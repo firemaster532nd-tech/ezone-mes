@@ -1,0 +1,19 @@
+{
+  "name": "ezone-mes",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "docker compose up",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "build": "npm run build --workspaces"
+  },
+  "dependencies": {
+    "docx": "^9.6.1"
+  }
+}

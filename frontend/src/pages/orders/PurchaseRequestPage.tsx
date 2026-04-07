@@ -1,0 +1,711 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { api } from '@/lib/api';
+
+interface PrItem {
+  pri_id: number;
+  item_id: number;
+  item_code: string;
+  item_name: string;
+  required_qty: number;
+  order_qty: number;
+  unit: string;
+  unit_price: number | null;
+  remarks: string;
+  roll_length_m: number | null;
+  roll_count: number | null;
+  roll_spec: string | null;
+  amount: number | null;
+  item_spec: string | null;
+  item_subcategory: string | null;
+  spec_detail: string | null;
+  calc_note: string | null;
+  component_name: string | null;
+  receiving_status: string | null;
+  received_qty: number | null;
+  lot_id: number | null;
+  insp_id: number | null;
+}
+
+interface ReceivingInfo {
+  pri_id: number;
+  item_code: string;
+  item_name: string;
+  order_qty: number;
+  receiving_status: string;
+  received_qty: number;
+  lot_number: string | null;
+  supplier_lot: string | null;
+  inspection_lot: string | null;
+  inspection_result: string | null;
+  insp_result: string | null;
+  insp_id: number | null;
+  form_code: string | null;
+}
+interface PR {
+  pr_id: number;
+  pr_number: string;
+  order_id: number;
+  order_number: string;
+  customer_name: string;
+  project_name: string;
+  pr_date: string;
+  supplier_name: string;
+  status: string;
+  remarks: string;
+  item_count: number;
+  total_qty: number;
+  total_amount: number | null;
+  items?: PrItem[];
+}
+
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  DRAFT: { label: '작성중', color: 'bg-gray-100 text-gray-700' },
+  SUBMITTED: { label: '제출', color: 'bg-blue-100 text-blue-700' },
+  APPROVED: { label: '승인', color: 'bg-green-100 text-green-700' },
+  ORDERED: { label: '발주완료', color: 'bg-purple-100 text-purple-700' },
+  RECEIVED: { label: '입고완료', color: 'bg-teal-100 text-teal-700' },
+  CANCELLED: { label: '취소', color: 'bg-red-100 text-red-700' },
+};
+
+export default function PurchaseRequestPage() {
+  const navigate = useNavigate();
+  const [prList, setPrList] = useState<PR[]>([]);
+  const [selectedPR, setSelectedPR] = useState<PR | null>(null);
+  const [prItems, setPrItems] = useState<PrItem[]>([]);
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [editingItem, setEditingItem] = useState<PrItem | null>(null);
+  const [editForm, setEditForm] = useState({ order_qty: '', remarks: '' });
+  // 입고등록
+  const [receivingItem, setReceivingItem] = useState<PrItem | null>(null);
+  const [receiveForm, setReceiveForm] = useState({ received_qty: '', supplier_lot: '', inspection_lot: '', inspector: '' });
+  const [receivingInfo, setReceivingInfo] = useState<ReceivingInfo[]>([]);
+
+  const fetchPRs = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: PR[] }>('/purchase-requests');
+      setPrList(res.data || []);
+    } catch { /* */ }
+  }, []);
+
+  useEffect(() => { fetchPRs(); }, [fetchPRs]);
+
+  const selectPR = async (pr: PR) => {
+    try {
+      const res = await api.get<{ data: PR }>(`/purchase-requests/${pr.pr_id}`);
+      const data = res.data;
+      setSelectedPR(data);
+      setPrItems(data.items || []);
+      setExpandedRows(new Set());
+      setEditingItem(null);
+      // 입고/검사 상태 조회
+      try {
+        const rcv = await api.get<{ data: ReceivingInfo[] }>(`/purchase-requests/${pr.pr_id}/receiving-status`);
+        setReceivingInfo(rcv.data || []);
+      } catch { setReceivingInfo([]); }
+    } catch { /* */ }
+  };
+
+  const updateStatus = async (status: string) => {
+    if (!selectedPR) return;
+    if (status === 'SUBMITTED') {
+      if (!confirm('자재발주서를 제출하시겠습니까?\n제출 시 결재함으로 전달됩니다.')) return;
+    }
+    try {
+      // 제출 시 writer_id를 함께 전송 (결재 생성용, 기본값 worker_id=1)
+      const body: Record<string, any> = { status };
+      if (status === 'SUBMITTED') {
+        body.writer_id = 1; // TODO: 로그인 사용자 ID로 교체
+      }
+      await api.patch(`/purchase-requests/${selectedPR.pr_id}/status`, body);
+      if (status === 'SUBMITTED') {
+        alert('자재발주서가 제출되어 결재함으로 전달되었습니다.');
+      }
+      await fetchPRs();
+      selectPR(selectedPR);
+    } catch { /* */ }
+  };
+
+  const toggleExpand = (priId: number) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(priId)) next.delete(priId);
+      else next.add(priId);
+      return next;
+    });
+  };
+
+  const startEdit = (item: PrItem) => {
+    setEditingItem(item);
+    setEditForm({
+      order_qty: String(item.order_qty || ''),
+      remarks: item.remarks || '',
+    });
+  };
+
+  const saveEdit = async () => {
+    if (!editingItem || !selectedPR) return;
+    try {
+      await api.patch(`/purchase-requests/items/${editingItem.pri_id}`, {
+        order_qty: parseFloat(editForm.order_qty) || 0,
+        remarks: editForm.remarks || null,
+      });
+      setEditingItem(null);
+      selectPR(selectedPR);
+    } catch { /* */ }
+  };
+
+  const deleteItem = async (priId: number) => {
+    if (!selectedPR || !confirm('이 품목을 발주서에서 삭제하시겠습니까?')) return;
+    try {
+      await api.delete(`/purchase-requests/items/${priId}`);
+      await fetchPRs();
+      selectPR(selectedPR);
+    } catch { /* */ }
+  };
+
+  const openReceiveModal = async (item: PrItem) => {
+    setReceivingItem(item);
+    // 자체 로트번호 자동생성
+    let nextLot = '';
+    try {
+      const res = await api.get<{ data: string }>('/lot-next-number?prefix=EZ');
+      nextLot = res.data;
+    } catch { /* 실패 시 빈값 → 서버에서 자동생성 */ }
+    setReceiveForm({
+      received_qty: String(item.order_qty || ''),
+      supplier_lot: '',
+      inspection_lot: nextLot,
+      inspector: '',
+    });
+  };
+
+  const submitReceive = async () => {
+    if (!receivingItem || !selectedPR) return;
+    const qty = parseFloat(receiveForm.received_qty);
+    if (!qty || qty <= 0) { alert('입고수량을 입력하세요.'); return; }
+    try {
+      await api.post(`/purchase-requests/${selectedPR.pr_id}/items/${receivingItem.pri_id}/receive`, {
+        received_qty: qty,
+        supplier_lot: receiveForm.supplier_lot || null,
+        inspection_lot: receiveForm.inspection_lot || null,
+        inspector: receiveForm.inspector || null,
+      });
+      setReceivingItem(null);
+      await fetchPRs();
+      selectPR(selectedPR);
+    } catch (err: any) {
+      alert(err?.message || '입고등록 실패');
+    }
+  };
+
+  // 입고 상태 조회 (pri_id → ReceivingInfo)
+  const getReceiving = (priId: number): ReceivingInfo | undefined =>
+    receivingInfo.find(r => r.pri_id === priId);
+
+  const downloadExcel = async () => {
+    if (!selectedPR) return;
+    try {
+      const response = await fetch(`/api/purchase-requests/${selectedPR.pr_id}/download-xlsx`);
+      if (!response.ok) throw new Error('다운로드 실패');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${selectedPR.pr_number}_발주상세.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { alert('엑셀 다운로드 실패'); }
+  };
+
+  const isDraft = selectedPR?.status === 'DRAFT';
+  const isOrdered = selectedPR?.status === 'ORDERED' || selectedPR?.status === 'RECEIVED';
+
+  return (
+    <div className="p-6 max-w-[1400px] mx-auto">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">자재 발주서</h1>
+        <p className="text-sm text-gray-500 mt-1">수주 BOM 전개 → 소요자재 산출 → 구매 연계용 자재 발주 준비</p>
+      </div>
+
+      <div className="grid grid-cols-12 gap-6">
+        {/* 좌측: 발주서 목록 */}
+        <div className="col-span-4">
+          <div className="bg-white rounded-xl border shadow-sm">
+            <div className="px-4 py-3 border-b bg-gray-50 rounded-t-xl">
+              <h2 className="font-semibold text-gray-700 text-sm">발주서 목록</h2>
+            </div>
+            <div className="divide-y max-h-[calc(100vh-200px)] overflow-y-auto">
+              {prList.length === 0 && (
+                <div className="p-8 text-center text-gray-400 text-sm">
+                  등록된 발주서가 없습니다<br />
+                  <span className="text-xs">수주 관리에서 BOM 전개 후 발주서를 생성하세요</span>
+                </div>
+              )}
+              {prList.map(pr => (
+                <div
+                  key={pr.pr_id}
+                  onClick={() => selectPR(pr)}
+                  className={`p-3 cursor-pointer hover:bg-blue-50 transition ${
+                    selectedPR?.pr_id === pr.pr_id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-sm font-medium">{pr.pr_number}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_LABELS[pr.status]?.color || 'bg-gray-100'}`}>
+                      {STATUS_LABELS[pr.status]?.label || pr.status}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-gray-500">
+                    {pr.order_number && <span className="mr-2">수주: {pr.order_number}</span>}
+                    {pr.customer_name && <span>{pr.customer_name}</span>}
+                  </div>
+                  <div className="mt-0.5 text-xs text-gray-400">
+                    {pr.pr_date?.slice(0, 10)} | {pr.item_count}품목
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* 우측: 상세 */}
+        <div className="col-span-8">
+          {selectedPR ? (
+            <div className="space-y-4">
+              {/* 발주서 헤더 */}
+              <div className="bg-white rounded-xl border shadow-sm p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="font-bold text-lg">{selectedPR.pr_number}</h2>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      수주: {selectedPR.order_number || '-'} | {selectedPR.customer_name || '-'}
+                    </p>
+                  </div>
+                  <span className={`text-sm px-3 py-1 rounded-full font-medium ${STATUS_LABELS[selectedPR.status]?.color || 'bg-gray-100'}`}>
+                    {STATUS_LABELS[selectedPR.status]?.label || selectedPR.status}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4 text-sm mb-4">
+                  <div><span className="text-gray-400">발주일:</span> <span className="ml-1">{selectedPR.pr_date?.slice(0, 10)}</span></div>
+                  <div><span className="text-gray-400">공급처:</span> <span className="ml-1">{selectedPR.supplier_name || '미지정'}</span></div>
+                  <div><span className="text-gray-400">품목수:</span> <span className="ml-1 font-medium">{prItems.length}건</span></div>
+                </div>
+
+                {/* 입고 진행률 (ORDERED 이후) */}
+                {isOrdered && receivingInfo.length > 0 && (() => {
+                  const received = receivingInfo.filter(r => r.receiving_status !== 'PENDING').length;
+                  const inspPass = receivingInfo.filter(r => r.insp_result === 'PASS').length;
+                  const inspPending = receivingInfo.filter(r => r.insp_result === 'PENDING').length;
+                  const total = receivingInfo.length;
+                  const pct = Math.round((received / total) * 100);
+                  return (
+                    <div className="mb-4 bg-gray-50 rounded-lg p-3">
+                      <div className="flex items-center justify-between text-xs mb-1.5">
+                        <span className="text-gray-500 font-medium">입고/검사 진행</span>
+                        <span className="text-gray-600">{received}/{total}건 입고 · {inspPass}건 합격 · {inspPending}건 검사대기</span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="h-full bg-teal-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* 상태 변경 버튼 + 다운로드 */}
+                <div className="flex gap-2 items-center">
+                  {selectedPR.status === 'DRAFT' && (
+                    <button onClick={() => updateStatus('SUBMITTED')}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                      제출
+                    </button>
+                  )}
+                  {selectedPR.status === 'SUBMITTED' && (
+                    <span className="px-4 py-2 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-lg text-sm font-medium inline-flex items-center gap-1">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      결재 진행중 (관리 → 결재함에서 승인)
+                    </span>
+                  )}
+                  {selectedPR.status === 'APPROVED' && (
+                    <button onClick={() => updateStatus('ORDERED')}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700">
+                      발주 완료
+                    </button>
+                  )}
+                  {/* 입고는 품목별 개별 처리 - 전체 입고 완료는 자동 */}
+                  <button onClick={downloadExcel}
+                    className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 ml-auto">
+                    <span className="mr-1">📥</span> 엑셀 다운로드
+                  </button>
+                </div>
+              </div>
+
+              {/* 발주 품목 */}
+              <div className="bg-white rounded-xl border shadow-sm">
+                <div className="px-5 py-3 border-b bg-gray-50 rounded-t-xl">
+                  <h3 className="font-semibold text-sm text-gray-700">소요자재 목록 <span className="text-xs text-gray-400 ml-1">(클릭하여 상세내역 확인)</span></h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-gray-50 text-gray-500 text-xs">
+                        <th className="px-2 py-2 text-left w-6"></th>
+                        <th className="px-2 py-2 text-left">#</th>
+                        <th className="px-3 py-2 text-left">품목코드</th>
+                        <th className="px-3 py-2 text-left">품목명</th>
+                        <th className="px-3 py-2 text-left">규격</th>
+                        <th className="px-3 py-2 text-right">필요량</th>
+                        <th className="px-3 py-2 text-right">발주량</th>
+                        <th className="px-3 py-2 text-left">단위</th>
+                        <th className="px-3 py-2 text-right">롤수</th>
+                        {isOrdered && <th className="px-3 py-2 text-center">입고/검사</th>}
+                        {isDraft && <th className="px-2 py-2 text-center">관리</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {prItems.map((item, idx) => {
+                        const rollCount = item.roll_count ?? null;
+                        const isExpanded = expandedRows.has(item.pri_id);
+                        const hasDetail = item.spec_detail || item.calc_note || item.item_spec;
+                        const rcvInfo = getReceiving(item.pri_id);
+                        return (
+                          <ItemRow key={item.pri_id}
+                            item={item} idx={idx} rollCount={rollCount}
+                            isExpanded={isExpanded} hasDetail={!!hasDetail} isDraft={isDraft} isOrdered={isOrdered}
+                            isEditing={editingItem?.pri_id === item.pri_id} editForm={editForm}
+                            rcvInfo={rcvInfo}
+                            onToggle={() => toggleExpand(item.pri_id)} onEdit={() => startEdit(item)}
+                            onDelete={() => deleteItem(item.pri_id)} onEditChange={setEditForm}
+                            onEditSave={saveEdit} onEditCancel={() => setEditingItem(null)}
+                            onReceive={() => openReceiveModal(item)}
+                            onGoInspection={(inspId) => navigate(`/quality/incoming?highlight=${inspId}`)}
+                          />
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border shadow-sm p-12 text-center text-gray-400">
+              <div className="text-4xl mb-3">📦</div>
+              <p>좌측에서 발주서를 선택하세요</p>
+              <p className="text-xs mt-2">수주 관리 → BOM 전개 → 자재발주서 생성 순서로 진행</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 입고등록 모달 */}
+      {receivingItem && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setReceivingItem(null)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[460px]" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-lg mb-1">입고등록</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {receivingItem.item_code} · {receivingItem.item_name}
+            </p>
+
+            <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">발주량</span>
+                <span className="font-mono font-medium">{Number(receivingItem.order_qty).toLocaleString()} {receivingItem.unit}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">입고수량 <span className="text-red-500">*</span></label>
+                <input type="number" value={receiveForm.received_qty}
+                  onChange={e => setReceiveForm(f => ({ ...f, received_qty: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="실 입고수량" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">공급처 LOT 번호</label>
+                <input type="text" value={receiveForm.supplier_lot}
+                  onChange={e => setReceiveForm(f => ({ ...f, supplier_lot: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="공급사/제조사 LOT번호 입력" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">
+                  자체 관리 LOT 번호 <span className="text-blue-500 text-[10px]">(자동생성)</span>
+                </label>
+                <div className="flex gap-2">
+                  <input type="text" value={receiveForm.inspection_lot}
+                    onChange={e => setReceiveForm(f => ({ ...f, inspection_lot: e.target.value }))}
+                    className="flex-1 border rounded-lg px-3 py-2 text-sm font-mono bg-blue-50 border-blue-200" placeholder="EZ-YYMMDD-NNN" />
+                  <button type="button" onClick={async () => {
+                    try {
+                      const res = await api.get<{ data: string }>('/lot-next-number?prefix=EZ');
+                      setReceiveForm(f => ({ ...f, inspection_lot: res.data }));
+                    } catch { /* */ }
+                  }}
+                    className="px-3 py-2 border rounded-lg text-xs text-blue-600 hover:bg-blue-50 whitespace-nowrap"
+                  >재생성</button>
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1">비워두면 자동 생성됩니다. 직접 입력도 가능합니다.</p>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">검사자</label>
+                <input type="text" value={receiveForm.inspector}
+                  onChange={e => setReceiveForm(f => ({ ...f, inspector: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="검사원 성명 (선택)" />
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4 text-xs text-blue-700">
+              입고등록 시 인수검사(INCOMING)가 자동 생성됩니다.<br/>
+              검사 양식은 품목에 맞게 자동 선택됩니다.
+            </div>
+
+            <div className="flex gap-2 mt-5 justify-end">
+              <button onClick={() => setReceivingItem(null)}
+                className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">취소</button>
+              <button onClick={submitReceive}
+                className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700">
+                입고등록 + 검사생성
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 인라인 수정 모달 */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setEditingItem(null)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[420px]" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-lg mb-4">품목 수정 - {editingItem.item_code}</h3>
+            <p className="text-sm text-gray-500 mb-4">{editingItem.item_name}</p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">발주량</label>
+                <input type="number" value={editForm.order_qty}
+                  onChange={e => setEditForm(f => ({ ...f, order_qty: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">비고</label>
+                <input type="text" value={editForm.remarks}
+                  onChange={e => setEditForm(f => ({ ...f, remarks: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5 justify-end">
+              <button onClick={() => setEditingItem(null)} className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">취소</button>
+              <button onClick={saveEdit} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">저장</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ──────── 구조코드 추출 헬퍼 ──────── */
+function extractStructureCode(componentName: string): string | null {
+  // "(VA-064)", "(HTG-1.69)", "(VT-01)" 등 추출
+  const m = componentName.match(/\(([A-Z]{2,}[-.][\w.]+)\)/);
+  return m ? m[1] : null;
+}
+
+/** component_name(comma 구분)과 spec_detail(pipe 구분)을 1:1 매핑하여 구조별 그룹핑 */
+function parseStructureSpecs(componentName: string | null, specDetail: string | null, calcNote: string | null) {
+  if (!componentName || !specDetail) return [];
+  const comps = componentName.split(', ').map(s => s.trim()).filter(Boolean);
+  const specs = specDetail.split('|').map(s => s.trim()).filter(Boolean);
+  const calcs = (calcNote || '').split('\n').filter(Boolean);
+
+  // 구조별 그룹핑
+  const grouped: Record<string, { parts: { component: string; spec: string; calc: string }[] }> = {};
+  comps.forEach((comp, i) => {
+    const structCode = extractStructureCode(comp) || '공통';
+    if (!grouped[structCode]) grouped[structCode] = { parts: [] };
+    // 구조코드 부분을 제거한 부품명
+    const cleanComp = comp.replace(/\([A-Z]{2,}[-.][\w.]+\)/, '').trim();
+    grouped[structCode].parts.push({
+      component: cleanComp,
+      spec: specs[i] || '',
+      calc: calcs[i] || '',
+    });
+  });
+  return Object.entries(grouped);
+}
+
+const RCV_STATUS: Record<string, { label: string; color: string }> = {
+  PENDING: { label: '미입고', color: 'bg-gray-100 text-gray-500' },
+  PARTIAL: { label: '부분입고', color: 'bg-amber-100 text-amber-700' },
+  RECEIVED: { label: '입고완료', color: 'bg-teal-100 text-teal-700' },
+  INSPECTED: { label: '검사완료', color: 'bg-green-100 text-green-700' },
+};
+
+const INSP_RESULT: Record<string, { label: string; color: string }> = {
+  PENDING: { label: '검사대기', color: 'bg-orange-100 text-orange-700' },
+  PASS: { label: '합격', color: 'bg-green-100 text-green-700' },
+  FAIL: { label: '불합격', color: 'bg-red-100 text-red-700' },
+};
+
+/* ──────── 개별 품목 행 (확장 가능) ──────── */
+function ItemRow({ item, idx, rollCount, isExpanded, hasDetail, isDraft, isOrdered, isEditing,
+  editForm, rcvInfo, onToggle, onEdit, onDelete, onEditChange, onEditSave, onEditCancel,
+  onReceive, onGoInspection }: {
+  item: PrItem; idx: number; rollCount: number | null;
+  isExpanded: boolean; hasDetail: boolean; isDraft: boolean; isOrdered: boolean; isEditing: boolean;
+  editForm: { order_qty: string; remarks: string };
+  rcvInfo?: ReceivingInfo;
+  onToggle: () => void; onEdit: () => void; onDelete: () => void;
+  onEditChange: (f: any) => void; onEditSave: () => void; onEditCancel: () => void;
+  onReceive: () => void; onGoInspection: (inspId: number) => void;
+}) {
+  const structureSpecs = parseStructureSpecs(item.component_name, item.spec_detail, item.calc_note);
+  const calcParts = item.calc_note ? item.calc_note.split('\n').filter(Boolean) : [];
+
+  return (
+    <>
+      <tr className={`hover:bg-gray-50 cursor-pointer ${isExpanded ? 'bg-blue-50/50' : ''}`} onClick={onToggle}>
+        <td className="px-2 py-2 text-gray-400 text-xs">
+          {hasDetail ? (
+            <span className={`inline-block transition-transform ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
+          ) : <span className="text-gray-200">─</span>}
+        </td>
+        <td className="px-2 py-2 text-gray-400">{idx + 1}</td>
+        <td className="px-3 py-2 font-mono text-xs">{item.item_code}</td>
+        <td className="px-3 py-2">
+          <div>{item.item_name}</div>
+          {item.item_subcategory && (
+            <div className="text-[10px] text-gray-400">{item.item_subcategory}</div>
+          )}
+        </td>
+        <td className="px-3 py-2 text-xs text-gray-600 max-w-[160px]">
+          <span className="truncate block" title={item.item_spec || ''}>{item.item_spec || '-'}</span>
+        </td>
+        <td className="px-3 py-2 text-right font-mono">{Number(item.required_qty).toLocaleString()}</td>
+        <td className="px-3 py-2 text-right font-mono font-medium">{Number(item.order_qty).toLocaleString()}</td>
+        <td className="px-3 py-2 text-gray-500">{item.unit}</td>
+        <td className="px-3 py-2 text-right font-mono">
+          {rollCount !== null ? (
+            <span className="text-indigo-600 font-medium" title={item.roll_spec || ''}>
+              {rollCount}롤
+            </span>
+          ) : <span className="text-gray-300">-</span>}
+        </td>
+        {isOrdered && (
+          <td className="px-3 py-2 text-center" onClick={e => e.stopPropagation()}>
+            {(!rcvInfo || rcvInfo.receiving_status === 'PENDING') ? (
+              <button onClick={onReceive}
+                className="px-2.5 py-1 bg-teal-600 text-white rounded text-xs font-medium hover:bg-teal-700 whitespace-nowrap">
+                입고등록
+              </button>
+            ) : (
+              <div className="flex flex-col items-center gap-0.5">
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${RCV_STATUS[rcvInfo.receiving_status]?.color || ''}`}>
+                  {RCV_STATUS[rcvInfo.receiving_status]?.label}
+                </span>
+                {rcvInfo.insp_result && (
+                  <button
+                    onClick={() => rcvInfo.insp_id && onGoInspection(rcvInfo.insp_id)}
+                    className={`text-[10px] px-1.5 py-0.5 rounded-full cursor-pointer hover:ring-1 ring-gray-300 ${INSP_RESULT[rcvInfo.insp_result]?.color || 'bg-gray-100 text-gray-600'}`}
+                    title={`INS-${String(rcvInfo.insp_id).padStart(4, '0')} → 인수검사로 이동`}
+                  >
+                    {INSP_RESULT[rcvInfo.insp_result]?.label || rcvInfo.insp_result}
+                  </button>
+                )}
+                {(rcvInfo.inspection_lot || rcvInfo.supplier_lot || rcvInfo.lot_number) && (
+                  <div className="flex flex-col items-center gap-px mt-0.5">
+                    {rcvInfo.inspection_lot && (
+                      <span className="text-[9px] text-blue-500 font-mono" title="자체 LOT">{rcvInfo.inspection_lot}</span>
+                    )}
+                    {rcvInfo.supplier_lot && (
+                      <span className="text-[9px] text-gray-400 font-mono" title="공급처 LOT">({rcvInfo.supplier_lot})</span>
+                    )}
+                    {!rcvInfo.inspection_lot && rcvInfo.lot_number && (
+                      <span className="text-[9px] text-gray-400 font-mono">{rcvInfo.lot_number}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </td>
+        )}
+        {isDraft && (
+          <td className="px-2 py-2 text-center" onClick={e => e.stopPropagation()}>
+            <div className="flex gap-1 justify-center">
+              <button onClick={onEdit} className="text-blue-500 hover:text-blue-700 p-1" title="수정">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+              </button>
+              <button onClick={onDelete} className="text-red-400 hover:text-red-600 p-1" title="삭제">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+              </button>
+            </div>
+          </td>
+        )}
+      </tr>
+
+      {/* 확장 상세 행: 구조별 규격 테이블 */}
+      {isExpanded && hasDetail && (
+        <tr className="bg-blue-50/30">
+          <td colSpan={isDraft ? 10 : (isOrdered ? 10 : 9)} className="px-6 py-3">
+            <div className="space-y-3 text-xs">
+              {/* 품목 기본 규격 */}
+              {item.item_spec && (
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-gray-500">발주규격:</span>
+                  <span className="font-medium text-gray-800 bg-white px-2 py-0.5 rounded border">{item.item_spec}</span>
+                </div>
+              )}
+
+              {/* 구조별 적용 규격 테이블 */}
+              {structureSpecs.length > 0 && (
+                <div>
+                  <span className="font-semibold text-gray-600 block mb-1.5">구조별 적용내역:</span>
+                  <table className="w-full text-xs border border-blue-200 rounded overflow-hidden">
+                    <thead>
+                      <tr className="bg-blue-100/60 text-gray-600">
+                        <th className="px-2 py-1.5 text-left font-semibold w-[100px]">구조</th>
+                        <th className="px-2 py-1.5 text-left font-semibold w-[160px]">용도</th>
+                        <th className="px-2 py-1.5 text-left font-semibold">적용규격</th>
+                        <th className="px-2 py-1.5 text-left font-semibold">산출</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-blue-100">
+                      {structureSpecs.map(([structCode, group]) =>
+                        group.parts.map((p, pi) => (
+                          <tr key={`${structCode}-${pi}`} className="hover:bg-white/60">
+                            {pi === 0 ? (
+                              <td className="px-2 py-1.5 font-mono font-bold text-blue-700 align-top" rowSpan={group.parts.length}>
+                                {structCode}
+                              </td>
+                            ) : null}
+                            <td className="px-2 py-1.5 text-gray-700">{p.component}</td>
+                            <td className="px-2 py-1.5 text-gray-800 font-medium">{p.spec}</td>
+                            <td className="px-2 py-1.5 text-gray-500 font-mono text-[10px]">{p.calc}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* 롤 규격 상세 */}
+              {item.roll_spec && (
+                <div>
+                  <span className="font-semibold text-gray-600 mr-2">롤규격:</span>
+                  <span className="text-gray-800">{item.roll_spec}</span>
+                </div>
+              )}
+
+              {/* 비고 */}
+              {item.remarks && (
+                <div>
+                  <span className="font-semibold text-gray-600 mr-2">비고:</span>
+                  <span className="text-gray-800">{item.remarks}</span>
+                </div>
+              )}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
