@@ -52,7 +52,7 @@ INSERT INTO item_master (item_code, item_name, item_category, item_subcategory, 
 ('SM-CW128', '세라믹울 128K',            'SM', '세라믹울', '소켓조립 전용(재단)',  'EA', NULL, 120.00,'MIN'),
 ('SM-CW100', '세라믹울 100K',            'SM', '세라믹울', '관통부 단열재',        'EA', NULL,  96.00,'MIN'),
 ('SM-CW96',  '세라믹울 96K',             'SM', '세라믹울', '지지구조 단열재',      'EA', NULL,  96.00,'MIN'),
-('SM-GW24',  '글라스울 24K',             'SM', '글라스울', '밀도24kg/m³, t25',    'EA', NULL,  24.00,'MIN'),
+('SM-GW24',  '그라스울 24K',             'SM', '그라스울', '밀도24kg/m³, t25',    'EA', NULL,  24.00,'MIN'),
 ('SM-PE',    'PE보온재',                  'SM', '보온재',   '관통부 보온',          'EA', NULL, NULL,   NULL),
 ('SM-SIL',   '실란트',                     'SM', '밀봉재',   'KS F 4910 F-12.5E',  'EA', NULL, NULL,   NULL),
 ('SM-FN',    '발포소켓 몸체(FN테크)',     'SM', '발포소켓', '100A용',              'EA', NULL, NULL,   NULL),
@@ -298,7 +298,7 @@ INSERT INTO structure_bom (cert_id, group_code, group_name, group_type, source_t
 (1, 'SOCKET', '방화소켓 VT200', 'SOCKET', 'MANUFACTURE', (SELECT item_id FROM item_master WHERE item_code='FP-VT01'), '{N}', NULL, true, 1),
 (1, 'FLASHING_I', '방화플래싱 I형', 'FLASHING', 'MANUFACTURE', (SELECT item_id FROM item_master WHERE item_code='FP-FL-I'), 'CEIL({perimeter}/1000)*2', NULL, true, 2),
 (1, 'SUPPORT_CW', '지지구조단열재(1단) 세라믹울96K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-CW96'), NULL, 2, false, 3),
-(1, 'SUPPORT_GW', '지지구조단열재(2단) 글라스울24K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), NULL, 2, false, 4),
+(1, 'SUPPORT_GW', '지지구조단열재(2단) 그라스울24K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), NULL, 2, false, 4),
 (1, 'SEALANT', '실란트', 'SEALANT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-SIL'), NULL, 1, false, 5);
 
 -- VS-01 (cert_id=2) 벽체 대형 0310 N=2
@@ -306,21 +306,21 @@ INSERT INTO structure_bom (cert_id, group_code, group_name, group_type, source_t
 (2, 'SOCKET', '방화소켓 VS200+VG200', 'SOCKET', 'MANUFACTURE', (SELECT item_id FROM item_master WHERE item_code='FP-VS01'), '{N}', NULL, true, 1),
 (2, 'FLASHING_I', '방화플래싱 I형', 'FLASHING', 'MANUFACTURE', (SELECT item_id FROM item_master WHERE item_code='FP-FL-I'), 'CEIL({perimeter}/1000)*2', NULL, true, 2),
 (2, 'SUPPORT_CW', '지지구조단열재(1단) 세라믹울96K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-CW96'), NULL, 2, false, 3),
-(2, 'SUPPORT_GW', '지지구조단열재(2단) 글라스울24K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), NULL, 2, false, 4),
+(2, 'SUPPORT_GW', '지지구조단열재(2단) 그라스울24K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), NULL, 2, false, 4),
 (2, 'SEALANT', '실란트', 'SEALANT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-SIL'), NULL, 1, false, 5);
 
 -- VT-049 (cert_id=3) 벽체 소형 0310 N=1
 INSERT INTO structure_bom (cert_id, group_code, group_name, group_type, source_type, output_item_id, qty_formula, qty_fixed, is_dimension_based, sort_order) VALUES
 (3, 'SOCKET', '방화소켓 VM200', 'SOCKET', 'MANUFACTURE', (SELECT item_id FROM item_master WHERE item_code='FP-VT049'), '1', NULL, true, 1),
 (3, 'FLASHING_I', '방화플래싱 I형', 'FLASHING', 'MANUFACTURE', (SELECT item_id FROM item_master WHERE item_code='FP-FL-I'), 'CEIL({perimeter}/1000)*2', NULL, true, 2),
-(3, 'SUPPORT_GW', '지지구조단열재 글라스울24K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), NULL, 2, false, 3);
+(3, 'SUPPORT_GW', '지지구조단열재 그라스울24K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), NULL, 2, false, 3);
 
 -- VA-064 (cert_id=4) 벽체 중형 0310 N=1
 INSERT INTO structure_bom (cert_id, group_code, group_name, group_type, source_type, output_item_id, qty_formula, qty_fixed, is_dimension_based, sort_order) VALUES
 (4, 'SOCKET', '방화소켓 VM200', 'SOCKET', 'MANUFACTURE', (SELECT item_id FROM item_master WHERE item_code='FP-VA064'), '1', NULL, true, 1),
 (4, 'FLASHING_I', '방화플래싱 I형', 'FLASHING', 'MANUFACTURE', (SELECT item_id FROM item_master WHERE item_code='FP-FL-I'), 'CEIL({perimeter}/1000)*2', NULL, true, 2),
 (4, 'SUPPORT_CW', '지지구조단열재(1단) 세라믹울96K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-CW96'), NULL, 2, false, 3),
-(4, 'SUPPORT_GW', '지지구조단열재(2단) 글라스울24K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), NULL, 2, false, 4),
+(4, 'SUPPORT_GW', '지지구조단열재(2단) 그라스울24K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), NULL, 2, false, 4),
 (4, 'SEALANT', '실란트', 'SEALANT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-SIL'), NULL, 1, false, 5);
 
 -- VT-064 (cert_id=5) 벽체 중형 0310 N=1
@@ -328,7 +328,7 @@ INSERT INTO structure_bom (cert_id, group_code, group_name, group_type, source_t
 (5, 'SOCKET', '방화소켓 VM200', 'SOCKET', 'MANUFACTURE', (SELECT item_id FROM item_master WHERE item_code='FP-VT064'), '1', NULL, true, 1),
 (5, 'FLASHING_I', '방화플래싱 I형', 'FLASHING', 'MANUFACTURE', (SELECT item_id FROM item_master WHERE item_code='FP-FL-I'), 'CEIL({perimeter}/1000)*2', NULL, true, 2),
 (5, 'SUPPORT_CW', '지지구조단열재(1단) 세라믹울96K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-CW96'), NULL, 2, false, 3),
-(5, 'SUPPORT_GW', '지지구조단열재(2단) 글라스울24K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), NULL, 2, false, 4),
+(5, 'SUPPORT_GW', '지지구조단열재(2단) 그라스울24K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), NULL, 2, false, 4),
 (5, 'SEALANT', '실란트', 'SEALANT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-SIL'), NULL, 1, false, 5);
 
 -- VAG-1.69 (cert_id=6) 벽체 대형 0910 N=2
@@ -344,7 +344,7 @@ INSERT INTO structure_bom (cert_id, group_code, group_name, group_type, source_t
 (7, 'FLASHING_I', '방화플래싱 I형', 'FLASHING', 'MANUFACTURE', (SELECT item_id FROM item_master WHERE item_code='FP-FL-I'), 'CEIL({perimeter}/1000)*2', NULL, true, 2),
 (7, 'GAP_COMPOSITE', '틈새복합시트', 'GAP_SHEET', 'MANUFACTURE', (SELECT item_id FROM item_master WHERE item_code='FP-TS'), NULL, NULL, true, 3),
 (7, 'SUPPORT_CW', '지지구조단열재 세라믹울96K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-CW96'), NULL, 2, false, 4),
-(7, 'SUPPORT_GW', '지지구조단열재 글라스울24K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), NULL, 2, false, 5);
+(7, 'SUPPORT_GW', '지지구조단열재 그라스울24K', 'SUPPORT', 'PURCHASE', (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), NULL, 2, false, 5);
 
 -- HAG-1.69 (cert_id=8) 입상 대형 0910 N=2
 INSERT INTO structure_bom (cert_id, group_code, group_name, group_type, source_type, output_item_id, qty_formula, qty_fixed, is_dimension_based, sort_order) VALUES
@@ -452,7 +452,7 @@ SELECT sb.sbom_id, (SELECT item_id FROM item_master WHERE item_code='SM-CW128'),
 FROM structure_bom sb WHERE sb.cert_id = 1 AND sb.group_code = 'SUPPORT_CW';
 
 INSERT INTO product_bom (sbom_id, item_id, component_name, component_type, source_type, qty_formula, qty_fixed, length_formula, unit, sort_order, spec_detail)
-SELECT sb.sbom_id, (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), '글라스울 보온재', 'INSULATION', 'PURCHASE', NULL, 1, NULL, 'EA', 1, 'GW 24kg/m3 보온재'
+SELECT sb.sbom_id, (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), '그라스울 보온재', 'INSULATION', 'PURCHASE', NULL, 1, NULL, 'EA', 1, 'GW 24kg/m3 보온재'
 FROM structure_bom sb WHERE sb.cert_id = 1 AND sb.group_code = 'SUPPORT_GW';
 
 INSERT INTO product_bom (sbom_id, item_id, component_name, component_type, source_type, qty_formula, qty_fixed, length_formula, unit, sort_order, spec_detail)
@@ -516,7 +516,7 @@ FROM structure_bom sb WHERE sb.cert_id = 2 AND sb.group_code = 'SUPPORT_CW';
 
 -- VS-01 SUPPORT_GW
 INSERT INTO product_bom (sbom_id, item_id, component_name, component_type, source_type, qty_formula, qty_fixed, length_formula, unit, sort_order, spec_detail)
-SELECT sb.sbom_id, (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), '글라스울 보온재', 'INSULATION', 'PURCHASE', NULL, 1, NULL, 'EA', 1, 'GW 24kg/m3 보온재'
+SELECT sb.sbom_id, (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), '그라스울 보온재', 'INSULATION', 'PURCHASE', NULL, 1, NULL, 'EA', 1, 'GW 24kg/m3 보온재'
 FROM structure_bom sb WHERE sb.cert_id = 2 AND sb.group_code = 'SUPPORT_GW';
 
 -- VS-01 SEALANT
@@ -568,7 +568,7 @@ FROM structure_bom sb WHERE sb.cert_id = 3 AND sb.group_code = 'FLASHING_I';
 
 -- VT-049 SUPPORT_GW
 INSERT INTO product_bom (sbom_id, item_id, component_name, component_type, source_type, qty_formula, qty_fixed, length_formula, unit, sort_order, spec_detail)
-SELECT sb.sbom_id, (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), '글라스울 보온재', 'INSULATION', 'PURCHASE', NULL, 1, NULL, 'EA', 1, 'GW 24kg/m3 보온재'
+SELECT sb.sbom_id, (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), '그라스울 보온재', 'INSULATION', 'PURCHASE', NULL, 1, NULL, 'EA', 1, 'GW 24kg/m3 보온재'
 FROM structure_bom sb WHERE sb.cert_id = 3 AND sb.group_code = 'SUPPORT_GW';
 
 -- =============================================
@@ -620,7 +620,7 @@ FROM structure_bom sb WHERE sb.cert_id = 4 AND sb.group_code = 'SUPPORT_CW';
 
 -- VA-064 SUPPORT_GW
 INSERT INTO product_bom (sbom_id, item_id, component_name, component_type, source_type, qty_formula, qty_fixed, length_formula, unit, sort_order, spec_detail)
-SELECT sb.sbom_id, (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), '글라스울 보온재', 'INSULATION', 'PURCHASE', NULL, 1, NULL, 'EA', 1, 'GW 24kg/m3 보온재'
+SELECT sb.sbom_id, (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), '그라스울 보온재', 'INSULATION', 'PURCHASE', NULL, 1, NULL, 'EA', 1, 'GW 24kg/m3 보온재'
 FROM structure_bom sb WHERE sb.cert_id = 4 AND sb.group_code = 'SUPPORT_GW';
 
 -- VA-064 SEALANT
@@ -677,7 +677,7 @@ FROM structure_bom sb WHERE sb.cert_id = 5 AND sb.group_code = 'SUPPORT_CW';
 
 -- VT-064 SUPPORT_GW
 INSERT INTO product_bom (sbom_id, item_id, component_name, component_type, source_type, qty_formula, qty_fixed, length_formula, unit, sort_order, spec_detail)
-SELECT sb.sbom_id, (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), '글라스울 보온재', 'INSULATION', 'PURCHASE', NULL, 1, NULL, 'EA', 1, 'GW 24kg/m3 보온재'
+SELECT sb.sbom_id, (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), '그라스울 보온재', 'INSULATION', 'PURCHASE', NULL, 1, NULL, 'EA', 1, 'GW 24kg/m3 보온재'
 FROM structure_bom sb WHERE sb.cert_id = 5 AND sb.group_code = 'SUPPORT_GW';
 
 -- VT-064 SEALANT
@@ -795,7 +795,7 @@ FROM structure_bom sb WHERE sb.cert_id = 7 AND sb.group_code = 'SUPPORT_CW';
 
 -- VTI-064 SUPPORT_GW
 INSERT INTO product_bom (sbom_id, item_id, component_name, component_type, source_type, qty_formula, qty_fixed, length_formula, unit, sort_order, spec_detail)
-SELECT sb.sbom_id, (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), '글라스울 보온재', 'INSULATION', 'PURCHASE', NULL, 1, NULL, 'EA', 1, 'GW 24kg/m3 보온재'
+SELECT sb.sbom_id, (SELECT item_id FROM item_master WHERE item_code='SM-GW24'), '그라스울 보온재', 'INSULATION', 'PURCHASE', NULL, 1, NULL, 'EA', 1, 'GW 24kg/m3 보온재'
 FROM structure_bom sb WHERE sb.cert_id = 7 AND sb.group_code = 'SUPPORT_GW';
 
 -- =============================================

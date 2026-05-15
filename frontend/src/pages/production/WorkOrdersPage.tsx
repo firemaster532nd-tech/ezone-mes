@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ProcessBadge } from '@/components/shared/ProcessBadge';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { Plus, Pencil, Trash2, MoreHorizontal, FlaskConical, Calculator, Layers, ChevronRight, ChevronDown, Zap, ChevronsUpDown } from 'lucide-react';
+import { Plus, Pencil, Trash2, MoreHorizontal, FlaskConical, Calculator, Layers, ChevronRight, ChevronDown, Zap, ChevronsUpDown, Play } from 'lucide-react';
 
 interface WorkOrder {
   wo_id: number;
@@ -67,6 +67,8 @@ export function WorkOrdersPage() {
   const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set([new Date().toISOString().slice(0, 10)]));
   const [showCascade, setShowCascade] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [batchLoading, setBatchLoading] = useState(false);
 
   const processOrderMap: Record<string, number> = { MIX: 0, EXT: 1, CUT: 2, ASM: 3, SHP: 4 };
 
@@ -154,6 +156,56 @@ export function WorkOrdersPage() {
     setMenuOpen(null);
   };
 
+  // 체크박스: 선택 가능한 항목 (PLANNED 상태만)
+  const selectableOrders = useMemo(() => data.filter(wo => wo.status === 'PLANNED'), [data]);
+
+  const toggleSelect = (woId: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(woId)) next.delete(woId);
+      else next.add(woId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    // 현재 보이는(expanded) PLANNED 항목만 대상
+    const visibleSelectable = selectableOrders.filter(wo => expandedDates.has(wo.wo_date?.slice(0, 10) || ''));
+    if (visibleSelectable.length > 0 && visibleSelectable.every(wo => selectedIds.has(wo.wo_id))) {
+      // 전체 해제
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        visibleSelectable.forEach(wo => next.delete(wo.wo_id));
+        return next;
+      });
+    } else {
+      // 전체 선택
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        visibleSelectable.forEach(wo => next.add(wo.wo_id));
+        return next;
+      });
+    }
+  };
+
+  const handleBatchStart = async () => {
+    const targets = data.filter(wo => selectedIds.has(wo.wo_id) && wo.status === 'PLANNED');
+    if (targets.length === 0) return;
+    if (!confirm(`선택한 ${targets.length}건의 작업지시를 일괄 진행시작 하시겠습니까?`)) return;
+
+    setBatchLoading(true);
+    const results = await Promise.allSettled(
+      targets.map(wo => api.patch(`/work-orders/${wo.wo_id}`, { status: 'IN_PROGRESS' }))
+    );
+    const failed = results.filter(r => r.status === 'rejected').length;
+    if (failed > 0) {
+      alert(`${targets.length}건 중 ${failed}건 실패. (수입검사 미완료 등 확인 필요)`);
+    }
+    setSelectedIds(new Set());
+    setBatchLoading(false);
+    fetchData();
+  };
+
   return (
     <div>
       <PageHeader title="작업지시 관리" count={data.length} description="MIX/EXT/CUT/ASM 4공정 작업지시">
@@ -204,7 +256,15 @@ export function WorkOrdersPage() {
         <table className="w-full min-w-[1050px] text-shop-sm">
           <thead>
             <tr className="border-b bg-gray-50">
-              <th className="w-8 px-2 py-3"></th>
+              <th className="w-8 px-2 py-3">
+                <input
+                  type="checkbox"
+                  checked={selectableOrders.length > 0 && selectableOrders.filter(wo => expandedDates.has(wo.wo_date?.slice(0, 10) || '')).every(wo => selectedIds.has(wo.wo_id))}
+                  onChange={toggleSelectAll}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                  title="계획 상태 전체 선택"
+                />
+              </th>
               <th className="px-3 py-3 text-left font-medium text-gray-500">지시번호</th>
               <th className="px-3 py-3 text-left font-medium text-gray-500">공정</th>
               <th className="px-3 py-3 text-left font-medium text-gray-500">상태</th>
@@ -312,9 +372,19 @@ export function WorkOrdersPage() {
 
                     {/* ── 개별 작업지시 행들 ── */}
                     {isExpanded && orders.map((wo) => (
-                      <tr key={wo.wo_id} className="border-b hover:bg-blue-50/50 transition-colors">
-                        <td className="px-2 py-2.5">
-                          <div className="w-4 h-px bg-gray-300 ml-2" />
+                      <tr key={wo.wo_id} className={cn("border-b hover:bg-blue-50/50 transition-colors", selectedIds.has(wo.wo_id) && "bg-blue-50")}>
+                        <td className="px-2 py-2.5 text-center">
+                          {wo.status === 'PLANNED' ? (
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(wo.wo_id)}
+                              onChange={() => toggleSelect(wo.wo_id)}
+                              onClick={(e) => e.stopPropagation()}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+                            />
+                          ) : (
+                            <div className="w-4 h-px bg-gray-300 mx-auto" />
+                          )}
                         </td>
                         <td className="px-3 py-2.5 font-mono text-xs">
                           <button
@@ -399,6 +469,27 @@ export function WorkOrdersPage() {
             })()}
           </div>
         </>
+      )}
+
+      {/* 일괄 진행시작 플로팅 바 */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-gray-900 text-white px-6 py-3 rounded-xl shadow-2xl">
+          <span className="text-sm font-medium">{selectedIds.size}건 선택됨</span>
+          <button
+            onClick={handleBatchStart}
+            disabled={batchLoading}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Play size={14} />
+            {batchLoading ? '처리중...' : '일괄 진행시작'}
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="px-3 py-2 text-sm text-gray-300 hover:text-white transition-colors"
+          >
+            선택 해제
+          </button>
+        </div>
       )}
 
       {/* 일일 생산계획 일괄 생성 모달 */}
@@ -569,6 +660,8 @@ function CreateWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onC
   const [bomBatchCount, setBomBatchCount] = useState(12);
   const [bomCalcResult, setBomCalcResult] = useState<BomCalcResult | null>(null);
   const [bomCalcLoading, setBomCalcLoading] = useState(false);
+  // MIX BOM 품목별 사용량 (item_code → qty_per_batch)
+  const [mixBomUsage, setMixBomUsage] = useState<Record<string, number>>({});
 
   useEffect(() => {
     api.get<{ data: any[] }>('/certifications').then((r) => setCerts(r.data));
@@ -601,6 +694,20 @@ function CreateWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onC
     setBomCalcResult(null);
     // 배치 기반 공정 기본값 설정
     setBomBatchCount(form.process_code === 'EXT' ? 2 : 12);
+    // MIX BOM 사용량 조회
+    if (form.process_code === 'MIX') {
+      api.get<{ data: any[] }>('/process-bom?process_code=MIX')
+        .then((r: any) => {
+          const boms = Array.isArray(r.data) ? r.data : r.data?.data ?? [];
+          if (boms.length > 0 && boms[0].items) {
+            const usage: Record<string, number> = {};
+            boms[0].items.forEach((item: any) => { usage[item.item_code] = parseFloat(item.qty); });
+            setMixBomUsage(usage);
+          }
+        }).catch(() => setMixBomUsage({}));
+    } else {
+      setMixBomUsage({});
+    }
   }, [form.process_code]);
 
   // BOM calculate
@@ -701,12 +808,17 @@ function CreateWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onC
     });
   };
 
-  // LOT번호 자동 제안: YYMMDD-SNN 형식
+  // LOT번호 자동 제안
   const suggestLotNumber = () => {
     const d = form.wo_date.replace(/-/g, '').slice(2); // YYMMDD
-    const prefix = form.process_code === 'ASM' ? `J${d}D` : `${d}-S`;
-    const seq = '01';
-    return `${prefix}${seq}`;
+    if (form.process_code === 'MIX') {
+      // MIX: 배치수만큼 LOT 범위 표시 (예: 260414-S01~260414-S08)
+      const count = batchCount || 1;
+      if (count <= 1) return `${d}-S01`;
+      return `${d}-S01~${d}-S${String(count).padStart(2, '0')}`;
+    }
+    if (form.process_code === 'ASM') return `J${d}D01`;
+    return `${d}-S01`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1262,9 +1374,27 @@ function CreateWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onC
 
           {/* 투입 LOT 선택 (FIFO) */}
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-gray-700">
-              투입 원료 LOT 선택 <span className="text-xs text-blue-500">(FIFO 순서)</span>
-            </label>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-700">
+                투입 원료 LOT 선택 <span className="text-xs text-blue-500">(FIFO 순서)</span>
+              </label>
+              {availableLots.length > 0 && (
+                <div className="flex gap-1.5">
+                  <button type="button"
+                    onClick={() => setSelectedLotIds(new Set(availableLots.map(l => l.lot_id)))}
+                    className="px-2 py-0.5 text-[10px] bg-green-100 text-green-700 rounded hover:bg-green-200 font-medium">
+                    전체선택(FIFO)
+                  </button>
+                  {selectedLotIds.size > 0 && (
+                    <button type="button"
+                      onClick={() => setSelectedLotIds(new Set())}
+                      className="px-2 py-0.5 text-[10px] bg-gray-100 text-gray-500 rounded hover:bg-gray-200">
+                      선택해제
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             {lotsLoading ? (
               <div className="text-sm text-gray-400 py-2">LOT 조회 중...</div>
             ) : availableLots.length === 0 ? (
@@ -1279,12 +1409,18 @@ function CreateWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onC
                       <th className="px-2 py-1.5 text-left w-8"></th>
                       <th className="px-2 py-1.5 text-left">LOT번호</th>
                       <th className="px-2 py-1.5 text-left">품목</th>
-                      <th className="px-2 py-1.5 text-right">잔량</th>
+                      <th className="px-2 py-1.5 text-right">재고</th>
+                      {isMixProcess && <th className="px-2 py-1.5 text-right">사용량</th>}
+                      {isMixProcess && <th className="px-2 py-1.5 text-right">잔여</th>}
                       <th className="px-2 py-1.5 text-left">입고일</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {availableLots.map((lot, idx) => (
+                    {availableLots.map((lot, idx) => {
+                      const balance = parseFloat(lot.balance);
+                      const usage = isMixProcess ? (mixBomUsage[lot.item_code] || 0) * batchCount : 0;
+                      const remaining = balance - usage;
+                      return (
                       <tr key={lot.lot_id}
                         className={cn('border-t cursor-pointer hover:bg-blue-50',
                           selectedLotIds.has(lot.lot_id) && 'bg-blue-50'
@@ -1297,12 +1433,27 @@ function CreateWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onC
                         <td className="px-2 py-1.5 font-mono">
                           {lot.lot_number}
                           {idx === 0 && <span className="ml-1 text-[10px] bg-green-100 text-green-700 px-1 rounded">선입선출</span>}
+                          {lot.wo_number && <span className="ml-1 text-[9px] bg-blue-100 text-blue-600 px-1 rounded">{lot.wo_number}</span>}
                         </td>
-                        <td className="px-2 py-1.5">{lot.item_name}</td>
-                        <td className="px-2 py-1.5 text-right font-mono">{parseFloat(lot.balance).toLocaleString()} {lot.unit}</td>
+                        <td className="px-2 py-1.5">
+                          {lot.item_name}
+                          {lot.ext_spec && <span className="ml-1 text-[9px] text-green-600 font-mono">({lot.ext_spec})</span>}
+                        </td>
+                        <td className="px-2 py-1.5 text-right font-mono">{balance.toLocaleString()} {lot.unit}</td>
+                        {isMixProcess && (
+                          <td className="px-2 py-1.5 text-right font-mono text-red-600 font-medium">
+                            {usage > 0 ? `-${usage.toLocaleString()}` : '-'}
+                          </td>
+                        )}
+                        {isMixProcess && (
+                          <td className={cn("px-2 py-1.5 text-right font-mono font-medium", remaining < 0 ? 'text-red-600' : 'text-green-600')}>
+                            {usage > 0 ? remaining.toLocaleString() : '-'}
+                          </td>
+                        )}
                         <td className="px-2 py-1.5 text-gray-500">{lot.created_at?.slice(0, 10)}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1353,30 +1504,48 @@ function CreateWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onC
             </div>
           )}
 
-          {/* EXT: 규격, 두께, 너비, 밀도, 팩창력 */}
+          {/* EXT: 규격(선택), 두께, 너비, 밀도, 팩창력 */}
           {form.process_code === 'EXT' && (
             <div className="rounded-lg border border-green-200 bg-green-50 p-4 space-y-3">
               <div className="text-shop-sm font-bold text-green-800">압출 공정 상세</div>
-              <label className="block">
-                <span className="text-xs font-medium text-green-900">규격 (T*W*L)</span>
-                <input type="text" value={form.ext_spec}
-                  onChange={(e) => setForm({ ...form, ext_spec: e.target.value })}
-                  className="mt-1 block w-full rounded-md border border-green-200 px-3 py-1.5 text-shop-sm"
-                  placeholder="예: 6.5T*415*2000mm" />
-              </label>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <label className="block">
-                  <span className="text-xs font-medium text-green-900">두께 (mm)</span>
-                  <input type="number" step="0.01" value={form.thickness_mm}
-                    onChange={(e) => setForm({ ...form, thickness_mm: e.target.value })}
-                    className="mt-1 block w-full rounded-md border border-green-200 px-3 py-1.5 text-shop-sm" />
+                  <span className="text-xs font-medium text-green-900">두께</span>
+                  <select value={form.thickness_mm}
+                    onChange={(e) => {
+                      const t = e.target.value;
+                      setForm({ ...form, thickness_mm: t, ext_spec: t && form.width_mm ? `${t}T×${form.width_mm}mm` : form.ext_spec });
+                    }}
+                    className="mt-1 block w-full rounded-md border border-green-200 px-3 py-1.5 text-shop-sm">
+                    <option value="">선택</option>
+                    <option value="4">4T</option>
+                    <option value="5">5T</option>
+                    <option value="6.5">6.5T</option>
+                  </select>
                 </label>
                 <label className="block">
-                  <span className="text-xs font-medium text-green-900">너비 (mm)</span>
-                  <input type="number" step="0.01" value={form.width_mm}
-                    onChange={(e) => setForm({ ...form, width_mm: e.target.value })}
-                    className="mt-1 block w-full rounded-md border border-green-200 px-3 py-1.5 text-shop-sm" />
+                  <span className="text-xs font-medium text-green-900">폭 (mm)</span>
+                  <select value={form.width_mm}
+                    onChange={(e) => {
+                      const w = e.target.value;
+                      setForm({ ...form, width_mm: w, ext_spec: form.thickness_mm && w ? `${form.thickness_mm}T×${w}mm` : form.ext_spec });
+                    }}
+                    className="mt-1 block w-full rounded-md border border-green-200 px-3 py-1.5 text-shop-sm">
+                    <option value="">선택</option>
+                    <option value="125">125mm</option>
+                    <option value="185">185mm</option>
+                    <option value="190">190mm</option>
+                    <option value="225">225mm</option>
+                    <option value="415">415mm</option>
+                  </select>
                 </label>
+                <label className="block">
+                  <span className="text-xs font-medium text-green-900">규격</span>
+                  <input type="text" value={form.ext_spec} readOnly
+                    className="mt-1 block w-full rounded-md border border-green-200 bg-green-100 px-3 py-1.5 text-shop-sm font-mono text-green-800" />
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <label className="block">
                   <span className="text-xs font-medium text-green-900">밀도 (g/cm3)</span>
                   <input type="number" step="0.0001" value={form.density_gcm3}
@@ -1393,7 +1562,7 @@ function CreateWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onC
             </div>
           )}
 
-          {/* CUT: 현장명, 구조, 규격(가로/세로), 소켓내부용 */}
+          {/* CUT: 현장명, 구조, 규격 + 재단 규격 상세 */}
           {form.process_code === 'CUT' && (
             <div className="rounded-lg border border-purple-200 bg-purple-50 p-4 space-y-3">
               <div className="text-shop-sm font-bold text-purple-800">재단 공정 상세</div>
@@ -1437,6 +1606,8 @@ function CreateWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onC
                     className="mt-1 block w-full rounded-md border border-purple-200 px-3 py-1.5 text-shop-sm" />
                 </label>
               </div>
+
+              {/* 재단 규격 상세는 투입 LOT 위에 별도 표시 */}
             </div>
           )}
 
@@ -1546,6 +1717,9 @@ function EditWorkOrderModal({ wo, onClose, onSaved, onDeleted }: { wo: WorkOrder
   const [availableLots, setAvailableLots] = useState<any[]>([]);
   const [selectedLotIds, setSelectedLotIds] = useState<Set<number>>(new Set());
   const [lotsLoading, setLotsLoading] = useState(false);
+  const [editMixBomUsage, setEditMixBomUsage] = useState<Record<string, number>>({});
+  const isMixWo = wo.process_code === 'MIX';
+  const editBatchCount = isMixWo ? Math.round((parseFloat(wo.planned_qty?.toString() || '0')) / 300) || 1 : 1;
 
   // Fetch available LOTs for the work order's process
   useEffect(() => {
@@ -1560,6 +1734,18 @@ function EditWorkOrderModal({ wo, onClose, onSaved, onDeleted }: { wo: WorkOrder
       .then((res: any) => setAvailableLots(Array.isArray(res.data) ? res.data : res.data?.data ?? []))
       .catch(() => setAvailableLots([]))
       .finally(() => setLotsLoading(false));
+    // MIX BOM 사용량 조회
+    if (isMixWo) {
+      api.get<{ data: any[] }>('/process-bom?process_code=MIX')
+        .then((r: any) => {
+          const boms = Array.isArray(r.data) ? r.data : r.data?.data ?? [];
+          if (boms[0]?.items) {
+            const usage: Record<string, number> = {};
+            boms[0].items.forEach((item: any) => { usage[item.item_code] = parseFloat(item.qty); });
+            setEditMixBomUsage(usage);
+          }
+        }).catch(() => {});
+    }
   }, [wo.process_code]);
 
   // Pre-select LOTs that match current input_lot_numbers
@@ -1581,6 +1767,24 @@ function EditWorkOrderModal({ wo, onClose, onSaved, onDeleted }: { wo: WorkOrder
       return next;
     });
   };
+
+  // 투입 LOT 선택 시 투입량(kg) 자동계산
+  useEffect(() => {
+    if (selectedLotIds.size === 0) return;
+    if (isMixWo && Object.keys(editMixBomUsage).length > 0) {
+      // MIX: BOM 사용량 합계 (배치수 × 1배치당 사용량)
+      const totalUsage = Object.values(editMixBomUsage).reduce((sum, qty) => sum + qty, 0) * editBatchCount;
+      setForm(f => ({ ...f, input_weight_kg: String(Math.round(totalUsage * 100) / 100) }));
+    } else {
+      // 기타 공정: 선택 LOT 잔량 합계
+      const totalWeight = availableLots
+        .filter(l => selectedLotIds.has(l.lot_id))
+        .reduce((sum, l) => sum + parseFloat(l.balance || 0), 0);
+      if (totalWeight > 0) {
+        setForm(f => ({ ...f, input_weight_kg: String(Math.round(totalWeight * 100) / 100) }));
+      }
+    }
+  }, [selectedLotIds, availableLots, editMixBomUsage]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1659,7 +1863,14 @@ function EditWorkOrderModal({ wo, onClose, onSaved, onDeleted }: { wo: WorkOrder
             <label className="block">
               <span className="text-shop-sm font-medium text-gray-700">실적수량</span>
               <input type="number" value={form.actual_qty}
-                onChange={(e) => setForm({ ...form, actual_qty: e.target.value })}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (wo.process_code === 'MIX') {
+                    setForm({ ...form, actual_qty: v, production_length_m: v });
+                  } else {
+                    setForm({ ...form, actual_qty: v });
+                  }
+                }}
                 className="mt-1 block w-full rounded-md border px-3 py-2 text-shop-sm" />
             </label>
           </div>
@@ -1746,14 +1957,25 @@ function EditWorkOrderModal({ wo, onClose, onSaved, onDeleted }: { wo: WorkOrder
           <div className="grid grid-cols-3 gap-4">
             <label className="block">
               <span className="text-shop-sm font-medium text-gray-700">투입량(kg)</span>
-              <input type="number" step="0.01" value={form.input_weight_kg}
+              <input type="number" step="0.01" value={form.input_weight_kg} readOnly={wo.process_code === 'MIX'}
                 onChange={(e) => setForm({ ...form, input_weight_kg: e.target.value })}
-                className="mt-1 block w-full rounded-md border px-3 py-2 text-shop-sm" />
+                className={cn("mt-1 block w-full rounded-md border px-3 py-2 text-shop-sm",
+                  wo.process_code === 'MIX' && "bg-gray-50")} />
+              {wo.process_code === 'MIX' && <span className="text-[10px] text-gray-400">투입 LOT 선택 시 자동계산</span>}
             </label>
             <label className="block">
-              <span className="text-shop-sm font-medium text-gray-700">생산길이(m)</span>
+              <span className="text-shop-sm font-medium text-gray-700">
+                {wo.process_code === 'MIX' ? '생산량(kg)' : '생산길이(m)'}
+              </span>
               <input type="number" step="0.01" value={form.production_length_m}
-                onChange={(e) => setForm({ ...form, production_length_m: e.target.value })}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (wo.process_code === 'MIX') {
+                    setForm({ ...form, production_length_m: v, actual_qty: v });
+                  } else {
+                    setForm({ ...form, production_length_m: v });
+                  }
+                }}
                 className="mt-1 block w-full rounded-md border px-3 py-2 text-shop-sm" />
             </label>
             <label className="block">
@@ -1763,6 +1985,17 @@ function EditWorkOrderModal({ wo, onClose, onSaved, onDeleted }: { wo: WorkOrder
                 className="mt-1 block w-full rounded-md border px-3 py-2 text-shop-sm" />
             </label>
           </div>
+
+          {/* MIX: 배치별 LOT 상세 */}
+          {wo.process_code === 'MIX' && wo?.wo_id && (
+            <MixBatchLotsDetail woId={wo.wo_id} actualQty={parseFloat(form.actual_qty) || parseFloat(form.planned_qty) || 0}
+              onTotalChange={(total) => setForm(f => ({ ...f, actual_qty: String(total), production_length_m: String(total) }))} />
+          )}
+
+          {/* CUT: 재단 규격 상세 - 투입 LOT 위에 바로 표시 */}
+          {wo.process_code === 'CUT' && wo?.wo_id && (
+            <CutSpecsDetail woId={wo.wo_id} />
+          )}
 
           {/* 투입 LOT 선택 (FIFO) */}
           <div>
@@ -1780,15 +2013,32 @@ function EditWorkOrderModal({ wo, onClose, onSaved, onDeleted }: { wo: WorkOrder
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
-                      <th className="px-2 py-1.5 text-left w-8"></th>
+                      <th className="px-2 py-1.5 text-left w-8">
+                        <input type="checkbox"
+                          checked={availableLots.length > 0 && selectedLotIds.size === availableLots.length}
+                          onChange={() => {
+                            if (selectedLotIds.size === availableLots.length) {
+                              setSelectedLotIds(new Set());
+                            } else {
+                              setSelectedLotIds(new Set(availableLots.map(l => l.lot_id)));
+                            }
+                          }}
+                          className="rounded" />
+                      </th>
                       <th className="px-2 py-1.5 text-left">LOT번호</th>
                       <th className="px-2 py-1.5 text-left">품목</th>
-                      <th className="px-2 py-1.5 text-right">잔량</th>
+                      <th className="px-2 py-1.5 text-right">재고</th>
+                      {isMixWo && <th className="px-2 py-1.5 text-right">사용량</th>}
+                      {isMixWo && <th className="px-2 py-1.5 text-right">잔여</th>}
                       <th className="px-2 py-1.5 text-left">입고일</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {availableLots.map((lot, idx) => (
+                    {availableLots.map((lot, idx) => {
+                      const bal = parseFloat(lot.balance);
+                      const usg = isMixWo ? (editMixBomUsage[lot.item_code] || 0) * editBatchCount : 0;
+                      const rem = bal - usg;
+                      return (
                       <tr key={lot.lot_id}
                         className={cn('border-t cursor-pointer hover:bg-blue-50',
                           selectedLotIds.has(lot.lot_id) && 'bg-blue-50'
@@ -1801,12 +2051,27 @@ function EditWorkOrderModal({ wo, onClose, onSaved, onDeleted }: { wo: WorkOrder
                         <td className="px-2 py-1.5 font-mono">
                           {lot.lot_number}
                           {idx === 0 && <span className="ml-1 text-[10px] bg-green-100 text-green-700 px-1 rounded">선입선출</span>}
+                          {lot.wo_number && <span className="ml-1 text-[9px] bg-blue-100 text-blue-600 px-1 rounded">{lot.wo_number}</span>}
                         </td>
-                        <td className="px-2 py-1.5">{lot.item_name}</td>
-                        <td className="px-2 py-1.5 text-right font-mono">{parseFloat(lot.balance).toLocaleString()} {lot.unit}</td>
+                        <td className="px-2 py-1.5">
+                          {lot.item_name}
+                          {lot.ext_spec && <span className="ml-1 text-[9px] text-green-600 font-mono">({lot.ext_spec})</span>}
+                        </td>
+                        <td className="px-2 py-1.5 text-right font-mono">{bal.toLocaleString()} {lot.unit}</td>
+                        {isMixWo && (
+                          <td className="px-2 py-1.5 text-right font-mono text-red-600 font-medium">
+                            {usg > 0 ? `-${usg.toLocaleString()}` : '-'}
+                          </td>
+                        )}
+                        {isMixWo && (
+                          <td className={cn("px-2 py-1.5 text-right font-mono font-medium", rem < 0 ? 'text-red-600' : 'text-green-600')}>
+                            {usg > 0 ? rem.toLocaleString() : '-'}
+                          </td>
+                        )}
                         <td className="px-2 py-1.5 text-gray-500">{lot.created_at?.slice(0, 10)}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1814,11 +2079,6 @@ function EditWorkOrderModal({ wo, onClose, onSaved, onDeleted }: { wo: WorkOrder
             {selectedLotIds.size > 0 && (
               <div className="mt-1.5 text-xs text-blue-600">
                 선택된 LOT: {selectedLotIds.size}건 — {availableLots.filter(l => selectedLotIds.has(l.lot_id)).map(l => l.lot_number).join(', ')}
-              </div>
-            )}
-            {wo.input_lot_numbers && selectedLotIds.size === 0 && (
-              <div className="mt-1.5 text-xs text-gray-500">
-                기존 입력값: {wo.input_lot_numbers}
               </div>
             )}
           </div>
@@ -1874,6 +2134,7 @@ interface CascadeResult {
   planned_qty: number;
   lot_number: string;
   item_name: string;
+  ext_spec?: string;
 }
 
 function CascadeCreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
@@ -1888,13 +2149,39 @@ function CascadeCreateModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [mixBatch, setMixBatch] = useState(12);
   const [extEnabled, setExtEnabled] = useState(true);
   const [extBatch, setExtBatch] = useState(2);
+  const [extPlannedM, setExtPlannedM] = useState(0);
+  const [extThickness, setExtThickness] = useState('5');
+  const [extWidth, setExtWidth] = useState('190');
+
+  // EXT 규격별 다건 설정
+  const [extSpecs, setExtSpecs] = useState([
+    { thickness: '5', width: '190', plannedM: 0, label: '소켓용' },
+  ]);
+  const addExtSpec = () => {
+    setExtSpecs(prev => [...prev, { thickness: '5', width: '125', plannedM: 0, label: '' }]);
+  };
+  const removeExtSpec = (idx: number) => {
+    setExtSpecs(prev => prev.filter((_, i) => i !== idx));
+  };
+  const updateExtSpec = (idx: number, field: string, value: any) => {
+    setExtSpecs(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+  };
+
+  // 규격 라벨 자동결정
+  const getSpecLabel = (t: string, w: string) => {
+    if (t === '5' && w === '190') return '소켓용';
+    if (t === '5' && w === '125') return '플래싱(I형)';
+    if (t === '4' && w === '125') return '플래싱(Z형)';
+    if (t === '6.5' && w === '415') return 'FN용';
+    return `${t}T×${w}`;
+  };
   const [cutEnabled, setCutEnabled] = useState(false);
   const [cutQty, setCutQty] = useState(0);
   const [asmEnabled, setAsmEnabled] = useState(false);
   const [asmQty, setAsmQty] = useState(0);
 
   const mixTotal = mixBatch * 300;
-  const extTotal = extBatch * 300;
+  const extTotal = extPlannedM || extBatch * 300;
 
   const handleSubmit = async () => {
     const processes: string[] = [];
@@ -1916,6 +2203,15 @@ function CascadeCreateModal({ onClose, onCreated }: { onClose: () => void; onCre
         processes,
         mix_batch_count: mixBatch,
         ext_batch_count: extBatch,
+        ext_planned_m: extPlannedM || undefined,
+        ext_thickness_mm: extEnabled ? parseFloat(extThickness) : undefined,
+        ext_width_mm: extEnabled ? parseFloat(extWidth) : undefined,
+        ext_specs: extEnabled ? extSpecs.map(s => ({
+          thickness: parseFloat(s.thickness),
+          width: parseFloat(s.width),
+          planned_m: s.plannedM || undefined,
+          label: getSpecLabel(s.thickness, s.width),
+        })) : undefined,
         cut_qty: cutQty || undefined,
         asm_qty: asmQty || undefined,
       });
@@ -1962,8 +2258,16 @@ function CascadeCreateModal({ onClose, onCreated }: { onClose: () => void; onCre
                     <tr key={idx} className="border-t">
                       <td className="px-3 py-2"><ProcessBadge process={wo.process_code as any} /></td>
                       <td className="px-3 py-2 font-mono">{wo.wo_number}</td>
-                      <td className="px-3 py-2">{wo.item_name ?? '-'}</td>
-                      <td className="px-3 py-2 text-right font-mono">{wo.planned_qty?.toLocaleString()}</td>
+                      <td className="px-3 py-2">
+                        {wo.item_name ?? '-'}
+                        {wo.ext_spec && <span className="ml-1 text-[10px] text-green-600 font-mono">({wo.ext_spec})</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono">
+                        {wo.planned_qty?.toLocaleString()}
+                        <span className="text-[10px] text-gray-400 ml-0.5">
+                          {wo.process_code === 'MIX' ? 'kg' : wo.process_code === 'EXT' ? 'm' : 'ea'}
+                        </span>
+                      </td>
                       <td className="px-3 py-2 font-mono">{wo.lot_number ?? '-'}</td>
                     </tr>
                   ))}
@@ -2021,25 +2325,81 @@ function CascadeCreateModal({ onClose, onCreated }: { onClose: () => void; onCre
               )}
             </div>
 
-            {/* EXT 압출 */}
+            {/* EXT 압출 - 규격별 다건 */}
             <div className={cn('rounded-lg border-2 p-4 transition-colors', extEnabled ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-gray-50 opacity-60')}>
-              <div className="flex items-center gap-3 mb-3">
-                <input type="checkbox" checked={extEnabled} onChange={(e) => setExtEnabled(e.target.checked)}
-                  className="rounded text-green-600 w-4 h-4" />
-                <span className="font-bold text-green-800">압출 (EXT)</span>
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <input type="checkbox" checked={extEnabled} onChange={(e) => setExtEnabled(e.target.checked)}
+                    className="rounded text-green-600 w-4 h-4" />
+                  <span className="font-bold text-green-800">압출 (EXT)</span>
+                  {extEnabled && <span className="text-[10px] text-green-600">{extSpecs.length}건</span>}
+                </div>
+                {extEnabled && (
+                  <button type="button" onClick={addExtSpec}
+                    className="text-xs text-green-700 border border-green-300 rounded px-2 py-0.5 hover:bg-green-100">
+                    + 규격 추가
+                  </button>
+                )}
               </div>
               {extEnabled && (
                 <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-3">
+                  {extSpecs.map((spec, idx) => (
+                    <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end bg-white rounded-md border border-green-200 p-2">
+                      <label className="block">
+                        <span className="text-[10px] font-medium text-green-800">두께</span>
+                        <select value={spec.thickness}
+                          onChange={(e) => updateExtSpec(idx, 'thickness', e.target.value)}
+                          className="mt-0.5 block w-full rounded border border-green-200 bg-white px-2 py-1.5 text-xs font-mono">
+                          <option value="4">4T</option>
+                          <option value="5">5T</option>
+                          <option value="6.5">6.5T</option>
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="text-[10px] font-medium text-green-800">폭</span>
+                        <select value={spec.width}
+                          onChange={(e) => updateExtSpec(idx, 'width', e.target.value)}
+                          className="mt-0.5 block w-full rounded border border-green-200 bg-white px-2 py-1.5 text-xs font-mono">
+                          <option value="125">125mm</option>
+                          <option value="185">185mm</option>
+                          <option value="190">190mm</option>
+                          <option value="225">225mm</option>
+                          <option value="415">415mm</option>
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="text-[10px] font-medium text-green-800">생산길이(m)</span>
+                        <input type="number" value={spec.plannedM || ''}
+                          onChange={(e) => updateExtSpec(idx, 'plannedM', parseInt(e.target.value) || 0)}
+                          className="mt-0.5 block w-full rounded border border-green-200 bg-white px-2 py-1.5 text-xs font-mono text-center"
+                          placeholder="0=배치" />
+                      </label>
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-[9px] text-green-600 font-medium whitespace-nowrap">
+                          {getSpecLabel(spec.thickness, spec.width)}
+                        </span>
+                        {extSpecs.length > 1 && (
+                          <button type="button" onClick={() => removeExtSpec(idx)}
+                            className="text-red-400 hover:text-red-600 text-xs">✕</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <div className="grid grid-cols-2 gap-3 pt-1">
                     <label className="block">
-                      <span className="text-xs font-medium text-green-900">배치 수</span>
+                      <span className="text-xs font-medium text-green-900">공통 배치 수 (투입량)</span>
                       <input type="number" value={extBatch} min={1} max={50}
                         onChange={(e) => setExtBatch(Math.max(1, parseInt(e.target.value) || 1))}
                         className="mt-1 block w-full rounded-md border border-green-300 bg-white px-3 py-2 text-shop-sm text-center font-mono" />
                     </label>
                     <div className="flex items-end pb-1">
-                      <div className="text-sm font-bold text-green-900">
-                        {extBatch}배치 × 300kg = <span className="text-lg">{extTotal.toLocaleString()}kg</span>
+                      <div className="text-xs text-green-800">
+                        {extSpecs.map((s, i) => (
+                          <div key={i} className="font-mono">
+                            {s.thickness}T×{s.width}mm <span className="text-green-600">({getSpecLabel(s.thickness, s.width)})</span>
+                            {s.plannedM > 0 && <span className="font-bold ml-1">{s.plannedM.toLocaleString()}m</span>}
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -2091,7 +2451,12 @@ function CascadeCreateModal({ onClose, onCreated }: { onClose: () => void; onCre
               <div className="flex flex-wrap gap-3 text-xs">
                 {mixEnabled && <span className="text-amber-800 font-mono">MIX {mixTotal.toLocaleString()}kg ({mixBatch}배치)</span>}
                 {mixEnabled && extEnabled && <span className="text-gray-400">→</span>}
-                {extEnabled && <span className="text-green-800 font-mono">EXT {extTotal.toLocaleString()}kg ({extBatch}배치)</span>}
+                {extEnabled && extSpecs.map((s, i) => (
+                  <span key={i} className="text-green-800 font-mono">
+                    EXT {s.thickness}T×{s.width}({getSpecLabel(s.thickness, s.width)})
+                    {s.plannedM > 0 ? ` ${s.plannedM.toLocaleString()}m` : ''}
+                  </span>
+                ))}
                 {(mixEnabled || extEnabled) && cutEnabled && <span className="text-gray-400">→</span>}
                 {cutEnabled && <span className="text-purple-800 font-mono">CUT {cutQty}ea</span>}
                 {cutEnabled && asmEnabled && <span className="text-gray-400">→</span>}
@@ -2111,6 +2476,237 @@ function CascadeCreateModal({ onClose, onCreated }: { onClose: () => void; onCre
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ═══════ 재단 규격 상세 컴포넌트 ═══════ */
+/* ═══════ MIX 배치별 LOT 상세 컴포넌트 ═══════ */
+function MixBatchLotsDetail({ woId, actualQty, onTotalChange }: { woId: number; actualQty: number; onTotalChange?: (total: number) => void }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed] = useState(false);
+  const [lotQtys, setLotQtys] = useState<Record<number, string>>({});
+
+  useEffect(() => {
+    setLoading(true);
+    api.get(`/work-orders/${woId}/batch-lots`)
+      .then((res: any) => {
+        const d = res.data?.data ?? res.data ?? null;
+        setData(d);
+        // 초기값: DB값 있으면 DB값, 없으면 빈값
+        if (d?.lots) {
+          const qtys: Record<number, string> = {};
+          d.lots.forEach((lot: any) => {
+            const q = parseFloat(lot.qty || 0);
+            qtys[lot.lot_id] = q > 0 ? String(q) : '';
+          });
+          setLotQtys(qtys);
+        }
+      })
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  }, [woId]);
+
+  if (loading) return <div className="text-xs text-gray-400 py-2">배치 LOT 로딩중...</div>;
+  if (!data || !data.lots?.length || data.count <= 1) return null;
+
+  const lotCount = data.count;
+  const isProduced = data.lots.some((l: any) => parseFloat(l.qty || 0) > 0);
+  const inputTotal = Object.values(lotQtys).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+
+  // 수량 변경 핸들러
+  const handleQtyChange = (lotId: number, value: string) => {
+    const next = { ...lotQtys, [lotId]: value };
+    setLotQtys(next);
+    // 합계를 상위에 전달
+    if (onTotalChange) {
+      const total = Object.values(next).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+      onTotalChange(Math.round(total * 100) / 100);
+    }
+  };
+
+  return (
+    <div className="border border-amber-300 rounded-lg overflow-hidden bg-white">
+      <button
+        type="button"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setCollapsed(!collapsed); }}
+        className="w-full px-3 py-2 bg-amber-100 text-left flex items-center justify-between hover:bg-amber-200 transition"
+      >
+        <span className="text-xs font-bold text-amber-900">
+          배치별 LOT ({lotCount}배치
+          {inputTotal > 0 ? ` · 합계 ${inputTotal.toLocaleString()}kg` : ' · 미입력'})
+        </span>
+        <span className="text-amber-500 text-xs">{collapsed ? '▶ 펼치기' : '▼ 접기'}</span>
+      </button>
+      {!collapsed && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="bg-gray-50 text-gray-500">
+                <th className="px-3 py-1.5 text-left">#</th>
+                <th className="px-3 py-1.5 text-left">LOT번호</th>
+                <th className="px-3 py-1.5 text-right">수량(kg)</th>
+                <th className="px-3 py-1.5 text-right">잔량</th>
+                <th className="px-3 py-1.5 text-center">상태</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {data.lots.map((lot: any, idx: number) => {
+                const dbQty = parseFloat(lot.qty || 0);
+                const dbRem = parseFloat(lot.remaining_qty || 0);
+                const isConsumed = lot.status === 'CONSUMED';
+                const displayRem = dbQty > 0 ? dbRem : 0;
+
+                return (
+                  <tr key={lot.lot_id} className={isConsumed ? 'bg-gray-50 text-gray-400' : 'hover:bg-amber-50/30'}>
+                    <td className="px-3 py-1.5 text-gray-400">{idx + 1}</td>
+                    <td className="px-3 py-1.5 font-mono font-medium text-amber-800">{lot.lot_number}</td>
+                    <td className="px-3 py-1.5 text-right">
+                      {isProduced ? (
+                        <span className="font-mono">{dbQty.toLocaleString()}kg</span>
+                      ) : (
+                        <input type="number" step="0.01"
+                          value={lotQtys[lot.lot_id] || ''}
+                          onChange={(e) => handleQtyChange(lot.lot_id, e.target.value)}
+                          className="w-20 border rounded px-1.5 py-0.5 text-[11px] font-mono text-right border-amber-200 focus:ring-1 focus:ring-amber-400"
+                          placeholder="0" />
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5 text-right font-mono">
+                      {displayRem > 0 ? `${displayRem.toLocaleString()}kg` : '0'}
+                    </td>
+                    <td className="px-3 py-1.5 text-center">
+                      {isConsumed ? (
+                        <span className="text-[10px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded">소진</span>
+                      ) : dbQty > 0 ? (
+                        <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">가용</span>
+                      ) : parseFloat(lotQtys[lot.lot_id] || '0') > 0 ? (
+                        <span className="text-[10px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded">입력</span>
+                      ) : (
+                        <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">미입력</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            {!isProduced && (
+              <tfoot>
+                <tr className="bg-amber-50 font-medium text-[11px]">
+                  <td colSpan={2} className="px-3 py-1.5 text-amber-800">합계</td>
+                  <td className="px-3 py-1.5 text-right font-mono text-amber-700">{inputTotal.toLocaleString()}kg</td>
+                  <td colSpan={2}></td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CutSpecsDetail({ woId }: { woId: number }) {
+  const [specs, setSpecs] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [socketCollapsed, setSocketCollapsed] = useState(false);
+  const [flashCollapsed, setFlashCollapsed] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    api.get(`/work-orders/${woId}/cut-specs`)
+      .then((res: any) => setSpecs(res.data?.data ?? res.data ?? null))
+      .catch(() => setSpecs(null))
+      .finally(() => setLoading(false));
+  }, [woId]);
+
+  if (loading) return <div className="text-xs text-gray-400 py-2">재단 규격 로딩중...</div>;
+  if (!specs) return null;
+
+  const socket = specs.socket;
+  const flashing = specs.flashing;
+  const hasSocket = socket?.specs?.length > 0;
+  const hasFlashing = flashing?.specs?.length > 0;
+  if (!hasSocket && !hasFlashing) return null;
+
+  // 구조별 규격 테이블 렌더링 (소켓/플래싱 공통)
+  const renderSpecTable = (items: any[], color: string) => (
+    <div className="p-3 space-y-2 max-h-[320px] overflow-y-auto">
+      {items.map((s: any, idx: number) => (
+        <div key={idx} className={`border border-${color}-100 rounded-md overflow-hidden`}>
+          <div className={`px-3 py-1.5 bg-${color}-50 flex items-center justify-between`}>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-bold text-${color}-800 font-mono`}>{s.structure_code}</span>
+              <span className="text-[10px] text-gray-500">관통 {s.penetration_w}×{s.penetration_h}mm</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] bg-${color}-200 text-${color}-800 px-1.5 py-0.5 rounded font-mono`}>{s.qty}세트</span>
+              <span className={`text-[10px] text-${color}-600`}>{s.total_sheets}매</span>
+            </div>
+          </div>
+          <table className="w-full text-[11px]">
+            <thead>
+              <tr className="bg-gray-50 text-gray-500">
+                <th className="px-2 py-1 text-left">부위</th>
+                <th className="px-2 py-1 text-right">재단길이</th>
+                <th className="px-2 py-1 text-left">규격</th>
+                <th className="px-2 py-1 text-right">매/세트</th>
+                <th className="px-2 py-1 text-right">소계</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {s.sheets.map((sh: any, si: number) => (
+                <tr key={si} className={`hover:bg-${color}-50/30`}>
+                  <td className={`px-2 py-1 text-${color}-800`}>{sh.part}</td>
+                  <td className="px-2 py-1 text-right font-mono font-medium">{sh.length}mm</td>
+                  <td className="px-2 py-1 text-gray-500">{sh.spec}</td>
+                  <td className="px-2 py-1 text-right font-mono">{sh.count}</td>
+                  <td className="px-2 py-1 text-right font-mono font-medium">{sh.count * s.qty}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="space-y-2">
+      {/* 소켓 재단 */}
+      {hasSocket && (
+        <div className="border border-purple-300 rounded-lg overflow-hidden bg-white">
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSocketCollapsed(!socketCollapsed); }}
+            className="w-full px-3 py-2 bg-purple-100 text-left flex items-center justify-between hover:bg-purple-200 transition"
+          >
+            <span className="text-xs font-bold text-purple-900">
+              소켓 재단 (5T×190) — {socket.total_structures}구조 · {specs.total_sets}세트 · 총 {socket.total_sheets.toLocaleString()}매
+            </span>
+            <span className="text-purple-500 text-xs">{socketCollapsed ? '▶ 펼치기' : '▼ 접기'}</span>
+          </button>
+          {!socketCollapsed && renderSpecTable(socket.specs, 'purple')}
+        </div>
+      )}
+
+      {/* 플래싱 재단 */}
+      {hasFlashing && (
+        <div className="border border-teal-300 rounded-lg overflow-hidden bg-white">
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFlashCollapsed(!flashCollapsed); }}
+            className="w-full px-3 py-2 bg-teal-100 text-left flex items-center justify-between hover:bg-teal-200 transition"
+          >
+            <span className="text-xs font-bold text-teal-900">
+              플래싱 재단 (5T×125) — {flashing.total_structures}구조 · {specs.total_sets}세트 · 총 {flashing.total_sheets.toLocaleString()}매
+            </span>
+            <span className="text-teal-500 text-xs">{flashCollapsed ? '▶ 펼치기' : '▼ 접기'}</span>
+          </button>
+          {!flashCollapsed && renderSpecTable(flashing.specs, 'teal')}
+        </div>
+      )}
     </div>
   );
 }

@@ -25,7 +25,7 @@ export function AppLayout() {
                 <User className="h-4 w-4" />
                 <span className="font-medium">{user.worker_name}</span>
                 <span className="text-xs text-gray-400">
-                  ({user.department || '-'} / {user.position || '-'})
+                  ({user.dept_name || '-'} / {user.position || '-'})
                 </span>
               </div>
               <button

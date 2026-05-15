@@ -1,0 +1,15 @@
+{
+  "appId": "com.ezone.mes",
+  "appName": "EZONE MES",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 1500,
+      "backgroundColor": "#2563eb",
+      "showSpinner": false
+    }
+  }
+}

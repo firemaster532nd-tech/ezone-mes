@@ -34,6 +34,9 @@ import { complianceRoutes } from './routes/compliance.js';
 import { orderRoutes } from './routes/orders.js';
 import { certDocumentRoutes } from './routes/cert-documents.js';
 import { structureBomRoutes } from './routes/structure-bom.js';
+import { authRoutes } from './routes/auth.js';
+import { departmentRoutes } from './routes/departments.js';
+import { permissionRoutes } from './routes/permissions.js';
 
 const app = Fastify({ logger: true });
 
@@ -72,6 +75,9 @@ await app.register(complianceRoutes);
 await app.register(orderRoutes);
 await app.register(certDocumentRoutes);
 await app.register(structureBomRoutes);
+await app.register(authRoutes);
+await app.register(departmentRoutes);
+await app.register(permissionRoutes);
 
 // Health check
 app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));

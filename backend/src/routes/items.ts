@@ -12,14 +12,14 @@ async function migrateItemMaster() {
     'SM-CW-128', 'SM-CW-100', 'SM-CW-96',
     'SM-CW-96-25W2', 'SM-CW-96-25W3', 'SM-CW-96-50', 'SM-CW-96-38', // 세라믹 96K 규격별
     'SM-CW-128-25',                                                    // 세라믹 128K 블랭킷
-    'SM-GW-24', 'SM-GW-24-14', 'SM-GW-24-10',                        // 글라스울 폭별
+    'SM-GW-24', 'SM-GW-24-14', 'SM-GW-24-10',                        // 그라스울 폭별
     'SM-PE-INS', 'SM-SIL', 'SM-FN-SK', 'SM-GP',
     // SM - 시드/BOM 엔진에서 사용하는 코드 (03_seed.sql 기준)
     'SM-GI-I', 'SM-GI-L', 'SM-GI-Z',        // 아연도금강판 (레거시)
     'SM-GI-I-10', 'SM-GI-Z-10', 'SM-GI-L-10', // 아연도금강판 L1000 (추후 -05/-15 확장)
     'SM-GP-10',                                 // 고정자재 L1000
     'SM-CW128', 'SM-CW100', 'SM-CW96',       // 세라믹울 (시드 원본)
-    'SM-GW24',                                 // 글라스울 (시드 원본)
+    'SM-GW24',                                 // 그라스울 (시드 원본)
     'SM-PE', 'SM-FN', 'SM-SP',               // 보온재/발포소켓/보호철판 (시드 원본, SM-SIL은 위에 이미 있음)
     'SM-SCREW',                                // 피스 (#8×64mm, 소모자재)
     'SM-BRK-TB', 'SM-BRK-MD',                 // 소켓 브라켓 (차열시트 고정용)
@@ -77,7 +77,7 @@ async function migrateItemMaster() {
       ('SM-CW-128', '세라믹차열재(128K)', 'SM', '세라믹차열재', '밀도128kg/m³, t50, W600', 'M', NULL, 128.00, 'MIN'),
       ('SM-CW-100', '세라믹차열재(100K)', 'SM', '세라믹차열재', '밀도100kg/m³, t50, W600', 'M', NULL, 100.00, 'MIN'),
       ('SM-CW-96',  '세라믹차열재(96K)',  'SM', '세라믹차열재', '밀도96kg/m³, t25~50, W200~600', 'M', NULL,  96.00, 'MIN'),
-      ('SM-GW-24',  '글라스울(24K)',      'SM', '글라스울', '밀도24kg/m³, t25, W1400', 'M', NULL,  24.00, 'MIN'),
+      ('SM-GW-24',  '그라스울(24K)',      'SM', '그라스울', '밀도24kg/m³, t25, W1400', 'M', NULL,  24.00, 'MIN'),
       ('SM-PE-INS', 'PE보온재',          'SM', '보온재',   '관통부 보온',        'EA', NULL,  NULL,   NULL),
       ('SM-SIL',    '실란트',            'SM', '밀봉재',   '실리콘실란트',       'EA', NULL,  NULL,   NULL),
       ('SM-FN-SK',  '발포소켓(FN Tech)', 'SM', '발포소켓', '규격별',             'EA', NULL,  NULL,   NULL),
@@ -92,8 +92,8 @@ async function migrateItemMaster() {
       ('SM-CW-96-50','세라믹차열재 96K t50 W600','SM','세라믹차열재','밀도96kg/m³, t50, W600 (지지구조)','M', NULL, 96.00, 'MIN'),
       ('SM-CW-96-38','세라믹차열재 96K t38 W600','SM','세라믹차열재','밀도96kg/m³, t38, W600 (지지구조 1.69)','M', NULL, 96.00, 'MIN'),
       ('SM-CW-128-25','세라믹차열재 128K t25 W200','SM','세라믹차열재','밀도128kg/m³, t25, W200 (블랭킷)','M', NULL, 128.00, 'MIN'),
-      ('SM-GW-24-14','글라스울 24K W1400','SM','글라스울','밀도24kg/m³, t25, W1400','M', NULL, 24.00, 'MIN'),
-      ('SM-GW-24-10','글라스울 24K W1000','SM','글라스울','밀도24kg/m³, t25, W1000','M', NULL, 24.00, 'MIN')
+      ('SM-GW-24-14','그라스울 24K W1400','SM','그라스울','밀도24kg/m³, t25, W1400','M', NULL, 24.00, 'MIN'),
+      ('SM-GW-24-10','그라스울 24K W1000','SM','그라스울','밀도24kg/m³, t25, W1000','M', NULL, 24.00, 'MIN')
     ON CONFLICT (item_code) DO UPDATE SET
       item_name = EXCLUDED.item_name,
       item_subcategory = EXCLUDED.item_subcategory,

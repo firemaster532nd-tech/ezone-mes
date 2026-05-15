@@ -689,7 +689,7 @@ function InspectionDetailModal({ inspId, onClose, onUpdated }: { inspId: number;
           {!editing && (
             <button onClick={startEdit}
               className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-md text-shop-sm font-medium hover:bg-blue-700">
-              <Pencil size={14} /> 수정
+              <Pencil size={14} /> 입력
             </button>
           )}
           <div className="flex-1" />

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 
 interface PrItem {
   pri_id: number;
@@ -70,6 +71,9 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 export default function PurchaseRequestPage() {
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
+  const isAdminMode = typeof window !== 'undefined' && localStorage.getItem('sidebar_mode') === 'admin';
+  const canDelete = isAdmin && isAdminMode;
   const [prList, setPrList] = useState<PR[]>([]);
   const [selectedPR, setSelectedPR] = useState<PR | null>(null);
   const [prItems, setPrItems] = useState<PrItem[]>([]);
@@ -106,20 +110,58 @@ export default function PurchaseRequestPage() {
     } catch { /* */ }
   };
 
+  // 배합원료 발주서 제출 시 입력된 수량 자동 저장
+  const saveRmQtysBeforeSubmit = async () => {
+    if (!selectedPR || selectedPR.remarks !== '배합원료 발주') return;
+    // 현재 화면에 입력된 수량을 가져오기 위해 DOM에서 읽기
+    const inputs = document.querySelectorAll<HTMLInputElement>('input[type="number"][placeholder="0"]');
+    const items: any[] = [];
+    prItems.filter(i => i.item_code?.startsWith('RM-')).forEach((item, idx) => {
+      const input = inputs[idx];
+      const qty = input ? parseFloat(input.value) || 0 : parseFloat(String(item.order_qty)) || 0;
+      if (qty > 0) {
+        items.push({ item_id: item.item_id, item_code: item.item_code, item_name: item.item_name, order_qty: qty, unit: item.unit || 'kg' });
+      }
+    });
+    if (items.length > 0) {
+      await api.post(`/purchase-requests/${selectedPR.pr_id}/rm-order`, { items });
+    }
+  };
+
   const updateStatus = async (status: string) => {
     if (!selectedPR) return;
     if (status === 'SUBMITTED') {
       if (!confirm('자재발주서를 제출하시겠습니까?\n제출 시 결재함으로 전달됩니다.')) return;
     }
+    if (status === 'ORDERED') {
+      if (!confirm('발주완료 처리하시겠습니까?\n발주완료 시 작업지시서가 자동으로 생성됩니다.')) return;
+    }
     try {
+      // 배합원료 발주서: 제출/발주완료 전에 수량 자동 저장
+      if (selectedPR.remarks === '배합원료 발주' && (status === 'SUBMITTED' || status === 'ORDERED')) {
+        await saveRmQtysBeforeSubmit();
+      }
       // 제출 시 writer_id를 함께 전송 (결재 생성용, 기본값 worker_id=1)
       const body: Record<string, any> = { status };
       if (status === 'SUBMITTED') {
         body.writer_id = 1; // TODO: 로그인 사용자 ID로 교체
       }
-      await api.patch(`/purchase-requests/${selectedPR.pr_id}/status`, body);
+      const res = await api.patch<{ data: any }>(`/purchase-requests/${selectedPR.pr_id}/status`, body);
       if (status === 'SUBMITTED') {
         alert('자재발주서가 제출되어 결재함으로 전달되었습니다.');
+      }
+      if (status === 'ORDERED' && res.data?.auto_work_orders) {
+        const wo = res.data.auto_work_orders;
+        if (wo.created) {
+          const lines = wo.orders.map((o: any) =>
+            `  ${o.process_code}: ${o.wo_number} (${Number(o.planned_qty).toLocaleString()}${o.process_code === 'MIX' || o.process_code === 'EXT' ? 'kg' : 'ea'})`
+          ).join('\n');
+          alert(`발주완료! 작업지시서 ${wo.count}건 자동 생성\n\n${lines}`);
+        } else if (wo.skipped) {
+          alert(`발주완료!\n(작업지시: ${wo.message})`);
+        }
+      } else if (status === 'ORDERED') {
+        alert('발주완료 처리되었습니다.');
       }
       await fetchPRs();
       selectPR(selectedPR);
@@ -166,11 +208,15 @@ export default function PurchaseRequestPage() {
 
   const openReceiveModal = async (item: PrItem) => {
     setReceivingItem(item);
-    // 자체 로트번호 자동생성
+    // 품목코드 기반 LOT 번호 자동생성
     let nextLot = '';
     try {
-      const res = await api.get<{ data: string }>('/lot-next-number?prefix=EZ');
-      nextLot = res.data;
+      if (selectedPR) {
+        const res = await api.post<{ data: any[] }>(`/purchase-requests/${selectedPR.pr_id}/preview-lots`, {
+          pri_ids: [item.pri_id],
+        });
+        nextLot = res.data?.[0]?.lot_number || '';
+      }
     } catch { /* 실패 시 빈값 → 서버에서 자동생성 */ }
     setReceiveForm({
       received_qty: String(item.order_qty || ''),
@@ -199,6 +245,89 @@ export default function PurchaseRequestPage() {
     }
   };
 
+  // 일괄 입고등록
+  const [batchSelected, setBatchSelected] = useState<Set<number>>(new Set());
+  const [batchSupplierLots, setBatchSupplierLots] = useState<Record<number, string>>({});
+  const [batchInspector, setBatchInspector] = useState('');
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
+  const [batchCollapsed, setBatchCollapsed] = useState(false);
+  // LOT 미리보기 단계
+  const [lotPreview, setLotPreview] = useState<Array<{ pri_id: number; item_code: string; item_name: string; order_qty: number; unit: string; abbrev: string; lot_number: string }> | null>(null);
+  const [lotEdits, setLotEdits] = useState<Record<number, string>>({});
+
+  // 입고 가능한 품목 (미입고 상태, RM 제외 - 배합원료는 별도 관리)
+  const pendingItems = prItems.filter(item => {
+    if (item.item_code?.startsWith('RM-')) return false;
+    const rcv = receivingInfo.find(r => r.pri_id === item.pri_id);
+    return !rcv || rcv.receiving_status === 'PENDING';
+  });
+
+  const toggleBatchItem = (priId: number) => {
+    setBatchSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(priId)) next.delete(priId);
+      else next.add(priId);
+      return next;
+    });
+  };
+
+  const toggleBatchAll = () => {
+    if (batchSelected.size === pendingItems.length) {
+      setBatchSelected(new Set());
+    } else {
+      setBatchSelected(new Set(pendingItems.map(i => i.pri_id)));
+    }
+  };
+
+  // 1단계: LOT 미리보기 요청
+  const requestLotPreview = async () => {
+    if (!selectedPR || batchSelected.size === 0) return;
+    try {
+      const res = await api.post<{ data: any[] }>(`/purchase-requests/${selectedPR.pr_id}/preview-lots`, {
+        pri_ids: Array.from(batchSelected),
+        receive_date: new Date().toISOString().slice(0, 10),
+      });
+      const previews = res.data || [];
+      setLotPreview(previews);
+      // 초기 편집값 설정
+      const edits: Record<number, string> = {};
+      previews.forEach((p: any) => { edits[p.pri_id] = p.lot_number; });
+      setLotEdits(edits);
+    } catch {
+      alert('LOT 미리보기 실패');
+    }
+  };
+
+  // 2단계: 확인 후 실제 입고
+  const submitBatchReceive = async () => {
+    if (!selectedPR || !lotPreview) return;
+    setBatchSubmitting(true);
+    try {
+      const items = lotPreview.map(p => ({
+        pri_id: p.pri_id,
+        received_qty: p.order_qty,
+        supplier_lot: batchSupplierLots[p.pri_id] || null,
+        custom_lot: lotEdits[p.pri_id] || p.lot_number,
+      }));
+      await api.post(`/purchase-requests/${selectedPR.pr_id}/receive-batch`, {
+        items,
+        inspector: batchInspector || null,
+      });
+      alert(`${items.length}건 일괄 입고등록 완료`);
+      setBatchSelected(new Set());
+      setBatchSupplierLots({});
+      setBatchInspector('');
+      setLotPreview(null);
+      setLotEdits({});
+      await fetchPRs();
+      selectPR(selectedPR);
+    } catch (err: any) {
+      alert(err?.message || '일괄 입고등록 실패');
+    } finally {
+      setBatchSubmitting(false);
+    }
+  };
+
   // 입고 상태 조회 (pri_id → ReceivingInfo)
   const getReceiving = (priId: number): ReceivingInfo | undefined =>
     receivingInfo.find(r => r.pri_id === priId);
@@ -223,48 +352,53 @@ export default function PurchaseRequestPage() {
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">자재 발주서</h1>
-        <p className="text-sm text-gray-500 mt-1">수주 BOM 전개 → 소요자재 산출 → 구매 연계용 자재 발주 준비</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">자재 발주서</h1>
+          <p className="text-sm text-gray-500 mt-1">수주 BOM 전개 → 소요자재 산출 → 구매 연계용 자재 발주 준비</p>
+        </div>
+        <button
+          onClick={async () => {
+            try {
+              const res = await api.post<{ data: any }>('/purchase-requests/create-rm', {});
+              alert(`배합원료 발주서 ${res.data.pr_number} 생성`);
+              await fetchPRs();
+            } catch (err: any) { alert(err?.message || '생성 실패'); }
+          }}
+          className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700"
+        >+ 배합원료 발주</button>
       </div>
 
       <div className="grid grid-cols-12 gap-6">
-        {/* 좌측: 발주서 목록 */}
+        {/* 좌측: 발주서 목록 (일별 그룹) */}
         <div className="col-span-4">
           <div className="bg-white rounded-xl border shadow-sm">
             <div className="px-4 py-3 border-b bg-gray-50 rounded-t-xl">
               <h2 className="font-semibold text-gray-700 text-sm">발주서 목록</h2>
             </div>
-            <div className="divide-y max-h-[calc(100vh-200px)] overflow-y-auto">
+            <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
               {prList.length === 0 && (
                 <div className="p-8 text-center text-gray-400 text-sm">
                   등록된 발주서가 없습니다<br />
                   <span className="text-xs">수주 관리에서 BOM 전개 후 발주서를 생성하세요</span>
                 </div>
               )}
-              {prList.map(pr => (
-                <div
-                  key={pr.pr_id}
-                  onClick={() => selectPR(pr)}
-                  className={`p-3 cursor-pointer hover:bg-blue-50 transition ${
-                    selectedPR?.pr_id === pr.pr_id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono text-sm font-medium">{pr.pr_number}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_LABELS[pr.status]?.color || 'bg-gray-100'}`}>
-                      {STATUS_LABELS[pr.status]?.label || pr.status}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-xs text-gray-500">
-                    {pr.order_number && <span className="mr-2">수주: {pr.order_number}</span>}
-                    {pr.customer_name && <span>{pr.customer_name}</span>}
-                  </div>
-                  <div className="mt-0.5 text-xs text-gray-400">
-                    {pr.pr_date?.slice(0, 10)} | {pr.item_count}품목
-                  </div>
-                </div>
-              ))}
+              {(() => {
+                // 일별 그룹핑
+                const grouped: Record<string, PR[]> = {};
+                prList.forEach(pr => {
+                  const date = pr.pr_date?.slice(0, 10) || '미정';
+                  if (!grouped[date]) grouped[date] = [];
+                  grouped[date].push(pr);
+                });
+                const dates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+                return dates.map(date => (
+                  <PrDateGroup key={date} date={date} prs={grouped[date]}
+                    selectedPrId={selectedPR?.pr_id || null}
+                    onSelect={selectPR}
+                    onDelete={() => {}} />
+                ));
+              })()}
             </div>
           </div>
         </div>
@@ -282,9 +416,11 @@ export default function PurchaseRequestPage() {
                       수주: {selectedPR.order_number || '-'} | {selectedPR.customer_name || '-'}
                     </p>
                   </div>
-                  <span className={`text-sm px-3 py-1 rounded-full font-medium ${STATUS_LABELS[selectedPR.status]?.color || 'bg-gray-100'}`}>
-                    {STATUS_LABELS[selectedPR.status]?.label || selectedPR.status}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm px-3 py-1 rounded-full font-medium ${STATUS_LABELS[selectedPR.status]?.color || 'bg-gray-100'}`}>
+                      {STATUS_LABELS[selectedPR.status]?.label || selectedPR.status}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 text-sm mb-4">
@@ -334,59 +470,160 @@ export default function PurchaseRequestPage() {
                     </button>
                   )}
                   {/* 입고는 품목별 개별 처리 - 전체 입고 완료는 자동 */}
-                  <button onClick={downloadExcel}
-                    className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 ml-auto">
-                    <span className="mr-1">📥</span> 엑셀 다운로드
-                  </button>
+                  <div className="flex gap-2 ml-auto">
+                    <button onClick={downloadExcel}
+                      className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
+                      <span className="mr-1">📥</span> 엑셀 다운로드
+                    </button>
+                    {canDelete && (
+                      <button onClick={async () => {
+                        if (!selectedPR) return;
+                        if (!confirm(`발주서 ${selectedPR.pr_number}을(를) 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+                        try {
+                          await api.delete(`/purchase-requests/${selectedPR.pr_id}`);
+                          alert(`${selectedPR.pr_number} 삭제 완료`);
+                          setSelectedPR(null); setPrItems([]);
+                          fetchPRs();
+                        } catch (err: any) { alert(err?.message || '삭제 실패'); }
+                      }}
+                        className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50">
+                        발주서 삭제
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* 발주 품목 */}
-              <div className="bg-white rounded-xl border shadow-sm">
-                <div className="px-5 py-3 border-b bg-gray-50 rounded-t-xl">
-                  <h3 className="font-semibold text-sm text-gray-700">소요자재 목록 <span className="text-xs text-gray-400 ml-1">(클릭하여 상세내역 확인)</span></h3>
+              {/* 배합원료 전용 발주서 */}
+              {selectedPR?.remarks === '배합원료 발주' ? (
+                <RmPurchaseSection prId={selectedPR.pr_id} prStatus={selectedPR.status} />
+              ) : (
+                <SoItemsSection
+                  prItems={prItems} isDraft={isDraft} isOrdered={isOrdered}
+                  expandedRows={expandedRows} editingItem={editingItem} editForm={editForm}
+                  receivingInfo={receivingInfo}
+                  onToggleExpand={toggleExpand} onStartEdit={startEdit}
+                  onDeleteItem={deleteItem} onEditChange={setEditForm}
+                  onEditSave={saveEdit} onEditCancel={() => setEditingItem(null)}
+                  onReceive={openReceiveModal}
+                  onGoInspection={(inspId) => navigate(`/quality/incoming?highlight=${inspId}`)}
+                  getReceiving={getReceiving}
+                />
+              )}
+
+              {/* 일괄 입고등록 섹션 (RM 발주서 제외) */}
+              {isOrdered && pendingItems.length > 0 && selectedPR?.remarks !== '배합원료 발주' && (
+                <div className="bg-white rounded-xl border shadow-sm">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setBatchCollapsed(!batchCollapsed); }}
+                    className="w-full px-5 py-3 border-b bg-teal-50 rounded-t-xl flex items-center justify-between hover:bg-teal-100 transition"
+                  >
+                    <h3 className="font-semibold text-sm text-teal-800">
+                      일괄 입고등록
+                      <span className="text-xs text-teal-600 ml-2">미입고 {pendingItems.length}건을 한번에 처리</span>
+                    </h3>
+                    <span className="text-teal-500 text-xs">{batchCollapsed ? '▶ 펼치기' : '▼ 접기'}</span>
+                  </button>
+                  {!batchCollapsed && (<>
+                  <div className="px-5 py-2 border-b bg-teal-50/50 flex items-center justify-end gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs text-gray-500">검사자:</label>
+                      <input
+                        type="text"
+                        value={batchInspector}
+                        onChange={e => setBatchInspector(e.target.value)}
+                        className="border rounded px-2 py-1 text-xs w-24"
+                        placeholder="성명"
+                      />
+                    </div>
+                    <button
+                      onClick={requestLotPreview}
+                      disabled={batchSelected.size === 0}
+                      className={`px-4 py-1.5 rounded-lg text-xs font-medium transition ${
+                        batchSelected.size > 0
+                          ? 'bg-teal-600 text-white hover:bg-teal-700'
+                          : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      {`선택 ${batchSelected.size}건 입고등록`}
+                    </button>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 text-gray-500 text-xs">
+                          <th className="px-3 py-2 text-center w-10">
+                            <input
+                              type="checkbox"
+                              checked={batchSelected.size === pendingItems.length && pendingItems.length > 0}
+                              onChange={toggleBatchAll}
+                              className="rounded border-gray-300"
+                            />
+                          </th>
+                          <th className="px-3 py-2 text-left">품목코드</th>
+                          <th className="px-3 py-2 text-left">품목명</th>
+                          <th className="px-3 py-2 text-left">규격</th>
+                          <th className="px-3 py-2 text-right">발주량</th>
+                          <th className="px-3 py-2 text-left">단위</th>
+                          <th className="px-3 py-2 text-right">입고수량</th>
+                          <th className="px-3 py-2 text-left">공급처 LOT</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {pendingItems.map(item => {
+                          const checked = batchSelected.has(item.pri_id);
+                          return (
+                            <tr
+                              key={item.pri_id}
+                              className={`hover:bg-gray-50 ${checked ? 'bg-teal-50/40' : ''}`}
+                            >
+                              <td className="px-3 py-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => toggleBatchItem(item.pri_id)}
+                                  className="rounded border-gray-300"
+                                />
+                              </td>
+                              <td className="px-3 py-2 font-mono text-xs">{item.item_code}</td>
+                              <td className="px-3 py-2">
+                                <div>{item.item_name}</div>
+                                {item.item_subcategory && (
+                                  <div className="text-[10px] text-gray-400">{item.item_subcategory}</div>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-xs text-gray-600 max-w-[140px]">
+                                <span className="truncate block" title={item.item_spec || ''}>{item.item_spec || '-'}</span>
+                              </td>
+                              <td className="px-3 py-2 text-right font-mono font-medium">
+                                {Number(item.order_qty).toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2 text-gray-500">{item.unit}</td>
+                              <td className="px-3 py-2 text-right font-mono text-teal-700 font-medium">
+                                {Number(item.order_qty).toLocaleString()}
+                              </td>
+                              <td className="px-3 py-2">
+                                <input
+                                  type="text"
+                                  value={batchSupplierLots[item.pri_id] || ''}
+                                  onChange={e => setBatchSupplierLots(prev => ({ ...prev, [item.pri_id]: e.target.value }))}
+                                  className="border rounded px-2 py-1 text-xs w-32"
+                                  placeholder="선택 입력"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="px-5 py-2.5 bg-blue-50 border-t text-xs text-blue-700 rounded-b-xl">
+                    선택한 품목은 발주량 전량으로 입고 처리되며, 자체 LOT번호가 자동 생성되고 인수검사가 자동 등록됩니다.
+                  </div>
+                  </>)}
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 text-gray-500 text-xs">
-                        <th className="px-2 py-2 text-left w-6"></th>
-                        <th className="px-2 py-2 text-left">#</th>
-                        <th className="px-3 py-2 text-left">품목코드</th>
-                        <th className="px-3 py-2 text-left">품목명</th>
-                        <th className="px-3 py-2 text-left">규격</th>
-                        <th className="px-3 py-2 text-right">필요량</th>
-                        <th className="px-3 py-2 text-right">발주량</th>
-                        <th className="px-3 py-2 text-left">단위</th>
-                        <th className="px-3 py-2 text-right">롤수</th>
-                        {isOrdered && <th className="px-3 py-2 text-center">입고/검사</th>}
-                        {isDraft && <th className="px-2 py-2 text-center">관리</th>}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {prItems.map((item, idx) => {
-                        const rollCount = item.roll_count ?? null;
-                        const isExpanded = expandedRows.has(item.pri_id);
-                        const hasDetail = item.spec_detail || item.calc_note || item.item_spec;
-                        const rcvInfo = getReceiving(item.pri_id);
-                        return (
-                          <ItemRow key={item.pri_id}
-                            item={item} idx={idx} rollCount={rollCount}
-                            isExpanded={isExpanded} hasDetail={!!hasDetail} isDraft={isDraft} isOrdered={isOrdered}
-                            isEditing={editingItem?.pri_id === item.pri_id} editForm={editForm}
-                            rcvInfo={rcvInfo}
-                            onToggle={() => toggleExpand(item.pri_id)} onEdit={() => startEdit(item)}
-                            onDelete={() => deleteItem(item.pri_id)} onEditChange={setEditForm}
-                            onEditSave={saveEdit} onEditCancel={() => setEditingItem(null)}
-                            onReceive={() => openReceiveModal(item)}
-                            onGoInspection={(inspId) => navigate(`/quality/incoming?highlight=${inspId}`)}
-                          />
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+              )}
             </div>
           ) : (
             <div className="bg-white rounded-xl border shadow-sm p-12 text-center text-gray-400">
@@ -434,17 +671,21 @@ export default function PurchaseRequestPage() {
                 <div className="flex gap-2">
                   <input type="text" value={receiveForm.inspection_lot}
                     onChange={e => setReceiveForm(f => ({ ...f, inspection_lot: e.target.value }))}
-                    className="flex-1 border rounded-lg px-3 py-2 text-sm font-mono bg-blue-50 border-blue-200" placeholder="EZ-YYMMDD-NNN" />
+                    className="flex-1 border rounded-lg px-3 py-2 text-sm font-mono bg-blue-50 border-blue-200" placeholder="YYMMDD약호NNN" />
                   <button type="button" onClick={async () => {
+                    if (!receivingItem || !selectedPR) return;
                     try {
-                      const res = await api.get<{ data: string }>('/lot-next-number?prefix=EZ');
-                      setReceiveForm(f => ({ ...f, inspection_lot: res.data }));
+                      const res = await api.post<{ data: any[] }>(`/purchase-requests/${selectedPR.pr_id}/preview-lots`, {
+                        pri_ids: [receivingItem.pri_id],
+                      });
+                      const lot = res.data?.[0]?.lot_number;
+                      if (lot) setReceiveForm(f => ({ ...f, inspection_lot: lot }));
                     } catch { /* */ }
                   }}
                     className="px-3 py-2 border rounded-lg text-xs text-blue-600 hover:bg-blue-50 whitespace-nowrap"
                   >재생성</button>
                 </div>
-                <p className="text-[10px] text-gray-400 mt-1">비워두면 자동 생성됩니다. 직접 입력도 가능합니다.</p>
+                <p className="text-[10px] text-gray-400 mt-1">품목별 자동 생성 (예: 260413MB001). 직접 수정도 가능합니다.</p>
               </div>
               <div>
                 <label className="text-xs text-gray-500 block mb-1">검사자</label>
@@ -465,6 +706,64 @@ export default function PurchaseRequestPage() {
               <button onClick={submitReceive}
                 className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700">
                 입고등록 + 검사생성
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* LOT 확인/수정 모달 */}
+      {lotPreview && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setLotPreview(null)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[600px] max-h-[80vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-lg mb-1">입고 LOT 번호 확인</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              자동 생성된 LOT 번호를 확인하고, 필요시 수정 후 입고를 진행하세요.
+            </p>
+
+            <div className="border rounded-lg overflow-hidden mb-4">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left">품목</th>
+                    <th className="px-3 py-2 text-right">수량</th>
+                    <th className="px-3 py-2 text-left">LOT 번호</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {lotPreview.map(p => (
+                    <tr key={p.pri_id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2">
+                        <div className="font-medium">{p.item_name}</div>
+                        <div className="text-[10px] text-gray-400">{p.item_code}</div>
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono">
+                        {Number(p.order_qty).toLocaleString()} {p.unit}
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          type="text"
+                          value={lotEdits[p.pri_id] || ''}
+                          onChange={e => setLotEdits(prev => ({ ...prev, [p.pri_id]: e.target.value }))}
+                          className="w-full border rounded px-2 py-1.5 text-xs font-mono bg-teal-50 border-teal-200 focus:ring-1 focus:ring-teal-400"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-700">
+              입고등록 시 각 품목에 대해 인수검사(INCOMING)가 자동 생성됩니다.
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setLotPreview(null)}
+                className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">취소</button>
+              <button onClick={submitBatchReceive} disabled={batchSubmitting}
+                className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
+                {batchSubmitting ? '처리중...' : `${lotPreview.length}건 입고등록 확정`}
               </button>
             </div>
           </div>
@@ -591,7 +890,9 @@ function ItemRow({ item, idx, rollCount, isExpanded, hasDetail, isDraft, isOrder
         </td>
         {isOrdered && (
           <td className="px-3 py-2 text-center" onClick={e => e.stopPropagation()}>
-            {(!rcvInfo || rcvInfo.receiving_status === 'PENDING') ? (
+            {item.item_code?.startsWith('RM-') ? (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">배합원료</span>
+            ) : (!rcvInfo || rcvInfo.receiving_status === 'PENDING') ? (
               <button onClick={onReceive}
                 className="px-2.5 py-1 bg-teal-600 text-white rounded text-xs font-medium hover:bg-teal-700 whitespace-nowrap">
                 입고등록
@@ -707,5 +1008,584 @@ function ItemRow({ item, idx, rollCount, isExpanded, hasDetail, isDraft, isOrder
         </tr>
       )}
     </>
+  );
+}
+
+/* ═══════ 소요자재 목록 섹션 (접기/펼치기) ═══════ */
+function SoItemsSection({ prItems, isDraft, isOrdered, expandedRows, editingItem, editForm,
+  receivingInfo, onToggleExpand, onStartEdit, onDeleteItem, onEditChange, onEditSave, onEditCancel,
+  onReceive, onGoInspection, getReceiving }: {
+  prItems: PrItem[]; isDraft: boolean; isOrdered: boolean;
+  expandedRows: Set<number>; editingItem: PrItem | null;
+  editForm: { order_qty: string; remarks: string };
+  receivingInfo: ReceivingInfo[];
+  onToggleExpand: (id: number) => void; onStartEdit: (item: PrItem) => void;
+  onDeleteItem: (id: number) => void; onEditChange: (f: any) => void;
+  onEditSave: () => void; onEditCancel: () => void;
+  onReceive: (item: PrItem) => void; onGoInspection: (inspId: number) => void;
+  getReceiving: (priId: number) => ReceivingInfo | undefined;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const smItems = prItems.filter(i => !i.item_code?.startsWith('RM-'));
+  const rmItems = prItems.filter(i => i.item_code?.startsWith('RM-'));
+  const totalCount = prItems.length;
+
+  return (
+    <div className="bg-white rounded-xl border shadow-sm">
+      <button
+        type="button"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setCollapsed(!collapsed); }}
+        className="w-full px-5 py-3 border-b bg-gray-50 rounded-t-xl flex items-center justify-between hover:bg-gray-100 transition"
+      >
+        <h3 className="font-semibold text-sm text-gray-700">
+          소요자재 목록
+          <span className="text-xs text-gray-400 ml-2">
+            부자재 {smItems.length}건{rmItems.length > 0 && ` · 배합원료 ${rmItems.length}건`} · 총 {totalCount}건
+          </span>
+        </h3>
+        <span className="text-gray-400 text-xs">{collapsed ? '▶ 펼치기' : '▼ 접기'}</span>
+      </button>
+      {!collapsed && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 text-gray-500 text-xs">
+                <th className="px-2 py-2 text-left w-6"></th>
+                <th className="px-2 py-2 text-left">#</th>
+                <th className="px-3 py-2 text-left">품목코드</th>
+                <th className="px-3 py-2 text-left">품목명</th>
+                <th className="px-3 py-2 text-left">규격</th>
+                <th className="px-3 py-2 text-right">필요량</th>
+                <th className="px-3 py-2 text-right">발주량</th>
+                <th className="px-3 py-2 text-left">단위</th>
+                <th className="px-3 py-2 text-right">롤수</th>
+                {isOrdered && <th className="px-3 py-2 text-center">입고/검사</th>}
+                {isDraft && <th className="px-2 py-2 text-center">관리</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {prItems.map((item, idx) => {
+                const rollCount = item.roll_count ?? null;
+                const isExpanded = expandedRows.has(item.pri_id);
+                const hasDetail = item.spec_detail || item.calc_note || item.item_spec;
+                const rcvInfo = getReceiving(item.pri_id);
+                return (
+                  <ItemRow key={item.pri_id}
+                    item={item} idx={idx} rollCount={rollCount}
+                    isExpanded={isExpanded} hasDetail={!!hasDetail} isDraft={isDraft} isOrdered={isOrdered}
+                    isEditing={editingItem?.pri_id === item.pri_id} editForm={editForm}
+                    rcvInfo={rcvInfo}
+                    onToggle={() => onToggleExpand(item.pri_id)} onEdit={() => onStartEdit(item)}
+                    onDelete={() => onDeleteItem(item.pri_id)} onEditChange={onEditChange}
+                    onEditSave={onEditSave} onEditCancel={onEditCancel}
+                    onReceive={() => onReceive(item)}
+                    onGoInspection={onGoInspection}
+                  />
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════ 배합원료 발주입력 섹션 ═══════ */
+/* ═══════ 발주서 일별 그룹 ═══════ */
+function PrDateGroup({ date, prs, selectedPrId, onSelect, onDelete }: {
+  date: string; prs: PR[]; selectedPrId: number | null; onSelect: (pr: PR) => void; onDelete: (pr: PR) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const today = new Date().toISOString().slice(0, 10);
+  const isToday = date === today;
+  const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+  const dayLabel = date !== '미정' ? dayNames[new Date(date).getDay()] : '';
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setCollapsed(!collapsed); }}
+        className={`w-full px-3 py-2 flex items-center justify-between text-left border-b transition ${
+          isToday ? 'bg-blue-50 hover:bg-blue-100' : 'bg-gray-50 hover:bg-gray-100'
+        }`}
+      >
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-bold ${isToday ? 'text-blue-800' : 'text-gray-700'}`}>
+            {date}
+          </span>
+          {dayLabel && (
+            <span className={`text-[10px] px-1 py-0.5 rounded ${isToday ? 'bg-blue-200 text-blue-800' : 'bg-gray-200 text-gray-600'}`}>
+              {dayLabel}{isToday ? ' · 오늘' : ''}
+            </span>
+          )}
+          <span className="text-[10px] text-gray-400">{prs.length}건</span>
+        </div>
+        <span className="text-gray-400 text-[10px]">{collapsed ? '▶' : '▼'}</span>
+      </button>
+      {!collapsed && (
+        <div className="divide-y">
+          {prs.map(pr => (
+            <div
+              key={pr.pr_id}
+              onClick={() => onSelect(pr)}
+              className={`p-3 cursor-pointer hover:bg-blue-50 transition ${
+                selectedPrId === pr.pr_id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-sm font-medium">{pr.pr_number}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_LABELS[pr.status]?.color || 'bg-gray-100'}`}>
+                  {STATUS_LABELS[pr.status]?.label || pr.status}
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-gray-500">
+                {pr.order_number && <span className="mr-2">수주: {pr.order_number}</span>}
+                {pr.customer_name && <span>{pr.customer_name}</span>}
+              </div>
+              <div className="mt-0.5 text-xs text-gray-400">
+                {pr.item_count}품목
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RmPurchaseSection({ prId, prStatus }: { prId: number; prStatus: string }) {
+  const [rmItems, setRmItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [orderQtys, setOrderQtys] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  // 체크박스 선택
+  const [selectedRm, setSelectedRm] = useState<Set<string>>(new Set());
+  const [batchRmSubmitting, setBatchRmSubmitting] = useState(false);
+  // 일괄 입고 LOT 확인 모달
+  const [rmLotPreview, setRmLotPreview] = useState<any[] | null>(null);
+  const [rmLotEdits, setRmLotEdits] = useState<Record<number, string>>({});
+  const [rmBatchInspector, setRmBatchInspector] = useState('');
+  // 개별 입고등록 모달
+  const [receiveItem, setReceiveItem] = useState<any | null>(null);
+  const [rmReceiveForm, setRmReceiveForm] = useState({ received_qty: '', supplier_lot: '', inspection_lot: '', inspector: '' });
+
+  const fetchRm = () => {
+    setLoading(true);
+    // 발주서 자체 품목에서 RM 읽기 + 현재고 조회
+    Promise.all([
+      api.get<{ data: any }>(`/purchase-requests/${prId}`),
+      api.get<{ data: any }>(`/purchase-requests/${prId}/rm-requirements`).catch(() => ({ data: [] })),
+    ]).then(([prRes, rmReqRes]: any[]) => {
+      const prItems = (prRes.data?.items || []).filter((i: any) => i.item_code?.startsWith('RM-'));
+      const rmReqs = rmReqRes.data || [];
+
+      // 재고 매핑
+      const stockMap: Record<string, number> = {};
+      rmReqs.forEach((r: any) => { stockMap[r.item_code] = r.current_stock || 0; });
+
+      const items = prItems.map((pi: any) => ({
+        pri_id: pi.pri_id,
+        item_id: pi.item_id,
+        item_code: pi.item_code,
+        item_name: pi.item_name,
+        order_qty: parseFloat(pi.order_qty || '0'),
+        unit: pi.unit || 'kg',
+        current_stock: stockMap[pi.item_code] || 0,
+        receiving_status: pi.receiving_status || 'PENDING',
+        received_qty: parseFloat(pi.received_qty || '0'),
+        insp_id: pi.insp_id,
+        lot_id: pi.lot_id,
+      }));
+
+      setRmItems(items);
+      const qtys: Record<string, string> = {};
+      items.forEach((item: any) => {
+        qtys[item.item_code] = item.order_qty > 0 ? String(item.order_qty) : '';
+      });
+      setOrderQtys(qtys);
+    }).catch(() => setRmItems([]))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchRm(); }, [prId]);
+
+  if (loading) return null;
+  if (rmItems.length === 0) return null;
+
+  // 발주 저장 (PR에 RM 품목 추가)
+  const handleSaveOrder = async () => {
+    const items = rmItems
+      .filter(r => parseFloat(orderQtys[r.item_code] || '0') > 0)
+      .map(r => ({
+        item_id: r.item_id, item_code: r.item_code, item_name: r.item_name,
+        order_qty: parseFloat(orderQtys[r.item_code] || '0'), unit: r.unit,
+      }));
+    if (items.length === 0) { alert('발주수량을 입력하세요.'); return; }
+    if (!confirm(`배합원료 ${items.length}건을 발주 저장하시겠습니까?`)) return;
+    setSubmitting(true);
+    try {
+      await api.post(`/purchase-requests/${prId}/rm-order`, { items });
+      alert(`배합원료 ${items.length}건 발주 저장 완료`);
+      fetchRm();
+    } catch (err: any) {
+      alert(err?.message || '발주 저장 실패');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 일괄 입고 LOT 미리보기
+  const requestRmBatchPreview = async () => {
+    const pendingRm = rmItems.filter(i => selectedRm.has(i.item_code) && i.receiving_status === 'PENDING');
+    if (pendingRm.length === 0) return;
+    const priIds = pendingRm.map(i => i.pri_id).filter(Boolean);
+    if (priIds.length === 0) { alert('발주 저장을 먼저 해주세요.'); return; }
+    try {
+      const res = await api.post<{ data: any[] }>(`/purchase-requests/${prId}/preview-lots`, { pri_ids: priIds });
+      const previews = res.data || [];
+      setRmLotPreview(previews.map((p: any) => {
+        const item = pendingRm.find(i => i.pri_id === p.pri_id);
+        return { ...p, order_qty: parseFloat(orderQtys[p.item_code] || '0') || item?.order_qty || 0, unit: p.unit || 'kg' };
+      }));
+      const edits: Record<number, string> = {};
+      previews.forEach((p: any) => { edits[p.pri_id] = p.lot_number; });
+      setRmLotEdits(edits);
+    } catch { alert('LOT 미리보기 실패'); }
+  };
+
+  // 일괄 입고 실행
+  const submitRmBatch = async () => {
+    if (!rmLotPreview) return;
+    setBatchRmSubmitting(true);
+    try {
+      const items = rmLotPreview.map(p => ({
+        pri_id: p.pri_id,
+        received_qty: p.order_qty,
+        custom_lot: rmLotEdits[p.pri_id] || p.lot_number,
+      }));
+      await api.post(`/purchase-requests/${prId}/receive-batch`, {
+        items,
+        inspector: rmBatchInspector || null,
+      });
+      alert(`배합원료 ${items.length}건 일괄 입고 완료`);
+      setRmLotPreview(null);
+      setSelectedRm(new Set());
+      setRmBatchInspector('');
+      fetchRm();
+    } catch (err: any) {
+      alert(err?.message || '일괄 입고 실패');
+    } finally {
+      setBatchRmSubmitting(false);
+    }
+  };
+
+  // 입고등록 모달 열기
+  const openRmReceive = async (item: any) => {
+    let lotNumber = '';
+    try {
+      if (item.pri_id) {
+        const lotRes = await api.post<{ data: any[] }>(`/purchase-requests/${prId}/preview-lots`, { pri_ids: [item.pri_id] });
+        lotNumber = lotRes.data?.[0]?.lot_number || '';
+      }
+    } catch { /* */ }
+    setReceiveItem(item);
+    setRmReceiveForm({
+      received_qty: String(parseFloat(orderQtys[item.item_code] || '0') || ''),
+      supplier_lot: '',
+      inspection_lot: lotNumber,
+      inspector: '',
+    });
+  };
+
+  // 입고등록 실행
+  const submitRmReceive = async () => {
+    if (!receiveItem || !receiveItem.pri_id) { alert('품목 정보가 없습니다.'); return; }
+    const qty = parseFloat(rmReceiveForm.received_qty);
+    if (!qty || qty <= 0) { alert('입고수량을 입력하세요.'); return; }
+    try {
+      await api.post(`/purchase-requests/${prId}/items/${receiveItem.pri_id}/receive`, {
+        received_qty: qty,
+        supplier_lot: rmReceiveForm.supplier_lot || null,
+        inspection_lot: rmReceiveForm.inspection_lot || null,
+        inspector: rmReceiveForm.inspector || null,
+      });
+      setReceiveItem(null);
+      fetchRm();
+      alert(`${receiveItem.item_name} 입고등록 완료`);
+    } catch (err: any) {
+      alert(err?.message || '입고등록 실패');
+    }
+  };
+
+  const totalOrdered = rmItems.reduce((s: number, r: any) => s + (r.order_qty || 0), 0);
+  const inputTotal = Object.values(orderQtys).reduce((s, v) => s + (parseFloat(v as string) || 0), 0);
+
+  return (
+    <div className="bg-white rounded-xl border shadow-sm">
+      <button
+        type="button"
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setCollapsed(!collapsed); }}
+        className="w-full px-5 py-3 border-b bg-amber-50 rounded-t-xl flex items-center justify-between hover:bg-amber-100 transition"
+      >
+        <h3 className="font-semibold text-sm text-amber-800">
+          배합원료 발주
+          <span className="text-xs text-amber-600 ml-2">
+            {rmItems.length}품목
+            {totalOrdered > 0 && ` · 발주 ${totalOrdered.toLocaleString()}kg`}
+          </span>
+        </h3>
+        <span className="text-amber-500 text-xs">{collapsed ? '▶ 펼치기' : '▼ 접기'}</span>
+      </button>
+
+      {!collapsed && (
+        <div>
+          {/* 일괄 입고 바 */}
+          {selectedRm.size > 0 && (
+            <div className="px-4 py-2 bg-teal-50 border-b flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-medium text-teal-800">{selectedRm.size}건 선택</span>
+                <select value={rmBatchInspector} onChange={e => setRmBatchInspector(e.target.value)}
+                  className="border rounded px-2 py-1 text-xs">
+                  <option value="">검사자 선택</option>
+                  <option value="김정용책임">김정용책임</option>
+                  <option value="이종재책임">이종재책임</option>
+                </select>
+              </div>
+              <button onClick={requestRmBatchPreview}
+                className="px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-medium hover:bg-teal-700">
+                선택 {selectedRm.size}건 일괄 입고
+              </button>
+            </div>
+          )}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50 text-gray-500 text-xs">
+                  <th className="px-2 py-2 w-8">
+                    <input type="checkbox"
+                      checked={rmItems.filter(i => i.receiving_status === 'PENDING').length > 0 &&
+                        rmItems.filter(i => i.receiving_status === 'PENDING').every(i => selectedRm.has(i.item_code))}
+                      onChange={() => {
+                        const pending = rmItems.filter(i => i.receiving_status === 'PENDING');
+                        if (pending.every(i => selectedRm.has(i.item_code))) setSelectedRm(new Set());
+                        else setSelectedRm(new Set(pending.map(i => i.item_code)));
+                      }}
+                      className="rounded" />
+                  </th>
+                  <th className="px-3 py-2 text-left">품목코드</th>
+                  <th className="px-3 py-2 text-left">품목명</th>
+                  <th className="px-3 py-2 text-right">현재고</th>
+                  <th className="px-3 py-2 text-right">발주수량</th>
+                  <th className="px-3 py-2 text-center">입고</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {rmItems.map(item => (
+                  <tr key={item.item_code} className={`hover:bg-amber-50/30 ${selectedRm.has(item.item_code) ? 'bg-teal-50/40' : ''}`}>
+                    <td className="px-2 py-2 text-center">
+                      {item.receiving_status === 'PENDING' && prStatus === 'ORDERED' ? (
+                        <input type="checkbox" checked={selectedRm.has(item.item_code)}
+                          onChange={() => setSelectedRm(prev => {
+                            const next = new Set(prev);
+                            if (next.has(item.item_code)) next.delete(item.item_code); else next.add(item.item_code);
+                            return next;
+                          })}
+                          className="rounded" />
+                      ) : <div className="w-4 h-px bg-gray-300 mx-auto" />}
+                    </td>
+                    <td className="px-3 py-2 font-mono text-xs text-amber-700">{item.item_code}</td>
+                    <td className="px-3 py-2">{item.item_name}</td>
+                    <td className="px-3 py-2 text-right font-mono text-gray-500">{(item.current_stock || 0).toLocaleString()} {item.unit}</td>
+                    <td className="px-3 py-2 text-right">
+                      {prStatus === 'DRAFT' ? (
+                        <input type="number" step="0.01"
+                          value={orderQtys[item.item_code] || ''}
+                          onChange={e => setOrderQtys(prev => ({ ...prev, [item.item_code]: e.target.value }))}
+                          className="w-28 border rounded px-2 py-1 text-xs font-mono text-right border-amber-200 focus:ring-1 focus:ring-amber-400"
+                          placeholder="0" />
+                      ) : (
+                        <span className="font-mono font-medium">{item.order_qty > 0 ? `${item.order_qty.toLocaleString()} ${item.unit}` : '-'}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      {item.receiving_status === 'RECEIVED' || item.receiving_status === 'INSPECTED' ? (
+                        <span className="text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full">입고완료</span>
+                      ) : prStatus === 'ORDERED' ? (
+                        <button onClick={() => openRmReceive(item)}
+                          className="px-2.5 py-1 bg-teal-600 text-white rounded text-xs font-medium hover:bg-teal-700">
+                          입고등록
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-gray-400">발주완료 후</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-amber-50 font-medium text-xs">
+                  <td colSpan={2} className="px-4 py-2 text-amber-800">합계 (1배치 = 300kg)</td>
+                  <td className="px-4 py-2"></td>
+                  <td className="px-4 py-2 text-right font-mono text-amber-700">
+                    {inputTotal.toLocaleString()} kg
+                  </td>
+                  <td className="px-4 py-2"></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {prStatus === 'DRAFT' && (
+            <div className="px-5 py-3 border-t bg-amber-50/50 flex items-center justify-between rounded-b-xl">
+              <span className="text-[11px] text-amber-600">
+                발주수량 입력 후 저장하거나, 제출 시 자동 저장됩니다.
+              </span>
+              <button
+                onClick={handleSaveOrder}
+                disabled={submitting}
+                className="px-4 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 disabled:opacity-50"
+              >
+                {submitting ? '저장중...' : '배합원료 발주 저장'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 일괄 입고 LOT 확인 모달 */}
+      {rmLotPreview && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setRmLotPreview(null)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[550px] max-h-[80vh] overflow-auto" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-lg mb-1">배합원료 일괄 입고 확인</h3>
+            <p className="text-sm text-gray-500 mb-4">LOT 번호를 확인/수정 후 입고를 진행하세요.</p>
+            <div className="border rounded-lg overflow-hidden mb-4">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left">품목</th>
+                    <th className="px-3 py-2 text-right">입고수량</th>
+                    <th className="px-3 py-2 text-left">LOT 번호</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {rmLotPreview.map(p => (
+                    <tr key={p.pri_id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2">
+                        <div className="font-medium">{p.item_name}</div>
+                        <div className="text-[10px] text-gray-400">{p.item_code}</div>
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono">{Number(p.order_qty).toLocaleString()} {p.unit}</td>
+                      <td className="px-3 py-2">
+                        <input type="text" value={rmLotEdits[p.pri_id] || ''}
+                          onChange={e => setRmLotEdits(prev => ({ ...prev, [p.pri_id]: e.target.value }))}
+                          className="w-full border rounded px-2 py-1.5 text-xs font-mono bg-teal-50 border-teal-200" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center gap-3 mb-4">
+              <label className="text-xs text-gray-500">검사자:</label>
+              <select value={rmBatchInspector} onChange={e => setRmBatchInspector(e.target.value)}
+                className="border rounded px-2 py-1 text-xs flex-1">
+                <option value="">선택</option>
+                <option value="김정용책임">김정용책임</option>
+                <option value="이종재책임">이종재책임</option>
+              </select>
+              <input type="text" value={rmBatchInspector}
+                onChange={e => setRmBatchInspector(e.target.value)}
+                className="border rounded px-2 py-1 text-xs flex-1" placeholder="직접 입력" />
+            </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-xs text-blue-700">
+              각 품목별 인수검사(INCOMING)가 자동 생성됩니다.
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setRmLotPreview(null)}
+                className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">취소</button>
+              <button onClick={submitRmBatch} disabled={batchRmSubmitting}
+                className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700 disabled:opacity-50">
+                {batchRmSubmitting ? '처리중...' : `${rmLotPreview.length}건 일괄 입고 확정`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 배합원료 개별 입고등록 모달 */}
+      {receiveItem && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setReceiveItem(null)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-[460px]" onClick={e => e.stopPropagation()}>
+            <h3 className="font-bold text-lg mb-1">입고등록</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {receiveItem.item_code} · {receiveItem.item_name}
+            </p>
+
+            <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-500">발주량</span>
+                <span className="font-mono font-medium">{Number(orderQtys[receiveItem.item_code] || 0).toLocaleString()} {receiveItem.unit}</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">입고수량 <span className="text-red-500">*</span></label>
+                <input type="number" value={rmReceiveForm.received_qty}
+                  onChange={e => setRmReceiveForm(f => ({ ...f, received_qty: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="실 입고수량" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">공급처 LOT 번호</label>
+                <input type="text" value={rmReceiveForm.supplier_lot}
+                  onChange={e => setRmReceiveForm(f => ({ ...f, supplier_lot: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="공급사/제조사 LOT번호 입력" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">
+                  자체 관리 LOT 번호 <span className="text-blue-500 text-[10px]">(자동생성)</span>
+                </label>
+                <input type="text" value={rmReceiveForm.inspection_lot}
+                  onChange={e => setRmReceiveForm(f => ({ ...f, inspection_lot: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-blue-50 border-blue-200" />
+                <p className="text-[10px] text-gray-400 mt-1">품목별 자동 생성. 직접 수정도 가능합니다.</p>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 block mb-1">검사자</label>
+                <div className="flex gap-2">
+                  <select
+                    value={['김정용책임', '이종재책임'].includes(rmReceiveForm.inspector) ? rmReceiveForm.inspector : ''}
+                    onChange={e => setRmReceiveForm(f => ({ ...f, inspector: e.target.value }))}
+                    className="border rounded-lg px-3 py-2 text-sm flex-1">
+                    <option value="">선택</option>
+                    <option value="김정용책임">김정용책임</option>
+                    <option value="이종재책임">이종재책임</option>
+                  </select>
+                  <input type="text" value={rmReceiveForm.inspector}
+                    onChange={e => setRmReceiveForm(f => ({ ...f, inspector: e.target.value }))}
+                    className="border rounded-lg px-3 py-2 text-sm flex-1" placeholder="직접 입력" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4 text-xs text-blue-700">
+              입고등록 시 인수검사(INCOMING)가 자동 생성됩니다.
+            </div>
+
+            <div className="flex gap-2 mt-5 justify-end">
+              <button onClick={() => setReceiveItem(null)}
+                className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-50">취소</button>
+              <button onClick={submitRmReceive}
+                className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-medium hover:bg-teal-700">
+                입고등록 + 검사생성
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

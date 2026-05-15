@@ -2,6 +2,34 @@ import { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import * as XLSX from 'xlsx';
 import { INCOMING_FORM_PRESETS } from './inspections.js';
+import { generateProcessLotNumber } from './lot-utils.js';
+
+// ─── 입고 LOT 약호 매핑 (품목코드 prefix → LOT 약호) ───
+const LOT_ABBREV_MAP: Record<string, string> = {
+  'RM-MB': 'MB',       // 난연컴파운드
+  'RM-EG50': '#5',     // 팽창흑연 #50
+  'RM-EA': 'EA',       // EVA-EA33045
+  'RM-EP': 'EP',       // EVA-EP100
+  'SM-SK': 'GI',       // 금속소켓 본체 (아연도금강판)
+  'SM-GI': 'GI',       // 강재류 아연도금강판
+  'SM-STL': 'GI',      // 강재류
+  'SM-CW': 'CW',       // 세라믹차열재
+  'SM-GW': 'GW',       // 그라스울
+  'SM-SIL': 'SS',      // 실란트
+  'SM-SL': 'SS',       // 실리콘 실란트
+  'SM-BRK': 'BK',      // 브라켓
+  'SM-GP': 'GP',       // 고정자재
+  'SM-SP': 'SP',       // 보호철판
+  'SM-FN': 'FN',       // 발포소켓
+  'SM-PE': 'PE',       // PE보온재
+};
+
+function resolveLotAbbrev(itemCode: string): string {
+  for (const [prefix, ab] of Object.entries(LOT_ABBREV_MAP)) {
+    if (itemCode.startsWith(prefix)) return ab;
+  }
+  return 'IN';
+}
 
 // ─── 마이그레이션 ───
 async function migrateOrderTables() {
@@ -575,13 +603,13 @@ function calculateStructureBom(d: DimParams): BomLine[] {
     addFlashingComponents(withLoss, 'I', 125);
   }
 
-  // ── 8. 글라스울 덕트보온재 ──
-  // VAG-1.69: 인정서에 글라스울 없음 (세라믹만 사용)
+  // ── 8. 그라스울 덕트보온재 ──
+  // VAG-1.69: 인정서에 그라스울 없음 (세라믹만 사용)
   // 나머지: (관통재W + 관통재H) × 2 × 4면 ÷ 1000 ÷ 롤폭1.4 = M
   if (!isVAG) {
     const gwDuctM = Math.round((d.W + d.H) * 2 * 4 / 1000 / 1.4 * 100) / 100;
     lines.push({
-      component: '글라스울 덕트보온재(24K)', item_code: 'SM-GW-24-14', qty: gwDuctM, unit: 'M',
+      component: '그라스울 덕트보온재(24K)', item_code: 'SM-GW-24-14', qty: gwDuctM, unit: 'M',
       spec: `밀도24kg/m³, 두께25mm, W1400(롤폭)`,
       calc: `(${d.W}+${d.H})×2×4면÷1000÷1.4=${gwDuctM}M`,
     });
@@ -598,7 +626,7 @@ function calculateStructureBom(d: DimParams): BomLine[] {
   //   VTI-064: 그라스울1단(W1000, 양면대칭) x2 + 세라믹2단(50mm, W600)
 
   if (isVAG) {
-    // VAG-1.69: 세라믹만 사용, 글라스울 없음
+    // VAG-1.69: 세라믹만 사용, 그라스울 없음
     const cwSupportM = Math.round(d.W * 4 / 1000 / 0.6 * 100) / 100;
     lines.push({
       component: '지지구조 세라믹차열재(96K)', item_code: 'SM-CW-96-50', qty: cwSupportM, unit: 'M',
@@ -1545,10 +1573,11 @@ export async function orderRoutes(app: FastifyInstance) {
       return { error: `이미 발주서 ${ep.pr_number} (${ep.status === 'DRAFT' ? '초안' : ep.status === 'SUBMITTED' ? '제출됨' : ep.status === 'APPROVED' ? '승인됨' : ep.status === 'ORDERED' ? '발주완료' : ep.status === 'RECEIVED' ? '입고완료' : ep.status})이 존재합니다. 기존 발주서를 취소 후 재생성하세요.` };
     }
 
+    // RM(배합원료)는 별도 발주서로 관리하므로 제외
     const shortageItems = await pool.query(`
       SELECT * FROM order_bom_result
-      WHERE order_id = $1 AND shortage_qty > 0 AND item_category IN ('RM', 'SM')
-      ORDER BY item_category, item_code
+      WHERE order_id = $1 AND shortage_qty > 0 AND item_category = 'SM'
+      ORDER BY item_code
     `, [orderId]);
 
     if (shortageItems.rows.length === 0) return { error: '발주 대상 부족 자재가 없습니다 (재고 충분)' };
@@ -1851,7 +1880,7 @@ export async function orderRoutes(app: FastifyInstance) {
     s1Rows.push([]);
     s1Rows.push(['No', '품목코드', '품목명', '상세규격', '수량', '단위', '적용구조', '비고']);
 
-    const categories = ['배합원료', '세라믹차열재', '글라스울', '강재류', '브라켓', '고정자재', '밀봉재'];
+    const categories = ['배합원료', '세라믹차열재', '그라스울', '강재류', '브라켓', '고정자재', '밀봉재'];
     const catLineMap = new Map<string, OrderLine[]>();
     for (const line of orderLines) {
       if (!catLineMap.has(line.category)) catLineMap.set(line.category, []);
@@ -2088,8 +2117,315 @@ export async function orderRoutes(app: FastifyInstance) {
       }
     }
 
+    // ── 발주완료(ORDERED) 시 작업지시서 자동 생성 ──
+    if (status === 'ORDERED' && pr.order_id) {
+      try {
+        const autoWoResult = await autoCreateWorkOrders(pr.order_id, pr.customer_name, pr.project_name);
+        return { data: { ...rows[0], auto_work_orders: autoWoResult } };
+      } catch (err: any) {
+        console.error('[AutoWO] 자동 작업지시 생성 실패 (발주 상태는 변경됨):', err.message);
+        return { data: { ...rows[0], auto_work_orders: null, auto_wo_error: err.message } };
+      }
+    }
+
     return { data: rows[0] };
   });
+
+  // ── 발주완료 시 작업지시서 자동 생성 헬퍼 ──
+  async function autoCreateWorkOrders(orderId: number, customerName: string | null, _projectName: string | null) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 이미 해당 수주에 대한 작업지시가 있는지 확인 (중복 방지)
+      const existingWo = await client.query(
+        `SELECT wo_id FROM work_order WHERE order_id = $1 LIMIT 1`,
+        [orderId]
+      );
+      if (existingWo.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return { skipped: true, message: '이미 작업지시가 존재합니다.', existing_count: existingWo.rows.length };
+      }
+
+      // 수주 정보 조회
+      const orderRes = await client.query(
+        `SELECT so.*,
+                (SELECT COUNT(*) FROM sales_order_item WHERE order_id = so.order_id) as item_count,
+                (SELECT COALESCE(SUM(qty), 0) FROM sales_order_item WHERE order_id = so.order_id) as total_item_qty
+         FROM sales_order so WHERE so.order_id = $1`,
+        [orderId]
+      );
+      if (orderRes.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return { skipped: true, message: '연결된 수주를 찾을 수 없습니다.' };
+      }
+      const order = orderRes.rows[0];
+
+      const woDate = new Date().toISOString().slice(0, 10);
+      const dateStr = woDate.replace(/-/g, '');
+      const createdOrders: any[] = [];
+      // MIX는 별도 생성 (일일 생산계획/개별 작업지시에서 선택)
+      const processes = ['EXT', 'CUT', 'ASM'];
+      const totalSets = parseInt(order.total_sets || order.total_item_qty || '1', 10) || 1;
+
+      // BOM 결과에서 실제 소요량 조회
+      const bomReqRes = await client.query(
+        `SELECT obr.item_code, obr.item_name, obr.required_qty, obr.unit, im.item_id
+         FROM order_bom_result obr
+         LEFT JOIN item_master im ON im.item_code = obr.item_code
+         WHERE obr.order_id = $1 AND obr.item_code IN ('SA-MIX-MB', 'SA-EXT-5190', 'SA-EXT-5125', 'SA-EXT-4125', 'SA-EXT-65415', 'SA-CUT-SK', 'SA-CUT-FL', 'FP-VT01', 'FP-VA064')`,
+        [orderId]
+      );
+      const bomQty: Record<string, number> = {};
+      const bomItemId: Record<string, number | null> = {};
+      for (const r of bomReqRes.rows) {
+        bomQty[r.item_code] = (bomQty[r.item_code] || 0) + parseFloat(r.required_qty);
+        bomItemId[r.item_code] = r.item_id;
+      }
+      const asmTotalQty = (bomQty['FP-VT01'] || 0) + (bomQty['FP-VA064'] || 0) || totalSets;
+
+      // EXT 규격별 BOM 목록 구성: item_code → {thickness, width, qty, name, item_id}
+      const EXT_SPEC_MAP: Record<string, { thickness: number; width: number }> = {
+        'SA-EXT-5190': { thickness: 5, width: 190 },
+        'SA-EXT-5125': { thickness: 5, width: 125 },
+        'SA-EXT-4125': { thickness: 4, width: 125 },
+        'SA-EXT-65415': { thickness: 6.5, width: 415 },
+      };
+      const extSpecs: Array<{ item_code: string; item_name: string; item_id: number | null; thickness: number; width: number; qty: number }> = [];
+      for (const r of bomReqRes.rows) {
+        if (r.item_code?.startsWith('SA-EXT-') && EXT_SPEC_MAP[r.item_code]) {
+          const spec = EXT_SPEC_MAP[r.item_code];
+          const existing = extSpecs.find(e => e.item_code === r.item_code);
+          if (existing) {
+            existing.qty += parseFloat(r.required_qty);
+          } else {
+            extSpecs.push({
+              item_code: r.item_code,
+              item_name: r.item_name,
+              item_id: r.item_id,
+              thickness: spec.thickness,
+              width: spec.width,
+              qty: parseFloat(r.required_qty),
+            });
+          }
+        }
+      }
+
+      // 헬퍼: 단일 작업지시 생성
+      async function createOneWO(
+        procCode: string, qty: number, batch: number,
+        itemId: number | null, itemName: string | null,
+        thickness: number | null, width: number | null, extSpec: string | null,
+      ) {
+        const woSeqResult = await client.query(
+          `SELECT COUNT(*) as cnt FROM work_order WHERE process_code = $1 AND wo_date = $2`,
+          [procCode, woDate]
+        );
+        const woSeq = parseInt(woSeqResult.rows[0].cnt, 10) + 1;
+        const woNumber = `WO-${procCode}-${dateStr}-${String(woSeq).padStart(3, '0')}`;
+
+        // LOT 번호 생성 (client 기반 - 트랜잭션 내 중복 방지)
+        const datePrefix = woDate.replace(/-/g, '').slice(2);
+        let lotNumber: string;
+        if (procCode === 'MIX') {
+          const lotSeq = await client.query(`SELECT lot_number FROM lot_transaction WHERE lot_number LIKE $1 ORDER BY lot_number DESC LIMIT 1`, [`${datePrefix}-S%`]);
+          const seq = lotSeq.rows.length > 0 ? (parseInt(lotSeq.rows[0].lot_number.match(/(\d+)$/)?.[1] || '0', 10) + 1) : 1;
+          lotNumber = `${datePrefix}-S${String(seq).padStart(2, '0')}`;
+        } else {
+          const prefix = procCode === 'EXT' ? 'EXT' : (procCode === 'CUT' ? 'CUT' : (procCode === 'ASM' ? 'ASM-GEN' : procCode));
+          const lotSeq = await client.query(`SELECT lot_number FROM lot_transaction WHERE lot_number LIKE $1 ORDER BY lot_number DESC LIMIT 1`, [`${prefix}-${datePrefix}-%`]);
+          const seq = lotSeq.rows.length > 0 ? (parseInt(lotSeq.rows[0].lot_number.match(/(\d+)$/)?.[1] || '0', 10) + 1) : 1;
+          lotNumber = `${prefix}-${datePrefix}-${String(seq).padStart(3, '0')}`;
+        }
+
+        // FIFO 자재 배정
+        let inputLotNumbers: string | null = null;
+        const pbResult = await client.query(
+          `SELECT * FROM process_bom WHERE process_code = $1 AND is_active = true ORDER BY bom_id LIMIT 1`,
+          [procCode]
+        );
+        const pbom = pbResult.rows[0] || null;
+        if (pbom) {
+          const bomItems = await client.query(
+            `SELECT pbi.item_id, im.item_code, im.item_name, pbi.qty
+             FROM process_bom_item pbi
+             LEFT JOIN item_master im ON im.item_id = pbi.item_id
+             WHERE pbi.bom_id = $1 AND pbi.item_id IS NOT NULL
+             ORDER BY pbi.sort_order`,
+            [pbom.bom_id]
+          );
+          if (bomItems.rows.length > 0) {
+            const allocations: any[] = [];
+            for (const bomItem of bomItems.rows) {
+              const needQty = parseFloat(bomItem.qty) * batch;
+              const lots = await client.query(
+                `SELECT lot_id, lot_number, remaining_qty FROM lot_transaction
+                 WHERE item_id = $1 AND status = 'ACTIVE' AND remaining_qty > 0
+                 ORDER BY created_at ASC`,
+                [bomItem.item_id]
+              );
+              let remaining = needQty;
+              for (const lot of lots.rows) {
+                if (remaining <= 0) break;
+                const take = Math.min(parseFloat(lot.remaining_qty), remaining);
+                allocations.push({ item_id: bomItem.item_id, item_code: bomItem.item_code, item_name: bomItem.item_name, lot_number: lot.lot_number, lot_id: lot.lot_id, qty: take });
+                remaining -= take;
+              }
+              if (remaining > 0) {
+                allocations.push({ item_id: bomItem.item_id, item_code: bomItem.item_code, item_name: bomItem.item_name, lot_number: null, lot_id: null, qty: remaining, shortage: true });
+              }
+            }
+            inputLotNumbers = JSON.stringify(allocations);
+          }
+        }
+
+        const insertResult = await client.query(
+          `INSERT INTO work_order (
+            wo_number, wo_date, process_code, status, order_id,
+            item_id, planned_qty, customer_name, input_lot_numbers, remarks,
+            thickness_mm, width_mm, ext_spec
+          ) VALUES ($1, $2, $3, 'PLANNED', $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          RETURNING wo_id`,
+          [woNumber, woDate, procCode, orderId, itemId, qty,
+           customerName, inputLotNumbers,
+           `수주 ${order.order_number} 발주완료 → 자동생성`,
+           thickness, width, extSpec]
+        );
+        const woId = insertResult.rows[0].wo_id;
+
+        const lotUnit = procCode === 'MIX' ? 'kg' : (procCode === 'EXT' ? 'm' : 'ea');
+        const createdLotNumbers: string[] = [];
+
+        if (procCode === 'MIX' && batch > 1 && itemId) {
+          // MIX: 배치당(300kg) LOT 개별 생성
+          for (let b = 0; b < batch; b++) {
+            let batchLotNumber: string;
+            if (b === 0) {
+              batchLotNumber = lotNumber; // 첫 번째는 이미 생성된 번호
+            } else {
+              const lotSeq2 = await client.query(
+                `SELECT lot_number FROM lot_transaction WHERE lot_number LIKE $1 ORDER BY lot_number DESC LIMIT 1`,
+                [`${datePrefix}-S%`]
+              );
+              const seq2 = lotSeq2.rows.length > 0 ? (parseInt(lotSeq2.rows[0].lot_number.match(/(\d+)$/)?.[1] || '0', 10) + 1) : 1;
+              batchLotNumber = `${datePrefix}-S${String(seq2).padStart(2, '0')}`;
+            }
+            await client.query(
+              `INSERT INTO lot_transaction (lot_number, lot_type, item_id, qty, remaining_qty, unit, status, wo_id)
+               VALUES ($1, $2, $3, 0, 0, $4, 'ACTIVE', $5)`,
+              [batchLotNumber, procCode, itemId, lotUnit, woId]
+            );
+            createdLotNumbers.push(batchLotNumber);
+          }
+        } else if (itemId) {
+          // 기타 공정: LOT 1건
+          await client.query(
+            `INSERT INTO lot_transaction (lot_number, lot_type, item_id, qty, remaining_qty, unit, status, wo_id)
+             VALUES ($1, $2, $3, 0, 0, $4, 'ACTIVE', $5)`,
+            [lotNumber, procCode, itemId, lotUnit, woId]
+          );
+          createdLotNumbers.push(lotNumber);
+        }
+
+        // 작업지시의 lot_number에 전체 LOT 기록
+        const displayLotNumber = createdLotNumbers.length > 1
+          ? `${createdLotNumbers[0]}~${createdLotNumbers[createdLotNumbers.length - 1]}`
+          : (createdLotNumbers[0] || lotNumber);
+        await client.query(
+          `UPDATE work_order SET lot_number = $1 WHERE wo_id = $2`,
+          [displayLotNumber, woId]
+        );
+
+        createdOrders.push({
+          wo_id: woId, wo_number: woNumber, process_code: procCode,
+          planned_qty: qty, batch_count: batch, lot_number: displayLotNumber,
+          item_name: itemName, ext_spec: extSpec,
+        });
+      }
+
+      for (const processCode of processes) {
+        if (processCode === 'EXT') {
+          // EXT: 규격별로 각각 작업지시 생성
+          if (extSpecs.length > 0) {
+            for (const ext of extSpecs) {
+              const extSpec = `${ext.thickness}T×${ext.width}mm`;
+              await createOneWO('EXT', Math.ceil(ext.qty), 1,
+                ext.item_id, ext.item_name,
+                ext.thickness, ext.width, extSpec);
+            }
+          } else {
+            // BOM에 압출 품목이 없으면 기본 1건
+            await createOneWO('EXT', 300, 1, null, null, 5, 190, '5T×190mm');
+          }
+          continue;
+        }
+
+        if (processCode === 'CUT') {
+          // CUT: 소켓용/플래싱용 분리 생성
+          const cutSkQty = bomQty['SA-CUT-SK'] || 0;
+          const cutFlQty = bomQty['SA-CUT-FL'] || 0;
+          if (cutSkQty > 0) {
+            await createOneWO('CUT', Math.ceil(cutSkQty), 1,
+              bomItemId['SA-CUT-SK'] || null, '재단(소켓용)', null, null, null);
+          }
+          if (cutFlQty > 0) {
+            await createOneWO('CUT', Math.ceil(cutFlQty), 1,
+              bomItemId['SA-CUT-FL'] || null, '재단(플래싱용)', null, null, null);
+          }
+          if (cutSkQty === 0 && cutFlQty === 0) {
+            await createOneWO('CUT', totalSets, 1, null, null, null, null, null);
+          }
+          continue;
+        }
+
+        // MIX / ASM
+        const pbResult = await client.query(
+          `SELECT * FROM process_bom WHERE process_code = $1 AND is_active = true ORDER BY bom_id LIMIT 1`,
+          [processCode]
+        );
+        const pbom = pbResult.rows[0] || null;
+
+        let plannedQty: number;
+        let batchCount = 1;
+        switch (processCode) {
+          case 'ASM':
+            plannedQty = asmTotalQty || totalSets;
+            break;
+          default:
+            plannedQty = 1;
+        }
+
+        const outputItemId = pbom?.output_item_id || null;
+        let itemName: string | null = null;
+        if (outputItemId) {
+          const itemRes = await client.query(`SELECT item_name FROM item_master WHERE item_id = $1`, [outputItemId]);
+          if (itemRes.rows.length > 0) itemName = itemRes.rows[0].item_name;
+        }
+
+        await createOneWO(processCode, plannedQty, batchCount, outputItemId, itemName, null, null, null);
+      }
+
+      // 수주 상태 업데이트
+      await client.query(
+        `UPDATE sales_order SET status = 'IN_PRODUCTION' WHERE order_id = $1 AND status NOT IN ('SHIPPED', 'CANCELLED')`,
+        [orderId]
+      );
+
+      await client.query('COMMIT');
+
+      return {
+        created: true,
+        count: createdOrders.length,
+        orders: createdOrders,
+        message: `${createdOrders.length}개 공정 작업지시 자동 생성 완료 (MIX/EXT/CUT/ASM)`,
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
 
   // PATCH /api/purchase-requests/items/:priId - 발주 품목 수정
   app.patch('/api/purchase-requests/items/:priId', async (req, reply) => {
@@ -2126,6 +2462,40 @@ export async function orderRoutes(app: FastifyInstance) {
     // 재조회하여 갱신된 amount 포함 반환
     const updated = await pool.query(`SELECT * FROM purchase_request_item WHERE pri_id = $1`, [pid]);
     return { data: updated.rows[0] };
+  });
+
+  // DELETE /api/purchase-requests/:id - 발주서 삭제 (DRAFT/배합원료 발주만)
+  app.delete('/api/purchase-requests/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const prId = parseInt(id);
+
+    const prRes = await pool.query(`SELECT * FROM purchase_request WHERE pr_id = $1`, [prId]);
+    if (prRes.rows.length === 0) return reply.status(404).send({ error: '발주서를 찾을 수 없습니다.' });
+    const pr = prRes.rows[0];
+
+    // 입고 진행된 품목이 있으면 삭제 불가
+    const receivedCheck = await pool.query(
+      `SELECT COUNT(*) as cnt FROM purchase_request_item WHERE pr_id = $1 AND receiving_status NOT IN ('PENDING') AND receiving_status IS NOT NULL`,
+      [prId]
+    );
+    if (parseInt(receivedCheck.rows[0].cnt) > 0) {
+      return reply.status(400).send({ error: '입고 처리된 품목이 있어 삭제할 수 없습니다.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`DELETE FROM purchase_request_item WHERE pr_id = $1`, [prId]);
+      await client.query(`DELETE FROM approval WHERE doc_type = 'PURCHASE_REQUEST' AND doc_id = $1`, [prId]);
+      await client.query(`DELETE FROM purchase_request WHERE pr_id = $1`, [prId]);
+      await client.query('COMMIT');
+      return { data: { message: `발주서 ${pr.pr_number} 삭제 완료` } };
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      return reply.status(500).send({ error: err.message });
+    } finally {
+      client.release();
+    }
   });
 
   // DELETE /api/purchase-requests/items/:priId - 발주 품목 삭제
@@ -2762,25 +3132,29 @@ export async function orderRoutes(app: FastifyInstance) {
     try {
       await client.query('BEGIN');
 
-      // 1. LOT 생성 (lot_type = 'IN')
+      // 1. LOT 생성 (품목코드 기반)
       const dateStr = receiveDate.replace(/-/g, '').slice(2);
-      const seqResult = await client.query(
-        `SELECT COUNT(*) as cnt FROM lot_transaction WHERE lot_number LIKE $1`,
-        [`IN-${dateStr}-%`]
-      );
-      const seq = parseInt(seqResult.rows[0].cnt, 10) + 1;
-      const lotNumber = `IN-${dateStr}-${String(seq).padStart(3, '0')}`;
+      const singleItemCode = pri.item_code || pri.master_item_code || '';
+      const singleAbbrev = resolveLotAbbrev(singleItemCode);
 
-      // 자체 로트번호: 입력값 없으면 자동 생성 (EZ-YYMMDD-NNN)
-      let finalInspLot = inspectionLot;
-      if (!finalInspLot) {
-        const inspLotSeq = await client.query(
-          `SELECT COUNT(*) as cnt FROM lot_transaction WHERE inspection_lot LIKE $1`,
-          [`EZ-${dateStr}-%`]
+      // inspectionLot이 이미 품목기반 형식이면 그대로 사용, 아니면 자동생성
+      let lotNumber: string;
+      if (inspectionLot && !inspectionLot.startsWith('EZ-')) {
+        lotNumber = inspectionLot;
+      } else {
+        const lotPattern = `${dateStr}${singleAbbrev}%`;
+        const seqResult = await client.query(
+          `SELECT lot_number FROM lot_transaction WHERE lot_number LIKE $1 ORDER BY lot_number DESC LIMIT 1`,
+          [lotPattern]
         );
-        const iseq = parseInt(inspLotSeq.rows[0].cnt, 10) + 1;
-        finalInspLot = `EZ-${dateStr}-${String(iseq).padStart(3, '0')}`;
+        let seq = 1;
+        if (seqResult.rows.length > 0) {
+          const m = seqResult.rows[0].lot_number.match(/(\d{3})$/);
+          if (m) seq = parseInt(m[1], 10) + 1;
+        }
+        lotNumber = `${dateStr}${singleAbbrev}${String(seq).padStart(3, '0')}`;
       }
+      const finalInspLot = lotNumber;
 
       const lotResult = await client.query(
         `INSERT INTO lot_transaction (lot_number, lot_type, item_id, qty, unit, supplier_lot, inspection_lot, inspection_result, status, remaining_qty)
@@ -2845,9 +3219,13 @@ export async function orderRoutes(app: FastifyInstance) {
         }
       }
 
-      // 4. purchase_request_item 상태 업데이트
+      // 4. purchase_request_item 상태 업데이트 (order_qty=0이면 입고수량으로 자동설정)
       const newReceivedQty = parseFloat(pri.received_qty || '0') + receivedQty;
-      const orderQty = parseFloat(pri.order_qty || pri.required_qty || '0');
+      let orderQty = parseFloat(pri.order_qty || pri.required_qty || '0');
+      if (orderQty <= 0) {
+        orderQty = receivedQty;
+        await client.query(`UPDATE purchase_request_item SET order_qty = $1, required_qty = $1 WHERE pri_id = $2`, [orderQty, pri.pri_id || priId]);
+      }
       const newStatus = newReceivedQty >= orderQty ? 'RECEIVED' : 'PARTIAL';
 
       await client.query(
@@ -2889,6 +3267,409 @@ export async function orderRoutes(app: FastifyInstance) {
     } catch (err: any) {
       await client.query('ROLLBACK');
       console.error('[Receive] Error:', err);
+      return reply.status(500).send({ error: 'Server Error', message: err.message });
+    } finally {
+      client.release();
+    }
+  });
+
+  // POST /api/purchase-requests/:prId/preview-lots
+  // 일괄 입고 전 LOT 번호 미리보기
+  app.post('/api/purchase-requests/:prId/preview-lots', async (request, reply) => {
+    const { prId } = request.params as { prId: string };
+    const body = request.body as Record<string, unknown>;
+    const priIds = body.pri_ids as number[];
+    const receiveDate = (body.receive_date as string) || new Date().toISOString().slice(0, 10);
+    const dateStr = receiveDate.replace(/-/g, '').slice(2);
+
+    if (!priIds || !Array.isArray(priIds) || priIds.length === 0) {
+      return reply.status(400).send({ error: 'Bad Request', message: '품목을 선택하세요.' });
+    }
+
+    // 약호별 현재 시퀀스 조회
+    const seqCache: Record<string, number> = {};
+
+    const previews: any[] = [];
+    for (const priId of priIds) {
+      const priRes = await pool.query(
+        `SELECT pri.pri_id, pri.item_code, pri.item_name, pri.order_qty, pri.unit,
+                im.item_code as master_item_code
+         FROM purchase_request_item pri
+         LEFT JOIN item_master im ON im.item_id = pri.item_id
+         WHERE pri.pri_id = $1 AND pri.pr_id = $2
+         AND (pri.receiving_status IS NULL OR pri.receiving_status = 'PENDING')`,
+        [priId, prId]
+      );
+      if (priRes.rows.length === 0) continue;
+      const pri = priRes.rows[0];
+
+      const itemCode = pri.item_code || pri.master_item_code || '';
+      const abbrev = resolveLotAbbrev(itemCode);
+
+      // 시퀀스 계산 (같은 약호끼리 누적)
+      if (!(abbrev in seqCache)) {
+        const seqRes = await pool.query(
+          `SELECT lot_number FROM lot_transaction WHERE lot_number LIKE $1 ORDER BY lot_number DESC LIMIT 1`,
+          [`${dateStr}${abbrev}%`]
+        );
+        const match = seqRes.rows[0]?.lot_number?.match(/(\d{3})$/);
+        seqCache[abbrev] = match ? parseInt(match[1], 10) + 1 : 1;
+      } else {
+        seqCache[abbrev]++;
+      }
+
+      const lotNumber = `${dateStr}${abbrev}${String(seqCache[abbrev]).padStart(3, '0')}`;
+
+      previews.push({
+        pri_id: pri.pri_id,
+        item_code: itemCode,
+        item_name: pri.item_name,
+        order_qty: pri.order_qty,
+        unit: pri.unit,
+        abbrev,
+        lot_number: lotNumber,
+      });
+    }
+
+    return { data: previews };
+  });
+
+  // POST /api/purchase-requests/:prId/receive-batch
+  // 일괄 입고등록: 여러 품목을 한 번에 입고 처리
+  app.post('/api/purchase-requests/:prId/receive-batch', async (request, reply) => {
+    const { prId } = request.params as { prId: string };
+    const body = request.body as Record<string, unknown>;
+    const items = body.items as Array<{ pri_id: number; received_qty: number; supplier_lot?: string }>;
+    const inspector = (body.inspector as string) || null;
+    const receiveDate = (body.receive_date as string) || new Date().toISOString().slice(0, 10);
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return reply.status(400).send({ error: 'Bad Request', message: '입고할 품목을 선택하세요.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const dateStr = receiveDate.replace(/-/g, '').slice(2);
+      const results: any[] = [];
+
+      for (const reqItem of items) {
+        const receivedQty = parseFloat(String(reqItem.received_qty)) || 0;
+        if (receivedQty <= 0) continue;
+
+        const priRes = await client.query(
+          `SELECT pri.*, im.item_category, im.item_subcategory, im.item_code as master_item_code
+           FROM purchase_request_item pri
+           LEFT JOIN item_master im ON im.item_id = pri.item_id
+           WHERE pri.pri_id = $1 AND pri.pr_id = $2`,
+          [reqItem.pri_id, prId]
+        );
+        if (priRes.rows.length === 0) continue;
+        const pri = priRes.rows[0];
+
+        // 이미 입고된 품목은 건너뜀
+        if (pri.receiving_status === 'RECEIVED' || pri.receiving_status === 'INSPECTED') continue;
+
+        // 품목코드 기반 LOT 약호
+        const itemCode = pri.item_code || pri.master_item_code || '';
+        const abbrev = resolveLotAbbrev(itemCode);
+
+        // LOT 번호: 입고날짜 + 약호 + 시퀀스 (예: 260413MB001)
+        const lotPattern = `${dateStr}${abbrev}%`;
+        const seqResult = await client.query(
+          `SELECT lot_number FROM lot_transaction WHERE lot_number LIKE $1 ORDER BY lot_number DESC LIMIT 1`,
+          [lotPattern]
+        );
+        let seq = 1;
+        if (seqResult.rows.length > 0) {
+          const match = seqResult.rows[0].lot_number.match(/(\d{3})$/);
+          if (match) seq = parseInt(match[1], 10) + 1;
+        }
+        // 프론트에서 커스텀 LOT를 넘겨준 경우 우선 사용
+        const lotNumber = (reqItem as any).custom_lot || `${dateStr}${abbrev}${String(seq).padStart(3, '0')}`;
+
+        // 자체 관리 로트번호 (inspection_lot)도 동일 규칙
+        const finalInspLot = lotNumber;
+
+        const supplierLot = reqItem.supplier_lot || null;
+
+        const lotResult = await client.query(
+          `INSERT INTO lot_transaction (lot_number, lot_type, item_id, qty, unit, supplier_lot, inspection_lot, inspection_result, status, remaining_qty)
+           VALUES ($1, 'IN', $2, $3, $4, $5, $6, 'PENDING', 'ACTIVE', $3)
+           RETURNING *`,
+          [lotNumber, pri.item_id, receivedQty, pri.unit || 'EA', supplierLot, finalInspLot]
+        );
+        const lot = lotResult.rows[0];
+
+        // 인수검사 자동 생성
+        const formCode = resolveFormCode(pri.item_code || '', pri.item_subcategory);
+        const inspResult = await client.query(
+          `INSERT INTO inspection (insp_type, form_code, lot_id, sampling_n, accept_c, result, inspector, inspected_at)
+           VALUES ('INCOMING', $1, $2, 3, 0, 'PENDING', $3, NULL)
+           RETURNING *`,
+          [formCode, lot.lot_id, inspector]
+        );
+        const insp = inspResult.rows[0];
+
+        // 검사 상세항목 자동 생성
+        if (formCode) {
+          const preset = INCOMING_FORM_PRESETS.find(p => p.form_code === formCode);
+          if (preset) {
+            let specW: number | null = null;
+            let specH: number | null = null;
+            const specDetail = pri.spec_detail || pri.item_spec || '';
+            const wMatch = specDetail.match(/W(\d+(?:\.\d+)?)/);
+            const hMatch = specDetail.match(/[×x,]\s*H(\d+(?:\.\d+)?)/i);
+            if (wMatch) specW = parseFloat(wMatch[1]);
+            if (hMatch) specH = parseFloat(hMatch[1]);
+
+            for (const detailItem of preset.items) {
+              let certStd = detailItem.cert_standard ?? null;
+              let direction = (detailItem as any).direction || null;
+              if (detailItem.quality_item === '본체 길이' && specH != null) {
+                certStd = specH;
+              } else if (detailItem.quality_item === '본체 너비' && specW != null) {
+                certStd = specW;
+              }
+              await client.query(
+                `INSERT INTO inspection_detail
+                 (insp_id, item_no, quality_item, check_item, check_method,
+                  cert_standard, unit, is_applicable, item_result, direction)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'NA', $8)`,
+                [insp.insp_id, detailItem.item_no, detailItem.quality_item, detailItem.check_item,
+                 detailItem.check_method, certStd, detailItem.unit, direction || 'MIN']
+              );
+            }
+          }
+        }
+
+        // 품목 상태 업데이트
+        const newReceivedQty = parseFloat(pri.received_qty || '0') + receivedQty;
+        const orderQty = parseFloat(pri.order_qty || pri.required_qty || '0');
+        const newStatus = newReceivedQty >= orderQty ? 'RECEIVED' : 'PARTIAL';
+
+        await client.query(
+          `UPDATE purchase_request_item
+           SET receiving_status = $1, received_qty = $2, received_at = NOW(), lot_id = $3, insp_id = $4
+           WHERE pri_id = $5`,
+          [newStatus, newReceivedQty, lot.lot_id, insp.insp_id, reqItem.pri_id]
+        );
+
+        results.push({
+          pri_id: reqItem.pri_id,
+          lot_number: lot.lot_number,
+          inspection_lot: lot.inspection_lot,
+          insp_id: insp.insp_id,
+          received_qty: receivedQty,
+          receiving_status: newStatus,
+        });
+      }
+
+      // PR 전체 상태 확인
+      const allItems = await client.query(
+        `SELECT receiving_status FROM purchase_request_item WHERE pr_id = $1`,
+        [prId]
+      );
+      const allReceived = allItems.rows.every((r: any) => r.receiving_status === 'RECEIVED' || r.receiving_status === 'INSPECTED');
+      if (allReceived) {
+        await client.query(`UPDATE purchase_request SET status = 'RECEIVED' WHERE pr_id = $1`, [prId]);
+      }
+
+      await client.query('COMMIT');
+
+      return {
+        data: {
+          count: results.length,
+          items: results,
+          message: `${results.length}건 일괄 입고 완료`,
+        },
+      };
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      console.error('[ReceiveBatch] Error:', err);
+      return reply.status(500).send({ error: 'Server Error', message: err.message });
+    } finally {
+      client.release();
+    }
+  });
+
+  // POST /api/purchase-requests/create-rm
+  // 배합원료 전용 발주서 생성 (당일 날짜)
+  app.post('/api/purchase-requests/create-rm', async (request, reply) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const dateStr = today.replace(/-/g, '');
+
+    // 번호 생성: PR-YYMMDD-NNN
+    const seqRes = await pool.query(
+      `SELECT COUNT(*) as cnt FROM purchase_request WHERE pr_number LIKE $1`,
+      [`PR-${dateStr.slice(2)}-%`]
+    );
+    const seq = parseInt(seqRes.rows[0].cnt, 10) + 1;
+    const prNumber = `PR-${dateStr.slice(2)}-${String(seq).padStart(3, '0')}`;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 발주서 생성 (수주 미연결, 배합원료 전용)
+      const prRes = await client.query(
+        `INSERT INTO purchase_request (pr_number, pr_date, status, remarks)
+         VALUES ($1, $2, 'DRAFT', '배합원료 발주')
+         RETURNING *`,
+        [prNumber, today]
+      );
+      const pr = prRes.rows[0];
+
+      // RM 4종 품목 자동 추가
+      const rmItems = await client.query(
+        `SELECT item_id, item_code, item_name FROM item_master
+         WHERE item_code IN ('RM-MB', 'RM-EG50', 'RM-EA', 'RM-EP')
+         ORDER BY item_code`
+      );
+
+      // 현재고 조회
+      for (const [idx, rm] of rmItems.rows.entries()) {
+        const stockRes = await client.query(
+          `SELECT COALESCE(SUM(GREATEST(remaining_qty, 0)), 0) as stock
+           FROM lot_transaction WHERE item_id = $1 AND status = 'ACTIVE' AND remaining_qty > 0`,
+          [rm.item_id]
+        );
+        const stock = parseFloat(stockRes.rows[0]?.stock || '0');
+
+        await client.query(
+          `INSERT INTO purchase_request_item (pr_id, item_id, item_code, item_name, required_qty, order_qty, unit, sort_order)
+           VALUES ($1, $2, $3, $4, 0, 0, 'kg', $5)`,
+          [pr.pr_id, rm.item_id, rm.item_code, rm.item_name, idx + 1]
+        );
+      }
+
+      await client.query('COMMIT');
+      return { data: pr };
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      return reply.status(500).send({ error: 'Server Error', message: err.message });
+    } finally {
+      client.release();
+    }
+  });
+
+  // GET /api/purchase-requests/:prId/rm-requirements
+  // 배합원료(RM) 필요량 조회 (BOM 기반)
+  app.get('/api/purchase-requests/:prId/rm-requirements', async (request, reply) => {
+    const { prId } = request.params as { prId: string };
+
+    // PR의 연결 수주 조회
+    const prRes = await pool.query(
+      `SELECT pr.order_id FROM purchase_request pr WHERE pr.pr_id = $1`, [prId]
+    );
+    if (prRes.rows.length === 0 || !prRes.rows[0].order_id) {
+      return { data: [] };
+    }
+    const orderId = prRes.rows[0].order_id;
+
+    // BOM 결과에서 RM 필요량
+    const bomRes = await pool.query(
+      `SELECT obr.item_code, obr.item_name, obr.required_qty, obr.unit,
+              obr.current_stock, obr.shortage_qty, im.item_id
+       FROM order_bom_result obr
+       LEFT JOIN item_master im ON im.item_code = obr.item_code
+       WHERE obr.order_id = $1 AND obr.item_code LIKE 'RM-%'
+       ORDER BY obr.item_code`,
+      [orderId]
+    );
+
+    // 이미 발주된 RM 품목 수량 조회
+    const orderedRes = await pool.query(
+      `SELECT pri.item_code, SUM(pri.order_qty) as ordered_qty
+       FROM purchase_request_item pri
+       JOIN purchase_request pr ON pr.pr_id = pri.pr_id
+       WHERE pr.order_id = $1 AND pri.item_code LIKE 'RM-%'
+       GROUP BY pri.item_code`,
+      [orderId]
+    );
+    const orderedMap: Record<string, number> = {};
+    for (const r of orderedRes.rows) {
+      orderedMap[r.item_code] = parseFloat(r.ordered_qty);
+    }
+
+    // 현재 재고 조회
+    const stockRes = await pool.query(
+      `SELECT im.item_code,
+              COALESCE(SUM(GREATEST(lt.remaining_qty, 0)), 0) as stock_qty
+       FROM item_master im
+       LEFT JOIN lot_transaction lt ON lt.item_id = im.item_id AND lt.status = 'ACTIVE' AND lt.remaining_qty > 0
+       WHERE im.item_code LIKE 'RM-%'
+       GROUP BY im.item_code`
+    );
+    const stockMap: Record<string, number> = {};
+    for (const r of stockRes.rows) {
+      stockMap[r.item_code] = parseFloat(r.stock_qty);
+    }
+
+    const items = bomRes.rows.map((r: any) => ({
+      item_id: r.item_id,
+      item_code: r.item_code,
+      item_name: r.item_name,
+      required_qty: parseFloat(r.required_qty),
+      unit: r.unit,
+      current_stock: stockMap[r.item_code] || 0,
+      ordered_qty: orderedMap[r.item_code] || 0,
+      shortage_qty: parseFloat(r.required_qty) - (stockMap[r.item_code] || 0),
+    }));
+
+    return { data: items };
+  });
+
+  // POST /api/purchase-requests/:prId/rm-order
+  // 배합원료 발주입력 (RM 품목을 발주서에 추가)
+  app.post('/api/purchase-requests/:prId/rm-order', async (request, reply) => {
+    const { prId } = request.params as { prId: string };
+    const body = request.body as Record<string, unknown>;
+    const items = body.items as Array<{ item_id: number; item_code: string; item_name: string; order_qty: number; unit: string }>;
+
+    if (!items || items.length === 0) {
+      return reply.status(400).send({ error: 'Bad Request', message: '발주할 원료를 입력하세요.' });
+    }
+
+    const prRes = await pool.query(`SELECT * FROM purchase_request WHERE pr_id = $1`, [prId]);
+    if (prRes.rows.length === 0) {
+      return reply.status(404).send({ error: 'Not Found' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 기존 RM 품목 삭제 (재입력)
+      await client.query(
+        `DELETE FROM purchase_request_item WHERE pr_id = $1 AND item_code LIKE 'RM-%'`,
+        [prId]
+      );
+
+      // 최대 sort_order 조회
+      const maxSort = await client.query(
+        `SELECT COALESCE(MAX(sort_order), 0) as max_sort FROM purchase_request_item WHERE pr_id = $1`,
+        [prId]
+      );
+      let sortOrder = parseInt(maxSort.rows[0].max_sort, 10);
+
+      const created: any[] = [];
+      for (const item of items) {
+        if (!item.order_qty || item.order_qty <= 0) continue;
+        sortOrder++;
+        await client.query(
+          `INSERT INTO purchase_request_item (pr_id, item_id, item_code, item_name, required_qty, order_qty, unit, sort_order)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [prId, item.item_id, item.item_code, item.item_name, item.order_qty, item.order_qty, item.unit, sortOrder]
+        );
+        created.push({ item_code: item.item_code, order_qty: item.order_qty });
+      }
+
+      await client.query('COMMIT');
+      return { data: { count: created.length, items: created, message: `배합원료 ${created.length}건 발주 입력 완료` } };
+    } catch (err: any) {
+      await client.query('ROLLBACK');
       return reply.status(500).send({ error: 'Server Error', message: err.message });
     } finally {
       client.release();

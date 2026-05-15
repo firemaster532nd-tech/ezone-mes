@@ -222,7 +222,7 @@ async function seedProcessBoms() {
         { code: 'SA-CUT-SK', name: '외부시트(좌/우)', qty: 2, unit: 'ea', spec: 't5.0 L650 W190 + CW', sort: 6 },
         { code: 'FP-FL-I', name: '방화플래싱(I형)', qty: 16, unit: 'ea', spec: null, sort: 7 },
         { code: 'SM-CW96', name: '세라믹울 96K', qty: 2, unit: 'ea', spec: 't50 W600', sort: 8 },
-        { code: 'SM-GW24', name: '글라스울 24K', qty: 2, unit: 'ea', spec: 't25 W1400', sort: 9 },
+        { code: 'SM-GW24', name: '그라스울 24K', qty: 2, unit: 'ea', spec: 't25 W1400', sort: 9 },
         { code: 'SM-SIL', name: '실란트', qty: 1, unit: 'ea', spec: null, sort: 10 },
         { code: 'SM-SP', name: '보호철판', qty: 1, unit: 'ea', spec: null, sort: 11 },
       ];

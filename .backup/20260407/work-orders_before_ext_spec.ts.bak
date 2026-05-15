@@ -1,0 +1,910 @@
+import { FastifyInstance } from 'fastify';
+import { pool } from '../db/pool.js';
+import { generateProcessLotNumber } from './lot-utils.js';
+
+/** LOT 번호 자동채번 - lot-utils.ts로 위임 */
+async function generateLotNumber(processCode: string, woDate: string, certId?: number): Promise<string> {
+  return generateProcessLotNumber(processCode, woDate, certId);
+}
+
+/** 작업지시 번호 자동생성 */
+async function generateWoNumber(processCode: string, woDate: string): Promise<string> {
+  const dateStr = woDate.replace(/-/g, '');
+  const result = await pool.query(
+    `SELECT COUNT(*) as cnt FROM work_order WHERE process_code = $1 AND wo_date = $2`,
+    [processCode, woDate]
+  );
+  const seq = parseInt(result.rows[0].cnt, 10) + 1;
+  return `WO-${processCode}-${dateStr}-${String(seq).padStart(3, '0')}`;
+}
+
+/** DB 마이그레이션: 신규 컬럼 추가 (idempotent) */
+async function migrateWorkOrderColumns() {
+  const newColumns: Array<{ name: string; type: string }> = [
+    { name: 'customer_name', type: 'VARCHAR(200)' },
+    { name: 'lot_number', type: 'VARCHAR(50)' },
+    { name: 'input_lot_numbers', type: 'TEXT' },
+    { name: 'bom_version', type: 'VARCHAR(20)' },
+    // 배합(MIX) 전용 필드
+    { name: 'mix_time_minutes', type: 'INTEGER' },
+    { name: 'actual_weight_kg', type: 'NUMERIC(10,2)' },
+    { name: 'incoming_inspection_status', type: 'VARCHAR(20)' },
+    { name: 'raw_material_lots', type: 'TEXT' },
+    // 압출(EXT) 전용 필드
+    { name: 'thickness_mm', type: 'NUMERIC(6,2)' },
+    { name: 'width_mm', type: 'NUMERIC(8,2)' },
+    { name: 'density_gcm3', type: 'NUMERIC(6,4)' },
+    { name: 'expansion_mm', type: 'NUMERIC(6,2)' },
+    { name: 'ext_spec', type: 'VARCHAR(100)' },
+    // 재단(CUT) 전용 필드
+    { name: 'project_site', type: 'VARCHAR(300)' },
+    { name: 'structure_name', type: 'VARCHAR(50)' },
+    { name: 'dimension_width', type: 'NUMERIC(8,1)' },
+    { name: 'dimension_height', type: 'NUMERIC(8,1)' },
+    { name: 'inner_width', type: 'NUMERIC(8,1)' },
+    { name: 'inner_height', type: 'NUMERIC(8,1)' },
+    // 조립(ASM) 전용 필드
+    { name: 'socket_lot', type: 'VARCHAR(100)' },
+    { name: 'sheet_lot', type: 'VARCHAR(100)' },
+    { name: 'ceramic_lot', type: 'VARCHAR(100)' },
+    { name: 'sealant_lot', type: 'VARCHAR(100)' },
+    { name: 'asm_structure', type: 'VARCHAR(50)' },
+    { name: 'asm_width', type: 'NUMERIC(8,1)' },
+    { name: 'asm_height', type: 'NUMERIC(8,1)' },
+  ];
+  for (const col of newColumns) {
+    await pool.query(`
+      DO $$ BEGIN
+        ALTER TABLE work_order ADD COLUMN ${col.name} ${col.type};
+      EXCEPTION WHEN duplicate_column THEN NULL;
+      END $$;
+    `);
+  }
+}
+
+export async function workOrderRoutes(app: FastifyInstance) {
+  // 서버 시작 시 마이그레이션 실행
+  await migrateWorkOrderColumns();
+  // GET /api/work-orders - 작업지시 목록
+  app.get('/api/work-orders', async (request) => {
+    const { process_code, date, status } = request.query as {
+      process_code?: string;
+      date?: string;
+      status?: string;
+    };
+
+    let query = `
+      SELECT w.*, c.cert_number, c.structure_code, i.item_name, i.item_code,
+             COALESCE(w.lot_number, lt.lot_number) AS lot_number
+      FROM work_order w
+      LEFT JOIN certification_master c ON c.cert_id = w.cert_id
+      LEFT JOIN item_master i ON i.item_id = w.item_id
+      LEFT JOIN lot_transaction lt ON lt.wo_id = w.wo_id
+    `;
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    if (process_code) {
+      params.push(process_code);
+      conditions.push(`w.process_code = $${params.length}`);
+    }
+    if (date) {
+      params.push(date);
+      conditions.push(`w.wo_date = $${params.length}`);
+    }
+    if (status) {
+      // 쉼표 구분 복수 상태 지원: "PLANNED,IN_PROGRESS"
+      const statuses = (status as string).split(',').map(s => s.trim()).filter(Boolean);
+      if (statuses.length === 1) {
+        params.push(statuses[0]);
+        conditions.push(`w.status = $${params.length}`);
+      } else {
+        const placeholders = statuses.map((s, i) => { params.push(s); return `$${params.length}`; });
+        conditions.push(`w.status IN (${placeholders.join(',')})`);
+      }
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+    query += ' ORDER BY w.wo_date DESC, w.wo_id DESC';
+
+    const result = await pool.query(query, params);
+    return { data: result.rows, total: result.rows.length };
+  });
+
+  // GET /api/work-orders/:id - 작업지시 상세
+  app.get('/api/work-orders/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const woId = parseInt(id, 10);
+
+    const result = await pool.query(
+      `SELECT w.*, c.cert_number, c.structure_code, i.item_name, i.item_code,
+              COALESCE(w.lot_number, lt.lot_number) AS lot_number, lt.lot_id
+       FROM work_order w
+       LEFT JOIN certification_master c ON c.cert_id = w.cert_id
+       LEFT JOIN item_master i ON i.item_id = w.item_id
+       LEFT JOIN lot_transaction lt ON lt.wo_id = w.wo_id
+       WHERE w.wo_id = $1`,
+      [woId]
+    );
+
+    if (result.rows.length === 0) {
+      return reply.status(404).send({ error: 'Not Found', message: '작업지시를 찾을 수 없습니다.' });
+    }
+
+    return { data: result.rows[0] };
+  });
+
+  // ───────────────────────────────────────────────────────
+  // FIFO 자재 자동배정 공통 함수
+  // ───────────────────────────────────────────────────────
+  async function fifoAllocate(
+    client: any,
+    items: Array<{ item_id: number; item_code: string; item_name: string; qty: number }>,
+    batchCount: number
+  ): Promise<Array<Record<string, unknown>>> {
+    const allocations: Array<Record<string, unknown>> = [];
+
+    for (const item of items) {
+      const requiredQty = item.qty * batchCount;
+
+      const lotsResult = await client.query(
+        `SELECT lt.lot_id, lt.lot_number, lt.qty, lt.remaining_qty, lt.item_id
+         FROM lot_transaction lt
+         WHERE lt.item_id = $1
+           AND lt.status = 'ACTIVE'
+           AND COALESCE(lt.remaining_qty, lt.qty) > 0
+         ORDER BY lt.created_at ASC`,
+        [item.item_id]
+      );
+
+      let remainingNeed = requiredQty;
+      for (const lot of lotsResult.rows) {
+        if (remainingNeed <= 0) break;
+        const available = parseFloat(lot.remaining_qty ?? lot.qty);
+        const allocate = Math.min(available, remainingNeed);
+
+        allocations.push({
+          item_id: item.item_id,
+          item_code: item.item_code,
+          item_name: item.item_name,
+          lot_number: lot.lot_number,
+          lot_id: lot.lot_id,
+          qty: Math.round(allocate * 100) / 100,
+        });
+        remainingNeed -= allocate;
+      }
+
+      // 재고 부족분도 기록 (lot 미지정)
+      if (remainingNeed > 0) {
+        allocations.push({
+          item_id: item.item_id,
+          item_code: item.item_code,
+          item_name: item.item_name,
+          lot_number: null,
+          lot_id: null,
+          qty: Math.round(remainingNeed * 100) / 100,
+          shortage: true,
+        });
+      }
+    }
+
+    return allocations;
+  }
+
+  // POST /api/work-orders - 작업지시 생성 + LOT 자동채번 + FIFO 자재배정
+  app.post('/api/work-orders', async (request, reply) => {
+    const body = request.body as Record<string, unknown>;
+    const processCode = body.process_code as string;
+    const woDate = body.wo_date as string;
+
+    if (!processCode || !woDate) {
+      return reply.status(400).send({ error: 'Bad Request', message: 'process_code, wo_date는 필수입니다.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. 작업지시 번호 생성
+      const woNumber = await generateWoNumber(processCode, woDate);
+
+      // ═══════════════════════════════════════════
+      // 2. process_bom 기반 자재 FIFO 자동배정 (전 공정 공통)
+      // ═══════════════════════════════════════════
+      let inputLotNumbers = body.input_lot_numbers || null;
+      let plannedQty = body.planned_qty ? Number(body.planned_qty) : null;
+      let outputItemId = body.item_id ? Number(body.item_id) : null;
+      const batchCount = body.batch_count ? Number(body.batch_count) : 1;
+      const processBomId = body.process_bom_id ? Number(body.process_bom_id) : null;
+
+      // process_bom으로 산출물과 투입 자재 자동 결정
+      let pbom: any = null;
+      if (processBomId) {
+        const pbResult = await client.query(
+          `SELECT * FROM process_bom WHERE bom_id = $1`, [processBomId]
+        );
+        if (pbResult.rows.length > 0) pbom = pbResult.rows[0];
+      } else {
+        // process_code로 첫 번째 활성 BOM 자동 선택
+        const pbResult = await client.query(
+          `SELECT * FROM process_bom WHERE process_code = $1 AND is_active = true ORDER BY bom_id LIMIT 1`,
+          [processCode]
+        );
+        if (pbResult.rows.length > 0) pbom = pbResult.rows[0];
+      }
+
+      if (pbom) {
+        // 산출물 품목 결정
+        if (!outputItemId && pbom.output_item_id) {
+          outputItemId = pbom.output_item_id;
+        }
+        // 계획 수량 계산: batch_count × 배치크기(output_qty)
+        if (!plannedQty) {
+          plannedQty = parseFloat(pbom.output_qty) * batchCount;
+        }
+
+        // 투입 자재 조회 + FIFO 배정
+        if (!inputLotNumbers) {
+          const bomItems = await client.query(
+            `SELECT pbi.item_id, im.item_code, im.item_name, pbi.qty
+             FROM process_bom_item pbi
+             LEFT JOIN item_master im ON im.item_id = pbi.item_id
+             WHERE pbi.bom_id = $1 AND pbi.item_id IS NOT NULL
+             ORDER BY pbi.sort_order`,
+            [pbom.bom_id]
+          );
+
+          if (bomItems.rows.length > 0) {
+            const allocations = await fifoAllocate(client, bomItems.rows, batchCount);
+            inputLotNumbers = JSON.stringify(allocations);
+          }
+        }
+      }
+
+      // MIX 공정: recipe 기반 배정 (process_bom 없을 때 fallback)
+      if (processCode === 'MIX' && body.recipe_id && !pbom) {
+        const recipeId = Number(body.recipe_id);
+        const recipeResult = await client.query(
+          `SELECT * FROM compounding_recipe WHERE recipe_id = $1`, [recipeId]
+        );
+        if (recipeResult.rows.length > 0) {
+          const recipe = recipeResult.rows[0];
+          plannedQty = parseFloat(recipe.batch_size) * batchCount;
+
+          const recipeItems = await client.query(
+            `SELECT ri.item_id, i.item_code, i.item_name, ri.qty
+             FROM compounding_recipe_item ri
+             LEFT JOIN item_master i ON i.item_id = ri.item_id
+             WHERE ri.recipe_id = $1 ORDER BY ri.sort_order`,
+            [recipeId]
+          );
+
+          const allocations = await fifoAllocate(client, recipeItems.rows, batchCount);
+          inputLotNumbers = JSON.stringify(allocations);
+        }
+      }
+
+      // 기본값
+      if (!plannedQty) plannedQty = 0;
+
+      // 2-1. 작업지시 INSERT
+      const woResult = await client.query(
+        `INSERT INTO work_order (wo_number, wo_date, process_code, product_type, cut_subtype,
+          install_type, cert_id, item_id, planned_qty, equipment_id, purpose, spec_detail, remarks,
+          customer_name, lot_number, input_lot_numbers, bom_version,
+          am_worker, pm_worker, night_worker, inspector,
+          mix_time_minutes, actual_weight_kg, incoming_inspection_status, raw_material_lots,
+          thickness_mm, width_mm, density_gcm3, expansion_mm, ext_spec,
+          project_site, structure_name, dimension_width, dimension_height, inner_width, inner_height,
+          socket_lot, sheet_lot, ceramic_lot, sealant_lot, asm_structure, asm_width, asm_height)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+                 $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43)
+         RETURNING *`,
+        [
+          woNumber, woDate, processCode,
+          body.product_type || null, body.cut_subtype || null, body.install_type || null,
+          body.cert_id || null, outputItemId, plannedQty,
+          body.equipment_id || null, body.purpose || null, body.spec_detail || null,
+          body.remarks || null,
+          body.customer_name || null, body.lot_number || null,
+          inputLotNumbers, body.bom_version || null,
+          body.am_worker || null, body.pm_worker || null, body.night_worker || null,
+          body.inspector || null,
+          body.mix_time_minutes || null, body.actual_weight_kg || null,
+          body.incoming_inspection_status || null, body.raw_material_lots || null,
+          body.thickness_mm || null, body.width_mm || null,
+          body.density_gcm3 || null, body.expansion_mm || null, body.ext_spec || null,
+          body.project_site || null, body.structure_name || null,
+          body.dimension_width || null, body.dimension_height || null,
+          body.inner_width || null, body.inner_height || null,
+          body.socket_lot || null, body.sheet_lot || null,
+          body.ceramic_lot || null, body.sealant_lot || null,
+          body.asm_structure || null, body.asm_width || null, body.asm_height || null,
+        ]
+      );
+      const wo = woResult.rows[0];
+
+      // 3. 산출물 LOT 자동채번 + lot_transaction 생성
+      const certId = body.cert_id ? Number(body.cert_id) : undefined;
+      const lotNumber = await generateLotNumber(processCode, woDate, certId);
+      const lotType = processCode === 'ASM' ? 'ASM' : processCode;
+      const lotResult = await client.query(
+        `INSERT INTO lot_transaction (lot_number, lot_type, item_id, wo_id, qty, unit, status, remaining_qty)
+         VALUES ($1,$2,$3,$4,$5,$6,'ACTIVE',$5)
+         RETURNING *`,
+        [lotNumber, lotType, outputItemId, wo.wo_id, plannedQty, pbom?.output_unit || 'EA']
+      );
+
+      await client.query('COMMIT');
+
+      return {
+        data: {
+          ...wo,
+          lot_number: lotResult.rows[0].lot_number,
+          lot_id: lotResult.rows[0].lot_id,
+          batch_count: batchCount,
+          process_bom: pbom ? { bom_id: pbom.bom_id, bom_name: pbom.bom_name, output_item_id: pbom.output_item_id } : null,
+        },
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
+  // PATCH /api/work-orders/:id - 작업지시 수정 (Quality Gate 포함)
+  app.patch('/api/work-orders/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const woId = parseInt(id, 10);
+    const body = request.body as Record<string, unknown>;
+
+    // Quality Gate: Block IN_PROGRESS without passed incoming inspection
+    if (body.status === 'IN_PROGRESS') {
+      // Fetch current work order
+      const woCheck = await pool.query(
+        'SELECT wo_id, process_code, status, item_id, cert_id FROM work_order WHERE wo_id = $1',
+        [woId]
+      );
+      if (woCheck.rows.length === 0) {
+        return reply.status(404).send({ error: 'Not Found', message: '작업지시를 찾을 수 없습니다.' });
+      }
+      const wo = woCheck.rows[0];
+
+      // Only check for processes that require incoming materials (not SHP)
+      const processesRequiringInspection = ['MIX', 'EXT', 'CUT', 'ASM'];
+      if (processesRequiringInspection.includes(wo.process_code)) {
+        // Check if there's a PASSED incoming inspection for materials related to this work order
+        // Look for passed inspections on lots linked to the BOM items or the WO's item
+        let hasPassedInspection = false;
+
+        // Check 1: Direct item-based check - any PASS incoming inspection for the WO's item
+        if (wo.item_id) {
+          const inspResult = await pool.query(
+            `SELECT ins.insp_id FROM inspection ins
+             JOIN lot_transaction lt ON lt.lot_id = ins.lot_id
+             WHERE ins.insp_type = 'INCOMING'
+               AND ins.result = 'PASS'
+               AND lt.item_id = $1
+               AND lt.inspection_result = 'PASS'
+             LIMIT 1`,
+            [wo.item_id]
+          );
+          if (inspResult.rows.length > 0) hasPassedInspection = true;
+        }
+
+        // Check 2: BOM-based check - if the WO has a cert_id, check BOM component items
+        if (!hasPassedInspection && wo.cert_id) {
+          const bomResult = await pool.query(
+            `SELECT bm.item_id FROM bom_master bm WHERE bm.cert_id = $1 AND bm.is_applicable = true`,
+            [wo.cert_id]
+          );
+          const bomItemIds = bomResult.rows.map((r: any) => r.item_id).filter((id: any) => id != null);
+          if (bomItemIds.length > 0) {
+            const inspResult = await pool.query(
+              `SELECT ins.insp_id FROM inspection ins
+               JOIN lot_transaction lt ON lt.lot_id = ins.lot_id
+               WHERE ins.insp_type = 'INCOMING'
+                 AND ins.result = 'PASS'
+                 AND lt.item_id = ANY($1)
+                 AND lt.inspection_result = 'PASS'
+               LIMIT 1`,
+              [bomItemIds]
+            );
+            if (inspResult.rows.length > 0) hasPassedInspection = true;
+          }
+        }
+
+        // Check 3: Any passed incoming inspection linked via lot_genealogy parents
+        if (!hasPassedInspection) {
+          const lotResult = await pool.query(
+            'SELECT lot_id FROM lot_transaction WHERE wo_id = $1',
+            [woId]
+          );
+          if (lotResult.rows.length > 0) {
+            const childLotId = lotResult.rows[0].lot_id;
+            const parentResult = await pool.query(
+              `SELECT ins.insp_id FROM lot_genealogy lg
+               JOIN lot_transaction lt ON lt.lot_id = lg.parent_lot_id
+               JOIN inspection ins ON ins.lot_id = lt.lot_id
+               WHERE lg.child_lot_id = $1
+                 AND ins.insp_type = 'INCOMING'
+                 AND ins.result = 'PASS'
+               LIMIT 1`,
+              [childLotId]
+            );
+            if (parentResult.rows.length > 0) hasPassedInspection = true;
+          }
+        }
+
+        // Check 4: Fallback - any PASS incoming inspection exists at all (lenient mode)
+        if (!hasPassedInspection) {
+          const anyPassResult = await pool.query(
+            `SELECT insp_id FROM inspection
+             WHERE insp_type = 'INCOMING' AND result = 'PASS'
+             LIMIT 1`
+          );
+          if (anyPassResult.rows.length > 0) hasPassedInspection = true;
+        }
+
+        if (!hasPassedInspection) {
+          return reply.status(400).send({
+            error: 'Quality Gate',
+            message: '인수검사 합격 후 작업지시를 진행할 수 있습니다.',
+          });
+        }
+      }
+    }
+
+    const allowedFields = [
+      'planned_qty', 'actual_qty', 'status', 'equipment_id',
+      'am_worker', 'pm_worker', 'night_worker', 'inspector',
+      'start_time', 'end_time', 'downtime_minutes', 'downtime_reason',
+      'production_length_m', 'input_weight_kg', 'scrap_kg',
+      'serial_number', 'purpose', 'spec_detail', 'remarks',
+      'customer_name', 'lot_number', 'input_lot_numbers', 'bom_version',
+      // MIX fields
+      'mix_time_minutes', 'actual_weight_kg', 'incoming_inspection_status', 'raw_material_lots',
+      // EXT fields
+      'thickness_mm', 'width_mm', 'density_gcm3', 'expansion_mm', 'ext_spec',
+      // CUT fields
+      'project_site', 'structure_name', 'dimension_width', 'dimension_height', 'inner_width', 'inner_height',
+      // ASM fields
+      'socket_lot', 'sheet_lot', 'ceramic_lot', 'sealant_lot', 'asm_structure', 'asm_width', 'asm_height',
+    ];
+
+    const updates: string[] = [];
+    const values: unknown[] = [];
+
+    for (const field of allowedFields) {
+      if (field in body) {
+        values.push(body[field]);
+        updates.push(`${field} = $${values.length}`);
+      }
+    }
+
+    if (body.status === 'COMPLETED') {
+      updates.push(`completed_at = NOW()`);
+    }
+
+    if (updates.length === 0) {
+      return reply.status(400).send({ error: 'Bad Request', message: '수정할 항목이 없습니다.' });
+    }
+
+    values.push(woId);
+    const query = `UPDATE work_order SET ${updates.join(', ')} WHERE wo_id = $${values.length} RETURNING *`;
+    const result = await pool.query(query, values);
+
+    if (result.rows.length === 0) {
+      return reply.status(404).send({ error: 'Not Found', message: '작업지시를 찾을 수 없습니다.' });
+    }
+
+    const wo = result.rows[0];
+
+    // ═══════════════════════════════════════════
+    // IN_PROGRESS 전환 시: 투입 자재 자동 소모 처리
+    // ═══════════════════════════════════════════
+    if (body.status === 'IN_PROGRESS' && wo.input_lot_numbers) {
+      const client2 = await pool.connect();
+      try {
+        await client2.query('BEGIN');
+
+        let allocations: Array<{ item_code?: string; item_name?: string; lot_id?: number; lot_number?: string; qty: number }> = [];
+        try {
+          allocations = typeof wo.input_lot_numbers === 'string'
+            ? JSON.parse(wo.input_lot_numbers)
+            : wo.input_lot_numbers;
+        } catch { /* invalid JSON → skip */ }
+
+        // 산출물 LOT 조회 (lot_genealogy의 child)
+        const childLotResult = await client2.query(
+          `SELECT lot_id FROM lot_transaction WHERE wo_id = $1 LIMIT 1`,
+          [woId]
+        );
+        const childLotId = childLotResult.rows.length > 0 ? childLotResult.rows[0].lot_id : null;
+
+        let consumedCount = 0;
+        for (const alloc of allocations) {
+          if (!alloc.lot_id || !alloc.qty || alloc.qty <= 0) continue;
+
+          // 이미 소모된 건인지 확인 (중복 방지)
+          const existing = await client2.query(
+            `SELECT 1 FROM inventory_transaction
+             WHERE lot_id = $1 AND ref_wo_id = $2 AND txn_type = 'OUT'
+             LIMIT 1`,
+            [alloc.lot_id, woId]
+          );
+          if (existing.rows.length > 0) continue;
+
+          // 부모 LOT 정보 조회
+          const parentLot = await client2.query(
+            `SELECT lot_id, item_id, remaining_qty, qty FROM lot_transaction WHERE lot_id = $1`,
+            [alloc.lot_id]
+          );
+          if (parentLot.rows.length === 0) continue;
+          const pl = parentLot.rows[0];
+
+          const consumeQty = Math.min(alloc.qty, parseFloat(pl.remaining_qty ?? pl.qty));
+          if (consumeQty <= 0) continue;
+
+          // 1) remaining_qty 차감
+          await client2.query(
+            `UPDATE lot_transaction SET remaining_qty = COALESCE(remaining_qty, qty) - $1 WHERE lot_id = $2`,
+            [consumeQty, alloc.lot_id]
+          );
+
+          // 2) 재고 출고 기록 (OUT)
+          await client2.query(
+            `INSERT INTO inventory_transaction (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id, worker)
+             VALUES ($1, $2, 'OUT', $3, $4, $5, $6, $7)`,
+            [pl.item_id, alloc.lot_id, wo.wo_date, consumeQty,
+             `${wo.process_code} 자재투입 (${alloc.item_code || ''})`, woId, wo.inspector || wo.am_worker]
+          );
+
+          // 3) LOT 계보 생성 (parent → child)
+          if (childLotId) {
+            const existGenealogy = await client2.query(
+              `SELECT 1 FROM lot_genealogy WHERE parent_lot_id = $1 AND child_lot_id = $2 LIMIT 1`,
+              [alloc.lot_id, childLotId]
+            );
+            if (existGenealogy.rows.length === 0) {
+              await client2.query(
+                `INSERT INTO lot_genealogy (parent_lot_id, child_lot_id, consumed_qty, component_position)
+                 VALUES ($1, $2, $3, $4)`,
+                [alloc.lot_id, childLotId, consumeQty, alloc.item_code || null]
+              );
+            }
+          }
+
+          // 4) 소모 후 remaining_qty가 0 이하면 CONSUMED 처리
+          const updated = await client2.query(
+            `SELECT remaining_qty FROM lot_transaction WHERE lot_id = $1`,
+            [alloc.lot_id]
+          );
+          if (updated.rows.length > 0 && parseFloat(updated.rows[0].remaining_qty) <= 0) {
+            await client2.query(
+              `UPDATE lot_transaction SET status = 'CONSUMED' WHERE lot_id = $1`,
+              [alloc.lot_id]
+            );
+          }
+
+          consumedCount++;
+        }
+
+        await client2.query('COMMIT');
+        // 소모 건수를 작업지시 remarks에 기록
+        if (consumedCount > 0) {
+          await pool.query(
+            `UPDATE work_order SET remarks = COALESCE(remarks, '') || $1 WHERE wo_id = $2`,
+            [`\n[자동소모] ${consumedCount}건 자재 투입 완료`, woId]
+          );
+        }
+      } catch (err) {
+        await client2.query('ROLLBACK');
+        console.error('[WO Auto-Consume] Error:', err);
+        // 자재 소모 실패해도 작업지시 상태 변경은 유지 (로그만 기록)
+      } finally {
+        client2.release();
+      }
+    }
+
+    // ═══════════════════════════════════════════
+    // COMPLETED 전환 시: 산출물 LOT 갱신 + 재고 IN 처리
+    // ═══════════════════════════════════════════
+    if (body.status === 'COMPLETED') {
+      const actualQty = parseFloat(wo.actual_qty) || parseFloat(wo.planned_qty) || 0;
+
+      if (wo.item_id && actualQty > 0) {
+        // 1) 산출물 LOT의 qty/remaining_qty를 실제 생산량으로 갱신
+        await pool.query(
+          `UPDATE lot_transaction SET qty = $1, remaining_qty = $1
+           WHERE wo_id = $2 AND status = 'ACTIVE'`,
+          [actualQty, woId]
+        );
+
+        // 2) 재고 IN 트랜잭션 (중복 방지)
+        const existIn = await pool.query(
+          `SELECT 1 FROM inventory_transaction WHERE ref_wo_id = $1 AND txn_type = 'IN' AND purpose LIKE '%생산완료%' LIMIT 1`,
+          [woId]
+        );
+        if (existIn.rows.length === 0) {
+          // 산출물 LOT ID 조회
+          const outputLot = await pool.query(
+            `SELECT lot_id FROM lot_transaction WHERE wo_id = $1 LIMIT 1`, [woId]
+          );
+          const outputLotId = outputLot.rows.length > 0 ? outputLot.rows[0].lot_id : null;
+
+          await pool.query(
+            `INSERT INTO inventory_transaction (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id, worker)
+             VALUES ($1, $2, 'IN', $3, $4, $5, $6, $7)`,
+            [wo.item_id, outputLotId, wo.wo_date, actualQty,
+             `${wo.process_code} 생산완료 (반제품 재고)`, wo.wo_id, wo.inspector]
+          );
+        }
+      }
+    }
+
+    // 최신 데이터 반환
+    const finalResult = await pool.query(
+      `SELECT wo.*, lt.lot_number as auto_lot_number, lt.lot_id as auto_lot_id
+       FROM work_order wo
+       LEFT JOIN lot_transaction lt ON lt.wo_id = wo.wo_id
+       WHERE wo.wo_id = $1
+       LIMIT 1`,
+      [woId]
+    );
+    return { data: finalResult.rows[0] || wo };
+  });
+
+  // DELETE /api/work-orders/:id - 작업지시 삭제 (PLANNED 상태만 가능)
+  app.delete('/api/work-orders/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const woId = parseInt(id, 10);
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 상태 확인 - COMPLETED는 삭제 불가
+      const woResult = await client.query('SELECT * FROM work_order WHERE wo_id = $1', [woId]);
+      if (woResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return reply.status(404).send({ error: 'Not Found', message: '작업지시를 찾을 수 없습니다.' });
+      }
+      const wo = woResult.rows[0];
+      if (wo.status === 'COMPLETED') {
+        await client.query('ROLLBACK');
+        return reply.status(400).send({ error: 'Bad Request', message: '완료된 작업지시는 삭제할 수 없습니다.' });
+      }
+
+      // 연결된 LOT 계보 삭제
+      const lots = await client.query('SELECT lot_id FROM lot_transaction WHERE wo_id = $1', [woId]);
+      const lotIds = lots.rows.map((r: any) => r.lot_id);
+      if (lotIds.length > 0) {
+        await client.query(
+          `DELETE FROM lot_genealogy WHERE parent_lot_id = ANY($1) OR child_lot_id = ANY($1)`,
+          [lotIds]
+        );
+      }
+
+      // 연결된 재고 트랜잭션 삭제
+      await client.query('DELETE FROM inventory_transaction WHERE ref_wo_id = $1', [woId]);
+
+      // 연결된 LOT 삭제
+      await client.query('DELETE FROM lot_transaction WHERE wo_id = $1', [woId]);
+
+      // 작업지시 삭제
+      await client.query('DELETE FROM work_order WHERE wo_id = $1', [woId]);
+
+      await client.query('COMMIT');
+      return { data: { success: true, deleted_wo_id: woId } };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
+  // POST /api/work-orders/:id/consume - 자재 투입 (LOT 계보 생성)
+  app.post('/api/work-orders/:id/consume', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const woId = parseInt(id, 10);
+    const { parent_lot_id, consumed_qty, component_position } = request.body as {
+      parent_lot_id: number;
+      consumed_qty: number;
+      component_position?: string;
+    };
+
+    if (!parent_lot_id || !consumed_qty) {
+      return reply.status(400).send({ error: 'Bad Request', message: 'parent_lot_id, consumed_qty 필수' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 해당 작업지시의 LOT 찾기
+      const childLot = await client.query(
+        `SELECT lot_id FROM lot_transaction WHERE wo_id = $1 LIMIT 1`,
+        [woId]
+      );
+      if (childLot.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return reply.status(404).send({ error: 'Not Found', message: '작업지시에 연결된 LOT가 없습니다.' });
+      }
+
+      // LOT 계보 생성
+      await client.query(
+        `INSERT INTO lot_genealogy (parent_lot_id, child_lot_id, consumed_qty, component_position)
+         VALUES ($1, $2, $3, $4)`,
+        [parent_lot_id, childLot.rows[0].lot_id, consumed_qty, component_position || null]
+      );
+
+      // 부모 LOT remaining_qty 차감
+      await client.query(
+        `UPDATE lot_transaction SET remaining_qty = COALESCE(remaining_qty, qty) - $1 WHERE lot_id = $2`,
+        [consumed_qty, parent_lot_id]
+      );
+
+      // 부모 LOT 재고 출고 기록
+      const parentLot = await client.query(
+        `SELECT * FROM lot_transaction WHERE lot_id = $1`,
+        [parent_lot_id]
+      );
+      if (parentLot.rows.length > 0) {
+        const pl = parentLot.rows[0];
+        await client.query(
+          `INSERT INTO inventory_transaction (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id)
+           VALUES ($1, $2, 'OUT', CURRENT_DATE, $3, $4, $5)`,
+          [pl.item_id, parent_lot_id, consumed_qty, `WO-${woId} 투입`, woId]
+        );
+      }
+
+      await client.query('COMMIT');
+      return { data: { success: true } };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════
+  // POST /api/work-orders/cascade - 일일 생산계획 일괄 생성
+  // ═══════════════════════════════════════════════════════
+  app.post('/api/work-orders/cascade', async (request, reply) => {
+    const body = request.body as Record<string, unknown>;
+    const woDate = body.wo_date as string;
+    const processes = (body.processes as string[]) || ['MIX', 'EXT'];
+    const customerName = (body.customer_name as string) || null;
+
+    if (!woDate) {
+      return reply.status(400).send({ error: 'Bad Request', message: 'wo_date는 필수입니다.' });
+    }
+
+    const mixBatchCount = Number(body.mix_batch_count) || 12;
+    const extBatchCount = Number(body.ext_batch_count) || 2;
+    const cutQty = Number(body.cut_qty) || null;
+    const asmQty = Number(body.asm_qty) || null;
+
+    const client = await pool.connect();
+    const createdOrders: Array<Record<string, unknown>> = [];
+
+    try {
+      await client.query('BEGIN');
+
+      for (const processCode of processes) {
+        // 1. 해당 공정의 process_bom 조회
+        const pbResult = await client.query(
+          `SELECT * FROM process_bom WHERE process_code = $1 AND is_active = true ORDER BY bom_id LIMIT 1`,
+          [processCode]
+        );
+        const pbom = pbResult.rows[0] || null;
+
+        // 2. 계획수량 결정
+        let plannedQty: number;
+        let batchCount = 1;
+
+        switch (processCode) {
+          case 'MIX':
+            batchCount = mixBatchCount;
+            plannedQty = pbom ? parseFloat(pbom.output_qty) * batchCount : 300 * batchCount;
+            break;
+          case 'EXT':
+            batchCount = extBatchCount;
+            plannedQty = pbom ? parseFloat(pbom.output_qty) * batchCount : 300 * batchCount;
+            break;
+          case 'CUT':
+            plannedQty = cutQty || 1;
+            break;
+          case 'ASM':
+            plannedQty = asmQty || 1;
+            break;
+          default:
+            plannedQty = 1;
+        }
+
+        // 3. 산출물 품목 결정
+        let outputItemId: number | null = null;
+        if (pbom?.output_item_id) {
+          outputItemId = pbom.output_item_id;
+        }
+
+        // 4. FIFO 자재 자동배정
+        let inputLotNumbers: string | null = null;
+        if (pbom) {
+          const bomItems = await client.query(
+            `SELECT pbi.item_id, im.item_code, im.item_name, pbi.qty
+             FROM process_bom_item pbi
+             LEFT JOIN item_master im ON im.item_id = pbi.item_id
+             WHERE pbi.bom_id = $1 AND pbi.item_id IS NOT NULL
+             ORDER BY pbi.sort_order`,
+            [pbom.bom_id]
+          );
+          if (bomItems.rows.length > 0) {
+            const allocations = await fifoAllocate(client, bomItems.rows, batchCount);
+            inputLotNumbers = JSON.stringify(allocations);
+          }
+        }
+
+        // 5. 작업지시 번호 & LOT 번호 생성
+        const woNumber = await generateWoNumber(processCode, woDate);
+        const cascadeCertId = body.cert_id ? Number(body.cert_id) : undefined;
+        const lotNumber = await generateLotNumber(processCode, woDate, cascadeCertId);
+
+        // 6. 작업지시 INSERT
+        const insertResult = await client.query(
+          `INSERT INTO work_order (
+            wo_number, wo_date, process_code, status,
+            item_id, planned_qty, customer_name, input_lot_numbers
+          ) VALUES ($1, $2, $3, 'PLANNED', $4, $5, $6, $7)
+          RETURNING wo_id`,
+          [woNumber, woDate, processCode, outputItemId, plannedQty, customerName, inputLotNumbers]
+        );
+        const woId = insertResult.rows[0].wo_id;
+
+        // 7. 산출물 LOT 생성
+        const lotType = processCode; // MIX, EXT, CUT, ASM
+        const lotUnit = ['MIX', 'EXT'].includes(processCode) ? 'kg' : 'ea';
+        let createdLotNumber = lotNumber;
+        if (outputItemId) {
+          await client.query(
+            `INSERT INTO lot_transaction (lot_number, lot_type, item_id, qty, remaining_qty, unit, status, wo_id)
+             VALUES ($1, $2, $3, 0, 0, $4, 'ACTIVE', $5)`,
+            [lotNumber, lotType, outputItemId, lotUnit, woId]
+          );
+        }
+
+        // 품목명 조회
+        let itemName: string | null = null;
+        if (outputItemId) {
+          const itemRes = await client.query(`SELECT item_name FROM item_master WHERE item_id = $1`, [outputItemId]);
+          if (itemRes.rows.length > 0) itemName = itemRes.rows[0].item_name;
+        }
+
+        createdOrders.push({
+          wo_id: woId,
+          wo_number: woNumber,
+          process_code: processCode,
+          planned_qty: plannedQty,
+          lot_number: createdLotNumber,
+          item_name: itemName,
+          batch_count: batchCount,
+        });
+      }
+
+      await client.query('COMMIT');
+      return { data: createdOrders };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+}

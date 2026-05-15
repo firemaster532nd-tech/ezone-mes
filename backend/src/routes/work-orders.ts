@@ -75,11 +75,10 @@ export async function workOrderRoutes(app: FastifyInstance) {
 
     let query = `
       SELECT w.*, c.cert_number, c.structure_code, i.item_name, i.item_code,
-             COALESCE(w.lot_number, lt.lot_number) AS lot_number
+             COALESCE(w.lot_number, (SELECT lt2.lot_number FROM lot_transaction lt2 WHERE lt2.wo_id = w.wo_id ORDER BY lt2.lot_number LIMIT 1)) AS lot_number
       FROM work_order w
       LEFT JOIN certification_master c ON c.cert_id = w.cert_id
       LEFT JOIN item_master i ON i.item_id = w.item_id
-      LEFT JOIN lot_transaction lt ON lt.wo_id = w.wo_id
     `;
     const conditions: string[] = [];
     const params: unknown[] = [];
@@ -120,11 +119,11 @@ export async function workOrderRoutes(app: FastifyInstance) {
 
     const result = await pool.query(
       `SELECT w.*, c.cert_number, c.structure_code, i.item_name, i.item_code,
-              COALESCE(w.lot_number, lt.lot_number) AS lot_number, lt.lot_id
+              COALESCE(w.lot_number, (SELECT lt2.lot_number FROM lot_transaction lt2 WHERE lt2.wo_id = w.wo_id ORDER BY lt2.lot_number LIMIT 1)) AS lot_number,
+              (SELECT lt2.lot_id FROM lot_transaction lt2 WHERE lt2.wo_id = w.wo_id ORDER BY lt2.lot_number LIMIT 1) AS lot_id
        FROM work_order w
        LEFT JOIN certification_master c ON c.cert_id = w.cert_id
        LEFT JOIN item_master i ON i.item_id = w.item_id
-       LEFT JOIN lot_transaction lt ON lt.wo_id = w.wo_id
        WHERE w.wo_id = $1`,
       [woId]
     );
@@ -328,23 +327,52 @@ export async function workOrderRoutes(app: FastifyInstance) {
 
       // 3. 산출물 LOT 자동채번 + lot_transaction 생성
       const certId = body.cert_id ? Number(body.cert_id) : undefined;
-      const lotNumber = await generateLotNumber(processCode, woDate, certId);
       const lotType = processCode === 'ASM' ? 'ASM' : processCode;
-      const lotResult = await client.query(
-        `INSERT INTO lot_transaction (lot_number, lot_type, item_id, wo_id, qty, unit, status, remaining_qty)
-         VALUES ($1,$2,$3,$4,$5,$6,'ACTIVE',$5)
-         RETURNING *`,
-        [lotNumber, lotType, outputItemId, wo.wo_id, plannedQty, pbom?.output_unit || 'EA']
-      );
+      const lotUnit = processCode === 'MIX' ? 'kg' : (processCode === 'EXT' ? 'm' : (pbom?.output_unit || 'EA'));
+      const createdLotNumbers: string[] = [];
+
+      if (processCode === 'MIX' && batchCount > 1 && outputItemId) {
+        // MIX: 배치당 LOT 개별 생성 (S01~S08) - client 기반 시퀀스
+        const datePrefix = woDate.replace(/-/g, '').slice(2);
+        for (let b = 0; b < batchCount; b++) {
+          const lotSeq = await client.query(
+            `SELECT lot_number FROM lot_transaction WHERE lot_number LIKE $1 ORDER BY lot_number DESC LIMIT 1`,
+            [`${datePrefix}-S%`]
+          );
+          const seq = lotSeq.rows.length > 0
+            ? (parseInt(lotSeq.rows[0].lot_number.match(/(\d+)$/)?.[1] || '0', 10) + 1) : 1;
+          const batchLotNumber = `${datePrefix}-S${String(seq).padStart(2, '0')}`;
+          await client.query(
+            `INSERT INTO lot_transaction (lot_number, lot_type, item_id, wo_id, qty, unit, status, remaining_qty)
+             VALUES ($1,$2,$3,$4,0,$5,'ACTIVE',0)`,
+            [batchLotNumber, lotType, outputItemId, wo.wo_id, lotUnit]
+          );
+          createdLotNumbers.push(batchLotNumber);
+        }
+      } else {
+        const lotNumber = await generateLotNumber(processCode, woDate, certId);
+        await client.query(
+          `INSERT INTO lot_transaction (lot_number, lot_type, item_id, wo_id, qty, unit, status, remaining_qty)
+           VALUES ($1,$2,$3,$4,0,$5,'ACTIVE',0)`,
+          [lotNumber, lotType, outputItemId, wo.wo_id, lotUnit]
+        );
+        createdLotNumbers.push(lotNumber);
+      }
+
+      // 작업지시에 LOT 번호 기록
+      const displayLotNumber = createdLotNumbers.length > 1
+        ? `${createdLotNumbers[0]}~${createdLotNumbers[createdLotNumbers.length - 1]}`
+        : createdLotNumbers[0];
+      await client.query(`UPDATE work_order SET lot_number = $1 WHERE wo_id = $2`, [displayLotNumber, wo.wo_id]);
 
       await client.query('COMMIT');
 
       return {
         data: {
           ...wo,
-          lot_number: lotResult.rows[0].lot_number,
-          lot_id: lotResult.rows[0].lot_id,
+          lot_number: displayLotNumber,
           batch_count: batchCount,
+          created_lots: createdLotNumbers,
           process_bom: pbom ? { bom_id: pbom.bom_id, bom_name: pbom.bom_name, output_item_id: pbom.output_item_id } : null,
         },
       };
@@ -618,42 +646,67 @@ export async function workOrderRoutes(app: FastifyInstance) {
       const actualQty = parseFloat(wo.actual_qty) || parseFloat(wo.planned_qty) || 0;
 
       if (wo.item_id && actualQty > 0) {
-        // 1) 산출물 LOT의 qty/remaining_qty를 실제 생산량으로 갱신
-        await pool.query(
-          `UPDATE lot_transaction SET qty = $1, remaining_qty = $1
-           WHERE wo_id = $2 AND status = 'ACTIVE'`,
-          [actualQty, woId]
-        );
-
-        // 2) 재고 IN 트랜잭션 (중복 방지)
-        const existIn = await pool.query(
-          `SELECT 1 FROM inventory_transaction WHERE ref_wo_id = $1 AND txn_type = 'IN' AND purpose LIKE '%생산완료%' LIMIT 1`,
+        // 산출물 LOT 목록 조회
+        const outputLots = await pool.query(
+          `SELECT lot_id, lot_number FROM lot_transaction WHERE wo_id = $1 AND status = 'ACTIVE' ORDER BY lot_number`,
           [woId]
         );
-        if (existIn.rows.length === 0) {
-          // 산출물 LOT ID 조회
-          const outputLot = await pool.query(
-            `SELECT lot_id FROM lot_transaction WHERE wo_id = $1 LIMIT 1`, [woId]
-          );
-          const outputLotId = outputLot.rows.length > 0 ? outputLot.rows[0].lot_id : null;
+        const lotCount = outputLots.rows.length;
 
+        if (lotCount > 1) {
+          // 다건 LOT (MIX 배치별): 균등 배분 (300kg씩)
+          const perLot = Math.round((actualQty / lotCount) * 100) / 100;
+          let distributed = 0;
+          for (let i = 0; i < lotCount; i++) {
+            const lot = outputLots.rows[i];
+            const lotQty = (i === lotCount - 1) ? (actualQty - distributed) : perLot; // 마지막에 나머지
+            await pool.query(
+              `UPDATE lot_transaction SET qty = $1, remaining_qty = $1 WHERE lot_id = $2`,
+              [lotQty, lot.lot_id]
+            );
+            distributed += lotQty;
+
+            // 각 LOT별 재고 IN
+            await pool.query(
+              `INSERT INTO inventory_transaction (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id, worker)
+               VALUES ($1, $2, 'IN', $3, $4, $5, $6, $7)`,
+              [wo.item_id, lot.lot_id, wo.wo_date, lotQty,
+               `${wo.process_code} 생산완료 (${lot.lot_number}, ${lotQty}kg)`, wo.wo_id, wo.inspector]
+            );
+          }
+        } else {
+          // 단건 LOT: 기존 로직
           await pool.query(
-            `INSERT INTO inventory_transaction (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id, worker)
-             VALUES ($1, $2, 'IN', $3, $4, $5, $6, $7)`,
-            [wo.item_id, outputLotId, wo.wo_date, actualQty,
-             `${wo.process_code} 생산완료 (반제품 재고)`, wo.wo_id, wo.inspector]
+            `UPDATE lot_transaction SET qty = $1, remaining_qty = $1
+             WHERE wo_id = $2 AND status = 'ACTIVE'`,
+            [actualQty, woId]
           );
+
+          // 재고 IN 트랜잭션 (중복 방지)
+          const existIn = await pool.query(
+            `SELECT 1 FROM inventory_transaction WHERE ref_wo_id = $1 AND txn_type = 'IN' AND purpose LIKE '%생산완료%' LIMIT 1`,
+            [woId]
+          );
+          if (existIn.rows.length === 0) {
+            const outputLotId = outputLots.rows.length > 0 ? outputLots.rows[0].lot_id : null;
+            await pool.query(
+              `INSERT INTO inventory_transaction (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id, worker)
+               VALUES ($1, $2, 'IN', $3, $4, $5, $6, $7)`,
+              [wo.item_id, outputLotId, wo.wo_date, actualQty,
+               `${wo.process_code} 생산완료 (반제품 재고)`, wo.wo_id, wo.inspector]
+            );
+          }
         }
       }
     }
 
     // 최신 데이터 반환
     const finalResult = await pool.query(
-      `SELECT wo.*, lt.lot_number as auto_lot_number, lt.lot_id as auto_lot_id
+      `SELECT wo.*,
+              (SELECT lt2.lot_number FROM lot_transaction lt2 WHERE lt2.wo_id = wo.wo_id ORDER BY lt2.lot_number LIMIT 1) as auto_lot_number,
+              (SELECT lt2.lot_id FROM lot_transaction lt2 WHERE lt2.wo_id = wo.wo_id ORDER BY lt2.lot_number LIMIT 1) as auto_lot_id
        FROM work_order wo
-       LEFT JOIN lot_transaction lt ON lt.wo_id = wo.wo_id
-       WHERE wo.wo_id = $1
-       LIMIT 1`,
+       WHERE wo.wo_id = $1`,
       [woId]
     );
     return { data: finalResult.rows[0] || wo };
@@ -789,6 +842,10 @@ export async function workOrderRoutes(app: FastifyInstance) {
 
     const mixBatchCount = Number(body.mix_batch_count) || 12;
     const extBatchCount = Number(body.ext_batch_count) || 2;
+    const extPlannedM = Number(body.ext_planned_m) || null;
+    const extThickness = Number(body.ext_thickness_mm) || null;
+    const extWidth = Number(body.ext_width_mm) || null;
+    const extSpecsList = (body.ext_specs as Array<{ thickness: number; width: number; planned_m?: number; label?: string }>) || null;
     const cutQty = Number(body.cut_qty) || null;
     const asmQty = Number(body.asm_qty) || null;
 
@@ -798,25 +855,120 @@ export async function workOrderRoutes(app: FastifyInstance) {
     try {
       await client.query('BEGIN');
 
+      // 헬퍼: 단일 작업지시 생성
+      async function createCascadeWO(
+        procCode: string, qty: number, batch: number,
+        itemId: number | null, thickness: number | null, width: number | null, extSpec: string | null,
+      ) {
+        // FIFO 자재 배정
+        const pbResult = await client.query(
+          `SELECT * FROM process_bom WHERE process_code = $1 AND is_active = true ORDER BY bom_id LIMIT 1`,
+          [procCode]
+        );
+        const pbom = pbResult.rows[0] || null;
+        const outputItemId = itemId || pbom?.output_item_id || null;
+
+        let inputLotNumbers: string | null = null;
+        if (pbom) {
+          const bomItems = await client.query(
+            `SELECT pbi.item_id, im.item_code, im.item_name, pbi.qty
+             FROM process_bom_item pbi
+             LEFT JOIN item_master im ON im.item_id = pbi.item_id
+             WHERE pbi.bom_id = $1 AND pbi.item_id IS NOT NULL ORDER BY pbi.sort_order`,
+            [pbom.bom_id]
+          );
+          if (bomItems.rows.length > 0) {
+            const allocations = await fifoAllocate(client, bomItems.rows, batch);
+            inputLotNumbers = JSON.stringify(allocations);
+          }
+        }
+
+        const woNumber = await generateWoNumber(procCode, woDate);
+        const cascadeCertId = body.cert_id ? Number(body.cert_id) : undefined;
+        const lotNumber = await generateLotNumber(procCode, woDate, cascadeCertId);
+
+        const insertResult = await client.query(
+          `INSERT INTO work_order (
+            wo_number, wo_date, process_code, status,
+            item_id, planned_qty, customer_name, input_lot_numbers,
+            thickness_mm, width_mm, ext_spec
+          ) VALUES ($1, $2, $3, 'PLANNED', $4, $5, $6, $7, $8, $9, $10)
+          RETURNING wo_id`,
+          [woNumber, woDate, procCode, outputItemId, qty, customerName, inputLotNumbers,
+           thickness, width, extSpec]
+        );
+        const woId = insertResult.rows[0].wo_id;
+
+        const lotUnit = procCode === 'EXT' ? 'm' : (procCode === 'MIX' ? 'kg' : 'ea');
+        const createdLotNumbers: string[] = [];
+
+        if (procCode === 'MIX' && batch > 1 && outputItemId) {
+          // MIX: 배치당(300kg) LOT 개별 생성
+          for (let b = 0; b < batch; b++) {
+            const batchLotNumber = b === 0 ? lotNumber : await generateLotNumber(procCode, woDate, cascadeCertId);
+            await client.query(
+              `INSERT INTO lot_transaction (lot_number, lot_type, item_id, qty, remaining_qty, unit, status, wo_id)
+               VALUES ($1, $2, $3, 0, 0, $4, 'ACTIVE', $5)`,
+              [batchLotNumber, procCode, outputItemId, lotUnit, woId]
+            );
+            createdLotNumbers.push(batchLotNumber);
+          }
+        } else if (outputItemId) {
+          await client.query(
+            `INSERT INTO lot_transaction (lot_number, lot_type, item_id, qty, remaining_qty, unit, status, wo_id)
+             VALUES ($1, $2, $3, 0, 0, $4, 'ACTIVE', $5)`,
+            [lotNumber, procCode, outputItemId, lotUnit, woId]
+          );
+          createdLotNumbers.push(lotNumber);
+        }
+
+        const displayLotNumber = createdLotNumbers.length > 1
+          ? `${createdLotNumbers[0]}~${createdLotNumbers[createdLotNumbers.length - 1]}`
+          : (createdLotNumbers[0] || lotNumber);
+        await client.query(`UPDATE work_order SET lot_number = $1 WHERE wo_id = $2`, [displayLotNumber, woId]);
+
+        let itemName: string | null = null;
+        if (outputItemId) {
+          const itemRes = await client.query(`SELECT item_name FROM item_master WHERE item_id = $1`, [outputItemId]);
+          if (itemRes.rows.length > 0) itemName = itemRes.rows[0].item_name;
+        }
+
+        createdOrders.push({
+          wo_id: woId, wo_number: woNumber, process_code: procCode,
+          planned_qty: qty, lot_number: displayLotNumber, item_name: itemName,
+          batch_count: batch, ext_spec: extSpec,
+        });
+      }
+
       for (const processCode of processes) {
-        // 1. 해당 공정의 process_bom 조회
+        if (processCode === 'EXT') {
+          // EXT: 규격별 다건 생성 (ext_specs가 있으면 규격별, 없으면 단건)
+          if (extSpecsList && extSpecsList.length > 0) {
+            for (const spec of extSpecsList) {
+              const qty = spec.planned_m || (extBatchCount * 300);
+              const specLabel = `${spec.thickness}T×${spec.width}mm`;
+              await createCascadeWO('EXT', qty, extBatchCount, null, spec.thickness, spec.width, specLabel);
+            }
+          } else {
+            const qty = extPlannedM || (extBatchCount * 300);
+            const specLabel = extThickness && extWidth ? `${extThickness}T×${extWidth}mm` : null;
+            await createCascadeWO('EXT', qty, extBatchCount, null, extThickness, extWidth, specLabel);
+          }
+          continue;
+        }
+
+        // MIX / CUT / ASM
         const pbResult = await client.query(
           `SELECT * FROM process_bom WHERE process_code = $1 AND is_active = true ORDER BY bom_id LIMIT 1`,
           [processCode]
         );
         const pbom = pbResult.rows[0] || null;
 
-        // 2. 계획수량 결정
         let plannedQty: number;
         let batchCount = 1;
-
         switch (processCode) {
           case 'MIX':
             batchCount = mixBatchCount;
-            plannedQty = pbom ? parseFloat(pbom.output_qty) * batchCount : 300 * batchCount;
-            break;
-          case 'EXT':
-            batchCount = extBatchCount;
             plannedQty = pbom ? parseFloat(pbom.output_qty) * batchCount : 300 * batchCount;
             break;
           case 'CUT':
@@ -829,73 +981,7 @@ export async function workOrderRoutes(app: FastifyInstance) {
             plannedQty = 1;
         }
 
-        // 3. 산출물 품목 결정
-        let outputItemId: number | null = null;
-        if (pbom?.output_item_id) {
-          outputItemId = pbom.output_item_id;
-        }
-
-        // 4. FIFO 자재 자동배정
-        let inputLotNumbers: string | null = null;
-        if (pbom) {
-          const bomItems = await client.query(
-            `SELECT pbi.item_id, im.item_code, im.item_name, pbi.qty
-             FROM process_bom_item pbi
-             LEFT JOIN item_master im ON im.item_id = pbi.item_id
-             WHERE pbi.bom_id = $1 AND pbi.item_id IS NOT NULL
-             ORDER BY pbi.sort_order`,
-            [pbom.bom_id]
-          );
-          if (bomItems.rows.length > 0) {
-            const allocations = await fifoAllocate(client, bomItems.rows, batchCount);
-            inputLotNumbers = JSON.stringify(allocations);
-          }
-        }
-
-        // 5. 작업지시 번호 & LOT 번호 생성
-        const woNumber = await generateWoNumber(processCode, woDate);
-        const cascadeCertId = body.cert_id ? Number(body.cert_id) : undefined;
-        const lotNumber = await generateLotNumber(processCode, woDate, cascadeCertId);
-
-        // 6. 작업지시 INSERT
-        const insertResult = await client.query(
-          `INSERT INTO work_order (
-            wo_number, wo_date, process_code, status,
-            item_id, planned_qty, customer_name, input_lot_numbers
-          ) VALUES ($1, $2, $3, 'PLANNED', $4, $5, $6, $7)
-          RETURNING wo_id`,
-          [woNumber, woDate, processCode, outputItemId, plannedQty, customerName, inputLotNumbers]
-        );
-        const woId = insertResult.rows[0].wo_id;
-
-        // 7. 산출물 LOT 생성
-        const lotType = processCode; // MIX, EXT, CUT, ASM
-        const lotUnit = ['MIX', 'EXT'].includes(processCode) ? 'kg' : 'ea';
-        let createdLotNumber = lotNumber;
-        if (outputItemId) {
-          await client.query(
-            `INSERT INTO lot_transaction (lot_number, lot_type, item_id, qty, remaining_qty, unit, status, wo_id)
-             VALUES ($1, $2, $3, 0, 0, $4, 'ACTIVE', $5)`,
-            [lotNumber, lotType, outputItemId, lotUnit, woId]
-          );
-        }
-
-        // 품목명 조회
-        let itemName: string | null = null;
-        if (outputItemId) {
-          const itemRes = await client.query(`SELECT item_name FROM item_master WHERE item_id = $1`, [outputItemId]);
-          if (itemRes.rows.length > 0) itemName = itemRes.rows[0].item_name;
-        }
-
-        createdOrders.push({
-          wo_id: woId,
-          wo_number: woNumber,
-          process_code: processCode,
-          planned_qty: plannedQty,
-          lot_number: createdLotNumber,
-          item_name: itemName,
-          batch_count: batchCount,
-        });
+        await createCascadeWO(processCode, plannedQty, batchCount, pbom?.output_item_id || null, null, null, null);
       }
 
       await client.query('COMMIT');
@@ -906,5 +992,156 @@ export async function workOrderRoutes(app: FastifyInstance) {
     } finally {
       client.release();
     }
+  });
+
+  // GET /api/work-orders/:woId/batch-lots - 배합(MIX) 배치별 LOT 상세
+  app.get('/api/work-orders/:woId/batch-lots', async (request, reply) => {
+    const { woId } = request.params as { woId: string };
+    const result = await pool.query(
+      `SELECT lt.lot_id, lt.lot_number, lt.qty, lt.remaining_qty, lt.unit, lt.status,
+              lt.created_at
+       FROM lot_transaction lt
+       WHERE lt.wo_id = $1
+       ORDER BY lt.lot_number`,
+      [woId]
+    );
+    return {
+      data: {
+        lots: result.rows,
+        count: result.rows.length,
+        total_qty: result.rows.reduce((sum: number, r: any) => sum + parseFloat(r.qty || 0), 0),
+      },
+    };
+  });
+
+  // GET /api/work-orders/:woId/cut-specs - 재단 작업지시의 구조별 재단 규격 상세
+  app.get('/api/work-orders/:woId/cut-specs', async (request, reply) => {
+    const { woId } = request.params as { woId: string };
+
+    // 작업지시 조회 (order_id, item_id 필요)
+    const woRes = await pool.query(
+      `SELECT wo.wo_id, wo.order_id, wo.process_code, wo.item_id,
+              im.item_code
+       FROM work_order wo
+       LEFT JOIN item_master im ON im.item_id = wo.item_id
+       WHERE wo.wo_id = $1`,
+      [woId]
+    );
+    if (woRes.rows.length === 0) return reply.status(404).send({ error: 'Not Found' });
+    const wo = woRes.rows[0];
+    if (!wo.order_id) return { data: { specs: [], message: '연결된 수주가 없습니다.' } };
+
+    // 소켓용(SA-CUT-SK) vs 플래싱용(SA-CUT-FL) 구분
+    const isSocket = !wo.item_code || wo.item_code === 'SA-CUT-SK';
+    const isFlashing = wo.item_code === 'SA-CUT-FL';
+
+    // 수주 아이템에서 구조별 치수 조회
+    const itemsRes = await pool.query(
+      `SELECT soi.order_item_id, soi.cert_id, soi.structure_code, soi.qty,
+              soi.penetration_w_mm, soi.penetration_h_mm,
+              cm.structure_name, cm.cert_version
+       FROM sales_order_item soi
+       LEFT JOIN certification_master cm ON cm.cert_id = soi.cert_id
+       WHERE soi.order_id = $1
+       ORDER BY soi.sort_order, soi.order_item_id`,
+      [wo.order_id]
+    );
+
+    // BOM calc_note에서 재단 산출 정보 조회
+    const bomRes = await pool.query(
+      `SELECT item_code, component_name, spec_detail, calc_note, required_qty, unit
+       FROM order_bom_result
+       WHERE order_id = $1 AND item_code LIKE 'SA-CUT%'
+       ORDER BY item_code`,
+      [wo.order_id]
+    );
+
+    // ── 소켓 재단 규격 ──
+    const socketSpecs: any[] = [];
+    let socketTotalSheets = 0;
+    for (const item of itemsRes.rows) {
+      const w = item.penetration_w_mm;
+      const h = item.penetration_h_mm;
+      if (!w || !h) continue;
+
+      const sheets = [
+        { part: '내부(상하)', count: 4, length: w - 5, width: 190, spec: '5T×190' },
+        { part: '내부(좌우)', count: 4, length: h - 30, width: 190, spec: '5T×190' },
+        { part: '외부(상하)', count: 2, length: w + 60, width: 190, spec: '5T×190' },
+        { part: '외부(좌우)', count: 2, length: h, width: 190, spec: '5T×190' },
+      ];
+      const total = sheets.reduce((sum, s) => sum + s.count * item.qty, 0);
+      socketTotalSheets += total;
+
+      socketSpecs.push({
+        structure_code: item.structure_code,
+        structure_name: item.structure_name,
+        qty: item.qty,
+        penetration_w: w,
+        penetration_h: h,
+        sheets,
+        total_sheets: total,
+      });
+    }
+
+    // ── 플래싱 재단 규격 ──
+    const flashingSpecs: any[] = [];
+    let flashingTotalSheets = 0;
+    for (const item of itemsRes.rows) {
+      const w = item.penetration_w_mm;
+      const h = item.penetration_h_mm;
+      if (!w || !h) continue;
+
+      // 플래싱 둘레 계산: 상하변 = W+250, 좌우변 = H
+      const topBot = w + 250;
+      const leftRight = h;
+      const perimeter1 = topBot * 2 + leftRight * 2; // 1면 둘레(mm)
+      const setsPerFace = perimeter1 / 1000;          // 1면 세트(L=1000mm 기준)
+      const totalSets = Math.ceil(setsPerFace * 2);   // 양면
+
+      const sheets = [
+        { part: '플래싱(I형)', count: totalSets, length: 1000, width: 125, spec: '5T×125',
+          detail: `상하${topBot}×2 + 좌우${leftRight}×2 = ${perimeter1}mm/면 → ${setsPerFace.toFixed(1)}세트/면 × 양면 = ${totalSets}` },
+      ];
+      const total = totalSets * item.qty;
+      flashingTotalSheets += total;
+
+      flashingSpecs.push({
+        structure_code: item.structure_code,
+        structure_name: item.structure_name,
+        qty: item.qty,
+        penetration_w: w,
+        penetration_h: h,
+        sheets,
+        total_sheets: total,
+      });
+    }
+
+    // BOM 요약
+    const bomSummary = bomRes.rows.map((r: any) => ({
+      item_code: r.item_code,
+      required_qty: r.required_qty,
+      unit: r.unit,
+      calc_note: r.calc_note,
+    }));
+
+    // item_code에 따라 해당하는 쪽만 반환
+    const filteredSocket = isFlashing ? { specs: [], total_sheets: 0, total_structures: 0 }
+      : { specs: socketSpecs, total_sheets: socketTotalSheets, total_structures: socketSpecs.length };
+    const filteredFlashing = isSocket && !isFlashing ? { specs: [], total_sheets: 0, total_structures: 0 }
+      : { specs: flashingSpecs, total_sheets: flashingTotalSheets, total_structures: flashingSpecs.length };
+    // item_code가 없으면 (미분류) 둘 다 표시
+    const showBoth = !wo.item_code;
+
+    return {
+      data: {
+        socket: showBoth ? { specs: socketSpecs, total_sheets: socketTotalSheets, total_structures: socketSpecs.length } : filteredSocket,
+        flashing: showBoth ? { specs: flashingSpecs, total_sheets: flashingTotalSheets, total_structures: flashingSpecs.length } : filteredFlashing,
+        structures: isFlashing ? flashingSpecs : socketSpecs,
+        bom_summary: bomSummary,
+        total_structures: (isFlashing ? flashingSpecs : socketSpecs).length,
+        total_sets: socketSpecs.reduce((sum: number, s: any) => sum + s.qty, 0),
+      },
+    };
   });
 }

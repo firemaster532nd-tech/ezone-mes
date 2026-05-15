@@ -481,17 +481,24 @@ export async function inventoryRoutes(app: FastifyInstance) {
     let query = `
       SELECT * FROM (
         SELECT
-          lt.lot_id, lt.lot_number, lt.item_id,
+          lt.lot_id, lt.lot_number, lt.lot_type, lt.item_id,
           i.item_code, i.item_name, i.item_category, i.unit,
-          COALESCE(
-            (SELECT SUM(CASE WHEN it.txn_type = 'IN' THEN it.qty
-                             WHEN it.txn_type = 'OUT' THEN -it.qty
-                             ELSE it.qty END)
-             FROM inventory_transaction it WHERE it.lot_id = lt.lot_id), 0
+          GREATEST(
+            COALESCE(lt.remaining_qty, lt.qty),
+            COALESCE(
+              (SELECT SUM(CASE WHEN it.txn_type = 'IN' THEN it.qty
+                               WHEN it.txn_type = 'OUT' THEN -it.qty
+                               ELSE it.qty END)
+               FROM inventory_transaction it WHERE it.lot_id = lt.lot_id), 0
+            )
           ) as balance,
-          lt.supplier_lot, lt.inspection_lot, lt.created_at
+          lt.remaining_qty, lt.qty as lot_qty,
+          lt.supplier_lot, lt.inspection_lot, lt.created_at,
+          lt.wo_id,
+          wo.wo_number, wo.ext_spec
         FROM lot_transaction lt
         JOIN item_master i ON i.item_id = lt.item_id
+        LEFT JOIN work_order wo ON wo.wo_id = lt.wo_id
         WHERE lt.status = 'ACTIVE'
     `;
     const params: unknown[] = [];

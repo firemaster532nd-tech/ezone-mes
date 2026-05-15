@@ -22,6 +22,8 @@ import { QualityReportPage } from '@/pages/shipment/QualityReportPage';
 import { InspectionPrintPage } from '@/pages/quality/InspectionPrintPage';
 import { BackupPage } from '@/pages/settings/BackupPage';
 import { UsersPage } from '@/pages/settings/UsersPage';
+import { DepartmentsPage } from '@/pages/settings/DepartmentsPage';
+import { PermissionsPage } from '@/pages/settings/PermissionsPage';
 import { ProcessExecutionPage } from '@/pages/production/ProcessExecutionPage';
 import { ProductionDashboardPage } from '@/pages/production/ProductionDashboardPage';
 import { LoginPage } from '@/pages/LoginPage';
@@ -84,6 +86,8 @@ export const router = createBrowserRouter([
       // 설정
       { path: 'settings/backup', element: <BackupPage /> },
       { path: 'settings/users', element: <UsersPage /> },
+      { path: 'settings/departments', element: <DepartmentsPage /> },
+      { path: 'settings/permissions', element: <PermissionsPage /> },
     ],
   },
 ]);

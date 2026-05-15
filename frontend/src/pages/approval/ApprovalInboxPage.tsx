@@ -392,6 +392,11 @@ function ApprovalCard({
             <p className="mb-3 text-sm text-gray-600">{approval.doc_summary}</p>
           )}
 
+          {/* 발주 품목 상세 */}
+          {approval.doc_type === 'PURCHASE_REQUEST' && (
+            <PrItemsPreview prId={approval.doc_id} />
+          )}
+
           {/* 결재 이력 */}
           <div className="mb-3 flex items-center gap-2 text-xs flex-wrap">
             <span className="rounded bg-white border px-2 py-1">
@@ -651,6 +656,77 @@ function ApprovalList({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/* ═══════ 발주서 품목 미리보기 ═══════ */
+function PrItemsPreview({ prId }: { prId: number }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get(`/purchase-requests/${prId}`)
+      .then((res: any) => setItems(res.data?.items || []))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, [prId]);
+
+  if (loading) return <div className="text-xs text-gray-400 mb-3">품목 로딩중...</div>;
+  if (items.length === 0) return null;
+
+  // 카테고리별 그룹핑
+  const rmItems = items.filter((i: any) => i.item_code?.startsWith('RM-'));
+  const smItems = items.filter((i: any) => !i.item_code?.startsWith('RM-'));
+
+  return (
+    <div className="mb-3 border rounded-lg overflow-hidden bg-white">
+      <div className="px-3 py-2 bg-gray-100 text-xs font-bold text-gray-700">
+        발주 품목 ({items.length}건)
+      </div>
+      <div className="max-h-[200px] overflow-y-auto">
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 sticky top-0">
+            <tr className="text-gray-500">
+              <th className="px-3 py-1.5 text-left">품목코드</th>
+              <th className="px-3 py-1.5 text-left">품목명</th>
+              <th className="px-3 py-1.5 text-right">발주수량</th>
+              <th className="px-3 py-1.5 text-left">단위</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {rmItems.length > 0 && (
+              <tr className="bg-amber-50">
+                <td colSpan={4} className="px-3 py-1 text-[10px] font-bold text-amber-700">배합원료 ({rmItems.length}건)</td>
+              </tr>
+            )}
+            {rmItems.map((item: any, idx: number) => (
+              <tr key={`rm-${idx}`} className="hover:bg-gray-50">
+                <td className="px-3 py-1.5 font-mono text-amber-700">{item.item_code}</td>
+                <td className="px-3 py-1.5">{item.item_name}</td>
+                <td className="px-3 py-1.5 text-right font-mono font-medium">{Number(item.order_qty).toLocaleString()}</td>
+                <td className="px-3 py-1.5 text-gray-500">{item.unit}</td>
+              </tr>
+            ))}
+            {smItems.length > 0 && (
+              <tr className="bg-blue-50">
+                <td colSpan={4} className="px-3 py-1 text-[10px] font-bold text-blue-700">부자재 ({smItems.length}건)</td>
+              </tr>
+            )}
+            {smItems.slice(0, 20).map((item: any, idx: number) => (
+              <tr key={`sm-${idx}`} className="hover:bg-gray-50">
+                <td className="px-3 py-1.5 font-mono">{item.item_code}</td>
+                <td className="px-3 py-1.5">{item.item_name}</td>
+                <td className="px-3 py-1.5 text-right font-mono font-medium">{Number(item.order_qty).toLocaleString()}</td>
+                <td className="px-3 py-1.5 text-gray-500">{item.unit}</td>
+              </tr>
+            ))}
+            {smItems.length > 20 && (
+              <tr><td colSpan={4} className="px-3 py-1.5 text-center text-gray-400 text-[10px]">... 외 {smItems.length - 20}건</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

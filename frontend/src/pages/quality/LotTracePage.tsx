@@ -40,7 +40,7 @@ const lotTypeColors: Record<string, string> = {
 
 const lotTypeLabels: Record<string, string> = {
   IN: '입고', MIX: '배합', EXT: '압출', CUT: '재단', ASM: '조립',
-  GI: '소켓', CW: '세라믹울', SS: '실란트', GW: '글라스울', OUT: '출하',
+  GI: '소켓', CW: '세라믹울', SS: '실란트', GW: '그라스울', OUT: '출하',
 };
 
 export function LotTracePage() {

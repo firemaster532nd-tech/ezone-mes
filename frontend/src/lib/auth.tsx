@@ -1,71 +1,115 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { api } from './api';
+import { indexByMenuCode, type Permission, type Action } from './permissions';
 
 export interface User {
   worker_id: number;
+  employee_no: string;
   worker_name: string;
-  birth_date: string | null;
-  department: string | null;
-  position: string | null;
   role: 'admin' | 'manager' | 'worker';
-  is_active: boolean;
+  dept_id: number | null;
+  dept_code?: string | null;
+  dept_name?: string | null;
+  position?: string | null;
+  email?: string | null;
+  must_change_pw?: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (user: User) => void;
+  token: string | null;
+  permissions: Permission[];
+  permMap: Map<string, Permission>;
+  loading: boolean;
+  login: (employee_no: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
+  refreshMe: () => Promise<void>;
+  can: (menu_code: string, action: Action) => boolean;
   isAuthenticated: boolean;
   isAdmin: boolean;
   isManager: boolean;
 }
 
-const AuthContext = createContext<AuthContextType>({
-  user: null,
-  login: () => {},
-  logout: () => {},
-  isAuthenticated: false,
-  isAdmin: false,
-  isManager: false,
-});
+const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
-const STORAGE_KEY = 'ezone_mes_user';
+const TOKEN_KEY = 'ezone_mes_token';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
+  const [user, setUser] = useState<User | null>(null);
+  const [permissions, setPermissions] = useState<Permission[]>([]);
+  const [loading, setLoading] = useState(!!token);
+
+  const permMap = useMemo(() => indexByMenuCode(permissions), [permissions]);
+
+  const refreshMe = useCallback(async () => {
+    if (!token) { setUser(null); setPermissions([]); setLoading(false); return; }
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : null;
+      const res = await api.get<{ user: User; permissions: Permission[] }>('/auth/me');
+      setUser(res.user);
+      setPermissions(res.permissions ?? []);
     } catch {
-      return null;
+      localStorage.removeItem(TOKEN_KEY);
+      setToken(null); setUser(null); setPermissions([]);
+    } finally {
+      setLoading(false);
     }
-  });
+  }, [token]);
 
-  const login = (u: User) => {
-    setUser(u);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(u));
-  };
+  useEffect(() => { refreshMe(); }, [refreshMe]);
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem(STORAGE_KEY);
-  };
+  const login = useCallback(async (employee_no: string, password: string) => {
+    try {
+      const res = await api.post<{ token: string; user: User }>('/auth/login', { employee_no, password });
+      localStorage.setItem(TOKEN_KEY, res.token);
+      setToken(res.token);
+      setUser(res.user);
+      // refresh fetches permissions
+      return { ok: true };
+    } catch (e: any) {
+      return { ok: false, error: e?.message ?? 'login_failed' };
+    }
+  }, []);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        login,
-        logout,
-        isAuthenticated: !!user,
-        isAdmin: user?.role === 'admin',
-        isManager: user?.role === 'admin' || user?.role === 'manager',
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    setToken(null); setUser(null); setPermissions([]);
+  }, []);
+
+  const canFn = useCallback(
+    (menu_code: string, action: Action) => {
+      if (user?.role === 'admin') return true;
+      const p = permMap.get(menu_code);
+      return !!(p && p[`can_${action}` as const]);
+    },
+    [permMap, user?.role],
   );
+
+  const value: AuthContextType = {
+    user, token, permissions, permMap, loading,
+    login, logout, refreshMe,
+    can: canFn,
+    isAuthenticated: !!user,
+    isAdmin: user?.role === 'admin',
+    isManager: user?.role === 'admin' || user?.role === 'manager',
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
   return useContext(AuthContext);
+}
+
+/** 컴포넌트 가드: 특정 권한이 없으면 children을 렌더링하지 않음 */
+export function PermGuard({
+  menu_code, action = 'read', fallback = null, children,
+}: {
+  menu_code: string;
+  action?: Action;
+  fallback?: ReactNode;
+  children: ReactNode;
+}) {
+  const { can } = useAuth();
+  return <>{can(menu_code, action) ? children : fallback}</>;
 }

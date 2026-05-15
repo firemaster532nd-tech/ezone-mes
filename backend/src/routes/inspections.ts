@@ -228,7 +228,7 @@ export const INCOMING_FORM_PRESETS: IncomingFormPreset[] = [
   // ===== 부자재 (SM) - 강재류/그라스울/세라믹울 (CLAUDE.md 기반) =====
   {
     form_code: 'D122-1', form_name: '그라스울 인수검사', category: 'SM', category_label: '부자재',
-    material: '글라스울 24K', spec_ref: 'EZC-D122 Rev1, KS L 9102',
+    material: '그라스울 24K', spec_ref: 'EZC-D122 Rev1, KS L 9102',
     ks_type: 'KS', ks_number: 'KS L 9102', cert_test_required: false,
     items: [
       { item_no: 1, quality_item: '겉모양', check_item: '색상/은박필름/파손', check_method: '육안', unit: 'OK/NG', frequency: '매로트' },

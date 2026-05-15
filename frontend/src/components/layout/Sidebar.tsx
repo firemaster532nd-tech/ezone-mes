@@ -233,6 +233,8 @@ const adminNavItems: NavSection[] = [
     icon: Settings,
     children: [
       { label: '사용자 관리', path: '/settings/users' },
+      { label: '부서 관리', path: '/settings/departments' },
+      { label: '권한 관리', path: '/settings/permissions' },
       { label: '백업 / 초기화', path: '/settings/backup' },
     ],
   },
@@ -240,11 +242,33 @@ const adminNavItems: NavSection[] = [
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const [mode, setMode] = useState<SidebarMode>('shop');
+  const [mode, _setMode] = useState<SidebarMode>(() => (localStorage.getItem('sidebar_mode') as SidebarMode) || 'shop');
+  const setMode = (m: SidebarMode) => { _setMode(m); localStorage.setItem('sidebar_mode', m); };
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
   const [approvalCount, setApprovalCount] = useState(0);
   const location = useLocation();
-  const { user } = useAuth();
+  const { user, permissions, isAdmin } = useAuth();
+
+  // path → can_read 룩업 (admin은 항상 true)
+  const pathReadable = (path?: string) => {
+    if (!path) return true;
+    if (isAdmin) return true;
+    return permissions.some((p: { path: string | null; can_read: boolean }) => p.path === path && p.can_read);
+  };
+
+  // 섹션/링크를 권한으로 필터링: 그룹 노드는 자식 1개 이상이 보일 때만 노출
+  const filterNav = (items: NavSection[]): NavSection[] => {
+    return items
+      .map((s) => {
+        if (s.path) return pathReadable(s.path) ? s : null;
+        if (s.children) {
+          const visible = s.children.filter((c) => pathReadable(c.path));
+          return visible.length ? { ...s, children: visible } : null;
+        }
+        return s;
+      })
+      .filter((s): s is NavSection => s !== null);
+  };
 
   // 결재 대기 건수 폴링
   useEffect(() => {
@@ -259,7 +283,7 @@ export function Sidebar() {
     return () => clearInterval(interval);
   }, [user]);
 
-  const navItems = mode === 'shop' ? shopNavItems : adminNavItems;
+  const navItems = filterNav(mode === 'shop' ? shopNavItems : adminNavItems);
 
   const toggleSection = (label: string) => {
     setOpenSections((prev) => {
