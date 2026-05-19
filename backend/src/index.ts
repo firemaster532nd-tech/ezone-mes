@@ -38,54 +38,68 @@ import { authRoutes } from './routes/auth.js';
 import { departmentRoutes } from './routes/departments.js';
 import { permissionRoutes } from './routes/permissions.js';
 
-const app = Fastify({ logger: true });
+export const app = Fastify({ logger: true });
 
-await app.register(cors, { origin: env.CORS_ORIGIN });
-await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB limit
+let isInitialized = false;
 
-await app.register(certificationRoutes);
-await app.register(itemRoutes);
-await app.register(workOrderRoutes);
-await app.register(lotRoutes);
-await app.register(inventoryRoutes);
-await app.register(inspectionRoutes);
-await app.register(selfInspectionRoutes);
-await app.register(processInspectionRoutes);
-await app.register(certCheckRoutes);
-await app.register(dashboardRoutes);
-await app.register(shipmentRoutes);
-await app.register(qualityReportRoutes);
-await app.register(attachmentRoutes);
-await app.register(backupRoutes);
-await app.register(lotValidationRoutes);
-await app.register(structureLotRoutes);
-await app.register(tbmRoutes);
-await app.register(workerRoutes);
-await app.register(processExecutionRoutes);
-await app.register(productionStatsRoutes);
-await app.register(approvalRoutes);
-await app.register(reportRoutes);
-await app.register(compoundingRoutes);
-await app.register(processBomRoutes);
-await app.register(defectRoutes);
-await app.register(lossAnalyticsRoutes);
-await app.register(lotPropertiesRoutes);
-await app.register(inventoryClosingRoutes);
-await app.register(complianceRoutes);
-await app.register(orderRoutes);
-await app.register(certDocumentRoutes);
-await app.register(structureBomRoutes);
-await app.register(authRoutes);
-await app.register(departmentRoutes);
-await app.register(permissionRoutes);
+export const initApp = async () => {
+  if (isInitialized) return app;
+  
+  await app.register(cors, { origin: env.CORS_ORIGIN });
+  await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB limit
 
-// Health check
-app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+  await app.register(certificationRoutes);
+  await app.register(itemRoutes);
+  await app.register(workOrderRoutes);
+  await app.register(lotRoutes);
+  await app.register(inventoryRoutes);
+  await app.register(inspectionRoutes);
+  await app.register(selfInspectionRoutes);
+  await app.register(processInspectionRoutes);
+  await app.register(certCheckRoutes);
+  await app.register(dashboardRoutes);
+  await app.register(shipmentRoutes);
+  await app.register(qualityReportRoutes);
+  await app.register(attachmentRoutes);
+  await app.register(backupRoutes);
+  await app.register(lotValidationRoutes);
+  await app.register(structureLotRoutes);
+  await app.register(tbmRoutes);
+  await app.register(workerRoutes);
+  await app.register(processExecutionRoutes);
+  await app.register(productionStatsRoutes);
+  await app.register(approvalRoutes);
+  await app.register(reportRoutes);
+  await app.register(compoundingRoutes);
+  await app.register(processBomRoutes);
+  await app.register(defectRoutes);
+  await app.register(lossAnalyticsRoutes);
+  await app.register(lotPropertiesRoutes);
+  await app.register(inventoryClosingRoutes);
+  await app.register(complianceRoutes);
+  await app.register(orderRoutes);
+  await app.register(certDocumentRoutes);
+  await app.register(structureBomRoutes);
+  await app.register(authRoutes);
+  await app.register(departmentRoutes);
+  await app.register(permissionRoutes);
 
-try {
-  await app.listen({ port: env.PORT, host: '0.0.0.0' });
-  console.log(`EZONE MES Backend running on port ${env.PORT}`);
-} catch (err) {
-  app.log.error(err);
-  process.exit(1);
+  // Health check
+  app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+  
+  isInitialized = true;
+  return app;
+};
+
+// Vercel 환경이 아닐 때만 자체 서버 구동
+if (process.env.VERCEL !== '1' && process.env.VERCEL !== 'true') {
+  initApp().then(async () => {
+    try {
+      await app.listen({ port: env.PORT || 3000, host: '0.0.0.0' });
+      console.log(`EZONE MES Backend running on port ${env.PORT || 3000}`);
+    } catch (err) {
+      app.log.error(err);
+      process.exit(1);
+    }
+  });
 }
