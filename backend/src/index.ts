@@ -38,12 +38,12 @@ import { authRoutes } from './routes/auth.js';
 import { departmentRoutes } from './routes/departments.js';
 import { permissionRoutes } from './routes/permissions.js';
 
-export const app = Fastify({ logger: true });
-
-let isInitialized = false;
+let appInstance: any = null;
 
 export const initApp = async () => {
-  if (isInitialized) return app;
+  if (appInstance) return appInstance;
+  
+  const app = Fastify({ logger: true });
   
   await app.register(cors, { origin: env.CORS_ORIGIN });
   await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB limit
@@ -87,13 +87,13 @@ export const initApp = async () => {
   // Health check
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
   
-  isInitialized = true;
+  appInstance = app;
   return app;
 };
 
 // Vercel 환경이 아닐 때만 자체 서버 구동
 if (process.env.VERCEL !== '1' && process.env.VERCEL !== 'true') {
-  initApp().then(async () => {
+  initApp().then(async (app) => {
     try {
       await app.listen({ port: env.PORT || 3000, host: '0.0.0.0' });
       console.log(`EZONE MES Backend running on port ${env.PORT || 3000}`);
