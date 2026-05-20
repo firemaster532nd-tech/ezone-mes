@@ -4,8 +4,15 @@
     "outDir": "dist",
     "rootDir": "src",
     "module": "ESNext",
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "noEmitOnError": false
   },
-  "include": ["src"],
-  "references": [{ "path": "../packages/shared" }]
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "../packages/shared"
+    }
+  ]
 }

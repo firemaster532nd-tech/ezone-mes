@@ -541,6 +541,7 @@ export async function inspectionRoutes(app: FastifyInstance) {
         measured_n2?: number;
         measured_n3?: number;
         is_applicable?: boolean;
+        direction?: string;
       }>;
     };
 
