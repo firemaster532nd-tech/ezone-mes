@@ -64,7 +64,7 @@ async function migrateCompoundingRecipe() {
 
 export async function compoundingRoutes(app: FastifyInstance) {
   // 서버 시작 시 마이그레이션 실행
-  await migrateCompoundingRecipe();
+  // await migrateCompoundingRecipe();
 
   // GET /api/compounding/recipes - 배합비 목록
   app.get('/api/compounding/recipes', async () => {

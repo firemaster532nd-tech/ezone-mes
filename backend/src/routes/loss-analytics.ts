@@ -27,7 +27,7 @@ async function migrateProcessIssue() {
 }
 
 export async function lossAnalyticsRoutes(app: FastifyInstance) {
-  await migrateProcessIssue();
+  // await migrateProcessIssue();
 
   // ═══════════════════════════════════════
   // Loss Analytics Endpoints

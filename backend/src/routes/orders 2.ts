@@ -566,7 +566,7 @@ function structureToFPCode(structureCode: string): string {
 // ═══════════════════════════════════════════════
 
 export async function orderRoutes(app: FastifyInstance) {
-  await migrateOrderTables();
+  // await migrateOrderTables();
 
   // ────── 수주 CRUD ──────
 

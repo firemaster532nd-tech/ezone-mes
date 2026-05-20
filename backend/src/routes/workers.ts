@@ -32,7 +32,7 @@ async function migrateWorkerTable() {
 
 export async function workerRoutes(app: FastifyInstance) {
   // 서버 시작 시 마이그레이션 실행
-  await migrateWorkerTable();
+  // await migrateWorkerTable();
 
   // GET /api/workers - 작업자 목록
   app.get('/api/workers', async (request) => {

@@ -65,7 +65,7 @@ async function migrateDefects() {
 }
 
 export async function defectRoutes(app: FastifyInstance) {
-  await migrateDefects();
+  // await migrateDefects();
 
   // ──────────────────────────────────────────────
   // POST /api/defects — 불량 기록 생성

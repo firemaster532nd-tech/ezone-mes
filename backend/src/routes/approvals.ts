@@ -51,7 +51,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
 };
 
 export async function approvalRoutes(app: FastifyInstance) {
-  await migrateApprovalTables();
+  // await migrateApprovalTables();
 
   // ═══════════════════════════════════════════
   // 결재 라인 관리

@@ -164,7 +164,7 @@ async function migrateItemMaster() {
 
 export async function itemRoutes(app: FastifyInstance) {
   // 서버 시작 시 마이그레이션 실행
-  await migrateItemMaster();
+  // await migrateItemMaster();
   // GET /api/items - 품목 목록
   app.get('/api/items', async (request, reply) => {
     const { category, search } = request.query as { category?: string; search?: string };

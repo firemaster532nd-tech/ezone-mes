@@ -269,7 +269,7 @@ async function seedProcessBoms() {
 
 export async function processBomRoutes(app: FastifyInstance) {
   // 서버 시작 시 마이그레이션 실행
-  await migrateProcessBom();
+  // await migrateProcessBom();
 
   // ──────────────────────────────────────────────
   // GET /api/process-bom — List all process BOMs

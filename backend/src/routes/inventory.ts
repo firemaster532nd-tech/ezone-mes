@@ -18,7 +18,7 @@ async function migrateInventoryTransaction() {
 
 export async function inventoryRoutes(app: FastifyInstance) {
   // Run migration on route registration
-  await migrateInventoryTransaction();
+  // await migrateInventoryTransaction();
   // GET /api/inventory/dashboard - 재고 대시보드 (카테고리별 요약)
   app.get('/api/inventory/dashboard', async () => {
     const result = await pool.query(`

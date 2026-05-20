@@ -56,7 +56,7 @@ async function migrateLotProperties() {
 }
 
 export async function lotPropertiesRoutes(app: FastifyInstance) {
-  await migrateLotProperties();
+  // await migrateLotProperties();
 
   /**
    * POST /api/lot-properties

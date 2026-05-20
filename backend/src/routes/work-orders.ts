@@ -64,7 +64,7 @@ async function migrateWorkOrderColumns() {
 
 export async function workOrderRoutes(app: FastifyInstance) {
   // 서버 시작 시 마이그레이션 실행
-  await migrateWorkOrderColumns();
+  // await migrateWorkOrderColumns();
   // GET /api/work-orders - 작업지시 목록
   app.get('/api/work-orders', async (request) => {
     const { process_code, date, status } = request.query as {

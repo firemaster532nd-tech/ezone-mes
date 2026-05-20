@@ -778,7 +778,7 @@ function structureToFPCode(structureCode: string): string {
 // ═══════════════════════════════════════════════
 
 export async function orderRoutes(app: FastifyInstance) {
-  await migrateOrderTables();
+  // await migrateOrderTables();
 
   // ─── work_order 컬럼 폭 확장 마이그레이션 ───
   try { await pool.query(`ALTER TABLE work_order ALTER COLUMN wo_number TYPE VARCHAR(50)`); } catch {}

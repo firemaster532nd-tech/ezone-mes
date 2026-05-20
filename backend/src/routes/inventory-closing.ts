@@ -107,7 +107,7 @@ function getApprover(zone: string): string {
 }
 
 export async function inventoryClosingRoutes(app: FastifyInstance) {
-  await migrateInventoryClosing();
+  // await migrateInventoryClosing();
 
   // ──────────────────────────────────────────────
   // GET /api/inventory-closing - 월마감 목록
