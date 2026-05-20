@@ -1,8 +1,7 @@
-
+import { initApp } from '../src/index.js';
 
 export default async function (req: any, res: any) {
   try {
-    const { initApp } = await import('../src/index.js');
     const app = await initApp();
     await app.ready();
     
@@ -13,15 +12,16 @@ export default async function (req: any, res: any) {
       payload: req.body
     });
     
-    res.status(response.statusCode);
+    res.statusCode = response.statusCode;
     Object.entries(response.headers).forEach(([key, value]) => {
       if (value !== undefined) {
         res.setHeader(key, value as string);
       }
     });
     
-    res.send(response.rawPayload);
+    res.end(response.rawPayload);
   } catch (err: any) {
-    res.status(500).json({ error: err.message, stack: err.stack });
+    res.statusCode = 500;
+    res.end(JSON.stringify({ error: err.message, stack: err.stack }));
   }
 }
