@@ -1,7 +1,8 @@
-import { initApp } from '../src/index.js';
+
 
 export default async function (req: any, res: any) {
   try {
+    const { initApp } = await import('../src/index.js');
     const app = await initApp();
     await app.ready();
     
