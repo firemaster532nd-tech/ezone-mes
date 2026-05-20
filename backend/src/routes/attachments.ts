@@ -8,11 +8,21 @@ import { randomUUID } from 'crypto';
 // @fastify/multipart augments FastifyRequest with .file()
 // We use (request as any).file() for compatibility
 
-const UPLOADS_DIR = path.resolve(process.cwd(), '..', 'uploads');
+let UPLOADS_DIR = process.env.UPLOAD_DIR || '/tmp/uploads';
 
 // Ensure uploads directory exists
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(UPLOADS_DIR)) {
+    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  }
+} catch (err) {
+  console.warn('Could not create UPLOADS_DIR:', UPLOADS_DIR, 'falling back to /tmp');
+  UPLOADS_DIR = '/tmp/uploads';
+  try {
+    if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  } catch (e) {
+    console.error('Failed to create fallback /tmp/uploads', e);
+  }
 }
 
 export async function attachmentRoutes(app: FastifyInstance) {
