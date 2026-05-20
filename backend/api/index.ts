@@ -1,4 +1,4 @@
-import { app, initApp } from '../src/index.js';
+import { app, initApp } from '../src/index';
 
 export default async function (req: any, res: any) {
   try {
