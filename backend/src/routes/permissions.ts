@@ -139,4 +139,89 @@ export async function permissionRoutes(app: FastifyInstance) {
       return { ok: true };
     },
   );
+
+  // GET /api/permissions/users/:worker_id  (특정 사용자의 개별 오버라이드 목록 조회)
+  app.get<{ Params: { worker_id: string } }>(
+    '/api/permissions/users/:worker_id',
+    { preHandler: requireRole('admin') },
+    async (req) => {
+      const wid = parseInt(req.params.worker_id, 10);
+      const { rows } = await pool.query(
+        `SELECT menu_id, override_mode, can_read, can_write, can_update, can_delete 
+         FROM user_permission_override WHERE worker_id = $1`,
+        [wid]
+      );
+      return { data: rows };
+    }
+  );
+
+  // PUT /api/permissions/users/batch  (개인 오버라이드 일괄 저장)
+  app.put('/api/permissions/users/batch', { preHandler: requireRole('admin') }, async (req, reply) => {
+    const body = req.body as {
+      worker_id: number;
+      permissions: Array<{
+        menu_id: number;
+        override_mode: 'ADD' | 'REVOKE' | 'REPLACE' | 'INHERIT';
+        can_read: boolean;
+        can_write: boolean;
+        can_update: boolean;
+        can_delete: boolean;
+      }>;
+    };
+
+    const { worker_id, permissions } = body;
+    if (!worker_id || !Array.isArray(permissions)) {
+      return reply.code(400).send({ error: 'invalid_body', message: 'worker_id와 permissions 배열이 필요합니다.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      for (const p of permissions) {
+        if (p.override_mode === 'INHERIT') {
+          // If inherit, remove the override from the override table so it falls back to department default
+          await client.query(
+            `DELETE FROM user_permission_override WHERE worker_id = $1 AND menu_id = $2`,
+            [worker_id, p.menu_id]
+          );
+        } else {
+          // Otherwise, insert/update the override
+          await client.query(
+            `INSERT INTO user_permission_override (
+               worker_id, menu_id, override_mode, can_read, can_write, can_update, can_delete, updated_by, updated_at
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+             ON CONFLICT (worker_id, menu_id) DO UPDATE
+               SET override_mode = EXCLUDED.override_mode,
+                   can_read = EXCLUDED.can_read,
+                   can_write = EXCLUDED.can_write,
+                   can_update = EXCLUDED.can_update,
+                   can_delete = EXCLUDED.can_delete,
+                   updated_by = EXCLUDED.updated_by,
+                   updated_at = NOW()`,
+            [
+              worker_id,
+              p.menu_id,
+              p.override_mode,
+              p.can_read || false,
+              p.can_write || false,
+              p.can_update || false,
+              p.can_delete || false,
+              req.auth!.worker_id
+            ]
+          );
+        }
+      }
+
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+
+    return { ok: true, count: permissions.length };
+  });
 }
+

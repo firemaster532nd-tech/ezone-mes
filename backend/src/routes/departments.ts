@@ -28,7 +28,7 @@ export async function departmentRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/api/departments/:id/members', { preHandler: requireAuth }, async (req) => {
     const id = parseInt(req.params.id, 10);
     const { rows } = await pool.query(
-      `SELECT worker_id, employee_no, worker_name, role, position, email, is_active
+      `SELECT worker_id, employee_no, worker_name, role, position, email, phone, dept_id, is_active
        FROM worker WHERE dept_id = $1 ORDER BY worker_name`,
       [id],
     );

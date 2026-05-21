@@ -160,4 +160,64 @@ export async function authRoutes(app: FastifyInstance) {
       return { ok: true };
     },
   );
+
+  // PATCH /api/auth/users/:id  (admin 전용: 계정 정보 수정)
+  app.patch<{ Params: { id: string } }>(
+    '/api/auth/users/:id',
+    { preHandler: requireRole('admin') },
+    async (req, reply) => {
+      const id = parseInt(req.params.id, 10);
+      const body = req.body as Record<string, any>;
+
+      const allowedFields = ['employee_no', 'worker_name', 'dept_id', 'role', 'position', 'email', 'phone', 'is_active'];
+      const updates: string[] = [];
+      const values: unknown[] = [];
+
+      // If dept_id is provided, let's fetch the department name to keep it synced
+      if ('dept_id' in body && body.dept_id) {
+        const deptRes = await pool.query('SELECT dept_name FROM department WHERE dept_id = $1', [body.dept_id]);
+        if (deptRes.rows[0]) {
+          body.department = deptRes.rows[0].dept_name;
+          allowedFields.push('department');
+        }
+      }
+
+      for (const field of allowedFields) {
+        if (field in body) {
+          values.push(body[field]);
+          updates.push(`${field} = $${values.length}`);
+        }
+      }
+
+      if (updates.length === 0) {
+        return reply.code(400).send({ error: 'invalid_body', message: '수정할 항목이 없습니다.' });
+      }
+
+      // Check unique constraint for employee_no
+      if ('employee_no' in body && body.employee_no) {
+        const dup = await pool.query(
+          'SELECT 1 FROM worker WHERE employee_no = $1 AND worker_id <> $2',
+          [body.employee_no, id]
+        );
+        if (dup.rows.length > 0) {
+          return reply.code(409).send({ error: 'duplicate_employee_no', message: '이미 사용중인 사번입니다.' });
+        }
+      }
+
+      values.push(id);
+      const { rows } = await pool.query(
+        `UPDATE worker SET ${updates.join(', ')}, updated_at = NOW()
+         WHERE worker_id = $${values.length}
+         RETURNING worker_id, employee_no, worker_name, role, dept_id, position, email, phone, is_active`,
+        values
+      );
+
+      if (!rows[0]) {
+        return reply.code(404).send({ error: 'not_found', message: '사용자를 찾을 수 없습니다.' });
+      }
+
+      return { ok: true, user: rows[0] };
+    }
+  );
 }
+
