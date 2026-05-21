@@ -168,7 +168,8 @@ INSERT INTO department (dept_code, dept_name, sort_order) VALUES
     ('PRODUCTION', '생산팀',   2),
     ('QUALITY',    '품질팀',   3),
     ('WAREHOUSE',  '자재팀',   4),
-    ('SALES',      '영업팀',   5)
+    ('SALES',      '영업팀',   5),
+    ('PURCHASING', '구매팀',   6)
 ON CONFLICT (dept_code) DO NOTHING;
 
 -- 기본 메뉴 트리 (사이드바와 1:1)

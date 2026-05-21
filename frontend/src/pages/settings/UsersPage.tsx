@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { Plus, KeyRound, UserCheck } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface UserRow {
   worker_id: number;
@@ -56,13 +57,40 @@ export function UsersPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!form.employee_no || !form.worker_name || !form.password) { setError('필수 항목을 입력하세요.'); return; }
+
+    const finalPassword = form.phone.trim();
+    if (!form.employee_no || !form.worker_name || !form.phone) { 
+      setError('필수 항목(사번, 이름, 휴대폰 번호)을 입력하세요.'); 
+      return; 
+    }
+    if (form.employee_no.length > 4) {
+      setError('사번은 최대 4자리 수까지만 허용됩니다.');
+      return;
+    }
+    if (finalPassword.length < 4) {
+      setError('휴대폰 번호(초기 비밀번호)는 최소 4자 이상이어야 합니다.');
+      return;
+    }
     if (!form.dept_id) { setError('부서를 선택하세요.'); return; }
+
     try {
-      await api.post('/auth/users', form);
+      await api.post('/auth/users', {
+        ...form,
+        password: finalPassword,
+      });
       setShowForm(false);
-      setForm({ employee_no: '', worker_name: '', password: '', dept_id: activeDept ?? 0, role: 'worker', position: '', email: '', phone: '' });
+      setForm({ 
+        employee_no: '', 
+        worker_name: '', 
+        password: '', 
+        dept_id: activeDept ?? 0, 
+        role: 'worker', 
+        position: '', 
+        email: '', 
+        phone: '' 
+      });
       if (activeDept) loadMembers(activeDept);
+      toast.success('신규 직원이 성공적으로 등록되었습니다!');
     } catch (err: any) {
       setError(err?.body?.error === 'duplicate_employee_no' ? '이미 사용중인 사번입니다.' : '생성 실패');
     }
@@ -160,9 +188,41 @@ export function UsersPage() {
               <UserCheck className="h-5 w-5 text-blue-600" /> 신규 직원 등록
             </div>
             <div className="space-y-3">
-              <Field label="사번 *"><input type="text" value={form.employee_no} onChange={(e) => setForm({ ...form, employee_no: e.target.value })} className="inp" /></Field>
+              <Field label="사번 * (최대 4자리)">
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={form.employee_no} 
+                    onChange={(e) => setForm({ ...form, employee_no: e.target.value })} 
+                    placeholder="사번 입력"
+                    maxLength={4}
+                    className="inp flex-1" 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const randomNo = Math.floor(1000 + Math.random() * 9000).toString();
+                      setForm({ ...form, employee_no: randomNo });
+                    }}
+                    className="px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 shrink-0 transition-colors"
+                  >
+                    임의 부여
+                  </button>
+                </div>
+              </Field>
               <Field label="이름 *"><input type="text" value={form.worker_name} onChange={(e) => setForm({ ...form, worker_name: e.target.value })} className="inp" /></Field>
-              <Field label="초기 비밀번호 *"><input type="text" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="inp font-mono" placeholder="첫 로그인 시 변경 요구됨" /></Field>
+              <Field label="휴대폰 번호 * (초기 비밀번호)">
+                <input 
+                  type="text" 
+                  value={form.phone} 
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })} 
+                  placeholder="예: 010-1234-5678"
+                  className="inp font-mono" 
+                />
+                <p className="text-[10px] text-gray-400 mt-1">
+                  입력한 휴대폰 번호가 초기 비밀번호로 지정되며 첫 로그인 시 변경을 강제합니다.
+                </p>
+              </Field>
               <Field label="부서 *">
                 <select value={form.dept_id} onChange={(e) => setForm({ ...form, dept_id: parseInt(e.target.value, 10) })} className="inp">
                   <option value={0}>선택...</option>

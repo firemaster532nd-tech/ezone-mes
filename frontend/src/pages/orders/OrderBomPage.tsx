@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 
 /* ─── 타입 ─── */
@@ -80,6 +81,7 @@ const CAT_COLORS: Record<string, string> = {
 };
 
 export default function OrderBomPage() {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [structures, setStructures] = useState<Structure[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -681,6 +683,12 @@ export default function OrderBomPage() {
                     className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium disabled:opacity-50">
                     {exploding ? 'BOM 전개 중...' : (bomResults.length > 0 ? 'BOM 재전개 (치수 기반)' : 'BOM 자동전개')}
                   </button>
+                  {bomResults.length > 0 && (
+                    <button onClick={() => navigate(`/shipment/statements/new?orderId=${selectedOrder.order_id}`)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">
+                      거래명세서 발급
+                    </button>
+                  )}
                   {bomResults.length > 0 && shortageCount > 0 && (
                     isPOCreated ? (
                       <span className="px-4 py-2 bg-gray-200 text-gray-500 rounded-lg text-sm font-medium cursor-not-allowed">

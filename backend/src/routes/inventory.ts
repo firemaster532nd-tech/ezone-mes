@@ -14,11 +14,16 @@ async function migrateInventoryTransaction() {
       ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS ${col.name} ${col.type};
     `);
   }
+  await pool.query(`
+    INSERT INTO department (dept_code, dept_name, sort_order)
+    VALUES ('PURCHASING', '구매팀', 6)
+    ON CONFLICT (dept_code) DO NOTHING;
+  `);
 }
 
 export async function inventoryRoutes(app: FastifyInstance) {
   // Run migration on route registration
-  // await migrateInventoryTransaction();
+  await migrateInventoryTransaction();
   // GET /api/inventory/dashboard - 재고 대시보드 (카테고리별 요약)
   app.get('/api/inventory/dashboard', async () => {
     const result = await pool.query(`
@@ -655,5 +660,133 @@ export async function inventoryRoutes(app: FastifyInstance) {
 
     const result = await pool.query(query, [parseInt(itemId, 10)]);
     return { data: result.rows, total: result.rows.length };
+  });
+
+  // GET /api/inventory/google-sheet-proxy - 구글 시트 CORS 우회용 프록시
+  app.get('/api/inventory/google-sheet-proxy', async (request, reply) => {
+    const { url } = request.query as { url?: string };
+    if (!url) {
+      return reply.status(400).send({ error: 'url_required', message: 'Google Sheet URL이 필요합니다.' });
+    }
+    const match = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (!match) {
+      return reply.status(400).send({ error: 'invalid_url', message: '올바른 Google Sheet URL이 아닙니다.' });
+    }
+    const id = match[1];
+    const exportUrl = `https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx`;
+    
+    try {
+      const res = await fetch(exportUrl);
+      if (!res.ok) {
+        throw new Error(`Google Sheets export failed: ${res.statusText}`);
+      }
+      const buffer = await res.arrayBuffer();
+      return reply
+        .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        .header('Content-Disposition', `attachment; filename="sheet_${id}.xlsx"`)
+        .send(Buffer.from(buffer));
+    } catch (err: any) {
+      app.log.error(err);
+      return reply.status(500).send({ error: 'proxy_failed', message: err.message || '구글 시트 연동에 실패했습니다.' });
+    }
+  });
+
+  // POST /api/inventory/import-excel - E-Count ERP 수불대장 일괄 연동 API
+  app.post('/api/inventory/import-excel', async (request, reply) => {
+    const { importType, records } = request.body as {
+      importType: 'assembly_log' | 'finished_ledger';
+      records: Array<{
+        txn_date: string;
+        item_code: string;
+        txn_type: 'IN' | 'OUT';
+        qty: number;
+        lot_number?: string;
+        source_lot?: string;
+        linked_lot?: string;
+        purpose?: string;
+        issuer_name?: string;
+        verifier_name?: string;
+        remarks?: string;
+      }>;
+    };
+
+    if (!records || !Array.isArray(records)) {
+      return reply.status(400).send({ error: 'bad_request', message: 'records 배열이 필요합니다.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      let insertedCount = 0;
+
+      for (const rec of records) {
+        // 1. 품목 ID 조회
+        const itemRes = await client.query(
+          `SELECT item_id, unit FROM item_master WHERE item_code = $1 AND is_active = TRUE`,
+          [rec.item_code.trim()]
+        );
+        const item = itemRes.rows[0];
+        if (!item) {
+          throw new Error(`존재하지 않거나 비활성화된 품목 코드입니다: ${rec.item_code}`);
+        }
+
+        // 2. LOT ID 조회 또는 자동 생성
+        let lotId: number | null = null;
+        if (rec.lot_number && rec.lot_number.trim() !== '') {
+          const lotNum = rec.lot_number.trim();
+          const lotRes = await client.query(
+            `SELECT lot_id FROM lot_transaction WHERE lot_number = $1`,
+            [lotNum]
+          );
+          if (lotRes.rows[0]) {
+            lotId = lotRes.rows[0].lot_id;
+          } else {
+            // LOT 자동 생성 (조립 수불대장은 ASM, 완제품은 OUT/IN 자동 판별)
+            const lotType = importType === 'assembly_log' ? 'ASM' : (rec.txn_type === 'OUT' ? 'OUT' : 'IN');
+            const newLotRes = await client.query(
+              `INSERT INTO lot_transaction (lot_number, lot_type, item_id, qty, unit, remaining_qty, status)
+               VALUES ($1, $2, $3, $4, $5, $4, 'ACTIVE')
+               RETURNING lot_id`,
+              [lotNum, lotType, item.item_id, rec.qty, item.unit]
+            );
+            lotId = newLotRes.rows[0].lot_id;
+          }
+        }
+
+        // 3. 수불 거래 내역 추가
+        await client.query(
+          `INSERT INTO inventory_transaction (
+             item_id, lot_id, txn_type, txn_date, qty, purpose,
+             source_lot, linked_lot, issuer_name, verifier_name
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [
+            item.item_id,
+            lotId,
+            rec.txn_type,
+            rec.txn_date,
+            rec.qty,
+            rec.purpose || null,
+            rec.source_lot || null,
+            rec.linked_lot || null,
+            rec.issuer_name || null,
+            rec.verifier_name || null
+          ]
+        );
+
+        insertedCount++;
+      }
+
+      await client.query('COMMIT');
+      return { success: true, count: insertedCount };
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      app.log.error(err);
+      return reply.status(500).send({
+        error: 'db_transaction_failed',
+        message: err.message || '데이터베이스 반영에 실패했습니다.'
+      });
+    } finally {
+      client.release();
+    }
   });
 }

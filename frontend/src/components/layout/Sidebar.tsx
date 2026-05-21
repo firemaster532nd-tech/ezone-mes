@@ -40,8 +40,11 @@ const shopNavItems: NavSection[] = [
     label: '수주/발주',
     icon: ShoppingCart,
     children: [
+      { label: '견적서 등록/관리', path: '/orders/quotations' },
+      { label: '미주문현황 조회', path: '/orders/unordered' },
       { label: '수주 관리 / BOM', path: '/orders' },
       { label: '자재 발주서', path: '/orders/purchase-requests' },
+      { label: '현장별 프로젝트', path: '/orders/projects' },
     ],
   },
   {
@@ -58,7 +61,10 @@ const shopNavItems: NavSection[] = [
   {
     label: '작업지시',
     icon: ClipboardList,
-    path: '/production/work-orders',
+    children: [
+      { label: '일반 작업지시', path: '/production/work-orders' },
+      { label: '현장별 작업지시', path: '/production/project-work-orders' },
+    ],
     dividerAfter: true,
   },
   // ── 생산 흐름 ──
@@ -70,6 +76,7 @@ const shopNavItems: NavSection[] = [
       { label: '인수검사', path: '/quality/incoming' },
       { label: '재고 현황', path: '/inventory/dashboard' },
       { label: '초기 재고 설정', path: '/inventory/initialize' },
+      { label: '수불대장 엑셀 연동', path: '/inventory/import' },
     ],
   },
   {
@@ -126,6 +133,7 @@ const shopNavItems: NavSection[] = [
     step: '⑦',
     children: [
       { label: '출하 목록', path: '/shipment/list' },
+      { label: '거래명세서 관리', path: '/shipment/statements' },
       { label: '품질관리서', path: '/shipment/list' },
     ],
     dividerAfter: true,
@@ -137,6 +145,7 @@ const shopNavItems: NavSection[] = [
     children: [
       { label: '생산 현황', path: '/production/production-dashboard' },
       { label: 'LOT 추적', path: '/quality/lot-trace' },
+      { label: '통합 LOT Matrix', path: '/quality/project-lot-matrix' },
       { label: '인정기준 검증', path: '/quality/cert-check' },
       { label: '불량/폐기', path: '/quality/defects' },
       { label: '로스 분석', path: '/reports/loss' },
@@ -151,6 +160,7 @@ const shopNavItems: NavSection[] = [
     icon: Database,
     children: [
       { label: '품목 등록/관리', path: '/master/items' },
+      { label: '거래처 관리', path: '/master/companies' },
       { label: '인정구조 관리', path: '/master/certifications' },
       { label: 'BOM 관리', path: '/master/bom' },
     ],
@@ -164,8 +174,11 @@ const adminNavItems: NavSection[] = [
     label: '수주/구매',
     icon: ShoppingCart,
     children: [
+      { label: '견적서 등록/관리', path: '/orders/quotations' },
+      { label: '미주문현황 조회', path: '/orders/unordered' },
       { label: '수주 관리 / BOM', path: '/orders' },
       { label: '자재 발주서', path: '/orders/purchase-requests' },
+      { label: '현장별 프로젝트', path: '/orders/projects' },
     ],
   },
   {
@@ -181,6 +194,7 @@ const adminNavItems: NavSection[] = [
     icon: ClipboardList,
     children: [
       { label: '작업지시 목록', path: '/production/work-orders' },
+      { label: '현장별 작업지시', path: '/production/project-work-orders' },
       { label: '공정 실행', path: '/production/process-execution' },
       { label: '생산 현황', path: '/production/production-dashboard' },
       { label: '공정일지', path: '/production/daily-log' },
@@ -195,6 +209,7 @@ const adminNavItems: NavSection[] = [
       { label: '중간검사 (C-701)', path: '/quality/process-inspection' },
       { label: '자주검사', path: '/quality/self-inspection' },
       { label: 'LOT 추적', path: '/quality/lot-trace' },
+      { label: '통합 LOT Matrix', path: '/quality/project-lot-matrix' },
       { label: '인정기준 검증', path: '/quality/cert-check' },
       { label: '불량/폐기', path: '/quality/defects' },
       { label: '미비사항 점검', path: '/quality/compliance' },
@@ -206,8 +221,10 @@ const adminNavItems: NavSection[] = [
     children: [
       { label: '재고 현황', path: '/inventory/dashboard' },
       { label: '초기 재고 설정', path: '/inventory/initialize' },
+      { label: '수불대장 엑셀 연동', path: '/inventory/import' },
       { label: '월말 실사/마감', path: '/inventory/closing' },
       { label: '출하 목록', path: '/shipment/list' },
+      { label: '거래명세서 관리', path: '/shipment/statements' },
       { label: '품질관리서', path: '/shipment/list' },
     ],
   },
@@ -224,6 +241,7 @@ const adminNavItems: NavSection[] = [
     icon: Database,
     children: [
       { label: '품목 등록/관리', path: '/master/items' },
+      { label: '거래처 관리', path: '/master/companies' },
       { label: '인정구조 관리', path: '/master/certifications' },
       { label: 'BOM 관리', path: '/master/bom' },
     ],

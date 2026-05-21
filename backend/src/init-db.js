@@ -2,10 +2,13 @@ import fs from 'fs';
 import path from 'path';
 import pg from 'pg';
 import { fileURLToPath } from 'url';
-import 'dotenv/config';
+import dotenv from 'dotenv';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
 
 const { Client } = pg;
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, '../..');
 
 const connectionString = process.env.DATABASE_URL;
@@ -20,7 +23,7 @@ async function initDb() {
     console.log('Connected!');
 
     const initDir = path.join(projectRoot, 'docker/postgres/init');
-    const sqlFiles = ['01_ddl.sql', '02_indexes.sql', '03_seed.sql'];
+    const sqlFiles = ['01_ddl.sql', '02_indexes.sql', '03_seed.sql', '04_rbac.sql', '05_company_statement.sql', '06_quotations.sql', '07_project_deliveries.sql'];
 
     for (const file of sqlFiles) {
       const filePath = path.join(initDir, file);

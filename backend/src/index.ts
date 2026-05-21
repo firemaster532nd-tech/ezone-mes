@@ -37,6 +37,10 @@ import { structureBomRoutes } from './routes/structure-bom.js';
 import { authRoutes } from './routes/auth.js';
 import { departmentRoutes } from './routes/departments.js';
 import { permissionRoutes } from './routes/permissions.js';
+import { companyRoutes } from './routes/companies.js';
+import { statementRoutes } from './routes/statements.js';
+import { quotationRoutes } from './routes/quotations.js';
+import { projectRoutes } from './routes/projects.js';
 
 let appInstance: any = null;
 
@@ -83,6 +87,10 @@ export const initApp = async () => {
   await app.register(authRoutes);
   await app.register(departmentRoutes);
   await app.register(permissionRoutes);
+  await app.register(companyRoutes);
+  await app.register(statementRoutes);
+  await app.register(quotationRoutes);
+  await app.register(projectRoutes);
 
   // Health check
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
@@ -91,15 +99,4 @@ export const initApp = async () => {
   return app;
 };
 
-// Vercel 환경이 아닐 때만 자체 서버 구동
-if (process.env.VERCEL !== '1' && process.env.VERCEL !== 'true') {
-  initApp().then(async (app) => {
-    try {
-      await app.listen({ port: env.PORT || 3000, host: '0.0.0.0' });
-      console.log(`EZONE MES Backend running on port ${env.PORT || 3000}`);
-    } catch (err) {
-      app.log.error(err);
-      process.exit(1);
-    }
-  });
-}
+
