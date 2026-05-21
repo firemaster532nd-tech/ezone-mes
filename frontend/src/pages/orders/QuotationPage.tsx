@@ -80,7 +80,7 @@ export function QuotationPage() {
       if (statusFilter) params.set('status', statusFilter);
       
       const res = await api.get<{ data: Quotation[] }>(`/quotations?${params.toString()}`);
-      setData(res.data.data);
+      setData(res.data);
     } catch (e: any) {
       toast.error('견적서 목록을 불러오지 못했습니다.');
     } finally {
@@ -392,13 +392,11 @@ function QuotationFormModal({
 
   // 마운트 시 기초 데이터 로딩
   useEffect(() => {
-    // 1. 거래처 조회
     api.get<{ data: Company[] }>('/companies').then((res) => {
-      setCompanies(res.data.data.filter(c => c.company_type === 'CUSTOMER' || c.company_type === 'BOTH'));
+      setCompanies(res.data.filter(c => c.company_type === 'CUSTOMER' || c.company_type === 'BOTH'));
     });
-    // 2. 품목 마스터 조회
     api.get<{ data: Item[] }>('/items').then((res) => {
-      setItemsMaster(res.data.data);
+      setItemsMaster(res.data);
     });
 
     if (quotation) {

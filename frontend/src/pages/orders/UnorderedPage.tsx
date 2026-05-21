@@ -38,7 +38,7 @@ export function UnorderedPage() {
     setLoading(true);
     try {
       const res = await api.get<{ data: UnorderedQuotationItem[] }>('/quotations/unordered');
-      setData(res.data.data);
+      setData(res.data);
     } catch (e: any) {
       toast.error('미주문현황 데이터를 불러오지 못했습니다.');
     } finally {

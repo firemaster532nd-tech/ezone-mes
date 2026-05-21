@@ -48,7 +48,7 @@ export function StatementPrintPage() {
     const fetchDetail = async () => {
       try {
         const res = await api.get<{ data: StatementDetail }>(`/statements/${id}`);
-        setData(res.data.data);
+        setData(res.data);
       } catch (err) {
         console.error(err);
       } finally {

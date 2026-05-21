@@ -49,7 +49,7 @@ export function StatementListPage() {
       const res = await api.get<{ data: Statement[] }>(
         `/statements?from=${fromDate}&to=${toDate}&customerId=${customerId}`
       );
-      setStatements(res.data.data);
+      setStatements(res.data);
     } catch (err) {
       console.error(err);
       toast.error('거래명세서 목록을 불러오지 못했습니다.');
@@ -61,7 +61,7 @@ export function StatementListPage() {
   const fetchCompanies = async () => {
     try {
       const res = await api.get<{ data: Company[] }>('/companies?active=true');
-      setCompanies(res.data.data);
+      setCompanies(res.data);
     } catch (err) {
       console.error(err);
     }

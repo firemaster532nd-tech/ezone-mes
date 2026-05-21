@@ -87,7 +87,7 @@ export function ProjectPage() {
       if (statusFilter) params.set('status', statusFilter);
       
       const res = await api.get<{ data: Project[] }>(`/projects?${params.toString()}`);
-      setData(res.data.data);
+      setData(res.data);
     } catch (e: any) {
       toast.error('프로젝트 목록을 불러오지 못했습니다.');
     } finally {
@@ -98,7 +98,7 @@ export function ProjectPage() {
   const fetchDistributors = async () => {
     try {
       const res = await api.get<{ data: any[] }>('/companies?type=DISTRIBUTOR');
-      setDistributors(res.data.data);
+      setDistributors(res.data);
     } catch (err) {
       console.error(err);
     }
@@ -125,7 +125,7 @@ export function ProjectPage() {
     try {
       const res = await api.get<{ data: any }>(`/projects/${projId}`);
       setExpandedProjectId(projId);
-      setExpandedSchedules(res.data.data.deliveries || []);
+      setExpandedSchedules(res.data.deliveries || []);
     } catch (err) {
       toast.error('납기 스케줄 정보를 불러오지 못했습니다.');
     }
@@ -137,7 +137,7 @@ export function ProjectPage() {
       setEditingProject(project);
       try {
         const res = await api.get<{ data: any }>(`/projects/${project.project_id}`);
-        const fullProj = res.data.data;
+        const fullProj = res.data;
         setFormData({
           project_code: fullProj.project_code,
           project_name: fullProj.project_name,

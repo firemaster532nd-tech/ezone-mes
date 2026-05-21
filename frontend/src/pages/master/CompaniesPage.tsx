@@ -118,7 +118,7 @@ export function CompaniesPage() {
       const res = await api.get<{ data: Company[] }>(
         `/companies?search=${encodeURIComponent(search)}&type=${typeFilter}&active=${activeParam}`
       );
-      setCompanies(res.data.data);
+      setCompanies(res.data);
     } catch (err) {
       console.error(err);
       toast.error('거래처 목록을 불러오지 못했습니다.');

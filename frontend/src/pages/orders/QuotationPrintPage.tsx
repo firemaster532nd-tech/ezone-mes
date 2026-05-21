@@ -92,7 +92,7 @@ export function QuotationPrintPage() {
     setLoading(true);
     api.get<{ data: QuotationDetail }>(`/quotations/${id}`)
       .then((res) => {
-        setData(res.data.data);
+        setData(res.data);
       })
       .catch((e) => {
         toast.error('견적 상세 데이터를 가져오지 못했습니다.');

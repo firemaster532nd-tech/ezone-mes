@@ -123,10 +123,10 @@ export function ProjectWorkOrderPage() {
   const fetchProjects = async (selectLatest = false) => {
     try {
       const res = await api.get<{ data: Project[] }>('/projects');
-      setProjects(res.data.data);
-      if (res.data.data.length > 0 && (!selectedProjectId || selectLatest)) {
+      setProjects(res.data);
+      if (res.data.length > 0 && (!selectedProjectId || selectLatest)) {
         // 가장 최근 등록되었거나 첫 번째 항목 매핑
-        const targetProj = selectLatest ? res.data.data[0] : res.data.data[0];
+        const targetProj = selectLatest ? res.data[0] : res.data[0];
         setSelectedProjectId(targetProj.project_id);
         setSelectedProjectName(targetProj.project_name);
       }
@@ -138,7 +138,7 @@ export function ProjectWorkOrderPage() {
   const fetchDistributors = async () => {
     try {
       const res = await api.get<{ data: any[] }>('/companies?type=DISTRIBUTOR');
-      setDistributors(res.data.data);
+      setDistributors(res.data);
     } catch (err) {
       console.error(err);
     }
@@ -241,14 +241,14 @@ export function ProjectWorkOrderPage() {
       };
       
       const res = await api.post<{ data: any }>('/projects', payload);
-      const newProj = res.data.data;
+      const newProj = res.data;
       
       toast.success(`새 현장 [${newProj.project_name}] 프로젝트가 신규 등록되었습니다.`);
       setIsQuickModalOpen(false);
 
       // 프로젝트 리스트 리로드 및 새로 생성된 프로젝트로 선택값 전환
       const resProj = await api.get<{ data: Project[] }>('/projects');
-      setProjects(resProj.data.data);
+      setProjects(resProj.data);
       setSelectedProjectId(newProj.project_id);
       setSelectedProjectName(newProj.project_name);
     } catch (e: any) {

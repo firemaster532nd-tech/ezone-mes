@@ -53,7 +53,7 @@ export function StatementEditPage() {
   const fetchCompanies = async () => {
     try {
       const res = await api.get<{ data: Company[] }>('/companies?active=true');
-      setCompanies(res.data.data);
+      setCompanies(res.data);
     } catch (err) {
       console.error(err);
     }
@@ -80,7 +80,7 @@ export function StatementEditPage() {
         }
       }>(`/statements/calculate-bom?orderId=${oid}`);
       
-      const { matched_company, proposed_items } = res.data.data;
+      const { matched_company, proposed_items } = res.data;
       if (matched_company) {
         setCustomerId(String(matched_company.company_id));
         toast.info(`수주처 [${matched_company.company_name}]가 공급받는 자로 연동되었습니다.`);

@@ -82,10 +82,10 @@ export function ProjectLotMatrixPage() {
   // 1. 프로젝트 리스트 조회
   useEffect(() => {
     api.get<{ data: Project[] }>('/projects').then(res => {
-      setProjects(res.data.data);
-      if (res.data.data.length > 0) {
-        setSelectedProjectId(res.data.data[0].project_id);
-        setSelectedProjectName(res.data.data[0].project_name);
+      setProjects(res.data);
+      if (res.data.length > 0) {
+        setSelectedProjectId(res.data[0].project_id);
+        setSelectedProjectName(res.data[0].project_name);
       }
     });
   }, []);
@@ -96,7 +96,7 @@ export function ProjectLotMatrixPage() {
     setLoading(true);
     api.get<{ data: LotMatrixRow[] }>(`/projects/${selectedProjectId}/lot-matrix`)
       .then(res => {
-        setMatrix(res.data.data);
+        setMatrix(res.data);
       })
       .catch(e => {
         toast.error('통합 LOT 매트릭스 데이터를 가져오지 못했습니다.');

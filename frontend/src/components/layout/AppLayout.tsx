@@ -332,7 +332,7 @@ export function AppLayout() {
       )}
 
       {/* ─── 모달 2: [보안 필수] 비밀번호 강제 변경 모달 오버레이 ─── */}
-      {user?.must_change_pw && (
+      {user?.must_change_pw && user?.role !== 'admin' && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[9999] p-4 animate-in fade-in duration-300">
           <div className="bg-white rounded-2xl w-full max-w-md p-7 shadow-2xl border border-slate-200 flex flex-col relative animate-in zoom-in-95 duration-200">
             {/* Warning Header */}
