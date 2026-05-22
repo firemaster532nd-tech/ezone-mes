@@ -47,9 +47,16 @@ interface Distributor {
   corporate_no: string | null;
 }
 
+interface Company {
+  company_id: number;
+  company_code: string;
+  company_name: string;
+}
+
 export function ProjectPage() {
   const [data, setData] = useState<Project[]>([]);
   const [distributors, setDistributors] = useState<Distributor[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(false);
@@ -104,9 +111,19 @@ export function ProjectPage() {
     }
   };
 
+  const fetchCompanies = async () => {
+    try {
+      const res = await api.get<{ data: Company[] }>('/companies?active=true');
+      setCompanies(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     fetchData();
     fetchDistributors();
+    fetchCompanies();
   }, [statusFilter]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -569,13 +586,18 @@ export function ProjectPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">거래처 (발주처명)</label>
-                  <input
-                    type="text"
+                  <select
                     value={formData.customer_name}
                     onChange={(e) => setFormData(prev => ({ ...prev, customer_name: e.target.value }))}
-                    placeholder="예: 현대건설㈜"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:border-blue-500 outline-none shadow-sm"
-                  />
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:border-blue-500 outline-none bg-white font-semibold text-slate-700 shadow-sm"
+                  >
+                    <option value="">거래처 선택...</option>
+                    {companies.map(c => (
+                      <option key={c.company_id} value={c.company_name}>
+                        {c.company_name} ({c.company_code})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>

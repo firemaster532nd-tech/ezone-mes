@@ -91,6 +91,12 @@ interface WorkOrderSheets {
   ceramicCutting: CeramicCutting[];
 }
 
+interface Company {
+  company_id: number;
+  company_code: string;
+  company_name: string;
+}
+
 export function ProjectWorkOrderPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
@@ -105,6 +111,7 @@ export function ProjectWorkOrderPage() {
   // ─── 신규 프로젝트 등록 (퀵 모달) 상태 ───
   const [isQuickModalOpen, setIsQuickModalOpen] = useState(false);
   const [distributors, setDistributors] = useState<Distributor[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [quickFormData, setQuickFormData] = useState({
     project_code: '',
     project_name: '',
@@ -144,10 +151,20 @@ export function ProjectWorkOrderPage() {
     }
   };
 
+  const fetchCompanies = async () => {
+    try {
+      const res = await api.get<{ data: Company[] }>('/companies?active=true');
+      setCompanies(res.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   // 1. 프로젝트 리스트 가져오기
   useEffect(() => {
     fetchProjects();
     fetchDistributors();
+    fetchCompanies();
   }, []);
 
   // 2. 선택된 프로젝트가 바뀔 때 시트 공식 데이터 전개 API 로드
@@ -859,13 +876,18 @@ export function ProjectWorkOrderPage() {
               <div className="grid grid-cols-2 gap-3.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 mb-1">거래처 (발주처명)</label>
-                  <input
-                    type="text"
+                  <select
                     value={quickFormData.customer_name}
                     onChange={(e) => setQuickFormData(prev => ({ ...prev, customer_name: e.target.value }))}
-                    placeholder="예: 현대건설㈜"
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:border-blue-500 outline-none shadow-sm"
-                  />
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:border-blue-500 outline-none bg-white font-bold text-slate-700 shadow-sm"
+                  >
+                    <option value="">거래처 선택...</option>
+                    {companies.map(c => (
+                      <option key={c.company_id} value={c.company_name}>
+                        {c.company_name} ({c.company_code})
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>

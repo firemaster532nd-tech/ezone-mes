@@ -32,6 +32,11 @@ interface DimSummary {
   structure_code: string; qty: number; penetration: string;
   perimeter: number; install_qty: number;
 }
+interface Company {
+  company_id: number;
+  company_code: string;
+  company_name: string;
+}
 
 /* ─── 구조별 BOM 트리 타입 ─── */
 interface BomTreeComponent {
@@ -108,6 +113,7 @@ export default function OrderBomPage() {
   const [bomTreeData, setBomTreeData] = useState<Map<number, BomTreeData>>(new Map());
   const [treeLoading, setTreeLoading] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [companies, setCompanies] = useState<Company[]>([]);
 
   const [form, setForm] = useState({
     order_date: new Date().toISOString().slice(0, 10),
@@ -129,7 +135,18 @@ export default function OrderBomPage() {
     } catch {}
   }, []);
 
-  useEffect(() => { fetchOrders(); fetchStructures(); }, [fetchOrders, fetchStructures]);
+  const fetchCompanies = useCallback(async () => {
+    try {
+      const r = await api.get<{ data: Company[] }>('/companies?active=true');
+      setCompanies(r.data || []);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchOrders();
+    fetchStructures();
+    fetchCompanies();
+  }, [fetchOrders, fetchStructures, fetchCompanies]);
 
   const selectOrder = async (order: Order) => {
     setShowNewForm(false); setShowExcelUpload(false); setExcelPreview(null);
@@ -499,8 +516,15 @@ export default function OrderBomPage() {
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">고객사 *</label>
-                  <input value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))}
-                    placeholder="고객사명" className="w-full px-3 py-2 border rounded-lg text-sm" />
+                  <select value={form.customer_name} onChange={e => setForm(f => ({ ...f, customer_name: e.target.value }))}
+                    className="w-full px-3 py-2 border rounded-lg text-sm bg-white outline-none focus:border-blue-500">
+                    <option value="">고객사 선택...</option>
+                    {companies.map(c => (
+                      <option key={c.company_id} value={c.company_name}>
+                        {c.company_name} ({c.company_code})
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">프로젝트명</label>
@@ -593,9 +617,16 @@ export default function OrderBomPage() {
                   <div>
                     <span className="text-gray-400">고객사:</span>{' '}
                     {editingOrder ? (
-                      <input value={editingOrder.customer_name}
+                      <select value={editingOrder.customer_name}
                         onChange={e => setEditingOrder(prev => prev ? { ...prev, customer_name: e.target.value } : null)}
-                        className="px-2 py-0.5 border rounded text-sm" />
+                        className="px-2 py-0.5 border rounded text-sm bg-white outline-none focus:border-blue-500">
+                        <option value="">고객사 선택...</option>
+                        {companies.map(c => (
+                          <option key={c.company_id} value={c.company_name}>
+                            {c.company_name} ({c.company_code})
+                          </option>
+                        ))}
+                      </select>
                     ) : selectedOrder.customer_name}
                   </div>
                 </div>

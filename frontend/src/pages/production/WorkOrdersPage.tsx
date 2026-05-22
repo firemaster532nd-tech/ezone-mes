@@ -590,6 +590,12 @@ interface BomCalcResult {
   items: BomCalcItem[];
 }
 
+interface Company {
+  company_id: number;
+  company_code: string;
+  company_name: string;
+}
+
 /* ========== 생성 모달 ========== */
 function CreateWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const today = new Date().toISOString().slice(0, 10);
@@ -639,6 +645,7 @@ function CreateWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onC
   });
   const [certs, setCerts] = useState<Array<{ cert_id: number; cert_number: string; structure_code: string }>>([]);
   const [items, setItems] = useState<Array<{ item_id: number; item_code: string; item_name: string }>>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [availableLots, setAvailableLots] = useState<any[]>([]);
   const [selectedLotIds, setSelectedLotIds] = useState<Set<number>>(new Set());
@@ -666,6 +673,7 @@ function CreateWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onC
   useEffect(() => {
     api.get<{ data: any[] }>('/certifications').then((r) => setCerts(r.data));
     api.get<{ data: any[] }>('/items').then((r) => setItems(r.data));
+    api.get<{ data: Company[] }>('/companies?active=true').then((r) => setCompanies(r.data));
   }, []);
 
   // Fetch compounding recipes when MIX process is selected
@@ -1316,10 +1324,16 @@ function CreateWorkOrderModal({ onClose, onCreated }: { onClose: () => void; onC
           <div className="grid grid-cols-2 gap-4">
             <label className="block">
               <span className="text-shop-sm font-medium text-gray-700">납품처명</span>
-              <input type="text" value={form.customer_name}
+              <select value={form.customer_name}
                 onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
-                className="mt-1 block w-full rounded-md border px-3 py-2 text-shop-sm"
-                placeholder="예: 현대건설" />
+                className="mt-1 block w-full rounded-md border px-3 py-2 text-shop-sm bg-white font-medium text-gray-700">
+                <option value="">거래처 선택...</option>
+                {companies.map(c => (
+                  <option key={c.company_id} value={c.company_name}>
+                    {c.company_name} ({c.company_code})
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="block">
               <span className="text-shop-sm font-medium text-gray-700">BOM 버전</span>
@@ -1713,6 +1727,7 @@ function EditWorkOrderModal({ wo, onClose, onSaved, onDeleted }: { wo: WorkOrder
     input_lot_numbers: wo.input_lot_numbers || '',
     bom_version: wo.bom_version || '',
   });
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [availableLots, setAvailableLots] = useState<any[]>([]);
   const [selectedLotIds, setSelectedLotIds] = useState<Set<number>>(new Set());
@@ -1720,6 +1735,12 @@ function EditWorkOrderModal({ wo, onClose, onSaved, onDeleted }: { wo: WorkOrder
   const [editMixBomUsage, setEditMixBomUsage] = useState<Record<string, number>>({});
   const isMixWo = wo.process_code === 'MIX';
   const editBatchCount = isMixWo ? Math.round((parseFloat(wo.planned_qty?.toString() || '0')) / 300) || 1 : 1;
+
+  useEffect(() => {
+    api.get<{ data: Company[] }>('/companies?active=true')
+      .then((r) => setCompanies(r.data))
+      .catch(() => setCompanies([]));
+  }, []);
 
   // Fetch available LOTs for the work order's process
   useEffect(() => {
@@ -1879,9 +1900,16 @@ function EditWorkOrderModal({ wo, onClose, onSaved, onDeleted }: { wo: WorkOrder
           <div className="grid grid-cols-3 gap-4">
             <label className="block">
               <span className="text-shop-sm font-medium text-gray-700">납품처명</span>
-              <input type="text" value={form.customer_name}
+              <select value={form.customer_name}
                 onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
-                className="mt-1 block w-full rounded-md border px-3 py-2 text-shop-sm" />
+                className="mt-1 block w-full rounded-md border px-3 py-2 text-shop-sm bg-white font-medium text-gray-700">
+                <option value="">거래처 선택...</option>
+                {companies.map(c => (
+                  <option key={c.company_id} value={c.company_name}>
+                    {c.company_name} ({c.company_code})
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="block">
               <span className="text-shop-sm font-medium text-gray-700">LOT번호</span>
