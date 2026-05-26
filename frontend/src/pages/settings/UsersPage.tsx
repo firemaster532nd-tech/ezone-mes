@@ -18,6 +18,7 @@ import {
   ShieldAlert 
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { validatePasswordComplexity } from '@/components/layout/AppLayout';
 
 interface UserRow {
   worker_id: number;
@@ -170,6 +171,26 @@ export function UsersPage() {
       return; 
     }
 
+    // Validate password complexity if custom password is provided
+    if (editingUser) {
+      if (userForm.password) {
+        const complexityErr = validatePasswordComplexity(userForm.password);
+        if (complexityErr) {
+          setUserError(complexityErr);
+          return;
+        }
+      }
+    } else {
+      const customPassword = userForm.password.trim();
+      if (customPassword) {
+        const complexityErr = validatePasswordComplexity(customPassword);
+        if (complexityErr) {
+          setUserError(complexityErr);
+          return;
+        }
+      }
+    }
+
     try {
       if (editingUser) {
         // Edit Mode
@@ -201,13 +222,30 @@ export function UsersPage() {
   };
 
   const handleResetPw = async (worker_id: number, name: string) => {
-    const np = prompt(`${name}의 새 비밀번호를 입력하세요 (4자 이상):`);
-    if (!np || np.length < 4) return;
+    const np = prompt(
+      `${name}의 새 비밀번호를 입력하세요.\n` +
+      `- 영어 소문자, 숫자, 특수문자가 모두 들어가야 합니다.\n` +
+      `- 3개 이상의 연속된 숫자와 반복된 숫자는 사용할 수 없습니다.`
+    );
+    if (np === null) return; // Cancel clicked
+    
+    const trimmedNp = np.trim();
+    if (!trimmedNp) {
+      toast.error('비밀번호를 입력해야 합니다.');
+      return;
+    }
+
+    const complexityErr = validatePasswordComplexity(trimmedNp);
+    if (complexityErr) {
+      toast.error(complexityErr);
+      return;
+    }
+
     try {
-      await api.post(`/auth/users/${worker_id}/reset-password`, { new_password: np });
+      await api.post(`/auth/users/${worker_id}/reset-password`, { new_password: trimmedNp });
       toast.success('비밀번호가 초기화되었습니다. 첫 로그인 시 비밀번호 변경을 강제합니다.');
-    } catch { 
-      toast.error('비밀번호 초기화 실패');
+    } catch (err: any) { 
+      toast.error(err?.body?.message || '비밀번호 초기화 실패');
     }
   };
 
@@ -673,16 +711,26 @@ export function UsersPage() {
                   />
                 </Field>
               </div>
-              <Field label={editingUser ? "비밀번호 (변경 시에만 입력)" : "비밀번호 (미입력 시 휴대폰 번호가 초기 비밀번호)"}>
-                <input 
-                  type="password" 
-                  value={userForm.password} 
-                  onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} 
-                  placeholder={editingUser ? "새 비밀번호 입력" : "비밀번호 입력"}
-                  className="inp" 
-                  autoComplete="new-password"
-                />
-              </Field>
+              <div className="space-y-1.5">
+                <Field label={editingUser ? "비밀번호 (변경 시에만 입력)" : "비밀번호 (미입력 시 휴대폰 번호가 초기 비밀번호)"}>
+                  <input 
+                    type="password" 
+                    value={userForm.password} 
+                    onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} 
+                    placeholder={editingUser ? "새 비밀번호 입력" : "비밀번호 입력"}
+                    className="inp" 
+                    autoComplete="new-password"
+                  />
+                </Field>
+                {userForm.password.length > 0 && (
+                  <div className="text-[10px] bg-slate-50 text-slate-500 rounded-xl p-3 space-y-1 leading-relaxed border border-slate-100/60 mt-1 animate-in fade-in duration-200">
+                    <p className="font-bold text-slate-700 text-xs mb-1">⚠️ 필수 보안 비밀번호 수칙:</p>
+                    <p>• <strong>영어 소문자, 숫자, 특수문자</strong>가 모두 최소 1자 이상 포함되어야 합니다.</p>
+                    <p>• <strong>3개 이상의 연속된 숫자</strong>(예: 123, 876)는 사용할 수 없습니다.</p>
+                    <p>• <strong>3개 이상의 반복된 숫자</strong>(예: 111, 999)는 사용할 수 없습니다.</p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {userError && <div className="mt-3.5 rounded bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{userError}</div>}

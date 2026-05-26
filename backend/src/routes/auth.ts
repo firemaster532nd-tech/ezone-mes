@@ -26,6 +26,32 @@ const changePasswordSchema = z.object({
   new_password: z.string().min(4).max(100),
 });
 
+export function validatePassword(password: string): string | null {
+  if (!/[a-z]/.test(password)) {
+    return '비밀번호에는 영어 소문자가 반드시 포함되어야 합니다.';
+  }
+  if (!/\d/.test(password)) {
+    return '비밀번호에는 숫자가 반드시 포함되어야 합니다.';
+  }
+  if (!/[\W_]/.test(password)) {
+    return '비밀번호에는 특수문자가 반드시 포함되어야 합니다.';
+  }
+  if (/(\d)\1\1/.test(password)) {
+    return '비밀번호에 3개 이상의 반복된 숫자(예: 111)를 사용할 수 없습니다.';
+  }
+  for (let i = 0; i < password.length - 2; i++) {
+    const c1 = password.charCodeAt(i);
+    const c2 = password.charCodeAt(i + 1);
+    const c3 = password.charCodeAt(i + 2);
+    if (c1 >= 48 && c1 <= 57 && c2 >= 48 && c2 <= 57 && c3 >= 48 && c3 <= 57) {
+      if ((c2 === c1 + 1 && c3 === c2 + 1) || (c2 === c1 - 1 && c3 === c2 - 1)) {
+        return '비밀번호에 3개 이상의 연속된 숫자(예: 123, 321)를 사용할 수 없습니다.';
+      }
+    }
+  }
+  return null;
+}
+
 export async function ensureAdminUser() {
   const res = await pool.query("SELECT worker_id, password_hash FROM worker WHERE employee_no = 'admin'");
   if (res.rows.length === 0) {
@@ -182,6 +208,9 @@ export async function authRoutes(app: FastifyInstance) {
 
     if (!ok) return reply.code(401).send({ error: 'wrong_current_password' });
 
+    const pwErr = validatePassword(new_password);
+    if (pwErr) return reply.code(400).send({ error: 'invalid_password_complexity', message: pwErr });
+
     const hash = await hashPassword(new_password);
     await pool.query(
       `UPDATE worker SET password_hash = $1, must_change_pw = FALSE, updated_at = NOW() WHERE worker_id = $2`,
@@ -195,6 +224,12 @@ export async function authRoutes(app: FastifyInstance) {
     const parsed = createUserSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     const { employee_no, worker_name, password, dept_id, role, position, email, phone } = parsed.data;
+
+    // 만약 어드민이 수동 기입한 비밀번호가 휴대폰 번호(임시비밀번호 기본값)와 다른 경우 보안 정책 적용
+    if (password !== phone?.trim()) {
+      const pwErr = validatePassword(password);
+      if (pwErr) return reply.code(400).send({ error: 'invalid_password_complexity', message: pwErr });
+    }
 
     const hash = await hashPassword(password);
     try {
@@ -218,7 +253,10 @@ export async function authRoutes(app: FastifyInstance) {
     async (req, reply) => {
       const id = parseInt(req.params.id, 10);
       const np = String(req.body?.new_password ?? '');
-      if (np.length < 4) return reply.code(400).send({ error: 'password_too_short' });
+      
+      const pwErr = validatePassword(np);
+      if (pwErr) return reply.code(400).send({ error: 'invalid_password_complexity', message: pwErr });
+
       const hash = await hashPassword(np);
       const r = await pool.query(
         `UPDATE worker SET password_hash = $1, must_change_pw = TRUE, updated_at = NOW()
@@ -241,6 +279,8 @@ export async function authRoutes(app: FastifyInstance) {
       const allowedFields = ['employee_no', 'worker_name', 'dept_id', 'role', 'position', 'email', 'phone', 'is_active'];
       
       if ('password' in body && body.password) {
+        const pwErr = validatePassword(String(body.password));
+        if (pwErr) return reply.code(400).send({ error: 'invalid_password_complexity', message: pwErr });
         const hash = await hashPassword(String(body.password));
         body.password_hash = hash;
         allowedFields.push('password_hash');

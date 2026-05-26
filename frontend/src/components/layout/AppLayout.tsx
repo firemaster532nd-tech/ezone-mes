@@ -10,6 +10,32 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+export function validatePasswordComplexity(password: string): string | null {
+  if (!/[a-z]/.test(password)) {
+    return '비밀번호에는 영어 소문자가 반드시 포함되어야 합니다.';
+  }
+  if (!/\d/.test(password)) {
+    return '비밀번호에는 숫자가 반드시 포함되어야 합니다.';
+  }
+  if (!/[\W_]/.test(password)) {
+    return '비밀번호에는 특수문자가 반드시 포함되어야 합니다.';
+  }
+  if (/(\d)\1\1/.test(password)) {
+    return '비밀번호에 3개 이상의 반복된 숫자(예: 111)를 사용할 수 없습니다.';
+  }
+  for (let i = 0; i < password.length - 2; i++) {
+    const c1 = password.charCodeAt(i);
+    const c2 = password.charCodeAt(i + 1);
+    const c3 = password.charCodeAt(i + 2);
+    if (c1 >= 48 && c1 <= 57 && c2 >= 48 && c2 <= 57 && c3 >= 48 && c3 <= 57) {
+      if ((c2 === c1 + 1 && c3 === c2 + 1) || (c2 === c1 - 1 && c3 === c2 - 1)) {
+        return '비밀번호에 3개 이상의 연속된 숫자(예: 123, 321)를 사용할 수 없습니다.';
+      }
+    }
+  }
+  return null;
+}
+
 export function AppLayout() {
   const { user, logout, refreshMe } = useAuth();
   const navigate = useNavigate();
@@ -61,8 +87,9 @@ export function AppLayout() {
       setPwError('모든 필드를 입력해 주세요.');
       return;
     }
-    if (newPw.length < 4) {
-      setPwError('새 비밀번호는 최소 4자 이상이어야 합니다.');
+    const complexityErr = validatePasswordComplexity(newPw);
+    if (complexityErr) {
+      setPwError(complexityErr);
       return;
     }
     if (newPw !== confirmPw) {
@@ -108,8 +135,9 @@ export function AppLayout() {
       setForcePwError('모든 필드를 입력해 주세요.');
       return;
     }
-    if (forceNewPw.length < 4) {
-      setForcePwError('새 비밀번호는 최소 4자 이상이어야 합니다.');
+    const complexityErr = validatePasswordComplexity(forceNewPw);
+    if (complexityErr) {
+      setForcePwError(complexityErr);
       return;
     }
     if (forceNewPw !== forceConfirmPw) {
@@ -256,9 +284,12 @@ export function AppLayout() {
 
             {/* Form */}
             <form onSubmit={handleSelfPasswordChange} className="mt-4 space-y-4">
-              <p className="text-xs text-slate-500 leading-relaxed">
-                보안 안전 수칙에 따라 비밀번호는 주기적으로 변경하여 주시기 바랍니다. 새 비밀번호는 최소 4자 이상으로 입력하세요.
-              </p>
+              <div className="text-[10px] bg-slate-50 text-slate-500 rounded-xl p-3 space-y-1 leading-relaxed border border-slate-100/60">
+                <p className="font-bold text-slate-700 text-xs mb-1">⚠️ 필수 보안 비밀번호 수칙:</p>
+                <p>• <strong>영어 소문자, 숫자, 특수문자</strong>가 모두 최소 1자 이상 포함되어야 합니다.</p>
+                <p>• <strong>3개 이상의 연속된 숫자</strong>(예: 123, 876)는 사용할 수 없습니다.</p>
+                <p>• <strong>3개 이상의 반복된 숫자</strong>(예: 111, 999)는 사용할 수 없습니다.</p>
+              </div>
 
               {pwError && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-xs text-red-700 flex gap-2 animate-shake">
@@ -344,6 +375,12 @@ export function AppLayout() {
               <p className="text-xs text-slate-500 mt-2 leading-relaxed max-w-xs">
                 현재 최초 로그인 상태이거나 관리자에 의해 비밀번호가 초기화되었습니다. 안전한 MES 정보 보호를 위해 비밀번호 변경 완료 후 사용이 허용됩니다.
               </p>
+              <div className="text-[10px] bg-slate-50 text-slate-500 rounded-xl p-3 space-y-1 text-left leading-relaxed border border-slate-100/60 mt-3 w-full">
+                <p className="font-bold text-slate-700 text-[11px] mb-1">⚠️ 필수 보안 비밀번호 수칙:</p>
+                <p>• <strong>영어 소문자, 숫자, 특수문자</strong>가 모두 최소 1자 이상 포함되어야 합니다.</p>
+                <p>• <strong>3개 이상의 연속된 숫자</strong>(예: 123, 876)는 사용할 수 없습니다.</p>
+                <p>• <strong>3개 이상의 반복된 숫자</strong>(예: 111, 999)는 사용할 수 없습니다.</p>
+              </div>
             </div>
 
             {/* Form */}
