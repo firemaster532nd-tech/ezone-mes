@@ -170,7 +170,16 @@ export async function authRoutes(app: FastifyInstance) {
     const { rows } = await pool.query(`SELECT password_hash FROM worker WHERE worker_id = $1`, [worker_id]);
     if (!rows[0]?.password_hash) return reply.code(404).send({ error: 'no_password_set' });
 
-    const ok = await verifyPassword(current_password, rows[0].password_hash);
+    let ok = await verifyPassword(current_password, rows[0].password_hash);
+    
+    // 현재 임시 비밀번호가 일치하지 않고, 입력된 값인 하이픈이 빠진 휴대폰 번호 형식(10~11자리 숫자)인 경우 하이픈을 넣어서 추가 검증 시도
+    if (!ok && /^\d{10,11}$/.test(current_password)) {
+      const formattedPhone = current_password.length === 11 
+        ? `${current_password.slice(0, 3)}-${current_password.slice(3, 7)}-${current_password.slice(7)}`
+        : `${current_password.slice(0, 3)}-${current_password.slice(3, 6)}-${current_password.slice(6)}`;
+      ok = await verifyPassword(formattedPhone, rows[0].password_hash);
+    }
+
     if (!ok) return reply.code(401).send({ error: 'wrong_current_password' });
 
     const hash = await hashPassword(new_password);
