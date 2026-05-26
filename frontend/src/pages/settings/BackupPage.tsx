@@ -5,6 +5,7 @@ import {
   Trash2, Shield, HardDrive, Lock, CheckCircle2, XCircle,
   RotateCcw, Eye, EyeOff,
 } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
 
 interface DbStat {
   key: string;
@@ -14,6 +15,8 @@ interface DbStat {
 }
 
 export function BackupPage() {
+  const { isAdmin } = useAuth();
+
   // ── 내보내기/가져오기 상태 ──
   const [exporting, setExporting] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -47,6 +50,10 @@ export function BackupPage() {
   };
 
   useEffect(() => { fetchStats(); }, []);
+
+  if (!isAdmin) {
+    return <div className="p-8 text-center text-gray-500">관리자만 접근 가능합니다.</div>;
+  }
 
   // ── 내보내기 ──
   const handleExport = async () => {

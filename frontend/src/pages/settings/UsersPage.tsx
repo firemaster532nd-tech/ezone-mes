@@ -77,7 +77,8 @@ export function UsersPage() {
     position: '', 
     email: '', 
     phone: '',
-    is_active: true
+    is_active: true,
+    password: ''
   });
   const [userError, setUserError] = useState('');
 
@@ -128,7 +129,8 @@ export function UsersPage() {
       position: '',
       email: '',
       phone: '',
-      is_active: true
+      is_active: true,
+      password: ''
     });
     setUserError('');
     setShowUserModal(true);
@@ -144,7 +146,8 @@ export function UsersPage() {
       position: u.position ?? '',
       email: u.email ?? '',
       phone: u.phone ?? '',
-      is_active: u.is_active
+      is_active: u.is_active,
+      password: ''
     });
     setUserError('');
     setShowUserModal(true);
@@ -170,11 +173,15 @@ export function UsersPage() {
     try {
       if (editingUser) {
         // Edit Mode
-        await api.patch(`/auth/users/${editingUser.worker_id}`, userForm);
+        const payload = {
+          ...userForm,
+          password: userForm.password ? userForm.password : undefined
+        };
+        await api.patch(`/auth/users/${editingUser.worker_id}`, payload);
         toast.success(`${userForm.worker_name} 직원의 정보가 수정되었습니다!`);
       } else {
         // Create Mode
-        const initialPassword = userForm.phone.trim();
+        const initialPassword = userForm.password.trim() || userForm.phone.trim();
         await api.post('/auth/users', {
           ...userForm,
           password: initialPassword
@@ -666,6 +673,16 @@ export function UsersPage() {
                   />
                 </Field>
               </div>
+              <Field label={editingUser ? "비밀번호 (변경 시에만 입력)" : "비밀번호 (미입력 시 휴대폰 번호가 초기 비밀번호)"}>
+                <input 
+                  type="password" 
+                  value={userForm.password} 
+                  onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} 
+                  placeholder={editingUser ? "새 비밀번호 입력" : "비밀번호 입력"}
+                  className="inp" 
+                  autoComplete="new-password"
+                />
+              </Field>
             </div>
 
             {userError && <div className="mt-3.5 rounded bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">{userError}</div>}

@@ -294,7 +294,7 @@ export async function projectRoutes(app: FastifyInstance) {
       });
 
       // 대형 구조 또는 특정 VT 구조 판별
-      const isVT = structure.startsWith('VT') || structure.startsWith('VAG') || qty > 1;
+      const isVT = structure.startsWith('VT') || structure.startsWith('VAG');
 
       // ── (2) 재단(VM) 작업 시트 ──
       // 기본 공식: 소켓내부용 가로 = W-5, 세로 = H-30, 외부용 상하 = W+60, 좌우 = H
@@ -307,20 +307,20 @@ export async function projectRoutes(app: FastifyInstance) {
           socket_lot: `LOT-${structure}-${w}x${h}`,
           qty,
           inner_w: w - 5,
-          inner_w_qty: 4,
+          inner_w_qty: qty * 4,
           inner_h: h - 30,
-          inner_h_qty: 4,
+          inner_h_qty: qty * 4,
           outer_tb: w + 60,
-          outer_tb_qty: 2,
+          outer_tb_qty: qty * 2,
           outer_lr: h,
-          outer_lr_qty: 2,
+          outer_lr_qty: qty * 2,
           remarks: 'VM 재단표준 준수'
         });
       } else {
         // ── (3) 재단(VT) 작업 시트 (대형 / 2분할 등) ──
-        // 공식: 내부 L = Math.floor(W/2) - 15, H = Math.floor(H/2) - 20, 외부 상하 = W+60, 좌우 = H
-        const innerW = Math.floor(w / 2) - 15;
-        const innerH = Math.floor(h / 2) - 20;
+        // 공식: 내부 L = (W-30)/2 - 5, H = (H-20)/2 - 10, 외부 상하 = W+60, 좌우 = H
+        const innerW = Math.floor((w - 30) / 2) - 5;
+        const innerH = Math.floor((h - 20) / 2) - 10;
 
         vtCutting.push({
           no: idxStr,
@@ -330,13 +330,13 @@ export async function projectRoutes(app: FastifyInstance) {
           socket_lot: `LOT-${structure}-${w}x${h}`,
           qty,
           inner_w: innerW,
-          inner_w_qty: 8,
+          inner_w_qty: qty * 16,
           inner_h: innerH,
-          inner_h_qty: 16,
+          inner_h_qty: qty * 16,
           outer_tb: w + 60,
-          outer_tb_qty: 4,
+          outer_tb_qty: qty * 4,
           outer_lr: h,
-          outer_lr_qty: 4,
+          outer_lr_qty: qty * 4,
           remarks: 'VT 이중소켓 절단공식 적용'
         });
       }
@@ -351,9 +351,9 @@ export async function projectRoutes(app: FastifyInstance) {
         socket_lot: `LOT-CW-${w}x${h}`,
         qty,
         outer_tb: w + 60,
-        outer_tb_qty: isVT ? 4 : 2,
+        outer_tb_qty: qty * 2,
         outer_lr: h,
-        outer_lr_qty: isVT ? 4 : 2,
+        outer_lr_qty: qty * 2,
         remarks: '세라믹울 차열재 정밀재단'
       });
     });

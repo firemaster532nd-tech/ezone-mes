@@ -43,6 +43,8 @@ async function migrateWorkOrderColumns() {
     { name: 'dimension_height', type: 'NUMERIC(8,1)' },
     { name: 'inner_width', type: 'NUMERIC(8,1)' },
     { name: 'inner_height', type: 'NUMERIC(8,1)' },
+    { name: 'cut_spec_details', type: 'TEXT' },
+    { name: 'order_id', type: 'INTEGER' },
     // 조립(ASM) 전용 필드
     { name: 'socket_lot', type: 'VARCHAR(100)' },
     { name: 'sheet_lot', type: 'VARCHAR(100)' },
@@ -64,7 +66,7 @@ async function migrateWorkOrderColumns() {
 
 export async function workOrderRoutes(app: FastifyInstance) {
   // 서버 시작 시 마이그레이션 실행
-  // await migrateWorkOrderColumns();
+  await migrateWorkOrderColumns();
   // GET /api/work-orders - 작업지시 목록
   app.get('/api/work-orders', async (request) => {
     const { process_code, date, status } = request.query as {
@@ -297,9 +299,11 @@ export async function workOrderRoutes(app: FastifyInstance) {
           mix_time_minutes, actual_weight_kg, incoming_inspection_status, raw_material_lots,
           thickness_mm, width_mm, density_gcm3, expansion_mm, ext_spec,
           project_site, structure_name, dimension_width, dimension_height, inner_width, inner_height,
-          socket_lot, sheet_lot, ceramic_lot, sealant_lot, asm_structure, asm_width, asm_height)
+          socket_lot, sheet_lot, ceramic_lot, sealant_lot, asm_structure, asm_width, asm_height,
+          order_id, cut_spec_details)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
-                 $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43)
+                 $22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,
+                 $44,$45)
          RETURNING *`,
         [
           woNumber, woDate, processCode,
@@ -321,6 +325,8 @@ export async function workOrderRoutes(app: FastifyInstance) {
           body.socket_lot || null, body.sheet_lot || null,
           body.ceramic_lot || null, body.sealant_lot || null,
           body.asm_structure || null, body.asm_width || null, body.asm_height || null,
+          body.order_id || null,
+          body.cut_spec_details || null,
         ]
       );
       const wo = woResult.rows[0];
@@ -500,6 +506,7 @@ export async function workOrderRoutes(app: FastifyInstance) {
       'thickness_mm', 'width_mm', 'density_gcm3', 'expansion_mm', 'ext_spec',
       // CUT fields
       'project_site', 'structure_name', 'dimension_width', 'dimension_height', 'inner_width', 'inner_height',
+      'order_id', 'cut_spec_details',
       // ASM fields
       'socket_lot', 'sheet_lot', 'ceramic_lot', 'sealant_lot', 'asm_structure', 'asm_width', 'asm_height',
     ];
@@ -1018,10 +1025,10 @@ export async function workOrderRoutes(app: FastifyInstance) {
   app.get('/api/work-orders/:woId/cut-specs', async (request, reply) => {
     const { woId } = request.params as { woId: string };
 
-    // 작업지시 조회 (order_id, item_id 필요)
+    // 작업지시 조회 (order_id, item_id, cut_spec_details 필요)
     const woRes = await pool.query(
       `SELECT wo.wo_id, wo.order_id, wo.process_code, wo.item_id,
-              im.item_code
+              wo.cut_spec_details, im.item_code
        FROM work_order wo
        LEFT JOIN item_master im ON im.item_id = wo.item_id
        WHERE wo.wo_id = $1`,
@@ -1029,11 +1036,112 @@ export async function workOrderRoutes(app: FastifyInstance) {
     );
     if (woRes.rows.length === 0) return reply.status(404).send({ error: 'Not Found' });
     const wo = woRes.rows[0];
-    if (!wo.order_id) return { data: { specs: [], message: '연결된 수주가 없습니다.' } };
 
     // 소켓용(SA-CUT-SK) vs 플래싱용(SA-CUT-FL) 구분
     const isSocket = !wo.item_code || wo.item_code === 'SA-CUT-SK';
     const isFlashing = wo.item_code === 'SA-CUT-FL';
+
+    // BOM calc_note에서 재단 산출 정보 조회 (order_id가 있는 경우에만)
+    let bomSummary: any[] = [];
+    if (wo.order_id) {
+      const bomRes = await pool.query(
+        `SELECT item_code, component_name, spec_detail, calc_note, required_qty, unit
+         FROM order_bom_result
+         WHERE order_id = $1 AND item_code LIKE 'SA-CUT%'
+         ORDER BY item_code`,
+        [wo.order_id]
+      );
+      bomSummary = bomRes.rows.map((r: any) => ({
+        item_code: r.item_code,
+        required_qty: r.required_qty,
+        unit: r.unit,
+        calc_note: r.calc_note,
+      }));
+    }
+
+    // ── DB에 저장된 개별 규격 상세(cut_spec_details)가 있는 경우 ──
+    if (wo.cut_spec_details) {
+      try {
+        const customStructures = JSON.parse(wo.cut_spec_details);
+        if (Array.isArray(customStructures) && customStructures.length > 0) {
+          const processedStructures = customStructures.map((s: any) => {
+            const w = parseFloat(s.penetration_w || s.dimension_width || 0);
+            const h = parseFloat(s.penetration_h || s.dimension_height || 0);
+            const qty = parseFloat(s.qty || 0);
+            const actual_qty = parseFloat(s.actual_qty ?? s.qty ?? 0);
+
+            let sheets: any[] = [];
+            if (isFlashing) {
+              const topBot = w + 250;
+              const leftRight = h;
+              const perimeter1 = topBot * 2 + leftRight * 2;
+              const setsPerFace = perimeter1 / 1000;
+              const totalSets = Math.ceil(setsPerFace * 2);
+              sheets = [
+                {
+                  part: '플래싱(I형)',
+                  count: totalSets,
+                  length: 1000,
+                  width: 125,
+                  spec: '5T×125',
+                  detail: `상하${topBot}×2 + 좌우${leftRight}×2 = ${perimeter1}mm/면 → ${setsPerFace.toFixed(1)}세트/면 × 양면 = ${totalSets}`
+                }
+              ];
+            } else {
+              sheets = [
+                { part: '내부(상하)', count: 4, length: w - 5, width: 190, spec: '5T×190' },
+                { part: '내부(좌우)', count: 4, length: h - 30, width: 190, spec: '5T×190' },
+                { part: '외부(상하)', count: 2, length: w + 60, width: 190, spec: '5T×190' },
+                { part: '외부(좌우)', count: 2, length: h, width: 190, spec: '5T×190' },
+              ];
+            }
+
+            const total = sheets.reduce((sum, sh) => sum + sh.count * qty, 0);
+            const total_actual = sheets.reduce((sum, sh) => sum + sh.count * actual_qty, 0);
+
+            return {
+              structure_code: s.structure_code || '',
+              structure_name: s.structure_name || '',
+              qty,
+              actual_qty,
+              penetration_w: w,
+              penetration_h: h,
+              sheets,
+              total_sheets: total,
+              total_actual_sheets: total_actual,
+            };
+          });
+
+          const totalSheets = processedStructures.reduce((sum: number, s: any) => sum + s.total_sheets, 0);
+          const totalActualSheets = processedStructures.reduce((sum: number, s: any) => sum + (s.total_actual_sheets || 0), 0);
+          const totalSets = processedStructures.reduce((sum: number, s: any) => sum + s.qty, 0);
+          const totalActualSets = processedStructures.reduce((sum: number, s: any) => sum + (s.actual_qty || 0), 0);
+
+          const filteredSocket = isFlashing ? { specs: [], total_sheets: 0, total_structures: 0 }
+            : { specs: processedStructures, total_sheets: totalSheets, total_structures: processedStructures.length };
+          const filteredFlashing = isSocket && !isFlashing ? { specs: [], total_sheets: 0, total_structures: 0 }
+            : { specs: processedStructures, total_sheets: totalSheets, total_structures: processedStructures.length };
+
+          return {
+            data: {
+              socket: filteredSocket,
+              flashing: filteredFlashing,
+              structures: processedStructures,
+              bom_summary: bomSummary,
+              total_structures: processedStructures.length,
+              total_sets: totalSets,
+              total_actual_sets: totalActualSets,
+              total_sheets: totalSheets,
+              total_actual_sheets: totalActualSheets,
+            }
+          };
+        }
+      } catch (err) {
+        console.error('[GET /cut-specs] error parsing cut_spec_details:', err);
+      }
+    }
+
+    if (!wo.order_id) return { data: { specs: [], message: '연결된 수주가 없습니다.' } };
 
     // 수주 아이템에서 구조별 치수 조회
     const itemsRes = await pool.query(
@@ -1118,7 +1226,7 @@ export async function workOrderRoutes(app: FastifyInstance) {
     }
 
     // BOM 요약
-    const bomSummary = bomRes.rows.map((r: any) => ({
+    bomSummary = bomRes.rows.map((r: any) => ({
       item_code: r.item_code,
       required_qty: r.required_qty,
       unit: r.unit,

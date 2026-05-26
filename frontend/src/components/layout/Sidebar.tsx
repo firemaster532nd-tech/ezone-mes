@@ -266,6 +266,7 @@ export function Sidebar() {
   const [approvalCount, setApprovalCount] = useState(0);
   const location = useLocation();
   const { user, permissions, isAdmin } = useAuth();
+  const currentMode = isAdmin ? mode : 'shop';
 
   // path → can_read 룩업 (admin은 항상 true)
   const pathReadable = (path?: string) => {
@@ -301,7 +302,7 @@ export function Sidebar() {
     return () => clearInterval(interval);
   }, [user]);
 
-  const navItems = filterNav(mode === 'shop' ? shopNavItems : adminNavItems);
+  const navItems = filterNav(currentMode === 'shop' ? shopNavItems : adminNavItems);
 
   const toggleSection = (label: string) => {
     setOpenSections((prev) => {
@@ -340,13 +341,13 @@ export function Sidebar() {
       </div>
 
       {/* Mode Toggle */}
-      {!collapsed && (
+      {!collapsed && isAdmin && (
         <div className="flex border-b border-gray-200">
           <button
             onClick={() => { setMode('shop'); setOpenSections(new Set()); }}
             className={cn(
               'flex-1 py-2.5 text-xs font-semibold transition-colors',
-              mode === 'shop'
+              currentMode === 'shop'
                 ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             )}
@@ -360,7 +361,7 @@ export function Sidebar() {
             onClick={() => { setMode('admin'); setOpenSections(new Set()); }}
             className={cn(
               'flex-1 py-2.5 text-xs font-semibold transition-colors',
-              mode === 'admin'
+              currentMode === 'admin'
                 ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             )}

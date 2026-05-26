@@ -26,7 +26,58 @@ const changePasswordSchema = z.object({
   new_password: z.string().min(4).max(100),
 });
 
+export async function ensureAdminUser() {
+  const res = await pool.query("SELECT worker_id, password_hash FROM worker WHERE employee_no = 'admin'");
+  if (res.rows.length === 0) {
+    const deptRes = await pool.query("SELECT dept_id FROM department WHERE dept_code = 'ADMIN'");
+    const deptId = deptRes.rows[0]?.dept_id || 1;
+    const hash = await hashPassword('admin1234');
+    await pool.query(
+      `INSERT INTO worker (worker_name, employee_no, password_hash, dept_id, role, position, is_active, must_change_pw)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      ['시스템 관리자', 'admin', hash, deptId, 'admin', '시스템 관리자', true, true]
+    );
+    console.log('✅ Default admin user successfully created at startup.');
+  } else {
+    const admin = res.rows[0];
+    if (!admin.password_hash) {
+      const hash = await hashPassword('admin1234');
+      await pool.query(
+        `UPDATE worker SET password_hash = $1 WHERE worker_id = $2`,
+        [hash, admin.worker_id]
+      );
+      console.log('✅ Default admin password hash initialized at startup.');
+    }
+  }
+}
+
+export async function initializeWorkerPasswords() {
+  const { rows } = await pool.query(
+    `SELECT worker_id, phone FROM worker 
+     WHERE role <> 'admin' AND phone IS NOT NULL AND password_hash IS NULL`
+  );
+  for (const r of rows) {
+    if (!r.phone) continue;
+    const phonePassword = r.phone.trim();
+    if (phonePassword) {
+      const hash = await hashPassword(phonePassword);
+      await pool.query(
+        `UPDATE worker SET password_hash = $1, must_change_pw = TRUE, updated_at = NOW() WHERE worker_id = $2`,
+        [hash, r.worker_id]
+      );
+    }
+  }
+}
+
 export async function authRoutes(app: FastifyInstance) {
+  // 서버 시작 시 admin 계정 보장 및 아직 패스워드가 세팅되지 않은 비관리자 계정들의 초기 비밀번호를 휴대폰 번호로 세팅
+  await ensureAdminUser().catch((err) => {
+    console.error('Failed to ensure admin user:', err);
+  });
+  await initializeWorkerPasswords().catch((err) => {
+    console.error('Failed to initialize worker passwords:', err);
+  });
+
   // POST /api/auth/login  (사번 + 비밀번호)
   app.post('/api/auth/login', async (req, reply) => {
     const parsed = loginSchema.safeParse(req.body);
@@ -170,6 +221,13 @@ export async function authRoutes(app: FastifyInstance) {
       const body = req.body as Record<string, any>;
 
       const allowedFields = ['employee_no', 'worker_name', 'dept_id', 'role', 'position', 'email', 'phone', 'is_active'];
+      
+      if ('password' in body && body.password) {
+        const hash = await hashPassword(String(body.password));
+        body.password_hash = hash;
+        allowedFields.push('password_hash');
+      }
+
       const updates: string[] = [];
       const values: unknown[] = [];
 

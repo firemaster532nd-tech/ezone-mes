@@ -97,6 +97,20 @@ interface Company {
   company_name: string;
 }
 
+function getAggregated(items: any[], sizeKey: string, qtyKey: string) {
+  const map: { [key: number]: number } = {};
+  items.forEach(item => {
+    const size = item[sizeKey];
+    const qty = item[qtyKey] || 0;
+    if (size !== undefined && size !== null) {
+      map[size] = (map[size] || 0) + qty;
+    }
+  });
+  return Object.keys(map)
+    .map(key => ({ size: parseInt(key, 10), total_qty: map[parseInt(key, 10)] }))
+    .sort((a, b) => b.size - a.size);
+}
+
 export function ProjectWorkOrderPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
@@ -273,6 +287,254 @@ export function ProjectWorkOrderPage() {
     }
   };
 
+  // ─── 재단 수량 합계 및 규격별 집계 계산 ───
+  const vmTotals = sheets ? sheets.vmCutting.reduce(
+    (acc, row) => ({
+      qty: acc.qty + row.qty,
+      inner_w_qty: acc.inner_w_qty + row.inner_w_qty,
+      inner_h_qty: acc.inner_h_qty + row.inner_h_qty,
+      outer_tb_qty: acc.outer_tb_qty + row.outer_tb_qty,
+      outer_lr_qty: acc.outer_lr_qty + row.outer_lr_qty,
+    }),
+    { qty: 0, inner_w_qty: 0, inner_h_qty: 0, outer_tb_qty: 0, outer_lr_qty: 0 }
+  ) : null;
+
+  const vtTotals = sheets ? sheets.vtCutting.reduce(
+    (acc, row) => ({
+      qty: acc.qty + row.qty,
+      inner_w_qty: acc.inner_w_qty + row.inner_w_qty,
+      inner_h_qty: acc.inner_h_qty + row.inner_h_qty,
+      outer_tb_qty: acc.outer_tb_qty + row.outer_tb_qty,
+      outer_lr_qty: acc.outer_lr_qty + row.outer_lr_qty,
+    }),
+    { qty: 0, inner_w_qty: 0, inner_h_qty: 0, outer_tb_qty: 0, outer_lr_qty: 0 }
+  ) : null;
+
+  const ceramicTotals = sheets ? sheets.ceramicCutting.reduce(
+    (acc, row) => ({
+      qty: acc.qty + row.qty,
+      outer_tb_qty: acc.outer_tb_qty + row.outer_tb_qty,
+      outer_lr_qty: acc.outer_lr_qty + row.outer_lr_qty,
+    }),
+    { qty: 0, outer_tb_qty: 0, outer_lr_qty: 0 }
+  ) : null;
+
+  // 규격별 집계 데이터
+  const vmAggregated = sheets ? {
+    inner_w: getAggregated(sheets.vmCutting, 'inner_w', 'inner_w_qty'),
+    inner_h: getAggregated(sheets.vmCutting, 'inner_h', 'inner_h_qty'),
+    outer_tb: getAggregated(sheets.vmCutting, 'outer_tb', 'outer_tb_qty'),
+    outer_lr: getAggregated(sheets.vmCutting, 'outer_lr', 'outer_lr_qty'),
+  } : null;
+
+  const vtAggregated = sheets ? {
+    inner_w: getAggregated(sheets.vtCutting, 'inner_w', 'inner_w_qty'),
+    inner_h: getAggregated(sheets.vtCutting, 'inner_h', 'inner_h_qty'),
+    outer_tb: getAggregated(sheets.vtCutting, 'outer_tb', 'outer_tb_qty'),
+    outer_lr: getAggregated(sheets.vtCutting, 'outer_lr', 'outer_lr_qty'),
+  } : null;
+
+  const ceramicAggregated = sheets ? {
+    outer_tb: getAggregated(sheets.ceramicCutting, 'outer_tb', 'outer_tb_qty'),
+    outer_lr: getAggregated(sheets.ceramicCutting, 'outer_lr', 'outer_lr_qty'),
+  } : null;
+
+  const renderAggregatedSummary = (agg: any, titlePrefix: string, isCeramic = false) => {
+    if (!agg) return null;
+    return (
+      <div className="print:hidden space-y-3 mb-6 bg-slate-50 p-5 rounded-2xl border border-slate-200 shadow-inner">
+        <h4 className="text-sm font-extrabold text-slate-800 flex items-center gap-1.5">
+          <Layers className="h-4 w-4 text-blue-600" />
+          {titlePrefix} 규격별 절단 집계 요약 (현장 작업용)
+        </h4>
+        <div className={cn("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4", isCeramic && "lg:grid-cols-2")}>
+          {!isCeramic ? (
+            <>
+              {/* 카드 1: 내부 가로 */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <span className="text-[11px] font-extrabold text-indigo-500 uppercase tracking-wider block border-b pb-1.5 mb-2">소켓내부용 가로</span>
+                <div className="space-y-1.5 max-h-[140px] overflow-y-auto font-mono text-xs">
+                  {agg.inner_w.map((item: any) => (
+                    <div key={item.size} className="flex justify-between items-center py-0.5 border-b border-dashed border-slate-100 last:border-0">
+                      <span className="font-bold text-slate-700">{item.size} mm</span>
+                      <span className="font-extrabold text-indigo-650 bg-indigo-50 px-2.5 py-0.5 rounded-full text-[10px]">{item.total_qty} EA</span>
+                    </div>
+                  ))}
+                  {agg.inner_w.length === 0 && <span className="text-slate-400">집계 내역 없음</span>}
+                </div>
+              </div>
+
+              {/* 카드 2: 내부 세로 */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <span className="text-[11px] font-extrabold text-indigo-500 uppercase tracking-wider block border-b pb-1.5 mb-2">소켓내부용 세로</span>
+                <div className="space-y-1.5 max-h-[140px] overflow-y-auto font-mono text-xs">
+                  {agg.inner_h.map((item: any) => (
+                    <div key={item.size} className="flex justify-between items-center py-0.5 border-b border-dashed border-slate-100 last:border-0">
+                      <span className="font-bold text-slate-700">{item.size} mm</span>
+                      <span className="font-extrabold text-indigo-650 bg-indigo-50 px-2.5 py-0.5 rounded-full text-[10px]">{item.total_qty} EA</span>
+                    </div>
+                  ))}
+                  {agg.inner_h.length === 0 && <span className="text-slate-400">집계 내역 없음</span>}
+                </div>
+              </div>
+
+              {/* 카드 3: 외부 상하 */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <span className="text-[11px] font-extrabold text-emerald-500 uppercase tracking-wider block border-b pb-1.5 mb-2">소켓외부용 상하</span>
+                <div className="space-y-1.5 max-h-[140px] overflow-y-auto font-mono text-xs">
+                  {agg.outer_tb.map((item: any) => (
+                    <div key={item.size} className="flex justify-between items-center py-0.5 border-b border-dashed border-slate-100 last:border-0">
+                      <span className="font-bold text-slate-700">{item.size} mm</span>
+                      <span className="font-extrabold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full text-[10px]">{item.total_qty} EA</span>
+                    </div>
+                  ))}
+                  {agg.outer_tb.length === 0 && <span className="text-slate-400">집계 내역 없음</span>}
+                </div>
+              </div>
+
+              {/* 카드 4: 외부 좌우 */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <span className="text-[11px] font-extrabold text-emerald-500 uppercase tracking-wider block border-b pb-1.5 mb-2">소켓외부용 좌우</span>
+                <div className="space-y-1.5 max-h-[140px] overflow-y-auto font-mono text-xs">
+                  {agg.outer_lr.map((item: any) => (
+                    <div key={item.size} className="flex justify-between items-center py-0.5 border-b border-dashed border-slate-100 last:border-0">
+                      <span className="font-bold text-slate-700">{item.size} mm</span>
+                      <span className="font-extrabold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full text-[10px]">{item.total_qty} EA</span>
+                    </div>
+                  ))}
+                  {agg.outer_lr.length === 0 && <span className="text-slate-400">집계 내역 없음</span>}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {/* 세라믹/차열재 카드 1: 상하 */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <span className="text-[11px] font-extrabold text-amber-500 uppercase tracking-wider block border-b pb-1.5 mb-2">차열재 상하 규격</span>
+                <div className="space-y-1.5 max-h-[140px] overflow-y-auto font-mono text-xs">
+                  {agg.outer_tb.map((item: any) => (
+                    <div key={item.size} className="flex justify-between items-center py-0.5 border-b border-dashed border-slate-100 last:border-0">
+                      <span className="font-bold text-slate-700">{item.size} mm</span>
+                      <span className="font-extrabold text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full text-[10px]">{item.total_qty} EA</span>
+                    </div>
+                  ))}
+                  {agg.outer_tb.length === 0 && <span className="text-slate-400">집계 내역 없음</span>}
+                </div>
+              </div>
+
+              {/* 세라믹/차열재 카드 2: 좌우 */}
+              <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <span className="text-[11px] font-extrabold text-amber-500 uppercase tracking-wider block border-b pb-1.5 mb-2">차열재 좌우 규격</span>
+                <div className="space-y-1.5 max-h-[140px] overflow-y-auto font-mono text-xs">
+                  {agg.outer_lr.map((item: any) => (
+                    <div key={item.size} className="flex justify-between items-center py-0.5 border-b border-dashed border-slate-100 last:border-0">
+                      <span className="font-bold text-slate-700">{item.size} mm</span>
+                      <span className="font-extrabold text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full text-[10px]">{item.total_qty} EA</span>
+                    </div>
+                  ))}
+                  {agg.outer_lr.length === 0 && <span className="text-slate-400">집계 내역 없음</span>}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderAggregatedPrintSummary = (agg: any, isCeramic = false) => {
+    if (!agg) return null;
+    return (
+      <div className="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-300">
+        <div className="text-[10px] font-extrabold text-slate-800 mb-1.5 border-b border-slate-300 pb-1 flex items-center gap-1">
+          <Layers className="h-3 w-3 text-blue-600" />
+          규격별 절단 집계 요약 (Grouped Summary)
+        </div>
+        <div className={cn("grid grid-cols-4 gap-3 text-[9px] font-mono", isCeramic && "grid-cols-2")}>
+          {!isCeramic ? (
+            <>
+              <div>
+                <div className="font-extrabold text-indigo-750 border-b border-indigo-200 pb-0.5 mb-1 text-[9px]">소켓내부용 가로</div>
+                <div className="space-y-0.5 max-h-[110px] overflow-y-auto">
+                  {agg.inner_w.map((item: any) => (
+                    <div key={item.size} className="flex justify-between border-b border-dashed border-slate-205 py-0.5">
+                      <span>{item.size}mm</span>
+                      <span className="font-bold text-indigo-750">{item.total_qty}EA</span>
+                    </div>
+                  ))}
+                  {agg.inner_w.length === 0 && <span className="text-slate-400">내역 없음</span>}
+                </div>
+              </div>
+              <div>
+                <div className="font-extrabold text-indigo-750 border-b border-indigo-200 pb-0.5 mb-1 text-[9px]">소켓내부용 세로</div>
+                <div className="space-y-0.5 max-h-[110px] overflow-y-auto">
+                  {agg.inner_h.map((item: any) => (
+                    <div key={item.size} className="flex justify-between border-b border-dashed border-slate-205 py-0.5">
+                      <span>{item.size}mm</span>
+                      <span className="font-bold text-indigo-750">{item.total_qty}EA</span>
+                    </div>
+                  ))}
+                  {agg.inner_h.length === 0 && <span className="text-slate-400">내역 없음</span>}
+                </div>
+              </div>
+              <div>
+                <div className="font-extrabold text-emerald-750 border-b border-emerald-200 pb-0.5 mb-1 text-[9px]">소켓외부용 상하</div>
+                <div className="space-y-0.5 max-h-[110px] overflow-y-auto">
+                  {agg.outer_tb.map((item: any) => (
+                    <div key={item.size} className="flex justify-between border-b border-dashed border-slate-205 py-0.5">
+                      <span>{item.size}mm</span>
+                      <span className="font-bold text-emerald-750">{item.total_qty}EA</span>
+                    </div>
+                  ))}
+                  {agg.outer_tb.length === 0 && <span className="text-slate-400">내역 없음</span>}
+                </div>
+              </div>
+              <div>
+                <div className="font-extrabold text-emerald-750 border-b border-emerald-200 pb-0.5 mb-1 text-[9px]">소켓외부용 좌우</div>
+                <div className="space-y-0.5 max-h-[110px] overflow-y-auto">
+                  {agg.outer_lr.map((item: any) => (
+                    <div key={item.size} className="flex justify-between border-b border-dashed border-slate-205 py-0.5">
+                      <span>{item.size}mm</span>
+                      <span className="font-bold text-emerald-750">{item.total_qty}EA</span>
+                    </div>
+                  ))}
+                  {agg.outer_lr.length === 0 && <span className="text-slate-400">내역 없음</span>}
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <div className="font-extrabold text-amber-750 border-b border-amber-200 pb-0.5 mb-1 text-[9px]">차열재 상하 규격</div>
+                <div className="space-y-0.5 max-h-[110px] overflow-y-auto">
+                  {agg.outer_tb.map((item: any) => (
+                    <div key={item.size} className="flex justify-between border-b border-dashed border-slate-205 py-0.5">
+                      <span>{item.size}mm</span>
+                      <span className="font-bold text-amber-750">{item.total_qty}EA</span>
+                    </div>
+                  ))}
+                  {agg.outer_tb.length === 0 && <span className="text-slate-400">내역 없음</span>}
+                </div>
+              </div>
+              <div>
+                <div className="font-extrabold text-amber-750 border-b border-amber-200 pb-0.5 mb-1 text-[9px]">차열재 좌우 규격</div>
+                <div className="space-y-0.5 max-h-[110px] overflow-y-auto">
+                  {agg.outer_lr.map((item: any) => (
+                    <div key={item.size} className="flex justify-between border-b border-dashed border-slate-205 py-0.5">
+                      <span>{item.size}mm</span>
+                      <span className="font-bold text-amber-700">{item.total_qty}EA</span>
+                    </div>
+                  ))}
+                  {agg.outer_lr.length === 0 && <span className="text-slate-400">내역 없음</span>}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 print:p-0 print:bg-white max-w-[1600px] mx-auto p-1">
       {/* 화면 제어 영역 (인쇄 시 숨김) */}
@@ -424,6 +686,7 @@ export function ProjectWorkOrderPage() {
                   <h3 className="text-base font-bold text-slate-850">재단(VM) 작업 명세</h3>
                   <span className="text-xs text-indigo-500 font-bold bg-indigo-50 px-2 py-0.5 rounded">Formula: 내부 W-5, H-30 / 외부 상하 W+60, 좌우 H</span>
                 </div>
+                {renderAggregatedSummary(vmAggregated, '단일소켓 (VM)')}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left border-collapse border border-slate-200">
                     <thead>
@@ -471,6 +734,21 @@ export function ProjectWorkOrderPage() {
                           <td className="px-2 py-2.5 border border-slate-200 text-left font-sans text-[10px] text-slate-500">{row.remarks}</td>
                         </tr>
                       ))}
+                      {sheets.vmCutting.length > 0 && vmTotals && (
+                        <tr className="bg-slate-100/90 font-extrabold border-t-2 border-slate-350 text-center font-mono text-slate-800">
+                          <td className="px-2 py-3 border border-slate-200" colSpan={5}>총 합계 (Total)</td>
+                          <td className="px-2 py-3 border border-slate-200 text-slate-900 font-bold bg-slate-100">{vmTotals.qty.toLocaleString()}</td>
+                          <td className="px-2 py-3 border border-slate-200 bg-indigo-50/10" />
+                          <td className="px-2 py-3 border border-slate-200 text-indigo-700 bg-indigo-50/20 font-bold">{vmTotals.inner_w_qty.toLocaleString()}</td>
+                          <td className="px-2 py-3 border border-slate-200 bg-indigo-50/10" />
+                          <td className="px-2 py-3 border border-slate-200 text-indigo-700 bg-indigo-50/20 font-bold">{vmTotals.inner_h_qty.toLocaleString()}</td>
+                          <td className="px-2 py-3 border border-slate-200 bg-emerald-50/10" />
+                          <td className="px-2 py-3 border border-slate-200 text-emerald-700 bg-emerald-50/20 font-bold">{vmTotals.outer_tb_qty.toLocaleString()}</td>
+                          <td className="px-2 py-3 border border-slate-200 bg-emerald-50/10" />
+                          <td className="px-2 py-3 border border-slate-200 text-emerald-700 bg-emerald-50/20 font-bold">{vmTotals.outer_lr_qty.toLocaleString()}</td>
+                          <td className="px-2 py-3 border border-slate-200" />
+                        </tr>
+                      )}
                       {sheets.vmCutting.length === 0 && (
                         <tr><td colSpan={15} className="py-8 text-slate-400 text-center">해당 현장의 단일소켓(VM) 재단 품목이 없거나 VT 규격만 존재합니다.</td></tr>
                       )}
@@ -485,8 +763,9 @@ export function ProjectWorkOrderPage() {
               <div className="space-y-4">
                 <div className="flex justify-between items-center print:hidden">
                   <h3 className="text-base font-bold text-slate-850">재단(VT) 작업 명세</h3>
-                  <span className="text-xs text-purple-500 font-bold bg-purple-50 px-2 py-0.5 rounded">Formula (대형 이중소켓): 내부 W/2-15, H/2-20 / 외부 상하 W+60, 좌우 H</span>
+                  <span className="text-xs text-purple-500 font-bold bg-purple-50 px-2 py-0.5 rounded">Formula (대형 이중소켓): 내부 (W-30)/2 - 5, (H-20)/2 - 10 / 외부 상하 W+60, 좌우 H</span>
                 </div>
+                {renderAggregatedSummary(vtAggregated, '이중소켓 (VT)')}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left border-collapse border border-slate-200">
                     <thead>
@@ -502,9 +781,9 @@ export function ProjectWorkOrderPage() {
                         <th className="px-2 py-3 border border-slate-200" rowSpan={2}>작업비고</th>
                       </tr>
                       <tr className="bg-slate-50 text-slate-500 font-semibold text-[10px] text-center">
-                        <th className="px-2 py-1.5 border border-slate-200 bg-purple-50/10 text-purple-600">가로(W/2-15)</th>
+                        <th className="px-2 py-1.5 border border-slate-200 bg-purple-50/10 text-purple-600">가로((W-30)/2-5)</th>
                         <th className="px-2 py-1.5 border border-slate-200 bg-purple-50/10 text-purple-600">수량</th>
-                        <th className="px-2 py-1.5 border border-slate-200 bg-purple-50/10 text-purple-600">세로(H/2-20)</th>
+                        <th className="px-2 py-1.5 border border-slate-200 bg-purple-50/10 text-purple-600">세로((H-20)/2-10)</th>
                         <th className="px-2 py-1.5 border border-slate-200 bg-purple-50/10 text-purple-600">수량</th>
                         <th className="px-2 py-1.5 border border-slate-200 bg-emerald-50/10 text-emerald-600">상하(W+60)</th>
                         <th className="px-2 py-1.5 border border-slate-200 bg-emerald-50/10 text-emerald-600">수량</th>
@@ -534,6 +813,21 @@ export function ProjectWorkOrderPage() {
                           <td className="px-2 py-2.5 border border-slate-200 text-left font-sans text-[10px] text-slate-500">{row.remarks}</td>
                         </tr>
                       ))}
+                      {sheets.vtCutting.length > 0 && vtTotals && (
+                        <tr className="bg-slate-100/90 font-extrabold border-t-2 border-slate-350 text-center font-mono text-slate-800">
+                          <td className="px-2 py-3 border border-slate-200" colSpan={5}>총 합계 (Total)</td>
+                          <td className="px-2 py-3 border border-slate-200 text-slate-900 font-bold bg-slate-100">{vtTotals.qty.toLocaleString()}</td>
+                          <td className="px-2 py-3 border border-slate-200 bg-purple-50/10" />
+                          <td className="px-2 py-3 border border-slate-200 text-purple-700 bg-purple-50/20 font-bold">{vtTotals.inner_w_qty.toLocaleString()}</td>
+                          <td className="px-2 py-3 border border-slate-200 bg-purple-50/10" />
+                          <td className="px-2 py-3 border border-slate-200 text-purple-700 bg-purple-50/20 font-bold">{vtTotals.inner_h_qty.toLocaleString()}</td>
+                          <td className="px-2 py-3 border border-slate-200 bg-emerald-50/10" />
+                          <td className="px-2 py-3 border border-slate-200 text-emerald-700 bg-emerald-50/20 font-bold">{vtTotals.outer_tb_qty.toLocaleString()}</td>
+                          <td className="px-2 py-3 border border-slate-200 bg-emerald-50/10" />
+                          <td className="px-2 py-3 border border-slate-200 text-emerald-700 bg-emerald-50/20 font-bold">{vtTotals.outer_lr_qty.toLocaleString()}</td>
+                          <td className="px-2 py-3 border border-slate-200" />
+                        </tr>
+                      )}
                       {sheets.vtCutting.length === 0 && (
                         <tr><td colSpan={15} className="py-8 text-slate-400 text-center">해당 현장의 이중소켓(VT) 재단 품목이 없습니다.</td></tr>
                       )}
@@ -550,6 +844,7 @@ export function ProjectWorkOrderPage() {
                   <h3 className="text-base font-bold text-slate-850">차열재 재단(VM,VT) 명세</h3>
                   <span className="text-xs text-amber-500 font-bold bg-amber-50 px-2 py-0.5 rounded">Formula: 세라믹울 차열재 정밀재단 공식 적용</span>
                 </div>
+                {renderAggregatedSummary(ceramicAggregated, '세라믹 차열재 (Ceramic)', true)}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left border-collapse border border-slate-200">
                     <thead>
@@ -587,6 +882,17 @@ export function ProjectWorkOrderPage() {
                           <td className="px-4 py-2.5 border border-slate-200 text-left font-sans text-[10px] text-slate-500">{row.remarks}</td>
                         </tr>
                       ))}
+                      {sheets.ceramicCutting.length > 0 && ceramicTotals && (
+                        <tr className="bg-slate-100/90 font-extrabold border-t-2 border-slate-350 text-center font-mono text-slate-800">
+                          <td className="px-4 py-3 border border-slate-200" colSpan={5}>총 합계 (Total)</td>
+                          <td className="px-4 py-3 border border-slate-200 text-slate-900 font-bold bg-slate-100">{ceramicTotals.qty.toLocaleString()}</td>
+                          <td className="px-4 py-3 border border-slate-200 bg-amber-50/10" />
+                          <td className="px-4 py-3 border border-slate-200 text-amber-700 bg-amber-50/20 font-bold">{ceramicTotals.outer_tb_qty.toLocaleString()}</td>
+                          <td className="px-4 py-3 border border-slate-200 bg-amber-50/10" />
+                          <td className="px-4 py-3 border border-slate-200 text-amber-700 bg-amber-50/20 font-bold">{ceramicTotals.outer_lr_qty.toLocaleString()}</td>
+                          <td className="px-4 py-3 border border-slate-200" />
+                        </tr>
+                      )}
                       {sheets.ceramicCutting.length === 0 && (
                         <tr><td colSpan={11} className="py-8 text-slate-400 text-center">차열재 품목이 없습니다.</td></tr>
                       )}
