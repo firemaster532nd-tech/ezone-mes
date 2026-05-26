@@ -104,7 +104,16 @@ export async function authRoutes(app: FastifyInstance) {
     if (!w.is_active) { logAttempt(false, 'inactive'); return reply.code(403).send({ error: 'account_disabled' }); }
     if (!w.password_hash) { logAttempt(false, 'no_password'); return reply.code(403).send({ error: 'password_not_set' }); }
 
-    const ok = await verifyPassword(password, w.password_hash);
+    let ok = await verifyPassword(password, w.password_hash);
+    
+    // 비밀번호가 일치하지 않고, 입력된 비밀번호가 하이픈이 빠진 휴대폰 번호 형식(10~11자리 숫자)인 경우 하이픈을 넣어서 추가 검증 시도
+    if (!ok && /^\d{10,11}$/.test(password)) {
+      const formattedPhone = password.length === 11 
+        ? `${password.slice(0, 3)}-${password.slice(3, 7)}-${password.slice(7)}`
+        : `${password.slice(0, 3)}-${password.slice(3, 6)}-${password.slice(6)}`;
+      ok = await verifyPassword(formattedPhone, w.password_hash);
+    }
+
     if (!ok) { logAttempt(false, 'bad_password'); return reply.code(401).send({ error: 'invalid_credentials' }); }
 
     await pool.query(`UPDATE worker SET last_login_at = NOW() WHERE worker_id = $1`, [w.worker_id]);
