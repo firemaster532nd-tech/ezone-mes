@@ -73,34 +73,24 @@ function numToKorean(num: number): string {
 }
 const fmt = (n: number) => new Intl.NumberFormat('ko-KR').format(n ?? 0);
 
-// ─── ㈜이지원 도장 SVG ────────────────────────────────────
+// ─── ㈜이지원 도장 이미지 ────────────────────────────────
 function EzoneStamp({ size = 70 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 100 100"
-         style={{ display: 'inline-block', flexShrink: 0 }}>
-      {/* 외부 원 */}
-      <circle cx="50" cy="50" r="47" fill="rgba(180,0,0,0.04)" stroke="#bb0000" strokeWidth="3.5" />
-      {/* 내부 원 */}
-      <circle cx="50" cy="50" r="39" fill="none" stroke="#bb0000" strokeWidth="1.8" />
-      {/* 상단: 주식회사 */}
-      <text x="50" y="23" textAnchor="middle" dominantBaseline="middle"
-            fontSize="11" fontWeight="800" fill="#bb0000" fontFamily="serif" letterSpacing="1.5">
-        주 식 회 사
-      </text>
-      {/* 중앙: 이지원 (크게) */}
-      <text x="50" y="50" textAnchor="middle" dominantBaseline="middle"
-            fontSize="20" fontWeight="900" fill="#bb0000" fontFamily="serif" letterSpacing="3">
-        이지원
-      </text>
-      {/* 하단: 대표이사인 */}
-      <text x="50" y="77" textAnchor="middle" dominantBaseline="middle"
-            fontSize="10.5" fontWeight="800" fill="#bb0000" fontFamily="serif" letterSpacing="1">
-        대 표 이 사 인
-      </text>
-    </svg>
+    <img
+      src="/stamp.png"
+      alt="이지원 도장"
+      width={size}
+      height={size}
+      style={{
+        display: 'inline-block',
+        flexShrink: 0,
+        objectFit: 'contain',
+        mixBlendMode: 'multiply',   // 흰 배경과 자연스럽게 합성
+        opacity: 0.92,
+      }}
+    />
   );
 }
-
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  A4 전체 1장 — 거래명세서 (Type A: 일반기입형)
