@@ -52,6 +52,11 @@ import { ProjectLotMatrixPage } from '@/pages/quality/ProjectLotMatrixPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+
+  // ══ 인쇄 전용 페이지 (새 탭/팝업용 — token을 URL 쿼리로 전달) ══
+  // 거래명세서 인쇄 (AuthGuard 없이 독립 렌더링)
+  { path: '/print/statements/:id', element: <StatementPrintPage /> },
+
   {
     path: '/',
     element: <AuthGuard><AppLayout /></AuthGuard>,
@@ -94,7 +99,6 @@ export const router = createBrowserRouter([
       { path: 'shipment/quality-report/:id', element: <QualityReportPage /> },
       { path: 'shipment/statements', element: <StatementListPage /> },
       { path: 'shipment/statements/new', element: <StatementEditPage /> },
-      { path: 'shipment/statements/print/:id', element: <StatementPrintPage /> },
       // 마스터관리
       { path: 'master/certifications', element: <CertificationsPage /> },
       { path: 'master/certifications/:id', element: <CertificationDetail /> },

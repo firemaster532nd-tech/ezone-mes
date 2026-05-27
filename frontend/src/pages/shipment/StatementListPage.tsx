@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   FileText, Search, Plus, Trash2, Printer, 
-  Building2, Calendar, FileSpreadsheet 
+  Building2, Calendar, FileSpreadsheet, LayoutList
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
@@ -88,10 +88,11 @@ export function StatementListPage() {
     }
   };
 
-  const handlePrint = (id: number) => {
-    // 팝업 창으로 인쇄 화면 띄우기
-    const printUrl = `/shipment/statements/print/${id}`;
-    window.open(printUrl, 'EZONE_MES_PRINT', 'width=900,height=900,scrollbars=yes');
+  const handlePrint = (id: number, type: 'A' | 'B' = 'A') => {
+    // localStorage에서 토큰을 가져와서 URL에 포함 (팝업 창 인증 지원)
+    const token = localStorage.getItem('ezone_mes_token') || '';
+    const printUrl = `/print/statements/${id}?type=${type}&token=${encodeURIComponent(token)}`;
+    window.open(printUrl, 'EZONE_MES_PRINT', 'width=980,height=960,scrollbars=yes,resizable=yes');
   };
 
   // 포맷팅 함수들
@@ -181,7 +182,7 @@ export function StatementListPage() {
                 <th className="px-6 py-3.5 text-right">공급가액</th>
                 <th className="px-6 py-3.5 text-right">세액 (VAT)</th>
                 <th className="px-6 py-3.5 text-right">합계금액</th>
-                <th className="px-6 py-3.5 text-center">출력</th>
+                <th className="px-4 py-3.5 text-center w-44">출력 양식</th>
                 <th className="px-6 py-3.5 text-right">작업</th>
               </tr>
             </thead>
@@ -218,14 +219,25 @@ export function StatementListPage() {
                       <td className="px-6 py-3.5 text-right font-bold text-gray-900">
                         {formatNumber(totalSum)} 원
                       </td>
-                      <td className="px-6 py-3.5 text-center">
-                        <button
-                          onClick={() => handlePrint(stmt.statement_id)}
-                          className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-xs transition-colors shadow-sm"
-                        >
-                          <Printer className="h-3.5 w-3.5" />
-                          인쇄
-                        </button>
+                      <td className="px-4 py-3.5 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handlePrint(stmt.statement_id, 'A')}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold text-[11px] transition-colors shadow-sm border border-blue-200"
+                            title="일반기입형: 순번·품명·규격·단위·수량·비고"
+                          >
+                            <LayoutList className="h-3 w-3" />
+                            일반형
+                          </button>
+                          <button
+                            onClick={() => handlePrint(stmt.statement_id, 'B')}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-semibold text-[11px] transition-colors shadow-sm border border-emerald-200"
+                            title="자동연산형: 규격 세분화(밀도·두께·가로·세로) 상세형"
+                          >
+                            <FileSpreadsheet className="h-3 w-3" />
+                            상세형
+                          </button>
+                        </div>
                       </td>
                       <td className="px-6 py-3.5 text-right">
                         <button
