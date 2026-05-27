@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { toast } from 'sonner';
-import { Search, X, Plus, Pencil, Trash2, Package } from 'lucide-react';
+import { Search, X, Plus, Pencil, Trash2, Package, Tag, ChevronDown } from 'lucide-react';
 
 interface Item {
   item_id: number;
@@ -25,12 +25,23 @@ interface Item {
   roll_spec: string | null;
 }
 
-const categoryTabs = [
-  { key: '', label: '전체' },
+interface Subcategory {
+  subcategory_id: number;
+  item_category: string;
+  subcategory_name: string;
+  sort_order: number;
+}
+
+const CATEGORY_OPTIONS = [
   { key: 'RM', label: '원재료' },
   { key: 'SM', label: '부자재' },
   { key: 'SA', label: '반제품' },
   { key: 'FP', label: '완제품' },
+];
+
+const categoryTabs = [
+  { key: '', label: '전체' },
+  ...CATEGORY_OPTIONS,
 ];
 
 const categoryColors: Record<string, string> = {
@@ -46,20 +57,29 @@ const categoryLabels: Record<string, string> = {
 
 export function ItemsPage() {
   const [data, setData] = useState<Item[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [filter, setFilter] = useState('');
   const [search, setSearch] = useState('');
   const [editItem, setEditItem] = useState<Item | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showSubcatPanel, setShowSubcatPanel] = useState(false);
 
-  const fetchData = () => {
+  const fetchData = useCallback(() => {
     const params = new URLSearchParams();
     if (filter) params.set('category', filter);
     if (search) params.set('search', search);
     const qs = params.toString();
     api.get<{ data: Item[] }>(`/items${qs ? `?${qs}` : ''}`).then((res) => setData(res.data));
-  };
+  }, [filter, search]);
 
-  useEffect(fetchData, [filter, search]);
+  const fetchSubcategories = useCallback(() => {
+    api.get<{ data: Subcategory[] }>('/item-subcategories')
+      .then(res => setSubcategories(res.data))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchSubcategories(); }, [fetchSubcategories]);
 
   const handleSave = async (itemId: number, updates: Partial<Item>) => {
     try {
@@ -122,7 +142,7 @@ export function ItemsPage() {
           ))}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -131,9 +151,17 @@ export function ItemsPage() {
               placeholder="품목코드 또는 품목명 검색..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-4 py-2 border rounded-input text-shop-sm w-64 focus:outline-none focus:ring-2 focus:ring-process-mix/20 focus:border-process-mix"
+              className="pl-9 pr-4 py-2 border rounded-input text-shop-sm w-56 focus:outline-none focus:ring-2 focus:ring-process-mix/20 focus:border-process-mix"
             />
           </div>
+          {/* 세분류 관리 */}
+          <button
+            onClick={() => setShowSubcatPanel(true)}
+            className="flex items-center gap-1.5 px-3 py-2 border border-purple-300 text-purple-700 bg-purple-50 text-shop-sm font-medium rounded-button hover:bg-purple-100 transition-colors"
+          >
+            <Tag className="h-4 w-4" />
+            세분류 관리
+          </button>
           {/* Add Button */}
           <button
             onClick={() => setShowAddForm(true)}
@@ -163,10 +191,7 @@ export function ItemsPage() {
           </thead>
           <tbody>
             {data.map((item) => (
-              <tr
-                key={item.item_id}
-                className="border-b hover:bg-blue-50/50 transition-colors"
-              >
+              <tr key={item.item_id} className="border-b hover:bg-blue-50/50 transition-colors">
                 <td className="px-4 py-3 font-mono text-xs">{item.item_code}</td>
                 <td className="px-4 py-3 font-medium">{item.item_name}</td>
                 <td className="px-4 py-3">
@@ -174,7 +199,13 @@ export function ItemsPage() {
                     {categoryLabels[item.item_category] || item.item_category}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-gray-600">{item.item_subcategory ?? '-'}</td>
+                <td className="px-4 py-3">
+                  {item.item_subcategory ? (
+                    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs bg-purple-50 text-purple-700 border border-purple-100">
+                      {item.item_subcategory}
+                    </span>
+                  ) : <span className="text-gray-300">-</span>}
+                </td>
                 <td className="px-4 py-3 text-xs text-gray-500 max-w-[200px] truncate" title={item.spec ?? ''}>
                   {item.spec ?? '-'}
                 </td>
@@ -224,8 +255,10 @@ export function ItemsPage() {
         <ItemFormModal
           mode="edit"
           item={editItem}
+          subcategories={subcategories}
           onClose={() => setEditItem(null)}
           onSave={(updates) => handleSave(editItem.item_id, updates)}
+          onSubcategoryAdded={fetchSubcategories}
         />
       )}
 
@@ -233,25 +266,162 @@ export function ItemsPage() {
       {showAddForm && (
         <ItemFormModal
           mode="add"
+          subcategories={subcategories}
           onClose={() => setShowAddForm(false)}
           onSave={(newItem) => handleCreate(newItem)}
+          onSubcategoryAdded={fetchSubcategories}
+        />
+      )}
+
+      {/* Subcategory Management Panel */}
+      {showSubcatPanel && (
+        <SubcategoryPanel
+          subcategories={subcategories}
+          onClose={() => setShowSubcatPanel(false)}
+          onChanged={fetchSubcategories}
         />
       )}
     </div>
   );
 }
 
+/* ─── 세분류 관리 패널 ─── */
+function SubcategoryPanel({
+  subcategories,
+  onClose,
+  onChanged,
+}: {
+  subcategories: Subcategory[];
+  onClose: () => void;
+  onChanged: () => void;
+}) {
+  const [newCat, setNewCat] = useState('SM');
+  const [newName, setNewName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleAdd = async () => {
+    if (!newName.trim()) return toast.error('세분류명을 입력하세요.');
+    setSaving(true);
+    try {
+      await api.post('/item-subcategories', { item_category: newCat, subcategory_name: newName.trim() });
+      toast.success(`세분류 "${newName.trim()}" 추가됨`);
+      setNewName('');
+      onChanged();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || '추가 실패');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: number, name: string) => {
+    if (!confirm(`"${name}" 세분류를 삭제하시겠습니까?`)) return;
+    try {
+      await api.delete(`/item-subcategories/${id}`);
+      toast.success('삭제되었습니다.');
+      onChanged();
+    } catch {
+      toast.error('삭제 실패');
+    }
+  };
+
+  const grouped = CATEGORY_OPTIONS.map(cat => ({
+    ...cat,
+    items: subcategories.filter(s => s.item_category === cat.key),
+  }));
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl p-6 w-full max-w-lg shadow-xl max-h-[80vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-lg font-bold flex items-center gap-2">
+            <Tag className="h-5 w-5 text-purple-600" />
+            세분류 관리
+          </h3>
+          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* 신규 추가 */}
+        <div className="flex gap-2 mb-5 p-3 bg-purple-50 rounded-lg border border-purple-200">
+          <select
+            value={newCat}
+            onChange={e => setNewCat(e.target.value)}
+            className="px-3 py-2 border rounded-lg text-sm w-28 bg-white"
+          >
+            {CATEGORY_OPTIONS.map(c => (
+              <option key={c.key} value={c.key}>{c.label}</option>
+            ))}
+          </select>
+          <input
+            type="text"
+            value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAdd()}
+            placeholder="새 세분류명 입력 (예: 그라스울)"
+            className="flex-1 px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-300"
+          />
+          <button
+            onClick={handleAdd}
+            disabled={saving}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
+          >
+            <Plus className="h-4 w-4" /> 추가
+          </button>
+        </div>
+
+        {/* 분류별 세분류 목록 */}
+        <div className="space-y-4">
+          {grouped.map(group => (
+            <div key={group.key}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className={cn('px-2 py-0.5 rounded text-xs font-semibold', categoryColors[group.key])}>
+                  {group.label}
+                </span>
+                <span className="text-xs text-gray-400">{group.items.length}개</span>
+              </div>
+              {group.items.length === 0 ? (
+                <p className="text-xs text-gray-400 pl-2">등록된 세분류 없음</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {group.items.map(s => (
+                    <span
+                      key={s.subcategory_id}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm bg-gray-100 text-gray-700 border border-gray-200"
+                    >
+                      {s.subcategory_name}
+                      <button
+                        onClick={() => handleDelete(s.subcategory_id, s.subcategory_name)}
+                        className="ml-0.5 text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── 품목 등록/수정 통합 모달 ─── */
 function ItemFormModal({
-  mode,
-  item,
-  onClose,
-  onSave,
+  mode, item, subcategories, onClose, onSave, onSubcategoryAdded,
 }: {
   mode: 'add' | 'edit';
   item?: Item;
+  subcategories: Subcategory[];
   onClose: () => void;
   onSave: (data: Partial<Item>) => void;
+  onSubcategoryAdded: () => void;
 }) {
   const [form, setForm] = useState({
     item_code: item?.item_code ?? '',
@@ -271,7 +441,40 @@ function ItemFormModal({
     roll_spec: item?.roll_spec ?? '',
   });
 
+  // 인라인 세분류 추가 상태
+  const [showAddSubcat, setShowAddSubcat] = useState(false);
+  const [newSubcatName, setNewSubcatName] = useState('');
+  const [addingSubcat, setAddingSubcat] = useState(false);
+
   const set = (key: string, val: string) => setForm((prev) => ({ ...prev, [key]: val }));
+
+  // 현재 분류에 맞는 세분류만 필터
+  const filteredSubcats = subcategories.filter(s => s.item_category === form.item_category);
+
+  // 분류가 바뀌면 세분류 초기화
+  const handleCategoryChange = (val: string) => {
+    setForm(prev => ({ ...prev, item_category: val, item_subcategory: '' }));
+  };
+
+  const handleAddSubcatInline = async () => {
+    if (!newSubcatName.trim()) return;
+    setAddingSubcat(true);
+    try {
+      await api.post('/item-subcategories', {
+        item_category: form.item_category,
+        subcategory_name: newSubcatName.trim(),
+      });
+      toast.success(`세분류 "${newSubcatName.trim()}" 추가됨`);
+      onSubcategoryAdded(); // 부모에서 목록 새로고침
+      set('item_subcategory', newSubcatName.trim());
+      setNewSubcatName('');
+      setShowAddSubcat(false);
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || '추가 실패');
+    } finally {
+      setAddingSubcat(false);
+    }
+  };
 
   const handleSubmit = () => {
     if (!form.item_code.trim() || !form.item_name.trim()) {
@@ -328,22 +531,79 @@ function ItemFormModal({
                 placeholder="예: 세라믹차열재(128K)" />
             </div>
             <div className="grid grid-cols-3 gap-3">
+              {/* 분류 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">분류 *</label>
                 <select
                   value={form.item_category}
-                  onChange={(e) => set('item_category', e.target.value)}
+                  onChange={(e) => handleCategoryChange(e.target.value)}
                   disabled={mode === 'edit'}
                   className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-process-mix/20 disabled:bg-gray-100"
                 >
-                  <option value="RM">원재료 (RM)</option>
-                  <option value="SM">부자재 (SM)</option>
-                  <option value="SA">반제품 (SA)</option>
-                  <option value="FP">완제품 (FP)</option>
+                  {CATEGORY_OPTIONS.map(c => (
+                    <option key={c.key} value={c.key}>{c.label} ({c.key})</option>
+                  ))}
                 </select>
               </div>
-              <Field label="세분류" value={form.item_subcategory} onChange={(v) => set('item_subcategory', v)}
-                placeholder="예: 세라믹차열재" />
+
+              {/* 세분류 — 드롭다운 + 인라인 추가 */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-gray-600">세분류</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddSubcat(v => !v)}
+                    className="text-[10px] text-purple-600 hover:underline flex items-center gap-0.5"
+                  >
+                    <Plus className="h-3 w-3" /> 새 세분류
+                  </button>
+                </div>
+
+                {showAddSubcat ? (
+                  <div className="flex gap-1">
+                    <input
+                      type="text"
+                      value={newSubcatName}
+                      onChange={e => setNewSubcatName(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleAddSubcatInline()}
+                      placeholder="세분류명 입력 후 Enter"
+                      autoFocus
+                      className="flex-1 px-2 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-purple-300"
+                    />
+                    <button
+                      onClick={handleAddSubcatInline}
+                      disabled={addingSubcat}
+                      className="px-2 py-1 bg-purple-600 text-white rounded-lg text-xs disabled:opacity-50"
+                    >
+                      추가
+                    </button>
+                    <button
+                      onClick={() => { setShowAddSubcat(false); setNewSubcatName(''); }}
+                      className="px-2 py-1 border rounded-lg text-xs hover:bg-gray-50"
+                    >
+                      취소
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <select
+                      value={form.item_subcategory}
+                      onChange={(e) => set('item_subcategory', e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-300 appearance-none pr-8"
+                    >
+                      <option value="">— 선택 —</option>
+                      {filteredSubcats.map(s => (
+                        <option key={s.subcategory_id} value={s.subcategory_name}>
+                          {s.subcategory_name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                  </div>
+                )}
+              </div>
+
+              {/* 단위 */}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">단위 *</label>
                 <select
@@ -409,7 +669,7 @@ function ItemFormModal({
                 disabled={!isRollable} />
               <Field label="롤 규격 상세" value={form.roll_spec}
                 onChange={(v) => set('roll_spec', v)}
-                placeholder="예: t50/W600=3.6M, t38/W400=4.8M"
+                placeholder="예: t50/W600=3.6M"
                 disabled={!isRollable} />
             </div>
             {isRollable && form.roll_length_m && (

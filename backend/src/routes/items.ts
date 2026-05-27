@@ -292,4 +292,74 @@ export async function itemRoutes(app: FastifyInstance) {
     }
     return { data: result.rows[0], message: '품목이 비활성화되었습니다.' };
   });
+
+  // ─── 세분류 마스터 CRUD ───────────────────────────────────────────
+
+  // 세분류 마스터 테이블 자동 생성 + 기존 데이터로 시드
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS item_subcategory_master (
+      subcategory_id  SERIAL PRIMARY KEY,
+      item_category   VARCHAR(10) NOT NULL,   -- RM/SM/SA/FP
+      subcategory_name VARCHAR(100) NOT NULL,
+      sort_order      INT DEFAULT 0,
+      is_active       BOOLEAN DEFAULT TRUE,
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (item_category, subcategory_name)
+    );
+  `).catch(() => {});
+
+  // 기존 item_master에서 쓰이는 세분류를 시드 (중복 무시)
+  await pool.query(`
+    INSERT INTO item_subcategory_master (item_category, subcategory_name)
+    SELECT DISTINCT item_category, item_subcategory
+    FROM item_master
+    WHERE item_subcategory IS NOT NULL AND item_subcategory <> ''
+    ON CONFLICT (item_category, subcategory_name) DO NOTHING;
+  `).catch(() => {});
+
+  // GET /api/item-subcategories — 세분류 목록 (분류별 필터 가능)
+  app.get('/api/item-subcategories', async (request) => {
+    const { category } = request.query as { category?: string };
+    let q = `SELECT * FROM item_subcategory_master WHERE is_active = true`;
+    const params: unknown[] = [];
+    if (category) {
+      params.push(category);
+      q += ` AND item_category = $${params.length}`;
+    }
+    q += ` ORDER BY item_category, sort_order, subcategory_name`;
+    const result = await pool.query(q, params);
+    return { data: result.rows };
+  });
+
+  // POST /api/item-subcategories — 세분류 신규 등록
+  app.post('/api/item-subcategories', async (request, reply) => {
+    const { item_category, subcategory_name, sort_order } = request.body as any;
+    if (!item_category || !subcategory_name?.trim()) {
+      return reply.status(400).send({ error: 'Bad Request', message: '분류와 세분류명은 필수입니다.' });
+    }
+    try {
+      const result = await pool.query(`
+        INSERT INTO item_subcategory_master (item_category, subcategory_name, sort_order)
+        VALUES ($1, $2, $3)
+        RETURNING *
+      `, [item_category, subcategory_name.trim(), sort_order ?? 0]);
+      return { data: result.rows[0] };
+    } catch (e: any) {
+      if (e.code === '23505') {
+        return reply.status(409).send({ error: 'Conflict', message: '이미 존재하는 세분류입니다.' });
+      }
+      throw e;
+    }
+  });
+
+  // DELETE /api/item-subcategories/:id — 세분류 삭제
+  app.delete('/api/item-subcategories/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const result = await pool.query(
+      `UPDATE item_subcategory_master SET is_active = false WHERE subcategory_id = $1 RETURNING *`,
+      [parseInt(id, 10)]
+    );
+    if (result.rows.length === 0) return reply.status(404).send({ error: 'Not Found' });
+    return { data: result.rows[0] };
+  });
 }
