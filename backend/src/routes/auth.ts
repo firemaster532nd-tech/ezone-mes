@@ -97,10 +97,28 @@ export async function initializeWorkerPasswords() {
 
 export async function authRoutes(app: FastifyInstance) {
   // 서버 시작 시 admin 계정 보장 및 아직 패스워드가 세팅되지 않은 비관리자 계정들의 초기 비밀번호를 휴대폰 번호로 세팅
-  // allowed_modes 컬럼 마이그레이션
+  // allowed_modes 콜럼 마이그레이션
   await pool.query(`
     ALTER TABLE worker ADD COLUMN IF NOT EXISTS allowed_modes VARCHAR(10) DEFAULT 'shop';
   `).catch(() => {});
+
+  // 세분류 마스터 테이블 생성 + 기존 item_master 데이터로 시드
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS item_subcategory_master (
+      subcategory_id   SERIAL PRIMARY KEY,
+      item_category    VARCHAR(10) NOT NULL,
+      subcategory_name VARCHAR(100) NOT NULL,
+      sort_order       INT DEFAULT 0,
+      is_active        BOOLEAN DEFAULT TRUE,
+      created_at       TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (item_category, subcategory_name)
+    );
+    INSERT INTO item_subcategory_master (item_category, subcategory_name)
+    SELECT DISTINCT item_category, item_subcategory
+    FROM item_master
+    WHERE item_subcategory IS NOT NULL AND item_subcategory <> ''
+    ON CONFLICT (item_category, subcategory_name) DO NOTHING;
+  `).catch((err: unknown) => console.error('[Migration] item_subcategory_master:', err));
 
   await ensureAdminUser().catch((err) => {
     console.error('Failed to ensure admin user:', err);

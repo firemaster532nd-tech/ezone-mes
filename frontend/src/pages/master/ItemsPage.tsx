@@ -74,8 +74,11 @@ export function ItemsPage() {
 
   const fetchSubcategories = useCallback(() => {
     api.get<{ data: Subcategory[] }>('/item-subcategories')
-      .then(res => setSubcategories(res.data))
-      .catch(() => {});
+      .then(res => setSubcategories(res.data ?? []))
+      .catch((err) => {
+        console.error('[fetchSubcategories] 세분류 로드 실패:', err);
+        toast.error('세분류 목록을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+      });
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);

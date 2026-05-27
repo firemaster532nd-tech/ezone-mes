@@ -293,32 +293,10 @@ export async function itemRoutes(app: FastifyInstance) {
     return { data: result.rows[0], message: '품목이 비활성화되었습니다.' };
   });
 
-  // ─── 세분류 마스터 CRUD ───────────────────────────────────────────
-
-  // 세분류 마스터 테이블 자동 생성 + 기존 데이터로 시드
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS item_subcategory_master (
-      subcategory_id  SERIAL PRIMARY KEY,
-      item_category   VARCHAR(10) NOT NULL,   -- RM/SM/SA/FP
-      subcategory_name VARCHAR(100) NOT NULL,
-      sort_order      INT DEFAULT 0,
-      is_active       BOOLEAN DEFAULT TRUE,
-      created_at      TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE (item_category, subcategory_name)
-    );
-  `).catch(() => {});
-
-  // 기존 item_master에서 쓰이는 세분류를 시드 (중복 무시)
-  await pool.query(`
-    INSERT INTO item_subcategory_master (item_category, subcategory_name)
-    SELECT DISTINCT item_category, item_subcategory
-    FROM item_master
-    WHERE item_subcategory IS NOT NULL AND item_subcategory <> ''
-    ON CONFLICT (item_category, subcategory_name) DO NOTHING;
-  `).catch(() => {});
+  // ─── 세분류 마스터 CRUD (테이블 생성은 authRoutes 시작 시 수행) ───
 
   // GET /api/item-subcategories — 세분류 목록 (분류별 필터 가능)
-  app.get('/api/item-subcategories', async (request) => {
+  app.get('/api/item-subcategories', async (request, reply) => {
     const { category } = request.query as { category?: string };
     let q = `SELECT * FROM item_subcategory_master WHERE is_active = true`;
     const params: unknown[] = [];
@@ -327,8 +305,14 @@ export async function itemRoutes(app: FastifyInstance) {
       q += ` AND item_category = $${params.length}`;
     }
     q += ` ORDER BY item_category, sort_order, subcategory_name`;
-    const result = await pool.query(q, params);
-    return { data: result.rows };
+    try {
+      const result = await pool.query(q, params);
+      return { data: result.rows };
+    } catch (err) {
+      console.error('[item-subcategories GET]', err);
+      // 테이블이 아직 없는 경우 빈 배열 반환
+      return { data: [] };
+    }
   });
 
   // POST /api/item-subcategories — 세분류 신규 등록
