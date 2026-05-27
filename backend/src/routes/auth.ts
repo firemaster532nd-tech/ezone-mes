@@ -97,6 +97,11 @@ export async function initializeWorkerPasswords() {
 
 export async function authRoutes(app: FastifyInstance) {
   // 서버 시작 시 admin 계정 보장 및 아직 패스워드가 세팅되지 않은 비관리자 계정들의 초기 비밀번호를 휴대폰 번호로 세팅
+  // allowed_modes 컬럼 마이그레이션
+  await pool.query(`
+    ALTER TABLE worker ADD COLUMN IF NOT EXISTS allowed_modes VARCHAR(10) DEFAULT 'shop';
+  `).catch(() => {});
+
   await ensureAdminUser().catch((err) => {
     console.error('Failed to ensure admin user:', err);
   });
@@ -121,7 +126,8 @@ export async function authRoutes(app: FastifyInstance) {
       ).catch(() => {});
 
     const { rows } = await pool.query(
-      `SELECT worker_id, employee_no, worker_name, password_hash, role, dept_id, is_active, must_change_pw
+      `SELECT worker_id, employee_no, worker_name, password_hash, role, dept_id, is_active, must_change_pw,
+              COALESCE(allowed_modes, 'shop') as allowed_modes
        FROM worker WHERE employee_no = $1`,
       [employee_no],
     );
@@ -161,6 +167,7 @@ export async function authRoutes(app: FastifyInstance) {
         role: w.role,
         dept_id: w.dept_id,
         must_change_pw: w.must_change_pw,
+        allowed_modes: w.allowed_modes ?? 'shop',
       },
     };
   });
@@ -171,7 +178,8 @@ export async function authRoutes(app: FastifyInstance) {
     const [userRes, permRes] = await Promise.all([
       pool.query(
         `SELECT w.worker_id, w.employee_no, w.worker_name, w.role, w.dept_id, w.position, w.email,
-                w.must_change_pw, d.dept_code, d.dept_name
+                w.must_change_pw, d.dept_code, d.dept_name,
+                COALESCE(w.allowed_modes, 'shop') as allowed_modes
          FROM worker w LEFT JOIN department d ON d.dept_id = w.dept_id
          WHERE w.worker_id = $1`,
         [worker_id],
@@ -183,7 +191,8 @@ export async function authRoutes(app: FastifyInstance) {
       ),
     ]);
     if (!userRes.rows[0]) return { error: 'not_found' };
-    return { user: userRes.rows[0], permissions: permRes.rows };
+    const u = userRes.rows[0];
+    return { user: { ...u, allowed_modes: u.allowed_modes ?? 'shop' }, permissions: permRes.rows };
   });
 
   // POST /api/auth/change-password

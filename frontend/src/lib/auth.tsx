@@ -13,6 +13,7 @@ export interface User {
   position?: string | null;
   email?: string | null;
   must_change_pw?: boolean;
+  allowed_modes?: 'shop' | 'both'; // 'shop'=실무만, 'both'=실무+관리 모두
 }
 
 interface AuthContextType {

@@ -207,7 +207,22 @@ export async function workerRoutes(app: FastifyInstance) {
     return { data: { message: '삭제되었습니다.', deleted: true } };
   });
 
-  // POST /api/workers/admin-login - 관리자 퀵 로그인 (PIN만으로)
+  // PATCH /api/workers/:id/allowed-modes — 모드 접근 권한 변경 (admin only)
+  app.patch('/api/workers/:id/allowed-modes', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { allowed_modes } = request.body as { allowed_modes?: string };
+    if (!allowed_modes || !['shop', 'both'].includes(allowed_modes)) {
+      return reply.status(400).send({ error: 'Bad Request', message: "allowed_modes는 'shop' 또는 'both' 이어야 합니다." });
+    }
+    const result = await pool.query(
+      `UPDATE worker SET allowed_modes = $1 WHERE worker_id = $2
+       RETURNING worker_id, worker_name, allowed_modes`,
+      [allowed_modes, parseInt(id, 10)]
+    );
+    if (result.rows.length === 0) return reply.status(404).send({ error: 'Not Found' });
+    return { data: result.rows[0] };
+  });
+
   app.post('/api/workers/admin-login', async (request, reply) => {
     const { pin_code } = request.body as { pin_code?: string };
     if (!pin_code) {

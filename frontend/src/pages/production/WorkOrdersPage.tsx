@@ -1,10 +1,10 @@
-import { useEffect, useState, useMemo, Fragment } from 'react';
+import { useEffect, useState, useMemo, Fragment, useRef, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ProcessBadge } from '@/components/shared/ProcessBadge';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { Plus, Pencil, Trash2, MoreHorizontal, FlaskConical, Calculator, Layers, ChevronRight, ChevronDown, Zap, ChevronsUpDown, Play } from 'lucide-react';
+import { Plus, Pencil, Trash2, MoreHorizontal, FlaskConical, Calculator, Layers, ChevronRight, ChevronDown, Zap, ChevronsUpDown, Play, Table2, List } from 'lucide-react';
 
 interface WorkOrder {
   wo_id: number;
@@ -71,6 +71,7 @@ export function WorkOrdersPage() {
   const [showCascade, setShowCascade] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batchLoading, setBatchLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'sheet'>('list');
 
   const processOrderMap: Record<string, number> = { MIX: 0, EXT: 1, CUT: 2, ASM: 3, SHP: 4 };
 
@@ -211,19 +212,42 @@ export function WorkOrdersPage() {
   return (
     <div>
       <PageHeader title="작업지시 관리" count={data.length} description="MIX/EXT/CUT/ASM 4공정 작업지시">
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {/* 뷰 전환 토글 */}
+          <div className="flex items-center border border-gray-300 rounded-md overflow-hidden">
+            <button
+              onClick={() => setViewMode('list')}
+              className={cn('flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors',
+                viewMode === 'list' ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+              )}
+              title="목록 보기"
+            >
+              <List size={14} /> 목록
+            </button>
+            <button
+              onClick={() => setViewMode('sheet')}
+              className={cn('flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors border-l border-gray-300',
+                viewMode === 'sheet' ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+              )}
+              title="스프레드시트 편집기"
+            >
+              <Table2 size={14} /> 일괄편집
+            </button>
+          </div>
           <button
             onClick={() => setShowCascade(true)}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md text-shop-sm font-medium hover:bg-indigo-700"
           >
             <Zap size={16} /> 일일 생산계획
           </button>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-process-mix text-white rounded-md text-shop-sm font-medium hover:opacity-90"
-          >
-            <Plus size={16} /> 개별 작업지시
-          </button>
+          {viewMode === 'list' && (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-process-mix text-white rounded-md text-shop-sm font-medium hover:opacity-90"
+            >
+              <Plus size={16} /> 개별 작업지시
+            </button>
+          )}
         </div>
       </PageHeader>
 
@@ -244,16 +268,28 @@ export function WorkOrdersPage() {
           </button>
         ))}
         <div className="flex-1" />
-        <button
-          onClick={toggleAllDates}
-          className="flex items-center gap-1 px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md mb-1"
-        >
-          <ChevronsUpDown size={14} />
-          {expandedDates.size === groupedByDate.length ? '전체 접기' : '전체 펼치기'}
-        </button>
+        {viewMode === 'list' && (
+          <button
+            onClick={toggleAllDates}
+            className="flex items-center gap-1 px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md mb-1"
+          >
+            <ChevronsUpDown size={14} />
+            {expandedDates.size === groupedByDate.length ? '전체 접기' : '전체 펼치기'}
+          </button>
+        )}
       </div>
 
-      {/* Tree Table - 날짜별 그룹 */}
+      {/* ══ 스프레드시트 편집기 ══ */}
+      {viewMode === 'sheet' && (
+        <SpreadsheetWorkOrderEditor
+          filter={filter}
+          onRefresh={fetchData}
+          onEditTarget={(wo) => { setViewMode('list'); setEditTarget(wo); }}
+        />
+      )}
+
+      {/* Tree Table - 날짜별 그룹 (목록 뷰에서만 표시) */}
+      {viewMode === 'list' && (
       <div className="overflow-x-auto rounded-card border bg-white">
         <table className="w-full min-w-[1050px] text-shop-sm">
           <thead>
@@ -430,6 +466,7 @@ export function WorkOrdersPage() {
           </tbody>
         </table>
       </div>
+      )} {/* end viewMode === 'list' */}
 
       {/* 드롭다운 메뉴 (fixed로 overflow 문제 해결) */}
       {menuOpen !== null && (
@@ -2616,85 +2653,7 @@ function MixBatchLotsDetail({ woId, actualQty, onTotalChange }: { woId: number; 
     }
   };
 
-  return (
-    <div className="border border-amber-300 rounded-lg overflow-hidden bg-white">
-      <button
-        type="button"
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setCollapsed(!collapsed); }}
-        className="w-full px-3 py-2 bg-amber-100 text-left flex items-center justify-between hover:bg-amber-200 transition"
-      >
-        <span className="text-xs font-bold text-amber-900">
-          배치별 LOT ({lotCount}배치
-          {inputTotal > 0 ? ` · 합계 ${inputTotal.toLocaleString()}kg` : ' · 미입력'})
-        </span>
-        <span className="text-amber-500 text-xs">{collapsed ? '▶ 펼치기' : '▼ 접기'}</span>
-      </button>
-      {!collapsed && (
-        <div className="overflow-x-auto">
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="bg-gray-50 text-gray-500">
-                <th className="px-3 py-1.5 text-left">#</th>
-                <th className="px-3 py-1.5 text-left">LOT번호</th>
-                <th className="px-3 py-1.5 text-right">수량(kg)</th>
-                <th className="px-3 py-1.5 text-right">잔량</th>
-                <th className="px-3 py-1.5 text-center">상태</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {data.lots.map((lot: any, idx: number) => {
-                const dbQty = parseFloat(lot.qty || 0);
-                const dbRem = parseFloat(lot.remaining_qty || 0);
-                const isConsumed = lot.status === 'CONSUMED';
-                const displayRem = dbQty > 0 ? dbRem : 0;
-
-                return (
-                  <tr key={lot.lot_id} className={isConsumed ? 'bg-gray-50 text-gray-400' : 'hover:bg-amber-50/30'}>
-                    <td className="px-3 py-1.5 text-gray-400">{idx + 1}</td>
-                    <td className="px-3 py-1.5 font-mono font-medium text-amber-800">{lot.lot_number}</td>
-                    <td className="px-3 py-1.5 text-right">
-                      {isProduced ? (
-                        <span className="font-mono">{dbQty.toLocaleString()}kg</span>
-                      ) : (
-                        <input type="number" step="0.01"
-                          value={lotQtys[lot.lot_id] || ''}
-                          onChange={(e) => handleQtyChange(lot.lot_id, e.target.value)}
-                          className="w-20 border rounded px-1.5 py-0.5 text-[11px] font-mono text-right border-amber-200 focus:ring-1 focus:ring-amber-400"
-                          placeholder="0" />
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5 text-right font-mono">
-                      {displayRem > 0 ? `${displayRem.toLocaleString()}kg` : '0'}
-                    </td>
-                    <td className="px-3 py-1.5 text-center">
-                      {isConsumed ? (
-                        <span className="text-[10px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded">소진</span>
-                      ) : dbQty > 0 ? (
-                        <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">가용</span>
-                      ) : parseFloat(lotQtys[lot.lot_id] || '0') > 0 ? (
-                        <span className="text-[10px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded">입력</span>
-                      ) : (
-                        <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">미입력</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-            {!isProduced && (
-              <tfoot>
-                <tr className="bg-amber-50 font-medium text-[11px]">
-                  <td colSpan={2} className="px-3 py-1.5 text-amber-800">합계</td>
-                  <td className="px-3 py-1.5 text-right font-mono text-amber-700">{inputTotal.toLocaleString()}kg</td>
-                  <td colSpan={2}></td>
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      )}
-    </div>
-  );
+  return null;
 }
 
 function CutSpecsDetail({
@@ -2712,15 +2671,9 @@ function CutSpecsDetail({
 }) {
   const [internalSpecs, setInternalSpecs] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [socketCollapsed, setSocketCollapsed] = useState(false);
-  const [flashCollapsed, setFlashCollapsed] = useState(false);
 
-  // Load internally only if NOT in edit mode
   useEffect(() => {
-    if (isEdit) {
-      setLoading(false);
-      return;
-    }
+    if (isEdit) { setLoading(false); return; }
     setLoading(true);
     api.get(`/work-orders/${woId}/cut-specs`)
       .then((res: any) => setInternalSpecs(res.data?.data ?? res.data ?? null))
@@ -2733,333 +2686,866 @@ function CutSpecsDetail({
   const isFlashing = itemCode === 'SA-CUT-FL';
   const rows = isEdit ? (propRows || []) : [];
 
-  // Helper calculation functions
-  const getSocketSheets = (w: number, h: number) => [
-    { part: '내부(상하)', count: 4, length: w - 5, width: 190, spec: '5T×190' },
-    { part: '내부(좌우)', count: 4, length: h - 30, width: 190, spec: '5T×190' },
-    { part: '외부(상하)', count: 2, length: w + 60, width: 190, spec: '5T×190' },
-    { part: '외부(좌우)', count: 2, length: h, width: 190, spec: '5T×190' },
-  ];
+  // ── 소켓 치수 자동계산 (VM 타입) ──
+  const socketDims = (w: number, h: number) => ({
+    innerW: w - 5,
+    innerH: h - 30,
+    outerUD: w + 60,
+    outerLR: h,
+  });
 
-  const getFlashingSheets = (w: number, h: number) => {
-    const topBot = w + 250;
-    const leftRight = h;
-    const perimeter1 = topBot * 2 + leftRight * 2;
-    const setsPerFace = perimeter1 / 1000;
-    const totalSets = Math.ceil(setsPerFace * 2);
-    return [
-      {
-        part: '플래싱(I형)',
-        count: totalSets,
-        length: 1000,
-        width: 125,
-        spec: '5T×125',
-        detail: `상하${topBot}×2 + 좌우${leftRight}×2 = ${perimeter1}mm/면 → ${setsPerFace.toFixed(1)}세트/면 × 양면 = ${totalSets}`
-      }
-    ];
+  // ── 플래싱 치수 자동계산 (VT/FL 타입) ──
+  const flashingDims = (w: number, h: number) => {
+    const perimeter = (w + 250) * 2 + h * 2;
+    const totalSets = Math.ceil((perimeter / 1000) * 2);
+    return { totalSets };
   };
 
   const handleCellChange = (idx: number, field: string, value: any) => {
     if (!onChange) return;
-    const next = rows.map((r, i) => {
-      if (i !== idx) return r;
-      return { ...r, [field]: value };
-    });
-    onChange(next);
+    onChange(rows.map((r, i) => i !== idx ? r : { ...r, [field]: value }));
   };
 
   const addRow = () => {
     if (!onChange) return;
-    const next = [
-      ...rows,
-      {
-        structure_code: `C-NEW-${String(rows.length + 1).padStart(2, '0')}`,
-        structure_name: '신규 규격',
-        penetration_w: 1000,
-        penetration_h: 1000,
-        qty: 1,
-        actual_qty: 1
-      }
-    ];
-    onChange(next);
+    onChange([...rows, {
+      structure_code: isFlashing ? `FL-${String(rows.length + 1).padStart(2,'0')}` : `VA-${String(rows.length + 1).padStart(2,'0')}`,
+      structure_name: '신규 규격',
+      penetration_w: 900,
+      penetration_h: 600,
+      qty: 1,
+      actual_qty: 0,
+    }]);
   };
 
   const removeRow = (idx: number) => {
     if (!onChange) return;
-    const next = rows.filter((_, i) => i !== idx);
-    onChange(next);
+    onChange(rows.filter((_, i) => i !== idx));
   };
 
-  // ── 엑셀 스프레드시트 일괄 편집 모드 ──
+  const totalPlanSets = rows.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+  const totalActualSets = rows.reduce((s, r) => s + (Number(r.actual_qty) || 0), 0);
+  const totalSheets = isFlashing ? 0 : rows.reduce((s, r) => s + 12 * (Number(r.qty) || 0), 0);
+
+  const theme = isFlashing
+    ? { border: 'border-teal-300', hd: 'bg-teal-50 text-teal-900', dot: 'bg-teal-500', btnCls: 'bg-teal-50 border-teal-300 text-teal-700 hover:bg-teal-100', ring: 'focus:ring-teal-400', rowHover: 'hover:bg-teal-50/20' }
+    : { border: 'border-purple-300', hd: 'bg-purple-50 text-purple-900', dot: 'bg-purple-500', btnCls: 'bg-purple-50 border-purple-300 text-purple-700 hover:bg-purple-100', ring: 'focus:ring-purple-400', rowHover: 'hover:bg-purple-50/20' };
+
+  // ─── 자동계산 셀들 ───
+  const AutoSocketCells = ({ w, h }: { w: number; h: number }) => {
+    const d = socketDims(w, h);
+    return (
+      <>
+        <td className="px-2 py-1.5 text-right bg-purple-50/50 font-mono font-bold text-purple-800 text-[11px]">{w > 0 ? d.innerW : '—'}</td>
+        <td className="px-2 py-1.5 text-center bg-purple-50/50 font-mono text-purple-600 text-[11px]">4</td>
+        <td className="px-2 py-1.5 text-right bg-purple-50/50 font-mono font-bold text-purple-800 text-[11px]">{h > 0 ? d.innerH : '—'}</td>
+        <td className="px-2 py-1.5 text-center bg-purple-50/50 font-mono text-purple-600 text-[11px]">4</td>
+        <td className="px-2 py-1.5 text-right bg-purple-100/50 font-mono font-bold text-purple-900 text-[11px]">{w > 0 ? d.outerUD : '—'}</td>
+        <td className="px-2 py-1.5 text-center bg-purple-100/50 font-mono text-purple-700 text-[11px]">2</td>
+        <td className="px-2 py-1.5 text-right bg-purple-100/50 font-mono font-bold text-purple-900 text-[11px]">{h > 0 ? d.outerLR : '—'}</td>
+        <td className="px-2 py-1.5 text-center bg-purple-100/50 font-mono text-purple-700 text-[11px]">2</td>
+      </>
+    );
+  };
+
+  const AutoFlashCells = ({ w, h }: { w: number; h: number }) => {
+    const { totalSets: fSets } = flashingDims(w, h);
+    return (
+      <>
+        <td className="px-2 py-1.5 text-center bg-teal-50/50 font-mono font-bold text-teal-800 text-[11px]">L=1000</td>
+        <td className="px-2 py-1.5 text-center bg-teal-50/50 font-mono text-teal-700 text-[11px]">{w > 0 ? fSets : '—'}</td>
+      </>
+    );
+  };
+
+  // ─── 공통 2레벨 헤더 ───
+  const TableHeader = ({ showActual }: { showActual: boolean }) => (
+    <thead className={cn('sticky top-0 z-10 text-[10px] font-bold', theme.hd)}>
+      <tr className="border-b-2 border-gray-300">
+        <th rowSpan={2} className="px-2 py-1.5 border-r border-gray-200 text-center w-8">No</th>
+        <th rowSpan={2} className="px-2 py-1.5 border-r border-gray-200 w-24">구조코드</th>
+        <th rowSpan={2} className="px-2 py-1.5 border-r border-gray-200 w-28">구조명</th>
+        <th colSpan={2} className="px-2 py-1 text-center border-r border-gray-200">규격 (mm)</th>
+        <th rowSpan={2} className="px-2 py-1.5 text-center border-r border-gray-200 w-14">계획<br/>세트</th>
+        {showActual && <th rowSpan={2} className="px-2 py-1.5 text-center border-r border-gray-200 w-14">실적<br/>세트</th>}
+        {!isFlashing ? (
+          <>
+            <th colSpan={4} className="px-2 py-1 text-center border-r border-gray-200 bg-purple-100/60">소켓 내부용 (자동)</th>
+            <th colSpan={4} className="px-2 py-1 text-center border-r border-gray-200 bg-purple-200/50">소켓 외부용 (자동)</th>
+          </>
+        ) : (
+          <th colSpan={2} className="px-2 py-1 text-center border-r border-gray-200 bg-teal-100/60">플래싱 (자동)</th>
+        )}
+        {showActual && <th rowSpan={2} className="px-2 py-1.5 text-center w-10">삭제</th>}
+      </tr>
+      <tr className="border-b border-gray-200 text-[9px]">
+        <th className="px-2 py-1 border-r border-gray-200 text-center">가로</th>
+        <th className="px-2 py-1 border-r border-gray-200 text-center">세로</th>
+        {!isFlashing ? (
+          <>
+            <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-50/80">가로규격</th>
+            <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-50/80">수량(EA)</th>
+            <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-50/80">세로규격</th>
+            <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-50/80">수량(EA)</th>
+            <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-100/60">상하규격</th>
+            <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-100/60">수량</th>
+            <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-100/60">좌우규격</th>
+            <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-100/60">수량</th>
+          </>
+        ) : (
+          <>
+            <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-teal-50/80">규격</th>
+            <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-teal-50/80">총매수</th>
+          </>
+        )}
+        {showActual && <th className="w-10" />}
+      </tr>
+    </thead>
+  );
+
+  const totalCols = isFlashing ? 11 : 17;
+
+  // ════════════════ 편집 모드 ════════════════
   if (isEdit) {
-    const totalSets = rows.reduce((sum, r) => sum + (parseFloat(r.qty) || 0), 0);
-    const totalActualSets = rows.reduce((sum, r) => sum + (parseFloat(r.actual_qty ?? r.qty) || 0), 0);
-    const totalSheets = rows.reduce((sum, r) => {
-      const w = parseFloat(r.penetration_w) || 0;
-      const h = parseFloat(r.penetration_h) || 0;
-      const q = parseFloat(r.qty) || 0;
-      const count = isFlashing
-        ? getFlashingSheets(w, h).reduce((s, sh) => s + sh.count, 0)
-        : getSocketSheets(w, h).reduce((s, sh) => s + sh.count, 0);
-      return sum + count * q;
-    }, 0);
+    const inp = (extra = '') =>
+      `text-[11px] px-1.5 py-1 rounded border border-gray-200 focus:outline-none focus:ring-1 ${theme.ring} bg-white font-mono ${extra}`;
 
     return (
-      <div className={cn("border rounded-xl overflow-hidden shadow-sm bg-white p-4 space-y-3", isFlashing ? "border-teal-300 bg-teal-50/5" : "border-purple-300 bg-purple-50/5")}>
-        <div className="flex items-center justify-between border-b pb-2">
+      <div className={cn('border rounded-xl overflow-hidden shadow-sm bg-white', theme.border)}>
+        <div className={cn('flex items-center justify-between px-4 py-2.5 border-b', theme.hd)}>
           <div className="flex items-center gap-2">
-            <span className={cn("inline-block w-2 h-2 rounded-full animate-pulse", isFlashing ? "bg-teal-500" : "bg-purple-500")} />
-            <h3 className={cn("text-xs font-bold uppercase tracking-wider", isFlashing ? "text-teal-900" : "text-purple-900")}>
-              재단 규격 스프레드시트 에디터 ({isFlashing ? '플래싱용' : '소켓용'})
+            <span className={cn('w-2 h-2 rounded-full animate-pulse', theme.dot)} />
+            <h3 className="text-xs font-bold">
+              재단작업지시서 — {isFlashing ? '플래싱용 (VT / SA-CUT-FL)' : '소켓용 (VM / SA-CUT-SK)'}
             </h3>
           </div>
-          <button
-            type="button"
-            onClick={addRow}
-            className={cn("px-2.5 py-1 text-xs font-semibold rounded-md border flex items-center gap-1 transition shadow-sm",
-              isFlashing
-                ? "bg-teal-50 border-teal-200 text-teal-700 hover:bg-teal-100 hover:border-teal-300"
-                : "bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100 hover:border-purple-300"
-            )}
-          >
-            <Plus size={13} /> 규격 행 추가
+          <button type="button" onClick={addRow}
+            className={cn('px-2.5 py-1 text-xs font-semibold rounded-md border flex items-center gap-1 transition shadow-sm', theme.btnCls)}>
+            <Plus size={13} /> + 규격 행 추가
           </button>
         </div>
 
-        <div className="overflow-x-auto rounded-lg border border-gray-100 shadow-inner max-h-[350px] overflow-y-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className={cn("sticky top-0 z-10 text-[10px] font-bold uppercase tracking-wider", isFlashing ? "bg-teal-50 text-teal-800" : "bg-purple-50 text-purple-800")}>
-              <tr className="divide-x divide-gray-200 border-b">
-                <th className="px-2 py-2 text-center w-8">No</th>
-                <th className="px-3 py-2 w-28">구조코드</th>
-                <th className="px-3 py-2 w-32">구조명</th>
-                <th className="px-2.5 py-2 w-20 text-right">가로(W)</th>
-                <th className="px-2.5 py-2 w-20 text-right">세로(H)</th>
-                <th className="px-2.5 py-2 w-16 text-right">계획세트</th>
-                <th className="px-2.5 py-2 w-16 text-right">실적세트</th>
-                <th className="px-3 py-2 text-left">재단 부품 치수 계산 & 매수</th>
-                <th className="px-2 py-2 text-center w-10">삭제</th>
-              </tr>
-            </thead>
+        {rows.length > 0 && (
+          <div className="px-4 py-2 bg-gray-50 border-b flex flex-wrap gap-5 text-[11px] text-gray-500">
+            <span>총 <strong className={isFlashing ? 'text-teal-700' : 'text-purple-700'}>{rows.length}종</strong></span>
+            <span>계획: <strong className="text-indigo-700">{totalPlanSets}세트</strong></span>
+            <span>실적: <strong className="text-emerald-700">{totalActualSets}세트</strong></span>
+            {!isFlashing && <span>재단 총 매수: <strong className="text-gray-800">{totalSheets.toLocaleString()}매</strong></span>}
+          </div>
+        )}
+
+        <div className="overflow-x-auto" style={{ maxHeight: '460px', overflowY: 'auto' }}>
+          <table className="w-full text-left border-collapse" style={{ minWidth: isFlashing ? '760px' : '1060px' }}>
+            <TableHeader showActual={true} />
             <tbody className="divide-y divide-gray-100 bg-white">
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-gray-400 italic">
-                    등록된 규격 정보가 없습니다. [규격 행 추가] 버튼을 클릭해 행을 추가해 주세요.
+                  <td colSpan={totalCols} className="px-4 py-10 text-center text-gray-400 italic text-xs">
+                    등록된 규격이 없습니다. [+ 규격 행 추가] 버튼을 눌러 추가하세요.
                   </td>
                 </tr>
-              ) : (
-                rows.map((r, idx) => {
-                  const w = parseFloat(r.penetration_w) || 0;
-                  const h = parseFloat(r.penetration_h) || 0;
-                  const q = parseFloat(r.qty) || 0;
-                  const aq = parseFloat(r.actual_qty ?? r.qty) || 0;
-
-                  // Dynamic formula calculations
-                  let formulaLabel = '';
-                  let itemTotalSheets = 0;
-                  if (isFlashing) {
-                    const sheets = getFlashingSheets(w, h);
-                    const singleSets = sheets[0]?.count || 0;
-                    itemTotalSheets = singleSets * q;
-                    formulaLabel = `플래싱(I형) L=1000 · ${singleSets}매/세트 (총 ${itemTotalSheets}매)`;
-                  } else {
-                    const sheets = getSocketSheets(w, h);
-                    itemTotalSheets = 12 * q;
-                    formulaLabel = `내부:상하 ${w-5}/좌우 ${h-30} · 외부:상하 ${w+60}/좌우 ${h} (총 12매/세트)`;
-                  }
-
-                  return (
-                    <tr key={idx} className="divide-x divide-gray-100 hover:bg-gray-50/50 transition-colors">
-                      <td className="px-2 py-1 text-center font-mono text-gray-400">{idx + 1}</td>
-                      <td className="px-2.5 py-1">
-                        <input
-                          type="text"
-                          value={r.structure_code || ''}
-                          onChange={(e) => handleCellChange(idx, 'structure_code', e.target.value)}
-                          className="w-full text-xs px-2 py-1 rounded border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-transparent transition font-mono"
-                          placeholder="C-001"
-                        />
-                      </td>
-                      <td className="px-2.5 py-1">
-                        <input
-                          type="text"
-                          value={r.structure_name || ''}
-                          onChange={(e) => handleCellChange(idx, 'structure_name', e.target.value)}
-                          className="w-full text-xs px-2 py-1 rounded border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-transparent transition"
-                          placeholder="구조명"
-                        />
-                      </td>
-                      <td className="px-2 py-1">
-                        <input
-                          type="number"
-                          value={r.penetration_w || ''}
-                          onChange={(e) => handleCellChange(idx, 'penetration_w', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
-                          className="w-full text-xs px-2 py-1 rounded border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-transparent text-right transition font-mono font-medium"
-                          placeholder="W"
-                        />
-                      </td>
-                      <td className="px-2 py-1">
-                        <input
-                          type="number"
-                          value={r.penetration_h || ''}
-                          onChange={(e) => handleCellChange(idx, 'penetration_h', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
-                          className="w-full text-xs px-2 py-1 rounded border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-transparent text-right transition font-mono font-medium"
-                          placeholder="H"
-                        />
-                      </td>
-                      <td className="px-2 py-1">
-                        <input
-                          type="number"
-                          value={r.qty || ''}
-                          onChange={(e) => handleCellChange(idx, 'qty', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
-                          className="w-full text-xs px-2 py-1 rounded border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-transparent text-right transition font-mono font-semibold text-indigo-700"
-                          placeholder="계획"
-                        />
-                      </td>
-                      <td className="px-2 py-1">
-                        <input
-                          type="number"
-                          value={r.actual_qty ?? ''}
-                          onChange={(e) => handleCellChange(idx, 'actual_qty', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
-                          className="w-full text-xs px-2 py-1 rounded border border-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-transparent text-right transition font-mono font-semibold text-emerald-700"
-                          placeholder="실적"
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-gray-500 font-mono text-[10px] truncate max-w-[200px]" title={formulaLabel}>
-                        <span className={cn("px-1.5 py-0.5 rounded text-[9px] mr-1.5", isFlashing ? "bg-teal-100 text-teal-800" : "bg-purple-100 text-purple-800")}>
-                          F(x)
-                        </span>
-                        {formulaLabel}
-                      </td>
-                      <td className="px-2 py-1 text-center">
-                        <button
-                          type="button"
-                          onClick={() => removeRow(idx)}
-                          className="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
+              ) : rows.map((r, idx) => {
+                const w = Number(r.penetration_w) || 0;
+                const h = Number(r.penetration_h) || 0;
+                return (
+                  <tr key={idx} className={cn('divide-x divide-gray-100 transition-colors', theme.rowHover)}>
+                    <td className="px-2 py-1.5 text-center font-mono text-gray-400 text-[10px]">{String(idx + 1).padStart(2, '0')}</td>
+                    <td className="px-2 py-1.5">
+                      <input type="text" value={r.structure_code || ''} onChange={e => handleCellChange(idx, 'structure_code', e.target.value)}
+                        className={inp('w-full')} placeholder={isFlashing ? 'FL-001' : 'VA-064'} />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input type="text" value={r.structure_name || ''} onChange={e => handleCellChange(idx, 'structure_name', e.target.value)}
+                        className={inp('w-full')} placeholder="구조명" />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input type="number" value={r.penetration_w || ''} onChange={e => handleCellChange(idx, 'penetration_w', Number(e.target.value) || 0)}
+                        className={inp('w-16 text-right')} placeholder="850" />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input type="number" value={r.penetration_h || ''} onChange={e => handleCellChange(idx, 'penetration_h', Number(e.target.value) || 0)}
+                        className={inp('w-16 text-right')} placeholder="550" />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input type="number" value={r.qty || ''} onChange={e => handleCellChange(idx, 'qty', Number(e.target.value) || 0)}
+                        className={inp('w-12 text-right text-indigo-700 font-semibold')} placeholder="1" />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input type="number" value={r.actual_qty ?? ''} onChange={e => handleCellChange(idx, 'actual_qty', Number(e.target.value) || 0)}
+                        className={inp('w-12 text-right text-emerald-700 font-semibold')} placeholder="0" />
+                    </td>
+                    {!isFlashing ? <AutoSocketCells w={w} h={h} /> : <AutoFlashCells w={w} h={h} />}
+                    <td className="px-2 py-1.5 text-center">
+                      <button type="button" onClick={() => removeRow(idx)}
+                        className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition">
+                        <Trash2 size={12} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
             {rows.length > 0 && (
-              <tfoot className="bg-gray-50 font-bold border-t divide-x divide-gray-200">
-                <tr className="divide-x divide-gray-200 text-gray-700">
-                  <td colSpan={3} className="px-3 py-2 text-center text-[10px] font-bold">합계</td>
-                  <td colSpan={2}></td>
-                  <td className="px-2.5 py-2 text-right font-mono text-indigo-700 text-[11px]">{totalSets.toLocaleString()}</td>
-                  <td className="px-2.5 py-2 text-right font-mono text-emerald-700 text-[11px]">{totalActualSets.toLocaleString()}</td>
-                  <td colSpan={2} className="px-3 py-2 font-mono text-[10px] text-gray-600">
-                    산출 재단 총 매수: <span className="font-bold text-gray-900">{totalSheets.toLocaleString()}매</span>
+              <tfoot className="bg-gray-50 border-t-2 border-gray-300 text-[11px] font-bold sticky bottom-0 z-10">
+                <tr className="divide-x divide-gray-200">
+                  <td colSpan={5} className="px-3 py-2 text-center text-[10px] text-gray-600">합 계</td>
+                  <td className="px-2 py-2 text-right font-mono text-indigo-700">{totalPlanSets}</td>
+                  <td className="px-2 py-2 text-right font-mono text-emerald-700">{totalActualSets}</td>
+                  {!isFlashing ? (
+                    <td colSpan={9} className="px-3 py-2 text-[10px] text-gray-500 font-mono">
+                      재단 총 매수: <strong className="text-gray-800">{totalSheets.toLocaleString()}매</strong>
+                      <span className="text-gray-400 ml-2">(소켓 1세트 = 12매)</span>
+                    </td>
+                  ) : (
+                    <td colSpan={3} className="px-3 py-2 text-[10px] text-teal-600">플래싱 합산</td>
+                  )}
+                  <td />
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
+
+        <div className="px-4 py-2 bg-gray-50 border-t flex justify-between text-[10px] text-gray-400 font-medium">
+          <span>💡 음영 열은 가로(W)·세로(H) 입력 시 자동으로 계산됩니다.</span>
+          <span>⚡ 계획/실적 세트 합계가 메인 작업지시 수량에 실시간 연동됩니다.</span>
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════ 읽기 전용 모드 ════════════════
+  if (!internalSpecs) return null;
+
+  const structures: any[] = internalSpecs.structures
+    || (internalSpecs.socket?.specs?.length > 0 ? internalSpecs.socket.specs : null)
+    || internalSpecs.flashing?.specs
+    || [];
+
+  const displayIsFlashing = !internalSpecs.socket?.specs?.length && (internalSpecs.flashing?.specs?.length > 0);
+
+  if (structures.length === 0) return null;
+
+  const roTheme = displayIsFlashing
+    ? { border: 'border-teal-300', hd: 'bg-teal-50 text-teal-900', dot: 'bg-teal-400', rowHover: 'hover:bg-teal-50/20' }
+    : { border: 'border-purple-300', hd: 'bg-purple-50 text-purple-900', dot: 'bg-purple-400', rowHover: 'hover:bg-purple-50/20' };
+
+  return (
+    <div className={cn('border rounded-xl overflow-hidden shadow-sm bg-white', roTheme.border)}>
+      <div className={cn('px-4 py-2.5 border-b flex items-center gap-2', roTheme.hd)}>
+        <span className={cn('w-2 h-2 rounded-full', roTheme.dot)} />
+        <span className="text-xs font-bold">재단작업지시서 — {displayIsFlashing ? '플래싱용' : '소켓용(VM)'}</span>
+        <span className="text-[10px] text-gray-400 font-normal ml-2">
+          총 {structures.length}종 · {internalSpecs.total_sets ?? 0}세트 · 재단 {(internalSpecs.total_sheets ?? 0).toLocaleString()}매
+        </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse"
+          style={{ minWidth: displayIsFlashing ? '700px' : '920px' }}>
+          <thead className={cn('text-[10px] font-bold', displayIsFlashing ? 'bg-teal-50 text-teal-900' : 'bg-purple-50 text-purple-900')}>
+            <tr className="border-b-2 border-gray-300">
+              <th rowSpan={2} className="px-2 py-1.5 border-r border-gray-200 text-center w-8">No</th>
+              <th rowSpan={2} className="px-2 py-1.5 border-r border-gray-200 w-24">구조코드</th>
+              <th rowSpan={2} className="px-2 py-1.5 border-r border-gray-200 w-28">구조명</th>
+              <th colSpan={2} className="px-2 py-1 text-center border-r border-gray-200">규격 (mm)</th>
+              <th rowSpan={2} className="px-2 py-1.5 text-center border-r border-gray-200 w-14">계획<br/>세트</th>
+              {!displayIsFlashing ? (
+                <>
+                  <th colSpan={4} className="px-2 py-1 text-center border-r border-gray-200 bg-purple-100/60">소켓 내부용</th>
+                  <th colSpan={4} className="px-2 py-1 text-center border-r border-gray-200 bg-purple-200/50">소켓 외부용</th>
+                </>
+              ) : (
+                <th colSpan={2} className="px-2 py-1 text-center border-r border-gray-200 bg-teal-100/60">플래싱</th>
+              )}
+            </tr>
+            <tr className="border-b border-gray-200 text-[9px]">
+              <th className="px-2 py-1 border-r border-gray-200 text-center">가로</th>
+              <th className="px-2 py-1 border-r border-gray-200 text-center">세로</th>
+              {!displayIsFlashing ? (
+                <>
+                  <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-50/80">가로규격</th>
+                  <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-50/80">수량(EA)</th>
+                  <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-50/80">세로규격</th>
+                  <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-50/80">수량(EA)</th>
+                  <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-100/60">상하규격</th>
+                  <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-100/60">수량</th>
+                  <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-100/60">좌우규격</th>
+                  <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-purple-100/60">수량</th>
+                </>
+              ) : (
+                <>
+                  <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-teal-50/80">규격</th>
+                  <th className="px-1.5 py-1 border-r border-gray-200 text-center bg-teal-50/80">총매수</th>
+                </>
+              )}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 bg-white">
+            {structures.map((s: any, idx: number) => {
+              const w = Number(s.penetration_w) || 0;
+              const h = Number(s.penetration_h) || 0;
+              return (
+                <tr key={idx} className={cn('divide-x divide-gray-100 transition-colors', roTheme.rowHover)}>
+                  <td className="px-2 py-1.5 text-center font-mono text-gray-400 text-[10px]">{String(idx + 1).padStart(2, '0')}</td>
+                  <td className="px-2 py-1.5 font-mono font-bold text-[11px]">{s.structure_code || '—'}</td>
+                  <td className="px-2 py-1.5 text-gray-700 text-[11px]">{s.structure_name || '—'}</td>
+                  <td className="px-2 py-1.5 text-right font-mono font-bold text-gray-800 text-[11px]">{w || '—'}</td>
+                  <td className="px-2 py-1.5 text-right font-mono font-bold text-gray-800 text-[11px]">{h || '—'}</td>
+                  <td className="px-2 py-1.5 text-center font-mono font-semibold text-indigo-700 text-[11px]">{s.qty}</td>
+                  {!displayIsFlashing
+                    ? <AutoSocketCells w={w} h={h} />
+                    : <AutoFlashCells w={w} h={h} />
+                  }
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot className="bg-gray-50 border-t-2 border-gray-300 text-[11px] font-bold">
+            <tr className="divide-x divide-gray-200">
+              <td colSpan={5} className="px-3 py-2 text-center text-[10px] text-gray-600">합 계</td>
+              <td className="px-2 py-2 text-center font-mono text-indigo-700">{internalSpecs.total_sets ?? 0}</td>
+              {!displayIsFlashing ? (
+                <td colSpan={8} className="px-3 py-2 text-[10px] text-gray-500 font-mono">
+                  재단 총 매수: <strong className="text-gray-800">{(internalSpecs.total_sheets ?? 0).toLocaleString()}매</strong>
+                </td>
+              ) : (
+                <td colSpan={2} className="px-3 py-2 text-[10px] text-teal-600">플래싱 합산</td>
+              )}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════
+   스프레드시트 일괄 편집기 (엑셀 스타일)
+   ═══════════════════════════════════════════════════════ */
+function SpreadsheetWorkOrderEditor({
+  filter,
+  onRefresh,
+  onEditTarget,
+}: {
+  filter: string;
+  onRefresh: () => void;
+  onEditTarget: (wo: WorkOrder) => void;
+}) {
+  // ── 데이터 & 상태 ──
+  const [rows, setRows] = useState<WorkOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<number | null>(null); // wo_id being saved
+  const [editingCell, setEditingCell] = useState<{ rowId: number | 'new'; field: string } | null>(null);
+  const [cellValues, setCellValues] = useState<Record<string, Record<string, string>>>({});
+  const [newRows, setNewRows] = useState<Array<{ _tmpId: string; wo_date: string; process_code: string; planned_qty: string; remarks: string }>>([]);
+  const [items, setItems] = useState<Array<{ item_id: number; item_code: string; item_name: string }>>([]);
+  const [companies, setCompanies] = useState<Array<{ company_id: number; company_name: string }>>([]);
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  const fetchRows = useCallback(() => {
+    setLoading(true);
+    const params = filter ? `?process_code=${filter}` : '';
+    api.get<{ data: WorkOrder[] }>(`/work-orders${params}`)
+      .then((res) => {
+        const sorted = [...res.data].sort((a, b) => {
+          const dateDiff = (b.wo_date || '').localeCompare(a.wo_date || '');
+          if (dateDiff !== 0) return dateDiff;
+          const pMap: Record<string, number> = { MIX: 0, EXT: 1, CUT: 2, ASM: 3 };
+          return (pMap[a.process_code] ?? 9) - (pMap[b.process_code] ?? 9);
+        });
+        setRows(sorted);
+      })
+      .finally(() => setLoading(false));
+  }, [filter]);
+
+  useEffect(() => {
+    fetchRows();
+    api.get<{ data: any[] }>('/items').then((r) => setItems(r.data));
+    api.get<{ data: any[] }>('/companies?active=true').then((r) => setCompanies(r.data));
+  }, [fetchRows]);
+
+  // ── 셀 값 가져오기 (로컬 편집값 우선) ──
+  const getCellVal = (woId: number, field: string, defaultVal: any) => {
+    return cellValues[woId]?.[field] ?? String(defaultVal ?? '');
+  };
+
+  // ── 셀 변경 ──
+  const handleCellChange = (woId: number, field: string, value: string) => {
+    setCellValues(prev => ({
+      ...prev,
+      [woId]: { ...(prev[woId] || {}), [field]: value }
+    }));
+  };
+
+  // ── 행 저장 (blur 또는 Enter 시) ──
+  const saveRow = async (wo: WorkOrder) => {
+    const changes = cellValues[wo.wo_id];
+    if (!changes || Object.keys(changes).length === 0) return;
+    setSaving(wo.wo_id);
+    try {
+      const payload: Record<string, any> = {};
+      if (changes.planned_qty !== undefined) payload.planned_qty = Number(changes.planned_qty) || 0;
+      if (changes.actual_qty !== undefined) payload.actual_qty = Number(changes.actual_qty) || 0;
+      if (changes.remarks !== undefined) payload.remarks = changes.remarks;
+      if (changes.lot_number !== undefined) payload.lot_number = changes.lot_number;
+      if (changes.customer_name !== undefined) payload.customer_name = changes.customer_name;
+      if (changes.wo_date !== undefined) payload.wo_date = changes.wo_date;
+      if (changes.status !== undefined) payload.status = changes.status;
+
+      await api.patch(`/work-orders/${wo.wo_id}`, payload);
+      // 저장 후 로컬 상태 정리
+      setCellValues(prev => {
+        const next = { ...prev };
+        delete next[wo.wo_id];
+        return next;
+      });
+      fetchRows();
+    } catch {
+      // keep local changes so user can retry
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // ── 새 행 추가 ──
+  const addNewRow = () => {
+    const tmpId = `new-${Date.now()}`;
+    setNewRows(prev => [...prev, {
+      _tmpId: tmpId,
+      wo_date: today,
+      process_code: filter || 'MIX',
+      planned_qty: '',
+      remarks: '',
+    }]);
+    // 새 행의 첫 셀로 포커스
+    setTimeout(() => {
+      document.getElementById(`cell-${tmpId}-wo_date`)?.focus();
+    }, 50);
+  };
+
+  // ── 새 행 저장 ──
+  const saveNewRow = async (row: typeof newRows[0]) => {
+    if (!row.planned_qty) return; // 수량 없으면 저장 안함
+    try {
+      await api.post('/work-orders', {
+        wo_date: row.wo_date,
+        process_code: row.process_code,
+        planned_qty: Number(row.planned_qty) || 0,
+        remarks: row.remarks || '',
+        status: 'PLANNED',
+      });
+      setNewRows(prev => prev.filter(r => r._tmpId !== row._tmpId));
+      fetchRows();
+    } catch {
+      // ignore
+    }
+  };
+
+  // ── 행 삭제 ──
+  const deleteRow = async (wo: WorkOrder) => {
+    if (wo.status === 'COMPLETED') { alert('완료된 작업지시는 삭제할 수 없습니다.'); return; }
+    if (!confirm(`[${wo.wo_number}] 삭제하시겠습니까?`)) return;
+    try {
+      await api.delete(`/work-orders/${wo.wo_id}`);
+      fetchRows();
+    } catch {
+      alert('삭제 실패');
+    }
+  };
+
+  const procColors: Record<string, { bg: string; text: string; badge: string }> = {
+    MIX: { bg: 'bg-amber-50', text: 'text-amber-900', badge: 'bg-amber-100 text-amber-800 border-amber-300' },
+    EXT: { bg: 'bg-green-50', text: 'text-green-900', badge: 'bg-green-100 text-green-800 border-green-300' },
+    CUT: { bg: 'bg-purple-50', text: 'text-purple-900', badge: 'bg-purple-100 text-purple-800 border-purple-300' },
+    ASM: { bg: 'bg-rose-50', text: 'text-rose-900', badge: 'bg-rose-100 text-rose-800 border-rose-300' },
+  };
+
+  const statusColors: Record<string, string> = {
+    PLANNED: 'bg-gray-100 text-gray-700 border-gray-300',
+    IN_PROGRESS: 'bg-blue-100 text-blue-800 border-blue-300',
+    COMPLETED: 'bg-green-100 text-green-800 border-green-300',
+    HOLD: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+  };
+  const statusLabel: Record<string, string> = { PLANNED: '계획', IN_PROGRESS: '진행중', COMPLETED: '완료', HOLD: '보류' };
+
+  // ── 인라인 셀 컴포넌트 ──
+  const InlineCell = ({
+    wo, field, type = 'text', width = 'w-full', align = '',
+    options, readOnly = false
+  }: {
+    wo: WorkOrder; field: string; type?: 'text' | 'number' | 'date' | 'select';
+    width?: string; align?: string; options?: { value: string; label: string }[];
+    readOnly?: boolean;
+  }) => {
+    const rawVal = (wo as any)[field];
+    const localVal = cellValues[wo.wo_id]?.[field];
+    const displayVal = localVal ?? String(rawVal ?? '');
+    const isEditing = editingCell?.rowId === wo.wo_id && editingCell?.field === field;
+    const isDirty = cellValues[wo.wo_id]?.[field] !== undefined;
+
+    if (readOnly) {
+      return (
+        <span className={cn('px-2 py-1 text-[11px] font-mono', align)}>
+          {rawVal != null ? rawVal.toLocaleString() : '—'}
+        </span>
+      );
+    }
+
+    if (type === 'select' && options) {
+      return (
+        <select
+          id={`cell-${wo.wo_id}-${field}`}
+          value={displayVal}
+          onChange={e => handleCellChange(wo.wo_id, field, e.target.value)}
+          onBlur={() => { saveRow(wo); setEditingCell(null); }}
+          onFocus={() => setEditingCell({ rowId: wo.wo_id, field })}
+          className={cn(
+            'px-1.5 py-1 text-[11px] border-0 focus:ring-1 focus:ring-blue-400 rounded bg-transparent cursor-pointer',
+            width, isDirty && 'font-semibold text-blue-700'
+          )}
+        >
+          {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      );
+    }
+
+    return (
+      <input
+        id={`cell-${wo.wo_id}-${field}`}
+        type={type}
+        value={displayVal}
+        onFocus={() => setEditingCell({ rowId: wo.wo_id, field })}
+        onChange={e => handleCellChange(wo.wo_id, field, e.target.value)}
+        onBlur={() => { saveRow(wo); setEditingCell(null); }}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { saveRow(wo); (e.target as HTMLInputElement).blur(); }
+          if (e.key === 'Escape') {
+            setCellValues(prev => {
+              const next = { ...prev };
+              if (next[wo.wo_id]) { const r = { ...next[wo.wo_id] }; delete r[field]; next[wo.wo_id] = r; }
+              return next;
+            });
+            (e.target as HTMLInputElement).blur();
+          }
+        }}
+        className={cn(
+          'px-2 py-1 text-[11px] border border-transparent focus:border-blue-400 focus:ring-1 focus:ring-blue-400 rounded bg-transparent transition-colors',
+          width, align,
+          isDirty && 'bg-blue-50/60 font-semibold text-blue-800 border-blue-300',
+          isEditing && 'bg-white shadow-sm'
+        )}
+        placeholder={type === 'number' ? '0' : '—'}
+      />
+    );
+  };
+
+  // ── 상태별 그룹화 통계 ──
+  const stats = useMemo(() => {
+    const s = { total: rows.length, planned: 0, inProgress: 0, completed: 0, hold: 0 };
+    rows.forEach(r => {
+      if (r.status === 'PLANNED') s.planned++;
+      else if (r.status === 'IN_PROGRESS') s.inProgress++;
+      else if (r.status === 'COMPLETED') s.completed++;
+      else if (r.status === 'HOLD') s.hold++;
+    });
+    return s;
+  }, [rows]);
+
+  const dirtyCount = Object.keys(cellValues).length;
+
+  return (
+    <div className="space-y-3">
+      {/* 상단 툴바 */}
+      <div className="flex items-center justify-between bg-emerald-900 text-white px-4 py-2.5 rounded-xl shadow-md">
+        <div className="flex items-center gap-3">
+          <Table2 size={16} className="text-emerald-300" />
+          <span className="text-sm font-bold tracking-wide">작업지시 일괄 편집 (스프레드시트)</span>
+          <span className="text-[11px] text-emerald-300 font-mono">
+            총 {stats.total}건 · 계획 {stats.planned} · 진행 {stats.inProgress} · 완료 {stats.completed}
+          </span>
+        </div>
+        <div className="flex items-center gap-3">
+          {dirtyCount > 0 && (
+            <span className="text-[11px] bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full font-bold animate-pulse">
+              {dirtyCount}행 미저장 (셀 이탈 시 자동저장)
+            </span>
+          )}
+          <button
+            onClick={addNewRow}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 rounded-lg text-xs font-semibold transition-colors"
+          >
+            <Plus size={13} /> + 새 행 추가
+          </button>
+          <button
+            onClick={() => { fetchRows(); onRefresh(); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 rounded-lg text-xs font-semibold transition-colors border border-emerald-500"
+          >
+            🔄 새로고침
+          </button>
+        </div>
+      </div>
+
+      {/* 안내 */}
+      <div className="flex items-center gap-4 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-[11px] text-blue-700">
+        <span>💡 <strong>셀 클릭</strong>하여 직접 편집</span>
+        <span>⌨️ <strong>Enter</strong>: 저장 / <strong>Esc</strong>: 취소</span>
+        <span>💾 셀에서 벗어나면 <strong>자동 저장</strong></span>
+        <span>📋 지시번호 클릭 → <strong>상세 수정 모달</strong> 열기</span>
+      </div>
+
+      {/* 스프레드시트 테이블 */}
+      <div className="rounded-xl border border-gray-200 overflow-hidden shadow-sm bg-white">
+        <div className="overflow-x-auto" style={{ maxHeight: 'calc(100vh - 280px)', overflowY: 'auto' }}>
+          <table className="w-full border-collapse text-[11px]" style={{ minWidth: '1100px' }}>
+            {/* 헤더 */}
+            <thead className="sticky top-0 z-20 bg-gray-800 text-white text-[10px] font-bold uppercase tracking-wider">
+              <tr>
+                <th className="px-2 py-2.5 text-center w-8 border-r border-gray-700">#</th>
+                <th className="px-3 py-2.5 text-left border-r border-gray-700 w-28">지시번호</th>
+                <th className="px-3 py-2.5 text-left border-r border-gray-700 w-24">지시일</th>
+                <th className="px-3 py-2.5 text-center border-r border-gray-700 w-20">공정</th>
+                <th className="px-3 py-2.5 text-center border-r border-gray-700 w-20">상태</th>
+                <th className="px-3 py-2.5 text-left border-r border-gray-700 w-40">품목명</th>
+                <th className="px-3 py-2.5 text-left border-r border-gray-700 w-32">납품처</th>
+                <th className="px-3 py-2.5 text-right border-r border-gray-700 w-24">계획 수량</th>
+                <th className="px-3 py-2.5 text-right border-r border-gray-700 w-24">실적 수량</th>
+                <th className="px-3 py-2.5 text-left border-r border-gray-700 w-32">LOT번호</th>
+                <th className="px-3 py-2.5 text-left border-r border-gray-700">비고</th>
+                <th className="px-2 py-2.5 text-center w-16">작업</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {/* 새 행 (임시) */}
+              {newRows.map((nr, idx) => (
+                <tr key={nr._tmpId} className="bg-emerald-50 border-b border-emerald-200 hover:bg-emerald-100/60 transition-colors">
+                  <td className="px-2 py-1.5 text-center text-gray-400 border-r border-gray-100 text-[10px]">
+                    <span className="text-emerald-600 font-bold">NEW</span>
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-[11px] text-gray-400 italic">자동생성</td>
+                  <td className="px-2 py-1.5 border-r border-gray-100">
+                    <input
+                      id={`cell-${nr._tmpId}-wo_date`}
+                      type="date"
+                      value={nr.wo_date}
+                      onChange={e => setNewRows(prev => prev.map(r => r._tmpId === nr._tmpId ? { ...r, wo_date: e.target.value } : r))}
+                      className="text-[11px] px-1.5 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-emerald-400 bg-white w-full"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 border-r border-gray-100">
+                    <select
+                      value={nr.process_code}
+                      onChange={e => setNewRows(prev => prev.map(r => r._tmpId === nr._tmpId ? { ...r, process_code: e.target.value } : r))}
+                      className="text-[11px] px-1.5 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-emerald-400 bg-white w-full"
+                    >
+                      {['MIX', 'EXT', 'CUT', 'ASM'].map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </td>
+                  <td className="px-2 py-1.5 border-r border-gray-100 text-center">
+                    <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-300">계획</span>
+                  </td>
+                  <td className="px-2 py-1.5 border-r border-gray-100 text-gray-400 italic text-[11px]">—</td>
+                  <td className="px-2 py-1.5 border-r border-gray-100 text-gray-400 italic text-[11px]">—</td>
+                  <td className="px-2 py-1.5 border-r border-gray-100">
+                    <input
+                      type="number"
+                      value={nr.planned_qty}
+                      onChange={e => setNewRows(prev => prev.map(r => r._tmpId === nr._tmpId ? { ...r, planned_qty: e.target.value } : r))}
+                      className="text-[11px] px-1.5 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-emerald-400 bg-white w-full text-right font-mono"
+                      placeholder="수량 입력"
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 border-r border-gray-100 text-gray-400 text-[11px]">—</td>
+                  <td className="px-2 py-1.5 border-r border-gray-100 text-gray-400 text-[11px]">—</td>
+                  <td className="px-2 py-1.5 border-r border-gray-100">
+                    <input
+                      type="text"
+                      value={nr.remarks}
+                      onChange={e => setNewRows(prev => prev.map(r => r._tmpId === nr._tmpId ? { ...r, remarks: e.target.value } : r))}
+                      className="text-[11px] px-1.5 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-emerald-400 bg-white w-full"
+                      placeholder="비고"
+                      onKeyDown={e => { if (e.key === 'Enter') saveNewRow(nr); }}
+                    />
+                  </td>
+                  <td className="px-2 py-1.5 text-center">
+                    <div className="flex items-center gap-1 justify-center">
+                      <button
+                        onClick={() => saveNewRow(nr)}
+                        className="px-2 py-1 bg-emerald-500 text-white text-[10px] font-bold rounded hover:bg-emerald-600 transition"
+                        title="저장"
+                      >저장</button>
+                      <button
+                        onClick={() => setNewRows(prev => prev.filter(r => r._tmpId !== nr._tmpId))}
+                        className="px-1.5 py-1 bg-gray-200 text-gray-600 text-[10px] rounded hover:bg-gray-300 transition"
+                        title="취소"
+                      >✕</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+
+              {/* 기존 데이터 행 */}
+              {loading ? (
+                <tr>
+                  <td colSpan={12} className="px-4 py-12 text-center text-gray-400">
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                      데이터 로딩 중...
+                    </div>
+                  </td>
+                </tr>
+              ) : rows.length === 0 && newRows.length === 0 ? (
+                <tr>
+                  <td colSpan={12} className="px-4 py-12 text-center text-gray-400">
+                    작업지시가 없습니다. [+ 새 행 추가] 버튼으로 추가하세요.
+                  </td>
+                </tr>
+              ) : rows.map((wo, idx) => {
+                const pc = procColors[wo.process_code] || { bg: 'bg-gray-50', text: 'text-gray-800', badge: 'bg-gray-100 text-gray-700 border-gray-300' };
+                const isSavingThis = saving === wo.wo_id;
+                const isDirtyRow = !!cellValues[wo.wo_id] && Object.keys(cellValues[wo.wo_id]).length > 0;
+                const isCompleted = wo.status === 'COMPLETED';
+
+                return (
+                  <tr
+                    key={wo.wo_id}
+                    className={cn(
+                      'border-b border-gray-100 transition-colors group',
+                      pc.bg,
+                      isDirtyRow && 'ring-1 ring-inset ring-blue-300',
+                      isSavingThis && 'opacity-60',
+                      isCompleted && 'opacity-70'
+                    )}
+                  >
+                    {/* 번호 */}
+                    <td className="px-2 py-1.5 text-center text-gray-400 border-r border-gray-200 text-[10px] font-mono">
+                      {idx + 1}
+                    </td>
+
+                    {/* 지시번호 */}
+                    <td className="px-3 py-1.5 border-r border-gray-200">
+                      <button
+                        onClick={() => onEditTarget(wo)}
+                        className="text-blue-600 hover:text-blue-800 hover:underline font-mono text-[11px] font-medium"
+                        title="상세 수정 열기"
+                      >
+                        {wo.wo_number}
+                      </button>
+                      {isSavingThis && (
+                        <span className="ml-1 text-[9px] text-emerald-600 animate-pulse">저장중...</span>
+                      )}
+                    </td>
+
+                    {/* 지시일 */}
+                    <td className="px-1 py-1.5 border-r border-gray-200">
+                      <InlineCell wo={wo} field="wo_date" type="date" width="w-28" />
+                    </td>
+
+                    {/* 공정 */}
+                    <td className="px-2 py-1.5 border-r border-gray-200 text-center">
+                      <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded border font-mono', pc.badge)}>
+                        {wo.process_code}
+                      </span>
+                    </td>
+
+                    {/* 상태 */}
+                    <td className="px-1 py-1.5 border-r border-gray-200 text-center">
+                      <InlineCell
+                        wo={wo}
+                        field="status"
+                        type="select"
+                        options={[
+                          { value: 'PLANNED', label: '계획' },
+                          { value: 'IN_PROGRESS', label: '진행중' },
+                          { value: 'COMPLETED', label: '완료' },
+                          { value: 'HOLD', label: '보류' },
+                        ]}
+                        width="w-20"
+                      />
+                    </td>
+
+                    {/* 품목명 */}
+                    <td className="px-2 py-1.5 border-r border-gray-200 text-[11px] text-gray-700 max-w-[160px]">
+                      <span className="truncate block">{wo.item_name || '—'}</span>
+                    </td>
+
+                    {/* 납품처 */}
+                    <td className="px-1 py-1.5 border-r border-gray-200">
+                      <InlineCell wo={wo} field="customer_name" type="text" width="w-full" />
+                    </td>
+
+                    {/* 계획 수량 */}
+                    <td className="px-1 py-1.5 border-r border-gray-200">
+                      <InlineCell wo={wo} field="planned_qty" type="number" width="w-20" align="text-right" />
+                    </td>
+
+                    {/* 실적 수량 */}
+                    <td className="px-1 py-1.5 border-r border-gray-200">
+                      <InlineCell wo={wo} field="actual_qty" type="number" width="w-20" align="text-right" />
+                    </td>
+
+                    {/* LOT번호 */}
+                    <td className="px-1 py-1.5 border-r border-gray-200">
+                      <InlineCell wo={wo} field="lot_number" type="text" width="w-full" />
+                    </td>
+
+                    {/* 비고 */}
+                    <td className="px-1 py-1.5 border-r border-gray-200">
+                      <InlineCell wo={wo} field="remarks" type="text" width="w-full" />
+                    </td>
+
+                    {/* 작업 버튼 */}
+                    <td className="px-2 py-1.5 text-center">
+                      <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => onEditTarget(wo)}
+                          className="p-1 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded transition"
+                          title="상세 수정"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                        {!isCompleted && (
+                          <button
+                            onClick={() => deleteRow(wo)}
+                            className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition"
+                            title="삭제"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+
+            {/* 합계 푸터 */}
+            {rows.length > 0 && (
+              <tfoot className="sticky bottom-0 bg-gray-800 text-white text-[11px] font-bold z-10">
+                <tr>
+                  <td colSpan={7} className="px-3 py-2.5 text-right text-gray-300 text-[10px]">
+                    합 계 ({rows.length}건)
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono text-yellow-300">
+                    {rows.reduce((s, r) => s + (r.planned_qty || 0), 0).toLocaleString()}
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-mono text-emerald-300">
+                    {rows.reduce((s, r) => s + (r.actual_qty || 0), 0).toLocaleString()}
+                  </td>
+                  <td colSpan={3} className="px-3 py-2.5 text-gray-400 text-[10px]">
+                    달성률: {rows.reduce((s, r) => s + (r.planned_qty || 0), 0) > 0
+                      ? Math.round(rows.reduce((s, r) => s + (r.actual_qty || 0), 0) / rows.reduce((s, r) => s + (r.planned_qty || 0), 0) * 100)
+                      : 0}%
                   </td>
                 </tr>
               </tfoot>
             )}
           </table>
         </div>
-        <div className="flex items-center justify-between text-[10px] text-gray-400 bg-gray-50 p-2 rounded-lg border border-gray-100 font-medium">
-          <span>💡 엑셀 시트에서 값을 입력하듯 셀을 포커싱하고 수정해 보세요.</span>
-          <span>⚡ 계획/실적 세트의 총합이 상단 메인 계획/실적 수량에 자동으로 실시간 연동됩니다.</span>
-        </div>
       </div>
-    );
-  }
-
-  // ── 프리미엄 글래스모피즘 읽기 전용 모드 ──
-  if (!internalSpecs) return null;
-
-  const socket = internalSpecs.socket;
-  const flashing = internalSpecs.flashing;
-  const hasSocket = socket?.specs?.length > 0;
-  const hasFlashing = flashing?.specs?.length > 0;
-  if (!hasSocket && !hasFlashing) return null;
-
-  // 구조별 규격 테이블 렌더링 (소켓/플래싱 공통)
-  const renderSpecTable = (items: any[], colorName: string) => (
-    <div className="p-3 space-y-2 max-h-[320px] overflow-y-auto bg-slate-50/50 backdrop-blur-md">
-      {items.map((s: any, idx: number) => (
-        <div key={idx} className={cn("border rounded-lg overflow-hidden shadow-sm transition-all hover:shadow-md bg-white/80 backdrop-blur-sm", colorName === 'purple' ? "border-purple-100" : "border-teal-100")}>
-          <div className={cn("px-3 py-1.5 flex items-center justify-between border-b", colorName === 'purple' ? "bg-purple-50/70 border-purple-100" : "bg-teal-50/70 border-teal-100")}>
-            <div className="flex items-center gap-2">
-              <span className={cn("text-xs font-extrabold font-mono", colorName === 'purple' ? "text-purple-800" : "text-teal-800")}>{s.structure_code}</span>
-              {s.structure_name && <span className="text-[10px] font-semibold text-gray-600 bg-gray-100 px-1.5 py-0.5 rounded">{s.structure_name}</span>}
-              <span className="text-[10px] text-gray-500 font-medium">관통 {s.penetration_w}×{s.penetration_h}mm</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className={cn("text-[10px] px-2 py-0.5 rounded-full font-bold font-mono shadow-sm",
-                colorName === 'purple' ? "bg-purple-100 text-purple-850" : "bg-teal-100 text-teal-850"
-              )}>{s.qty}세트</span>
-              <span className={cn("text-[10px] font-bold", colorName === 'purple' ? "text-purple-650" : "text-teal-650")}>{s.total_sheets}매</span>
-            </div>
-          </div>
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="bg-gray-50/80 text-gray-500 font-semibold border-b border-gray-100">
-                <th className="px-2.5 py-1 text-left">부위</th>
-                <th className="px-2.5 py-1 text-right">재단길이</th>
-                <th className="px-2.5 py-1 text-left">규격</th>
-                <th className="px-2.5 py-1 text-right">매/세트</th>
-                <th className="px-2.5 py-1 text-right">소계</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {s.sheets.map((sh: any, si: number) => (
-                <tr key={si} className={cn("hover:bg-gray-50/50 transition-colors", colorName === 'purple' ? "hover:bg-purple-50/20" : "hover:bg-teal-50/20")}>
-                  <td className={cn("px-2.5 py-1.5 font-medium", colorName === 'purple' ? "text-purple-800" : "text-teal-800")}>{sh.part}</td>
-                  <td className="px-2.5 py-1.5 text-right font-mono font-bold text-gray-800">{sh.length}mm</td>
-                  <td className="px-2.5 py-1.5 text-gray-500 font-mono text-[10px]">{sh.spec}</td>
-                  <td className="px-2.5 py-1.5 text-right font-mono text-gray-600">{sh.count}</td>
-                  <td className="px-2.5 py-1.5 text-right font-mono font-bold text-gray-800">{sh.count * s.qty}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ))}
-    </div>
-  );
-
-  return (
-    <div className="space-y-3">
-      {/* 소켓 재단 */}
-      {hasSocket && (
-        <div className="border border-purple-300 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
-          <button
-            type="button"
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setSocketCollapsed(!socketCollapsed); }}
-            className="w-full px-3 py-2 bg-gradient-to-r from-purple-100 to-purple-50/30 text-left flex items-center justify-between hover:bg-purple-100/80 transition-colors"
-          >
-            <span className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
-              소켓 재단 (5T×190) — {socket.total_structures}구조 · {internalSpecs.total_sets}세트 · 총 {socket.total_sheets.toLocaleString()}매
-            </span>
-            <span className="text-purple-500 text-xs font-semibold">{socketCollapsed ? '▶ 펼치기' : '▼ 접기'}</span>
-          </button>
-          {!socketCollapsed && renderSpecTable(socket.specs, 'purple')}
-        </div>
-      )}
-
-      {/* 플래싱 재단 */}
-      {hasFlashing && (
-        <div className="border border-teal-300 rounded-xl overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
-          <button
-            type="button"
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFlashCollapsed(!flashCollapsed); }}
-            className="w-full px-3 py-2 bg-gradient-to-r from-teal-100 to-teal-50/30 text-left flex items-center justify-between hover:bg-teal-100/80 transition-colors"
-          >
-            <span className="text-xs font-bold text-teal-900 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
-              플래싱 재단 (5T×125) — {flashing.total_structures}구조 · {internalSpecs.total_sets}세트 · 총 {flashing.total_sheets.toLocaleString()}매
-            </span>
-            <span className="text-teal-500 text-xs font-semibold">{flashCollapsed ? '▶ 펼치기' : '▼ 접기'}</span>
-          </button>
-          {!flashCollapsed && renderSpecTable(flashing.specs, 'teal')}
-        </div>
-      )}
     </div>
   );
 }

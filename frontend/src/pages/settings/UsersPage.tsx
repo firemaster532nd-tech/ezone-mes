@@ -30,6 +30,7 @@ interface UserRow {
   phone: string | null;
   dept_id: number | null;
   is_active: boolean;
+  allowed_modes?: 'shop' | 'both'; // 'shop'=실무만, 'both'=실무+관리
 }
 
 interface DeptRow {
@@ -439,6 +440,21 @@ export function UsersPage() {
     return <div className="p-8 text-center text-gray-500">관리자만 접근 가능합니다.</div>;
   }
 
+  // 모드 권한 토글 (admin은 변경 불가)
+  const handleModeToggle = async (u: UserRow) => {
+    if (u.role === 'admin') return;
+    const newMode = (u.allowed_modes ?? 'shop') === 'shop' ? 'both' : 'shop';
+    try {
+      await api.patch(`/workers/${u.worker_id}/allowed-modes`, { allowed_modes: newMode });
+      setUsers(prev => prev.map(r =>
+        r.worker_id === u.worker_id ? { ...r, allowed_modes: newMode } : r
+      ));
+      toast.success(`${u.worker_name} 님의 모드 권한이 변경되었습니다.`);
+    } catch {
+      toast.error('모드 권한 변경 실패');
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* HEADER */}
@@ -516,6 +532,7 @@ export function UsersPage() {
                   <th className="px-4 py-3 text-left font-semibold">이름</th>
                   <th className="px-4 py-3 text-left font-semibold">직급</th>
                   <th className="px-4 py-3 text-left font-semibold">권한</th>
+                  <th className="px-4 py-3 text-center font-semibold w-28">모드접근</th>
                   <th className="px-4 py-3 text-left font-semibold">연락처 / 이메일</th>
                   <th className="px-4 py-3 text-center font-semibold w-28">상태</th>
                   <th className="px-4 py-3 text-center font-semibold w-36">작업</th>
@@ -524,13 +541,13 @@ export function UsersPage() {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <td colSpan={8} className="py-12 text-center text-slate-400">
                       직원 정보를 불러오는 중...
                     </td>
                   </tr>
                 ) : users.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <td colSpan={8} className="py-12 text-center text-slate-400">
                       소속 직원이 없습니다.
                     </td>
                   </tr>
@@ -556,6 +573,26 @@ export function UsersPage() {
                         }`}>
                           {ROLE_LABELS[u.role] ?? u.role}
                         </span>
+                      </td>
+                      {/* 모드 접근 권한 토글 */}
+                      <td className="px-4 py-3.5 text-center">
+                        {u.role === 'admin' ? (
+                          <span className="inline-flex rounded px-2 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-100">
+                            관리자
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleModeToggle(u)}
+                            title="클릭하면 모드 접근 권한이 토글됩니다"
+                            className={`inline-flex rounded px-2 py-0.5 text-[10px] font-bold border transition-all cursor-pointer ${
+                              (u.allowed_modes ?? 'shop') === 'both'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            {(u.allowed_modes ?? 'shop') === 'both' ? '실무+관리' : '실무만'}
+                          </button>
+                        )}
                       </td>
                       <td className="px-4 py-3.5 text-xs text-slate-500 space-y-0.5">
                         {u.phone && (

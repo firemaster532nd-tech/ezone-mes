@@ -266,7 +266,9 @@ export function Sidebar() {
   const [approvalCount, setApprovalCount] = useState(0);
   const location = useLocation();
   const { user, permissions, isAdmin } = useAuth();
-  const currentMode = isAdmin ? mode : 'shop';
+  // 관리모드 접근 가능: admin 또는 allowed_modes='both' 이면 모드 토글 표시
+  const canSwitchMode = isAdmin || user?.allowed_modes === 'both';
+  const currentMode = canSwitchMode ? mode : 'shop';
 
   // path → can_read 룩업 (admin은 항상 true)
   const pathReadable = (path?: string) => {
@@ -341,7 +343,7 @@ export function Sidebar() {
       </div>
 
       {/* Mode Toggle */}
-      {!collapsed && isAdmin && (
+      {!collapsed && canSwitchMode && (
         <div className="flex border-b border-gray-200">
           <button
             onClick={() => { setMode('shop'); setOpenSections(new Set()); }}

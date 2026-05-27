@@ -405,7 +405,17 @@ export const INCOMING_FORM_PRESETS: IncomingFormPreset[] = [
 ];
 
 export async function inspectionRoutes(app: FastifyInstance) {
-  // GET /api/inspections/incoming-presets - 인수검사 양식 프리셋 목록
+  // DB 마이그레이션: 스펙 치수 컬럼 추가
+  await pool.query(`
+    ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS spec_thickness_mm NUMERIC(10,2);
+    ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS spec_width_mm NUMERIC(10,2);
+    ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS spec_length_mm NUMERIC(10,2);
+    ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS spec_density VARCHAR(30);
+    ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS total_length_mm BIGINT;
+    ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS length_mm BIGINT;
+  `).catch((e: unknown) => console.error('[Migration] spec columns:', e));
+
+
   app.get('/api/inspections/incoming-presets', async (request) => {
     const { category } = request.query as { category?: string };
     let presets = INCOMING_FORM_PRESETS;
@@ -559,6 +569,14 @@ export async function inspectionRoutes(app: FastifyInstance) {
     const supplierLot = (body.supplier_lot as string) || null;
     const inspDate = (body.insp_date as string) || new Date().toISOString().slice(0, 10);
 
+    // 스펙 치수 필드 (SM 자재용: T, W, L, 밀도)
+    const specThickness = (body.spec_thickness_mm as number) || null;
+    const specWidth = (body.spec_width_mm as number) || null;
+    const specLength = (body.spec_length_mm as number) || null;
+    const specDensity = (body.spec_density as string) || null;
+    // 길이 추적 자동 계산: L(mm) × 수량 = 총 길이
+    const totalLengthMm = (specLength && qty) ? Math.round(Number(specLength) * Number(qty)) : null;
+
     if (isIncoming && (!itemId || !qty)) {
       return reply.status(400).send({
         error: 'Bad Request',
@@ -616,10 +634,14 @@ export async function inspectionRoutes(app: FastifyInstance) {
         const lotNumber = await generateIncomingLotNumber(itemId, inspDate);
 
         const lotResult = await client.query(
-          `INSERT INTO lot_transaction (lot_number, lot_type, item_id, qty, unit, supplier_lot, inspection_result, status, remaining_qty)
-           VALUES ($1, 'IN', $2, $3, (SELECT unit FROM item_master WHERE item_id = $2), $4, 'PENDING', 'ACTIVE', $3)
+          `INSERT INTO lot_transaction
+             (lot_number, lot_type, item_id, qty, unit, supplier_lot, inspection_result, status, remaining_qty,
+              spec_thickness_mm, spec_width_mm, spec_length_mm, spec_density, total_length_mm)
+           VALUES ($1, 'IN', $2, $3, (SELECT unit FROM item_master WHERE item_id = $2), $4, 'PENDING', 'ACTIVE', $3,
+                  $5, $6, $7, $8, $9)
            RETURNING *`,
-          [lotNumber, itemId, qty, supplierLot]
+          [lotNumber, itemId, qty, supplierLot,
+           specThickness, specWidth, specLength, specDensity, totalLengthMm]
         );
         lotId = lotResult.rows[0].lot_id;
       }
@@ -693,10 +715,10 @@ export async function inspectionRoutes(app: FastifyInstance) {
       let inventoryTxn = null;
       if (isIncoming && overallResult === 'PASS' && lotId && itemId && qty) {
         const invResult = await client.query(
-          `INSERT INTO inventory_transaction (item_id, lot_id, txn_type, txn_date, qty, purpose, worker)
-           VALUES ($1, $2, 'IN', $3, $4, 'INSP_PASS', $5)
+          `INSERT INTO inventory_transaction (item_id, lot_id, txn_type, txn_date, qty, purpose, worker, length_mm)
+           VALUES ($1, $2, 'IN', $3, $4, 'INSP_PASS', $5, $6)
            RETURNING *`,
-          [itemId, lotId, inspDate, qty, body.inspector || null]
+          [itemId, lotId, inspDate, qty, body.inspector || null, totalLengthMm]
         );
         inventoryTxn = invResult.rows[0];
       }

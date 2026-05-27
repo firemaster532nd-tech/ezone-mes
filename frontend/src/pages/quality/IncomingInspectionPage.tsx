@@ -730,6 +730,27 @@ function CreateInspectionModal({ onClose, onCreated }: { onClose: () => void; on
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ pass: boolean; lot_number: string; inventory_created: boolean } | null>(null);
 
+  // 스펙 치수 (SM 자재용: T/W/L/밀도)
+  const [specThickness, setSpecThickness] = useState('');
+  const [specWidth, setSpecWidth] = useState('');
+  const [specLength, setSpecLength] = useState('');
+  const [specDensity, setSpecDensity] = useState('');
+
+  // 울(Wool)류 판단: 그라스울, 세라믹울 = 밀도 필드 있음
+  const selectedItemObj = items.find(i => String(i.item_id) === selectedItem);
+  const isWoolType = !!(selectedItemObj && (
+    selectedItemObj.item_name.includes('그라스울') ||
+    selectedItemObj.item_name.includes('세라믹울') ||
+    selectedItemObj.item_name.includes('세라믹') ||
+    selectedItemObj.item_name.toUpperCase().includes('GLASSWOOL') ||
+    selectedItemObj.item_name.toUpperCase().includes('CERAMIC')
+  ));
+  // 전체 길이 자동 계산 (mm)
+  const totalLengthMm = (specLength && qty && parseFloat(specLength) > 0 && parseFloat(qty) > 0)
+    ? Math.round(parseFloat(specLength) * parseFloat(qty))
+    : null;
+
+
   // LOT 검증 상태
   const [lotNumber, setLotNumber] = useState('');
   const [lotValidation, setLotValidation] = useState<{
@@ -929,6 +950,11 @@ function CreateInspectionModal({ onClose, onCreated }: { onClose: () => void; on
         inspector: inspector || null,
         insp_date: inspDate,
         cert_doc_id: selectedCertDocId || null,
+        // SM 자재 스펙 치수
+        spec_thickness_mm: specThickness ? parseFloat(specThickness) : null,
+        spec_width_mm: specWidth ? parseFloat(specWidth) : null,
+        spec_length_mm: specLength ? parseFloat(specLength) : null,
+        spec_density: specDensity || null,
         details: measurements.map((m) => ({
           item_no: m.item_no,
           quality_item: m.quality_item,
@@ -1218,6 +1244,64 @@ function CreateInspectionModal({ onClose, onCreated }: { onClose: () => void; on
                   placeholder="수량 입력" className="w-full border rounded px-3 py-2 text-shop-sm bg-white" />
               </div>
             </div>
+
+            {/* SM 부자재 전용: 규격 치수 입력 (T/W/L, 울류는 밀도 추가) */}
+            {!isRM && (
+              <div className="border border-blue-200 rounded-lg p-3 bg-blue-50/50">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-bold text-blue-700">규격 치수</span>
+                  {isWoolType && (
+                    <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-semibold">
+                      🌀 울류 — 밀도 포함 · 총 길이 자동 계산
+                    </span>
+                  )}
+                </div>
+                <div className={`grid gap-2 ${isWoolType ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                  {/* 밀도 — 울류만 */}
+                  {isWoolType && (
+                    <div>
+                      <label className="block text-[10px] text-gray-500 mb-1">밀도 (kg/m³)</label>
+                      <input type="text" value={specDensity} onChange={e => setSpecDensity(e.target.value)}
+                        placeholder="예: 24K, 96K"
+                        className="w-full border rounded px-2 py-1.5 text-xs bg-white" />
+                    </div>
+                  )}
+                  {/* T (두께) */}
+                  <div>
+                    <label className="block text-[10px] text-gray-500 mb-1">T · 두께 (mm)</label>
+                    <input type="number" step="0.1" value={specThickness} onChange={e => setSpecThickness(e.target.value)}
+                      placeholder="예: 25"
+                      className="w-full border rounded px-2 py-1.5 text-xs bg-white font-mono" />
+                  </div>
+                  {/* W (폭) */}
+                  <div>
+                    <label className="block text-[10px] text-gray-500 mb-1">W · 폭 (mm)</label>
+                    <input type="number" step="1" value={specWidth} onChange={e => setSpecWidth(e.target.value)}
+                      placeholder="예: 600"
+                      className="w-full border rounded px-2 py-1.5 text-xs bg-white font-mono" />
+                  </div>
+                  {/* L (길이) */}
+                  <div>
+                    <label className="block text-[10px] text-gray-500 mb-1">L · 길이 (mm)</label>
+                    <input type="number" step="1" value={specLength} onChange={e => setSpecLength(e.target.value)}
+                      placeholder="예: 10000"
+                      className="w-full border rounded px-2 py-1.5 text-xs bg-white font-mono" />
+                  </div>
+                </div>
+                {/* 총 길이 자동 계산 표시 */}
+                {totalLengthMm !== null && (
+                  <div className="mt-2 flex items-center gap-2 text-xs">
+                    <span className="text-gray-500">총 길이:</span>
+                    <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded font-mono">
+                      {qty} EA × {Number(specLength).toLocaleString()}mm
+                      = {totalLengthMm.toLocaleString()}mm
+                      ({(totalLengthMm / 1000).toFixed(1)}m)
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">
