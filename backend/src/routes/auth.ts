@@ -102,7 +102,7 @@ export async function authRoutes(app: FastifyInstance) {
     ALTER TABLE worker ADD COLUMN IF NOT EXISTS allowed_modes VARCHAR(10) DEFAULT 'shop';
   `).catch(() => {});
 
-  // 세분류 마스터 테이블 생성 + 기존 item_master 데이터로 시드
+  // 세분류 마스터 테이블 생성 (쿼리 1)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS item_subcategory_master (
       subcategory_id   SERIAL PRIMARY KEY,
@@ -112,13 +112,17 @@ export async function authRoutes(app: FastifyInstance) {
       is_active        BOOLEAN DEFAULT TRUE,
       created_at       TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE (item_category, subcategory_name)
-    );
+    )
+  `).catch((err: unknown) => console.error('[Migration] CREATE item_subcategory_master:', err));
+
+  // 기존 item_master 에서 세분류 시드 (쿼리 2 - 분리 필수)
+  await pool.query(`
     INSERT INTO item_subcategory_master (item_category, subcategory_name)
     SELECT DISTINCT item_category, item_subcategory
     FROM item_master
     WHERE item_subcategory IS NOT NULL AND item_subcategory <> ''
-    ON CONFLICT (item_category, subcategory_name) DO NOTHING;
-  `).catch((err: unknown) => console.error('[Migration] item_subcategory_master:', err));
+    ON CONFLICT (item_category, subcategory_name) DO NOTHING
+  `).catch((err: unknown) => console.error('[Migration] SEED item_subcategory_master:', err));
 
   await ensureAdminUser().catch((err) => {
     console.error('Failed to ensure admin user:', err);
