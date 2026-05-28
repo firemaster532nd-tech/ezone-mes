@@ -23,6 +23,20 @@ interface Item {
   is_active: boolean;
   roll_length_m: number | null;
   roll_spec: string | null;
+  // SM 구조적 규격 필드
+  spec_density: string | null;
+  spec_thickness: string | null;
+  spec_width: string | null;
+  spec_length: string | null;
+  spec_height: string | null;
+}
+
+interface SpecOptions {
+  densities: string[];
+  thicknesses: string[];
+  widths: string[];
+  lengths: string[];
+  heights: string[];
 }
 
 interface Subcategory {
@@ -63,6 +77,9 @@ export function ItemsPage() {
   const [editItem, setEditItem] = useState<Item | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showSubcatPanel, setShowSubcatPanel] = useState(false);
+  const [specOptions, setSpecOptions] = useState<SpecOptions>({
+    densities: [], thicknesses: [], widths: [], lengths: [], heights: [],
+  });
 
   const fetchData = useCallback(() => {
     const params = new URLSearchParams();
@@ -81,8 +98,15 @@ export function ItemsPage() {
       });
   }, []);
 
+  const fetchSpecOptions = useCallback(() => {
+    api.get<{ data: SpecOptions }>('/items/spec-options')
+      .then(res => setSpecOptions(res.data ?? { densities: [], thicknesses: [], widths: [], lengths: [], heights: [] }))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => { fetchData(); }, [fetchData]);
   useEffect(() => { fetchSubcategories(); }, [fetchSubcategories]);
+  useEffect(() => { fetchSpecOptions(); }, [fetchSpecOptions]);
 
   const handleSave = async (itemId: number, updates: Partial<Item>) => {
     try {
@@ -259,9 +283,10 @@ export function ItemsPage() {
           mode="edit"
           item={editItem}
           subcategories={subcategories}
+          specOptions={specOptions}
           onClose={() => setEditItem(null)}
           onSave={(updates) => handleSave(editItem.item_id, updates)}
-          onSubcategoryAdded={fetchSubcategories}
+          onSubcategoryAdded={() => { fetchSubcategories(); fetchSpecOptions(); }}
         />
       )}
 
@@ -270,9 +295,10 @@ export function ItemsPage() {
         <ItemFormModal
           mode="add"
           subcategories={subcategories}
+          specOptions={specOptions}
           onClose={() => setShowAddForm(false)}
           onSave={(newItem) => handleCreate(newItem)}
-          onSubcategoryAdded={fetchSubcategories}
+          onSubcategoryAdded={() => { fetchSubcategories(); fetchSpecOptions(); }}
         />
       )}
 
@@ -417,11 +443,12 @@ function SubcategoryPanel({
 
 /* ─── 품목 등록/수정 통합 모달 ─── */
 function ItemFormModal({
-  mode, item, subcategories, onClose, onSave, onSubcategoryAdded,
+  mode, item, subcategories, specOptions, onClose, onSave, onSubcategoryAdded,
 }: {
   mode: 'add' | 'edit';
   item?: Item;
   subcategories: Subcategory[];
+  specOptions: SpecOptions;
   onClose: () => void;
   onSave: (data: Partial<Item>) => void;
   onSubcategoryAdded: () => void;
@@ -442,6 +469,12 @@ function ItemFormModal({
     safety_stock: item?.safety_stock != null ? String(item.safety_stock) : '0',
     roll_length_m: item?.roll_length_m != null ? String(item.roll_length_m) : '',
     roll_spec: item?.roll_spec ?? '',
+    // SM 구조적 규격 필드
+    spec_density:   item?.spec_density   ?? '',
+    spec_thickness: item?.spec_thickness ?? '',
+    spec_width:     item?.spec_width     ?? '',
+    spec_length:    item?.spec_length    ?? '',
+    spec_height:    item?.spec_height    ?? '',
   });
 
   // 인라인 세분류 추가 상태
@@ -500,6 +533,12 @@ function ItemFormModal({
       safety_stock: Number(form.safety_stock) || 0,
       roll_length_m: form.roll_length_m ? Number(form.roll_length_m) : null,
       roll_spec: form.roll_spec || null,
+      // SM 구조적 규격 필드
+      spec_density:   form.spec_density   || null,
+      spec_thickness: form.spec_thickness || null,
+      spec_width:     form.spec_width     || null,
+      spec_length:    form.spec_length    || null,
+      spec_height:    form.spec_height    || null,
     };
     onSave(data);
   };
@@ -624,8 +663,63 @@ function ItemFormModal({
                 </select>
               </div>
             </div>
-            <Field label="규격" value={form.spec} onChange={(v) => set('spec', v)}
-              placeholder="예: 밀도128kg/m3, t50, W600" />
+
+            {/* 규격 — SM이면 구조화 입력, 나머지는 자유 텍스트 */}
+            {form.item_category === 'SM' ? (
+              <div className="bg-green-50/60 rounded-lg p-3 space-y-2 border border-green-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-green-700">규격 치수 (SM 부자재)</span>
+                  {/* 자동 생성 미리보기 */}
+                  {(form.spec_density || form.spec_thickness || form.spec_width || form.spec_length || form.spec_height) && (
+                    <span className="text-[10px] text-green-600 font-mono bg-green-100 px-2 py-0.5 rounded">
+                      {[
+                        form.spec_density && form.spec_density !== '사용안함' ? `밀도${form.spec_density}kg/m³` : null,
+                        form.spec_thickness ? `t${form.spec_thickness}` : null,
+                        form.spec_width     ? `W${form.spec_width}`     : null,
+                        form.spec_length    ? `L${form.spec_length}`    : null,
+                        form.spec_height    ? `H${form.spec_height}`    : null,
+                      ].filter(Boolean).join(', ') || '—'}
+                    </span>
+                  )}
+                </div>
+                <div className="grid grid-cols-5 gap-2">
+                  <SpecDimField
+                    label="밀도 (kg/m³)"
+                    value={form.spec_density}
+                    options={specOptions.densities}
+                    onChange={v => set('spec_density', v)}
+                    allowNone
+                  />
+                  <SpecDimField
+                    label="두께 T (mm)"
+                    value={form.spec_thickness}
+                    options={specOptions.thicknesses}
+                    onChange={v => set('spec_thickness', v)}
+                  />
+                  <SpecDimField
+                    label="폭 W (mm)"
+                    value={form.spec_width}
+                    options={specOptions.widths}
+                    onChange={v => set('spec_width', v)}
+                  />
+                  <SpecDimField
+                    label="길이 L (mm)"
+                    value={form.spec_length}
+                    options={specOptions.lengths}
+                    onChange={v => set('spec_length', v)}
+                  />
+                  <SpecDimField
+                    label="높이 H (mm)"
+                    value={form.spec_height}
+                    options={specOptions.heights}
+                    onChange={v => set('spec_height', v)}
+                  />
+                </div>
+              </div>
+            ) : (
+              <Field label="규격" value={form.spec} onChange={(v) => set('spec', v)}
+                placeholder="예: 밀도128kg/m3, t50, W600" />
+            )}
           </div>
 
           {/* 인정 기준값 */}
@@ -722,6 +816,76 @@ function Field({
           mono && 'font-mono',
         )}
       />
+    </div>
+  );
+}
+
+/* ─── 규격 치수 필드 (드롭다운 + 직접입력) ─── */
+function SpecDimField({
+  label, value, options, onChange, allowNone,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+  allowNone?: boolean;  // 밀도처럼 "사용안함" 옵션이 필요한 경우
+}) {
+  const DIRECT = '__direct__';
+  // 현재 값이 옵션 목록에 없고 비어있지 않으면 직접입력 상태
+  const isKnown = !value || value === '사용안함' || options.includes(value);
+  const [directMode, setDirectMode] = useState(!isKnown);
+  const [directVal, setDirectVal] = useState(!isKnown ? value : '');
+
+  const selectVal = directMode ? DIRECT : value;
+
+  const handleSelectChange = (v: string) => {
+    if (v === DIRECT) {
+      setDirectMode(true);
+      setDirectVal('');
+      onChange('');
+    } else {
+      setDirectMode(false);
+      setDirectVal('');
+      onChange(v);
+    }
+  };
+
+  return (
+    <div>
+      <label className="block text-[10px] font-medium text-gray-600 mb-1 leading-tight">{label}</label>
+      {directMode ? (
+        <div className="flex flex-col gap-1">
+          <input
+            type="text"
+            value={directVal}
+            autoFocus
+            onChange={e => { setDirectVal(e.target.value); onChange(e.target.value); }}
+            placeholder="직접 입력"
+            className="w-full px-2 py-1.5 border border-green-400 rounded text-xs focus:outline-none focus:ring-2 focus:ring-green-300 font-mono"
+          />
+          <button
+            type="button"
+            onClick={() => { setDirectMode(false); onChange(value); }}
+            className="text-[10px] text-gray-400 hover:text-gray-600 underline text-left"
+          >
+            ← 목록으로
+          </button>
+        </div>
+      ) : (
+        <div className="relative">
+          <select
+            value={selectVal}
+            onChange={e => handleSelectChange(e.target.value)}
+            className="w-full px-2 py-1.5 border rounded text-xs focus:outline-none focus:ring-2 focus:ring-green-300 appearance-none pr-6 bg-white"
+          >
+            <option value="">— 미입력 —</option>
+            {allowNone && <option value="사용안함">사용안함</option>}
+            {options.map(o => <option key={o} value={o}>{o}</option>)}
+            <option value={DIRECT}>✏️ 직접입력</option>
+          </select>
+          <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+        </div>
+      )}
     </div>
   );
 }

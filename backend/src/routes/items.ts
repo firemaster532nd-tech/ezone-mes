@@ -165,6 +165,27 @@ async function migrateItemMaster() {
 export async function itemRoutes(app: FastifyInstance) {
   // 서버 시작 시 마이그레이션 실행
   // await migrateItemMaster();
+
+  // GET /api/items/spec-options — 규격 드롭다운 옵션 (기존 item_master 데이터 기반)
+  app.get('/api/items/spec-options', async () => {
+    const [densities, thicknesses, widths, lengths, heights] = await Promise.all([
+      pool.query(`SELECT DISTINCT spec_density  AS v FROM item_master WHERE spec_density  IS NOT NULL AND spec_density  <> '' ORDER BY v`),
+      pool.query(`SELECT DISTINCT spec_thickness AS v FROM item_master WHERE spec_thickness IS NOT NULL AND spec_thickness <> '' ORDER BY v`),
+      pool.query(`SELECT DISTINCT spec_width    AS v FROM item_master WHERE spec_width    IS NOT NULL AND spec_width    <> '' ORDER BY v`),
+      pool.query(`SELECT DISTINCT spec_length   AS v FROM item_master WHERE spec_length   IS NOT NULL AND spec_length   <> '' ORDER BY v`),
+      pool.query(`SELECT DISTINCT spec_height   AS v FROM item_master WHERE spec_height   IS NOT NULL AND spec_height   <> '' ORDER BY v`),
+    ]).catch(() => [{ rows: [] }, { rows: [] }, { rows: [] }, { rows: [] }, { rows: [] }]);
+    return {
+      data: {
+        densities:  (densities  as any).rows.map((r: any) => r.v),
+        thicknesses:(thicknesses as any).rows.map((r: any) => r.v),
+        widths:     (widths     as any).rows.map((r: any) => r.v),
+        lengths:    (lengths    as any).rows.map((r: any) => r.v),
+        heights:    (heights    as any).rows.map((r: any) => r.v),
+      },
+    };
+  });
+
   // GET /api/items - 품목 목록
   app.get('/api/items', async (request, reply) => {
     const { category, search } = request.query as { category?: string; search?: string };
@@ -203,16 +224,29 @@ export async function itemRoutes(app: FastifyInstance) {
   // POST /api/items - 품목 신규 등록
   app.post('/api/items', async (request, reply) => {
     const body = request.body as Record<string, unknown>;
-    const { item_code, item_name, item_category, item_subcategory, spec, unit,
+    const { item_code, item_name, item_category, item_subcategory, unit,
             cert_min_density, cert_min_thickness, cert_min_mass,
             production_value, tolerance_plus, value_direction,
-            safety_stock, roll_length_m, roll_spec } = body as any;
+            safety_stock, roll_length_m, roll_spec,
+            spec_density, spec_thickness, spec_width, spec_length, spec_height } = body as any;
 
     if (!item_code || !item_name || !item_category || !unit) {
       return reply.status(400).send({
         error: 'Bad Request',
         message: '품목코드, 품목명, 분류, 단위는 필수입니다.',
       });
+    }
+
+    // 규격 문자열 자동 생성 (SM 부자재 - 구조적 필드 기반)
+    let specStr = (body.spec as string) || null;
+    if (item_category === 'SM') {
+      const parts: string[] = [];
+      if (spec_density && spec_density !== '사용안함') parts.push(`밀도${spec_density}kg/m³`);
+      if (spec_thickness) parts.push(`t${spec_thickness}`);
+      if (spec_width)     parts.push(`W${spec_width}`);
+      if (spec_length)    parts.push(`L${spec_length}`);
+      if (spec_height)    parts.push(`H${spec_height}`);
+      if (parts.length > 0) specStr = parts.join(', ');
     }
 
     // 중복 체크
@@ -228,14 +262,18 @@ export async function itemRoutes(app: FastifyInstance) {
       INSERT INTO item_master (item_code, item_name, item_category, item_subcategory, spec, unit,
         cert_min_density, cert_min_thickness, cert_min_mass,
         production_value, tolerance_plus, value_direction,
-        safety_stock, roll_length_m, roll_spec, is_active)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,true)
+        safety_stock, roll_length_m, roll_spec,
+        spec_density, spec_thickness, spec_width, spec_length, spec_height,
+        is_active)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,true)
       RETURNING *
     `, [
-      item_code, item_name, item_category, item_subcategory || null, spec || null, unit,
+      item_code, item_name, item_category, item_subcategory || null, specStr, unit,
       cert_min_density || null, cert_min_thickness || null, cert_min_mass || null,
       production_value || null, tolerance_plus || null, value_direction || null,
       safety_stock || 0, roll_length_m || null, roll_spec || null,
+      spec_density || null, spec_thickness || null, spec_width || null,
+      spec_length || null, spec_height || null,
     ]);
 
     return { data: result.rows[0] };
@@ -252,7 +290,20 @@ export async function itemRoutes(app: FastifyInstance) {
       'cert_min_density', 'cert_min_thickness', 'cert_min_mass',
       'production_value', 'tolerance_plus', 'value_direction',
       'safety_stock', 'is_active', 'roll_length_m', 'roll_spec',
+      'spec_density', 'spec_thickness', 'spec_width', 'spec_length', 'spec_height',
     ];
+
+    // SM 부자재: 구조적 필드로 spec 자동 생성
+    const b = body as any;
+    if (b.item_category === 'SM' || (!b.item_category && body.spec_density !== undefined)) {
+      const parts: string[] = [];
+      if (b.spec_density && b.spec_density !== '사용안함') parts.push(`밀도${b.spec_density}kg/m³`);
+      if (b.spec_thickness) parts.push(`t${b.spec_thickness}`);
+      if (b.spec_width)     parts.push(`W${b.spec_width}`);
+      if (b.spec_length)    parts.push(`L${b.spec_length}`);
+      if (b.spec_height)    parts.push(`H${b.spec_height}`);
+      if (parts.length > 0) body.spec = parts.join(', ');
+    }
 
     const updates: string[] = [];
     const values: unknown[] = [];

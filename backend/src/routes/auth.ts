@@ -124,6 +124,13 @@ export async function authRoutes(app: FastifyInstance) {
     ON CONFLICT (item_category, subcategory_name) DO NOTHING
   `).catch((err: unknown) => console.error('[Migration] SEED item_subcategory_master:', err));
 
+  // 구조적 규격 콜럼 추가 (다중 ALTER 단일 쿼리)
+  await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_density  VARCHAR(30)`).catch(()=>{});
+  await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_thickness VARCHAR(30)`).catch(()=>{});
+  await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_width    VARCHAR(30)`).catch(()=>{});
+  await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_length   VARCHAR(30)`).catch(()=>{});
+  await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_height   VARCHAR(30)`).catch(()=>{});
+
   await ensureAdminUser().catch((err) => {
     console.error('Failed to ensure admin user:', err);
   });
