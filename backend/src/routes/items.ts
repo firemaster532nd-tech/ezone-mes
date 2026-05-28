@@ -295,23 +295,56 @@ export async function itemRoutes(app: FastifyInstance) {
 
   // ─── 세분류 마스터 CRUD (테이블 생성은 authRoutes 시작 시 수행) ───
 
-  // GET /api/item-subcategories — 세분류 목록 (분류별 필터 가능)
+  // GET /api/item-subcategories — 세분류 목록
+  // item_subcategory_master + item_master 양쪽을 UNION하여 반환
+  // → 마스터 테이블 시드 여부와 무관하게 기존 데이터 항상 표시
   app.get('/api/item-subcategories', async (request, reply) => {
     const { category } = request.query as { category?: string };
-    let q = `SELECT * FROM item_subcategory_master WHERE is_active = true`;
     const params: unknown[] = [];
+    let catFilter = '';
     if (category) {
       params.push(category);
-      q += ` AND item_category = $${params.length}`;
+      catFilter = `AND item_category = $${params.length}`;
     }
-    q += ` ORDER BY item_category, sort_order, subcategory_name`;
+
     try {
+      // item_master 에서 현재 쓰이는 세분류를 마스터 테이블에 자동 동기화
+      await pool.query(`
+        INSERT INTO item_subcategory_master (item_category, subcategory_name)
+        SELECT DISTINCT item_category, item_subcategory
+        FROM item_master
+        WHERE item_subcategory IS NOT NULL AND item_subcategory <> ''
+        ON CONFLICT (item_category, subcategory_name) DO NOTHING
+      `).catch(() => {});
+
+      // 마스터 테이블에서 반환 (이미 item_master 값이 모두 포함됨)
+      const q = `
+        SELECT subcategory_id, item_category, subcategory_name, sort_order
+        FROM item_subcategory_master
+        WHERE is_active = true ${catFilter}
+        ORDER BY item_category, sort_order, subcategory_name
+      `;
       const result = await pool.query(q, params);
       return { data: result.rows };
     } catch (err) {
       console.error('[item-subcategories GET]', err);
-      // 테이블이 아직 없는 경우 빈 배열 반환
-      return { data: [] };
+      // 마스터 테이블이 없으면 item_master에서 직접 조회
+      try {
+        const fallback = await pool.query(`
+          SELECT DISTINCT
+            item_category,
+            item_subcategory AS subcategory_name,
+            0 AS subcategory_id,
+            0 AS sort_order
+          FROM item_master
+          WHERE item_subcategory IS NOT NULL AND item_subcategory <> ''
+          ${category ? `AND item_category = $1` : ''}
+          ORDER BY item_category, subcategory_name
+        `, params);
+        return { data: fallback.rows };
+      } catch {
+        return { data: [] };
+      }
     }
   });
 
