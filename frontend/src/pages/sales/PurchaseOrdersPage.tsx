@@ -17,11 +17,26 @@ interface PurchaseOrder {
   file_name: string;
   order_date: string | null;
   delivery_date: string | null;
+  // 발주처
+  biz_name: string | null;
+  biz_no: string | null;
+  biz_ceo: string | null;
+  biz_address: string | null;
+  biz_manager: string | null;
+  biz_contact: string | null;
+  // 제출인 / 공사
   submitter: string | null;
+  submitter_address: string | null;
   construction_site: string | null;
   contractor: string | null;
+  contractor_address: string | null;
   supervisor: string | null;
+  supervisor_office: string | null;
+  supervisor_address: string | null;
+  // 납품
   site_address: string | null;
+  consignee: string | null;
+  builder_name: string | null;
   special_notes: string | null;
   item_count: number;
   created_at: string;
@@ -146,27 +161,62 @@ function PreviewModal({
           </button>
         </div>
 
-        <div className="p-6 space-y-5 max-h-[65vh] overflow-y-auto">
-          {/* 프로젝트 정보 */}
-          <div className="bg-blue-50 rounded-xl p-4 space-y-3">
-            <h3 className="font-semibold text-blue-800 flex items-center gap-2">
+        <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+          {/* 발주처 정보 */}
+          <div className="bg-orange-50 rounded-xl p-4 space-y-3 border border-orange-100">
+            <h3 className="font-semibold text-orange-800 flex items-center gap-2 text-sm">
               <Building2 className="h-4 w-4" />
-              자동 추출된 프로젝트 정보
+              발주처 정보
+            </h3>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <InfoRow icon={<Building2 className="h-3.5 w-3.5" />} label="업체명" value={project.biz_name} highlight />
+              <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="사업자번호" value={project.biz_no} />
+              <InfoRow icon={<User className="h-3.5 w-3.5" />} label="대표자" value={project.biz_ceo} />
+              <InfoRow icon={<User className="h-3.5 w-3.5" />} label="담당자" value={project.biz_manager} />
+              <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="주소" value={project.biz_address} />
+              <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="연락처" value={project.biz_contact} />
+            </div>
+          </div>
+
+          {/* 프로젝트·납품 정보 */}
+          <div className="bg-blue-50 rounded-xl p-4 space-y-3 border border-blue-100">
+            <h3 className="font-semibold text-blue-800 flex items-center gap-2 text-sm">
+              <MapPin className="h-4 w-4" />
+              현장 및 납품 정보
             </h3>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="현장명 (프로젝트명)" value={project.project_name} highlight />
               <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} label="납기 요청일" value={project.delivery_date} />
-              <InfoRow icon={<User className="h-3.5 w-3.5" />} label="제출인 (건축주)" value={project.submitter} />
-              <InfoRow icon={<Building2 className="h-3.5 w-3.5" />} label="시공사" value={project.contractor} />
               <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="납품지 주소" value={project.site_address} />
-              <InfoRow icon={<User className="h-3.5 w-3.5" />} label="감리" value={project.supervisor} />
+              <InfoRow icon={<User className="h-3.5 w-3.5" />} label="인수자" value={project.consignee} />
+              <InfoRow icon={<Building2 className="h-3.5 w-3.5" />} label="건설사" value={project.builder_name} />
+              <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} label="발주 일자" value={project.order_date} />
             </div>
-            {project.special_notes && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 text-xs text-yellow-800">
-                <span className="font-semibold">특기사항:</span> {project.special_notes}
-              </div>
-            )}
           </div>
+
+          {/* 제출인 / 시공사 / 감리 */}
+          <div className="bg-green-50 rounded-xl p-4 space-y-3 border border-green-100">
+            <h3 className="font-semibold text-green-800 flex items-center gap-2 text-sm">
+              <User className="h-4 w-4" />
+              제출인 / 시공사 / 감리
+            </h3>
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <InfoRow icon={<User className="h-3.5 w-3.5" />} label="제출인 (건축주)" value={project.submitter} />
+              <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="제출인 주소" value={project.submitter_address} />
+              <InfoRow icon={<Building2 className="h-3.5 w-3.5" />} label="시공사" value={project.contractor} />
+              <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="시공사 주소" value={project.contractor_address} />
+              <InfoRow icon={<User className="h-3.5 w-3.5" />} label="감리" value={project.supervisor} />
+              <InfoRow icon={<Building2 className="h-3.5 w-3.5" />} label="감리 사무소" value={project.supervisor_office} />
+            </div>
+          </div>
+
+          {/* 특기사항 */}
+          {project.special_notes && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
+              <p className="text-xs font-semibold text-yellow-800 mb-1">📌 특기사항</p>
+              <p className="text-sm text-yellow-900">{project.special_notes}</p>
+            </div>
+          )}
 
           {/* 발주 명세 요약 */}
           <div className="flex gap-3">
@@ -313,18 +363,50 @@ function DetailModal({ po, onClose }: { po: PurchaseOrder & { items?: PoItem[]; 
           <h2 className="text-lg font-bold">{po.project_name}</h2>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100"><X className="h-5 w-5" /></button>
         </div>
-        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-          <div className="grid grid-cols-3 gap-3 text-sm">
-            <InfoRow icon={<User className="h-3.5 w-3.5" />} label="제출인" value={po.submitter || undefined} />
-            <InfoRow icon={<Building2 className="h-3.5 w-3.5" />} label="시공사" value={po.contractor || undefined} />
-            <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} label="납기 요청일" value={po.delivery_date || undefined} />
-            <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="납품지" value={po.site_address || undefined} />
-            <InfoRow icon={<User className="h-3.5 w-3.5" />} label="감리" value={po.supervisor || undefined} />
-            <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="파일명" value={po.file_name} />
+        <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+          {/* 발주처 정보 */}
+          {(po.biz_name || po.biz_no) && (
+            <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
+              <p className="text-xs font-bold text-orange-700 mb-2">📦 발주처 정보</p>
+              <div className="grid grid-cols-3 gap-2 text-sm">
+                <InfoRow icon={<Building2 className="h-3.5 w-3.5" />} label="업체명" value={po.biz_name || undefined} highlight />
+                <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="사업자번호" value={po.biz_no || undefined} />
+                <InfoRow icon={<User className="h-3.5 w-3.5" />} label="대표자" value={po.biz_ceo || undefined} />
+                <InfoRow icon={<User className="h-3.5 w-3.5" />} label="담당자" value={po.biz_manager || undefined} />
+                <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="연락처" value={po.biz_contact || undefined} />
+                <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="주소" value={po.biz_address || undefined} />
+              </div>
+            </div>
+          )}
+          {/* 현장·납품 정보 */}
+          <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+            <p className="text-xs font-bold text-blue-700 mb-2">🏗️ 현장 및 납품 정보</p>
+            <div className="grid grid-cols-3 gap-2 text-sm">
+              <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="현장명" value={po.project_name} highlight />
+              <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} label="납기 요청일" value={po.delivery_date || undefined} />
+              <InfoRow icon={<Calendar className="h-3.5 w-3.5" />} label="발주일자" value={po.order_date || undefined} />
+              <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="납품지 주소" value={po.site_address || undefined} />
+              <InfoRow icon={<User className="h-3.5 w-3.5" />} label="인수자" value={po.consignee || undefined} />
+              <InfoRow icon={<Building2 className="h-3.5 w-3.5" />} label="건설사" value={po.builder_name || undefined} />
+            </div>
           </div>
+          {/* 제출인 / 시공사 / 감리 */}
+          <div className="bg-green-50 rounded-xl p-4 border border-green-100">
+            <p className="text-xs font-bold text-green-700 mb-2">👷 제출인 / 시공사 / 감리</p>
+            <div className="grid grid-cols-3 gap-2 text-sm">
+              <InfoRow icon={<User className="h-3.5 w-3.5" />} label="제출인 (건축주)" value={po.submitter || undefined} />
+              <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="제출인 주소" value={po.submitter_address || undefined} />
+              <InfoRow icon={<Building2 className="h-3.5 w-3.5" />} label="시공사" value={po.contractor || undefined} />
+              <InfoRow icon={<MapPin className="h-3.5 w-3.5" />} label="시공사 주소" value={po.contractor_address || undefined} />
+              <InfoRow icon={<User className="h-3.5 w-3.5" />} label="감리" value={po.supervisor || undefined} />
+              <InfoRow icon={<Building2 className="h-3.5 w-3.5" />} label="감리 사무소" value={po.supervisor_office || undefined} />
+            </div>
+          </div>
+          {/* 특기사항 */}
           {po.special_notes && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
-              <span className="font-semibold">특기사항:</span> {po.special_notes}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3">
+              <p className="text-xs font-semibold text-yellow-800 mb-1">📌 특기사항</p>
+              <p className="text-sm text-yellow-900">{po.special_notes}</p>
             </div>
           )}
           <div className="space-y-2">

@@ -3,6 +3,9 @@ import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 import XLSX from 'xlsx';
 
+// ──────────────────────────────────────────────────────────// 셀 값 정리 헬퍼
+const cv = (v: any) => String(v ?? '').replace(/\n/g, ' ').trim();
+
 // ────────────────────────────────────────────────────────────────────────────
 // 이지원 발주서 엑셀 파서
 // ────────────────────────────────────────────────────────────────────────────
@@ -22,87 +25,117 @@ function parsePurchaseOrderExcel(buffer: Buffer) {
   };
 
   const firstWs = wb.Sheets[wb.SheetNames[0]];
-  const rows: any[][] = XLSX.utils.sheet_to_json(firstWs, { header: 1, defval: '' });
+  const R: any[][] = XLSX.utils.sheet_to_json(firstWs, { header: 1, defval: '' });
 
-  // ── 프로젝트 헤더 파싱 ──
-  let projectName = '', orderDate = '', deliveryDate = '';
-  let submitter = '', constructionSite = '', contractor = '', supervisor = '';
-  let siteAddress = '', specialNotes = '';
+  // ─────────────────────────────────────────────────
+  // 이지원 발주서 고정 레이아웃 기반 파싱
+  // ─────────────────────────────────────────────────
 
-  for (let i = 0; i < Math.min(rows.length, 30); i++) {
-    const row = rows[i];
-    const col0 = String(row[0] || '').trim();
-    const col3 = String(row[3] || '').trim();
-    const col4 = String(row[4] || '').trim();
-    const col9 = String(row[9] || '').trim();
-    const col12 = String(row[12] || '').trim();
-    const col15 = String(row[15] || '').trim();
+  let bizName = '', bizNo = '', bizCeo = '', bizAddress = '', bizContact = '', bizManager = '';
+  let orderDate = '', deliveryDate = '';
+  let submitter = '', submitterAddress = '';
+  let projectName = '', constructionSite = '', siteAddress = '';
+  let contractor = '', contractorAddress = '';
+  let supervisor = '', supervisorOffice = '', supervisorAddress = '';
+  let deliveryAddress = '', consignee = '', specialNotes = '', builderName = '';
 
-    if (col0.includes('발주 일자') || col0.includes('발주일자')) {
-      orderDate = col4 || col3;
+  for (let i = 0; i < Math.min(R.length, 30); i++) {
+    const r = R[i];
+    const c0 = cv(r[0]);
+    const c3 = cv(r[3]);
+    const c4 = cv(r[4]);
+    const c9 = cv(r[9]);
+    const c12 = cv(r[12]);
+    const c14 = cv(r[14]);
+    const c18 = cv(r[18]);
+
+    if (c0.includes('발') && (c0.includes('주 일자') || c0.includes('주일자'))) {
+      orderDate = c4 || c3;
     }
-    if (col0.includes('납기') || col0.includes('기납')) {
-      deliveryDate = col4 || col3;
-    }
-    if (col0.includes('제출인') || col0.includes('건축주')) {
-      if (rows[i + 1]) submitter = String(rows[i + 1][3] || '').trim();
-    }
-    if (col0.includes('공사') && col0.includes('현장')) {
-      if (rows[i + 1]) {
-        const next = rows[i + 1];
-        projectName = projectName || String(next[3] || '').trim();
-        constructionSite = constructionSite || String(next[9] || '').trim();
+    if (c0.includes('납기') || c0.startsWith('납기요청')) {
+      deliveryDate = c4 || c3;
+      if (c12.includes('담당')) bizManager = c14;
+      if (c12.includes('연락') || c18.includes('연락') || c12.includes('담당')) {
+        bizContact = cv(r[19]) || cv(r[18]);
       }
     }
-    if ((col0.includes('시공') || (col0.includes('공사') && !constructionSite)) && rows[i + 1]) {
-      if (!contractor) contractor = String(rows[i + 1][9] || '').trim().replace(/\n.*/s, '');
+    if (c12.includes('사업자')) bizNo = c14;
+    if (c12.includes('업체명')) {
+      bizName = c14;
+      bizCeo = c18;
     }
-    if (col0.includes('감리')) {
-      if (rows[i + 1]) {
-        const sv = String(rows[i + 1][3] || '').trim().replace(/\n/g, ' ');
-        const svc = String(rows[i + 1][9] || '').trim().replace(/\n.*/s, '');
-        supervisor = [sv, svc].filter(Boolean).join(' / ');
-      }
+    if (c12 === '주소') bizAddress = c14;
+    if (c12.includes('담당자')) {
+      bizManager = bizManager || c14;
+      bizContact = bizContact || cv(r[19]) || cv(r[18]);
     }
-    if (col0.includes('현장명') || col0.includes('현 장 명')) {
-      if (!projectName) projectName = col3 || col4;
-    }
-    if (col0.includes('납품지') || col0.includes('납품')) {
-      if (!siteAddress) siteAddress = col3 || col4;
-    }
-    if (col0.includes('특기') || col0.includes('요청')) {
-      if (!specialNotes) specialNotes = (col3 || col4).replace(/\n/g, ' ');
-    }
-  }
 
-  // ── 현장명을 현장정보 행에서 재추출 (더 정확) ──
-  for (let i = 0; i < Math.min(rows.length, 30); i++) {
-    const col0 = String(rows[i][0] || '').trim();
-    if (col0.includes('현장명') || col0 === '현 장 명' || (col0 === '' && String(rows[i][3] || '').includes('공사'))) {
-      const candidate = String(rows[i][3] || '').trim();
-      if (candidate.includes('공사') || candidate.includes('아파트') || candidate.includes('신축')) {
-        if (!projectName) projectName = candidate;
+    if (c0.includes('제출인') || c0.includes('건축주')) {
+      if (R[i + 1]) {
+        submitter = cv(R[i + 1][3]);
+        submitterAddress = cv(R[i + 1][9]);
       }
     }
-    if (col0 === '' && String(rows[i][3] || '').trim().length > 5) {
-      const d3 = String(rows[i][3] || '').trim();
-      // 납품지 주소 형태 감지
-      if (d3.includes('시') && d3.includes('구') && !siteAddress) {
-        // 현장 주소 형태면 skip
+    if (c0.includes('공사현장') || (c0.includes('공사') && c0.includes('현장'))) {
+      if (R[i + 1]) {
+        projectName = projectName || cv(R[i + 1][3]);
+        constructionSite = constructionSite || cv(R[i + 1][9]);
       }
+    }
+    if (c0.includes('시공자') || (c0.includes('공사') && c0.includes('시공'))) {
+      if (R[i + 1]) {
+        contractor = contractor || cv(R[i + 1][9]);
+        contractorAddress = contractorAddress || cv(R[i + 1][15]);
+      }
+    }
+    if (c0.includes('감리자') || (c0.includes('공사') && c0.includes('감리'))) {
+      if (R[i + 1]) {
+        const sv = cv(R[i + 1][3]);
+        supervisorOffice = cv(R[i + 1][9]);
+        supervisorAddress = cv(R[i + 1][15]);
+        supervisor = [sv, supervisorOffice].filter(Boolean).join(' / ');
+      }
+    }
+
+    if (c0.includes('현  장  명') || c0 === '현  장  명' || (c0.includes('현장명') && !c0.includes('공사'))) {
+      projectName = projectName || c3;
+      builderName = builderName || cv(r[15]);
+    }
+    if (c0.includes('납품지 주소') || c0.includes('납품지주소')) {
+      deliveryAddress = c3;
+      consignee = cv(r[15]);
+    }
+    if (c0.includes('특기 사항') || c0.includes('특기사항')) {
+      specialNotes = c3;
     }
   }
 
   result.project = {
-    project_name: projectName || '미등록 현장',
-    order_date: orderDate,
-    delivery_date: deliveryDate,
+    project_name:       projectName || '미등록 현장',
+    order_date:         orderDate,
+    delivery_date:      deliveryDate,
+    // 발주처 정보
+    biz_name:           bizName,
+    biz_no:             bizNo,
+    biz_ceo:            bizCeo,
+    biz_address:        bizAddress,
+    biz_manager:        bizManager,
+    biz_contact:        bizContact,
+    // 제출인 (건축주)
     submitter,
-    construction_site: constructionSite,
-    contractor: contractor.replace(/\n.*/s, ''),
-    supervisor: supervisor.replace(/\n/g, ' ').substring(0, 200),
-    site_address: siteAddress,
-    special_notes: specialNotes.substring(0, 500),
+    submitter_address:  submitterAddress,
+    // 공사 정보
+    construction_site:  constructionSite,
+    contractor:         contractor.replace(/\n.*/s, ''),
+    contractor_address: contractorAddress,
+    supervisor:         supervisor.replace(/\n/g, ' ').substring(0, 300),
+    supervisor_office:  supervisorOffice,
+    supervisor_address: supervisorAddress,
+    // 납품 정보
+    site_address:       deliveryAddress || constructionSite,
+    consignee,
+    builder_name:       builderName,
+    special_notes:      specialNotes.substring(0, 500),
   };
 
   // ── 시트(동)별 발주 명세 파싱 ──
@@ -212,26 +245,60 @@ function parsePurchaseOrderExcel(buffer: Buffer) {
 // ────────────────────────────────────────────────────────────────────────────
 export async function purchaseOrderRoutes(app: FastifyInstance) {
 
-  // DB 마이그레이션: 발주서 관련 테이블 자동 생성
+  // DB 마이그레이션: 발주서 테이블 생성
   await pool.query(`
     CREATE TABLE IF NOT EXISTS purchase_order (
-      po_id          SERIAL PRIMARY KEY,
-      project_id     INT REFERENCES project_master(project_id) ON DELETE SET NULL,
-      file_name      VARCHAR(500) NOT NULL,
-      project_name   VARCHAR(300),
-      order_date     VARCHAR(100),
-      delivery_date  VARCHAR(100),
-      submitter      VARCHAR(300),
-      construction_site VARCHAR(500),
-      contractor     VARCHAR(300),
-      supervisor     VARCHAR(500),
-      site_address   VARCHAR(500),
-      special_notes  TEXT,
-      status         VARCHAR(20) DEFAULT 'ACTIVE',
-      uploaded_by    INT,
-      created_at     TIMESTAMPTZ DEFAULT NOW()
+      po_id              SERIAL PRIMARY KEY,
+      project_id         INT REFERENCES project_master(project_id) ON DELETE SET NULL,
+      file_name          VARCHAR(500) NOT NULL,
+      project_name       VARCHAR(300),
+      order_date         VARCHAR(100),
+      delivery_date      VARCHAR(100),
+      -- 발주처 정보
+      biz_name           VARCHAR(300),
+      biz_no             VARCHAR(50),
+      biz_ceo            VARCHAR(100),
+      biz_address        VARCHAR(500),
+      biz_manager        VARCHAR(100),
+      biz_contact        VARCHAR(100),
+      -- 제출인 / 공사 정보
+      submitter          VARCHAR(300),
+      submitter_address  VARCHAR(500),
+      construction_site  VARCHAR(500),
+      contractor         VARCHAR(300),
+      contractor_address VARCHAR(500),
+      supervisor         VARCHAR(500),
+      supervisor_office  VARCHAR(300),
+      supervisor_address VARCHAR(500),
+      -- 납품 정보
+      site_address       VARCHAR(500),
+      consignee          VARCHAR(200),
+      builder_name       VARCHAR(200),
+      special_notes      TEXT,
+      status             VARCHAR(20) DEFAULT 'ACTIVE',
+      uploaded_by        INT,
+      created_at         TIMESTAMPTZ DEFAULT NOW()
     )
   `).catch(() => {});
+
+  // 기존 테이블 컬럼 추가 (이미 생성된 경우)
+  const newCols = [
+    ['biz_name',           'VARCHAR(300)'],
+    ['biz_no',             'VARCHAR(50)'],
+    ['biz_ceo',            'VARCHAR(100)'],
+    ['biz_address',        'VARCHAR(500)'],
+    ['biz_manager',        'VARCHAR(100)'],
+    ['biz_contact',        'VARCHAR(100)'],
+    ['submitter_address',  'VARCHAR(500)'],
+    ['contractor_address', 'VARCHAR(500)'],
+    ['supervisor_office',  'VARCHAR(300)'],
+    ['supervisor_address', 'VARCHAR(500)'],
+    ['consignee',          'VARCHAR(200)'],
+    ['builder_name',       'VARCHAR(200)'],
+  ];
+  for (const [col, type] of newCols) {
+    await pool.query(`ALTER TABLE purchase_order ADD COLUMN IF NOT EXISTS ${col} ${type}`).catch(() => {});
+  }
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS purchase_order_item (
@@ -353,22 +420,38 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
       const poRes = await client.query(
         `INSERT INTO purchase_order (
           project_id, file_name, project_name, order_date, delivery_date,
-          submitter, construction_site, contractor, supervisor, site_address, special_notes,
+          biz_name, biz_no, biz_ceo, biz_address, biz_manager, biz_contact,
+          submitter, submitter_address,
+          construction_site, contractor, contractor_address,
+          supervisor, supervisor_office, supervisor_address,
+          site_address, consignee, builder_name, special_notes,
           uploaded_by
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING po_id`,
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING po_id`,
         [
           projectId,
           fileName,
           project.project_name,
-          project.order_date || null,
-          project.delivery_date || null,
-          project.submitter || null,
+          project.order_date        || null,
+          project.delivery_date     || null,
+          project.biz_name          || null,
+          project.biz_no            || null,
+          project.biz_ceo           || null,
+          project.biz_address       || null,
+          project.biz_manager       || null,
+          project.biz_contact       || null,
+          project.submitter         || null,
+          project.submitter_address || null,
           project.construction_site || null,
-          project.contractor || null,
-          project.supervisor || null,
-          project.site_address || null,
-          project.special_notes || null,
-          user?.worker_id || null,
+          project.contractor        || null,
+          project.contractor_address|| null,
+          project.supervisor        || null,
+          project.supervisor_office || null,
+          project.supervisor_address|| null,
+          project.site_address      || null,
+          project.consignee         || null,
+          project.builder_name      || null,
+          project.special_notes     || null,
+          user?.worker_id           || null,
         ]
       );
       const poId = poRes.rows[0].po_id;
