@@ -257,15 +257,14 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
   `).catch(() => {});
 
   // ── POST /api/purchase-orders/parse ── 업로드 전 미리보기 (저장 없음)
+  // { file_base64: string, file_name: string }
   app.post('/api/purchase-orders/parse', { preHandler: requireAuth }, async (req, reply) => {
-    const data = await (req as any).file();
-    if (!data) return reply.code(400).send({ error: 'no_file', message: '파일이 없습니다.' });
-
-    const chunks: Buffer[] = [];
-    for await (const chunk of data.file) chunks.push(chunk);
-    const buffer = Buffer.concat(chunks);
-
+    const body = req.body as any;
+    if (!body?.file_base64) {
+      return reply.code(400).send({ error: 'no_file', message: '파일 데이터가 없습니다.' });
+    }
     try {
+      const buffer = Buffer.from(body.file_base64, 'base64');
       const parsed = parsePurchaseOrderExcel(buffer);
       return { data: parsed };
     } catch (err: any) {
@@ -274,15 +273,24 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
   });
 
   // ── POST /api/purchase-orders/upload ── 업로드 + 파싱 + DB 저장
+  // { file_base64: string, file_name: string }
   app.post('/api/purchase-orders/upload', { preHandler: requireAuth }, async (req, reply) => {
-    const data = await (req as any).file();
-    if (!data) return reply.code(400).send({ error: 'no_file', message: '파일이 없습니다.' });
+    const body = req.body as any;
+    if (!body?.file_base64) {
+      return reply.code(400).send({ error: 'no_file', message: '파일 데이터가 업습니다.' });
+    }
 
-    const fileName = data.filename;
-    const chunks: Buffer[] = [];
-    for await (const chunk of data.file) chunks.push(chunk);
-    const buffer = Buffer.concat(chunks);
+    const fileName: string = body.file_name || 'upload.xlsx';
+    let buffer: Buffer;
+    try {
+      buffer = Buffer.from(body.file_base64, 'base64');
+    } catch {
+      return reply.code(422).send({ error: 'decode_failed', message: 'Base64 디코딩 실패' });
+    }
 
+    const user = (req as any).user;
+
+    // 파싱
     let parsed: ReturnType<typeof parsePurchaseOrderExcel>;
     try {
       parsed = parsePurchaseOrderExcel(buffer);
@@ -290,7 +298,6 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
       return reply.code(422).send({ error: 'parse_failed', message: `파싱 실패: ${err.message}` });
     }
 
-    const user = (req as any).user;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');

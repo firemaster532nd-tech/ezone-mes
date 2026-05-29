@@ -385,12 +385,24 @@ function DetailModal({ po, onClose }: { po: PurchaseOrder & { items?: PoItem[]; 
 export default function PurchaseOrdersPage() {
   const [list, setList] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(false);
+  const [parsing, setParsing] = useState(false);
   const [search, setSearch] = useState('');
   const [preview, setPreview] = useState<ParsedPreview | null>(null);
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [detailPo, setDetailPo] = useState<(PurchaseOrder & { items?: PoItem[]; sheets?: string[] }) | null>(null);
   const [initialized, setInitialized] = useState(false);
+
+  // 비동기 base64 인코딩 (큰 파일 스택 오버플로우 방지)
+  const toBase64 = (buffer: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buffer);
+    let bin = '';
+    const CHUNK = 8192;
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(bin);
+  };
 
   const fetchList = useCallback(async () => {
     setLoading(true);
@@ -410,34 +422,43 @@ export default function PurchaseOrdersPage() {
     fetchList();
   }
 
-  // 파일 선택 → 미리보기 파싱
+  // 파일 선택 → 미리보기 파싱 (base64 JSON)
   const handleFile = async (file: File) => {
-    const formData = new FormData();
-    formData.append('file', file);
+    setParsing(true);
     try {
-      const res = await api.upload<{ data: ParsedPreview }>('/purchase-orders/parse', formData);
+      const arrayBuffer = await file.arrayBuffer();
+      const base64 = toBase64(arrayBuffer);
+      const res = await api.post<{ data: ParsedPreview }>('/purchase-orders/parse', {
+        file_base64: base64,
+        file_name: file.name,
+      });
       setPreview(res.data);
       setPreviewFile(file);
     } catch (e: any) {
-      toast.error(`파싱 실패: ${e?.response?.data?.message || e.message}`);
+      toast.error(`파싱 실패: ${e?.body?.message || e.message}`);
+    } finally {
+      setParsing(false);
     }
   };
 
-  // 확정 업로드
+  // 확정 업로드 (base64 JSON)
   const handleConfirm = async () => {
     if (!previewFile) return;
     setUploading(true);
-    const formData = new FormData();
-    formData.append('file', previewFile);
     try {
-      const res = await api.upload<{ data: any }>('/purchase-orders/upload', formData);
+      const arrayBuffer = await previewFile.arrayBuffer();
+      const base64 = toBase64(arrayBuffer);
+      const res = await api.post<{ data: any }>('/purchase-orders/upload', {
+        file_base64: base64,
+        file_name: previewFile.name,
+      });
       const d = res.data;
       toast.success(`발주서 등록 완료 — 프로젝트: ${d.project_name} / 명세 ${d.item_count}건`);
       setPreview(null);
       setPreviewFile(null);
       fetchList();
     } catch (e: any) {
-      toast.error(`업로드 실패: ${e?.response?.data?.message || e.message}`);
+      toast.error(`업로드 실패: ${e?.body?.message || e.message}`);
     } finally {
       setUploading(false);
     }
@@ -477,6 +498,12 @@ export default function PurchaseOrdersPage() {
             발주서 Excel 업로드
           </h2>
           <DropZone onFile={handleFile} />
+          {parsing && (
+            <div className="flex items-center justify-center gap-2 py-3 text-blue-600 text-sm">
+              <div className="h-4 w-4 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" />
+              발주서 읽는 중...
+            </div>
+          )}
           <p className="text-xs text-gray-400 text-center">
             이지원 발주서 양식 자동 인식 • 현장명, 시공사, 감리자, 발주 명세 자동 추출
           </p>
