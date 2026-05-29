@@ -4,6 +4,8 @@ import { initApp } from '../src/index.js';
 export const config = {
   api: {
     bodyParser: false,
+    // 큰 JSON 요청(base64 파일) 허용
+    responseLimit: false,
   },
 };
 
@@ -24,7 +26,7 @@ function setCorsHeaders(req: any, res: any) {
 }
 
 export default async function handler(req: any, res: any) {
-  // OPTIONS preflight는 즉시 200으로 응답 (Fastify 초기화 불필요)
+  // OPTIONS preflight는 즉시 204 응답 (Fastify 초기화 불필요)
   if (req.method === 'OPTIONS') {
     setCorsHeaders(req, res);
     res.statusCode = 204;
@@ -36,32 +38,45 @@ export default async function handler(req: any, res: any) {
     const app = await initApp();
     await app.ready();
 
-    // raw body를 Buffer로 읽기
+    // raw body 읽기
     const chunks: Buffer[] = [];
     for await (const chunk of req) {
       chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     }
     const rawBody = chunks.length > 0 ? Buffer.concat(chunks) : undefined;
 
+    // Fastify inject에 넘길 헤더 정제
+    // transfer-encoding, host, connection 등은 inject에서 충돌 발생
+    const headers: Record<string, string> = {};
+    for (const [k, v] of Object.entries(req.headers as Record<string, string>)) {
+      const lower = k.toLowerCase();
+      if (['transfer-encoding', 'host', 'connection'].includes(lower)) continue;
+      headers[lower] = v;
+    }
+    // content-length를 실제 body 크기로 맞춤
+    if (rawBody) {
+      headers['content-length'] = String(rawBody.length);
+    } else {
+      delete headers['content-length'];
+      delete headers['content-type'];
+    }
+
     const response = await app.inject({
       method: req.method,
       url: req.url,
-      headers: req.headers,
+      headers,
       payload: rawBody,
     });
 
     res.statusCode = response.statusCode;
-    Object.entries(response.headers).forEach(([key, value]) => {
-      if (value !== undefined) {
-        res.setHeader(key, value as string);
-      }
-    });
-
+    for (const [key, value] of Object.entries(response.headers)) {
+      if (value !== undefined) res.setHeader(key, value as string);
+    }
     res.end(response.rawPayload);
+
   } catch (err: any) {
-    // 서버 에러 시에도 CORS 헤더 포함 → 브라우저에서 에러 내용 확인 가능
     setCorsHeaders(req, res);
     res.statusCode = 500;
-    res.end(JSON.stringify({ error: err.message, stack: err.stack }));
+    res.end(JSON.stringify({ error: err.message }));
   }
 }

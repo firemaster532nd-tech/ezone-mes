@@ -44,7 +44,6 @@ function parsePurchaseOrderExcel(buffer: Buffer) {
     const c0 = cv(r[0]);
     const c3 = cv(r[3]);
     const c4 = cv(r[4]);
-    const c9 = cv(r[9]);
     const c12 = cv(r[12]);
     const c14 = cv(r[14]);
     const c18 = cv(r[18]);
