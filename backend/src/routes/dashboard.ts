@@ -118,78 +118,73 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
   // GET /api/dashboard/activity-log - 최근 시스템 활동 로그
   app.get('/api/dashboard/activity-log', async (_request) => {
-    const result = await pool.query(`
-      (
-        SELECT 'WORK_ORDER' as type,
-          'WO ' || wo_number || ' (' || process_code || ') ' || status as message,
-          CASE WHEN status = 'HOLD' THEN 'warning' ELSE 'info' END as severity,
-          created_at as timestamp,
-          jsonb_build_object('wo_number', wo_number, 'process_code', process_code, 'status', status) as details
-        FROM work_order
-        WHERE created_at >= NOW() - INTERVAL '3 days'
-      )
-      UNION ALL
-      (
-        SELECT 'INSPECTION' as type,
-          '검사 불합격: ' || COALESCE(form_code, insp_type) as message,
-          'error' as severity,
-          inspected_at as timestamp,
-          jsonb_build_object('form_code', form_code, 'insp_type', insp_type, 'result', result) as details
-        FROM inspection
-        WHERE result = 'FAIL' AND inspected_at >= NOW() - INTERVAL '7 days'
-      )
-      UNION ALL
-      (
-        SELECT 'APPROVAL' as type,
-          '결재 대기: ' || doc_title || ' (' || status || ')' as message,
-          CASE WHEN EXTRACT(DAY FROM NOW() - created_at) >= 3 THEN 'error' ELSE 'warning' END as severity,
-          created_at as timestamp,
-          jsonb_build_object('doc_title', doc_title, 'status', status) as details
-        FROM approval
-        WHERE status IN ('REVIEW', 'PENDING_APPROVE')
-      )
-      UNION ALL
-      (
-        SELECT 'INVENTORY' as type,
-          i.item_name || ' 안전재고 미달 (' || COALESCE(SUM(
-            CASE WHEN it.txn_type = 'IN' THEN it.qty
-                 WHEN it.txn_type = 'OUT' THEN -it.qty
-                 WHEN it.txn_type = 'ADJ' THEN it.qty
-                 ELSE 0 END), 0) || '/' || i.safety_stock || ')' as message,
-          'warning' as severity,
-          NOW() as timestamp,
-          jsonb_build_object('item_code', i.item_code, 'item_name', i.item_name,
-            'balance', COALESCE(SUM(
+    try {
+      const result = await pool.query(`
+        (
+          SELECT 'WORK_ORDER' as type,
+            'WO ' || wo_number || ' (' || process_code || ') ' || status as message,
+            CASE WHEN status = 'HOLD' THEN 'warning' ELSE 'info' END as severity,
+            created_at as timestamp,
+            jsonb_build_object('wo_number', wo_number, 'process_code', process_code, 'status', status) as details
+          FROM work_order
+          WHERE created_at >= NOW() - INTERVAL '3 days'
+        )
+        UNION ALL
+        (
+          SELECT 'INSPECTION' as type,
+            '검사 불합격: ' || COALESCE(form_code, insp_type) as message,
+            'error' as severity,
+            inspected_at as timestamp,
+            jsonb_build_object('form_code', form_code, 'insp_type', insp_type, 'result', result) as details
+          FROM inspection
+          WHERE result = 'FAIL' AND inspected_at >= NOW() - INTERVAL '7 days'
+        )
+        UNION ALL
+        (
+          SELECT 'APPROVAL' as type,
+            '결재 대기: ' || doc_title || ' (' || status || ')' as message,
+            CASE WHEN EXTRACT(DAY FROM NOW() - created_at) >= 3 THEN 'error' ELSE 'warning' END as severity,
+            created_at as timestamp,
+            jsonb_build_object('doc_title', doc_title, 'status', status) as details
+          FROM approval
+          WHERE status IN ('REVIEW', 'PENDING_APPROVE')
+        )
+        UNION ALL
+        (
+          SELECT 'INVENTORY' as type,
+            i.item_name || ' 안전재고 미달 (' || COALESCE(SUM(
               CASE WHEN it.txn_type = 'IN' THEN it.qty
                    WHEN it.txn_type = 'OUT' THEN -it.qty
                    WHEN it.txn_type = 'ADJ' THEN it.qty
-                   ELSE 0 END), 0),
-            'safety_stock', i.safety_stock) as details
-        FROM item_master i
-        LEFT JOIN inventory_transaction it ON it.item_id = i.item_id
-        WHERE i.safety_stock > 0 AND i.is_active = true
-        GROUP BY i.item_id, i.item_code, i.item_name, i.safety_stock
-        HAVING COALESCE(SUM(
-          CASE WHEN it.txn_type = 'IN' THEN it.qty
-               WHEN it.txn_type = 'OUT' THEN -it.qty
-               WHEN it.txn_type = 'ADJ' THEN it.qty
-               ELSE 0 END), 0) < i.safety_stock
-      )
-      UNION ALL
-      (
-        SELECT 'PROCESS' as type,
-          '공정 정체: ' || process_code || ' (' || status || ')' as message,
-          'warning' as severity,
-          started_at as timestamp,
-          jsonb_build_object('process_code', process_code, 'status', status) as details
-        FROM process_log
-        WHERE status IN ('PAUSED', 'RUNNING') AND started_at < NOW() - INTERVAL '2 hours'
-      )
-      ORDER BY timestamp DESC
-      LIMIT 30
-    `);
-
-    return { data: result.rows };
+                   ELSE 0 END), 0) || '/' || i.safety_stock || ')' as message,
+            'warning' as severity,
+            NOW() as timestamp,
+            jsonb_build_object('item_code', i.item_code, 'item_name', i.item_name,
+              'balance', COALESCE(SUM(
+                CASE WHEN it.txn_type = 'IN' THEN it.qty
+                     WHEN it.txn_type = 'OUT' THEN -it.qty
+                     WHEN it.txn_type = 'ADJ' THEN it.qty
+                     ELSE 0 END), 0),
+              'safety_stock', i.safety_stock) as details
+          FROM item_master i
+          LEFT JOIN inventory_transaction it ON it.item_id = i.item_id
+          WHERE i.safety_stock > 0 AND i.is_active = true
+          GROUP BY i.item_id, i.item_code, i.item_name, i.safety_stock
+          HAVING COALESCE(SUM(
+            CASE WHEN it.txn_type = 'IN' THEN it.qty
+                 WHEN it.txn_type = 'OUT' THEN -it.qty
+                 WHEN it.txn_type = 'ADJ' THEN it.qty
+                 ELSE 0 END), 0) < i.safety_stock
+        )
+        ORDER BY timestamp DESC
+        LIMIT 30
+      `);
+      return { data: result.rows };
+    } catch (err: any) {
+      // process_log 등 테이블 부재 시 graceful fallback
+      console.error('[dashboard/activity-log] query error:', err?.message);
+      return { data: [] };
+    }
   });
 
   // GET /api/dashboard/alerts - 경고/오류 항목 유형별 집계
@@ -230,12 +225,12 @@ export async function dashboardRoutes(app: FastifyInstance) {
         ) sub
       `),
 
-      // 정체 공정 건수
+      // 정체 공정 건수 — process_log 없을 수 있음
       pool.query(`
         SELECT COUNT(*) as count
         FROM process_log
         WHERE status IN ('PAUSED', 'RUNNING') AND started_at < NOW() - INTERVAL '2 hours'
-      `),
+      `).catch(() => ({ rows: [{ count: '0' }] })),
     ]);
 
     return {
@@ -243,7 +238,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
         failed_inspections_count: parseInt(failedInspections.rows[0].count, 10),
         pending_approvals_count: parseInt(pendingApprovals.rows[0].count, 10),
         safety_stock_alerts_count: parseInt(safetyStockAlerts.rows[0].count, 10),
-        stalled_processes_count: parseInt(stalledProcesses.rows[0].count, 10),
+        stalled_processes_count: parseInt(stalledProcesses.rows[0]?.count ?? '0', 10),
       },
     };
   });
@@ -295,13 +290,13 @@ export async function dashboardRoutes(app: FastifyInstance) {
         GROUP BY process_code, status
         ORDER BY process_code, status
       `),
-      // 5. 공정실행 현황 (공정별×상태별)
+      // 5. 공정실행 현황 (공정별×상태별) — process_log 없을 수 있음
       pool.query(`
         SELECT pl.process_code, pl.status, COUNT(*) as count
         FROM process_log pl
         GROUP BY pl.process_code, pl.status
         ORDER BY pl.process_code
-      `),
+      `).catch(() => ({ rows: [] })),
       // 6. 결재 현황
       pool.query(`
         SELECT status, COUNT(*) as count

@@ -258,7 +258,7 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
 
   // ── POST /api/purchase-orders/parse ── 업로드 전 미리보기 (저장 없음)
   app.post('/api/purchase-orders/parse', { preHandler: requireAuth }, async (req, reply) => {
-    const data = await req.file?.();
+    const data = await (req as any).file();
     if (!data) return reply.code(400).send({ error: 'no_file', message: '파일이 없습니다.' });
 
     const chunks: Buffer[] = [];
@@ -275,7 +275,7 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
 
   // ── POST /api/purchase-orders/upload ── 업로드 + 파싱 + DB 저장
   app.post('/api/purchase-orders/upload', { preHandler: requireAuth }, async (req, reply) => {
-    const data = await req.file?.();
+    const data = await (req as any).file();
     if (!data) return reply.code(400).send({ error: 'no_file', message: '파일이 없습니다.' });
 
     const fileName = data.filename;
