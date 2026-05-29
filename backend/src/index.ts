@@ -41,6 +41,7 @@ import { companyRoutes } from './routes/companies.js';
 import { statementRoutes } from './routes/statements.js';
 import { quotationRoutes } from './routes/quotations.js';
 import { projectRoutes } from './routes/projects.js';
+import { purchaseOrderRoutes } from './routes/purchase-orders.js';
 
 let appInstance: any = null;
 
@@ -91,6 +92,7 @@ export const initApp = async () => {
   await app.register(statementRoutes);
   await app.register(quotationRoutes);
   await app.register(projectRoutes);
+  await app.register(purchaseOrderRoutes);
 
   // Health check
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));

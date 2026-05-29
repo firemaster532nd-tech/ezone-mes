@@ -40,6 +40,7 @@ const shopNavItems: NavSection[] = [
     label: '수주/발주',
     icon: ShoppingCart,
     children: [
+      { label: '발주서 관리', path: '/orders/purchase-orders' },
       { label: '견적서 등록/관리', path: '/orders/quotations' },
       { label: '미주문현황 조회', path: '/orders/unordered' },
       { label: '수주 관리 / BOM', path: '/orders' },
@@ -174,6 +175,7 @@ const adminNavItems: NavSection[] = [
     label: '수주/구매',
     icon: ShoppingCart,
     children: [
+      { label: '발주서 관리', path: '/orders/purchase-orders' },
       { label: '견적서 등록/관리', path: '/orders/quotations' },
       { label: '미주문현황 조회', path: '/orders/unordered' },
       { label: '수주 관리 / BOM', path: '/orders' },

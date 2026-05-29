@@ -49,6 +49,7 @@ import { QuotationPrintPage } from '@/pages/orders/QuotationPrintPage';
 import { ProjectPage } from '@/pages/orders/ProjectPage';
 import { ProjectWorkOrderPage } from '@/pages/production/ProjectWorkOrderPage';
 import { ProjectLotMatrixPage } from '@/pages/quality/ProjectLotMatrixPage';
+import PurchaseOrdersPage from '@/pages/sales/PurchaseOrdersPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -94,6 +95,7 @@ export const router = createBrowserRouter([
       { path: 'orders/unordered', element: <UnorderedPage /> },
       { path: 'orders/quotations/print/:id', element: <QuotationPrintPage /> },
       { path: 'orders/projects', element: <ProjectPage /> },
+      { path: 'orders/purchase-orders', element: <PurchaseOrdersPage /> },
       // 출하관리
       { path: 'shipment/list', element: <ShipmentPage /> },
       { path: 'shipment/quality-report/:id', element: <QualityReportPage /> },
