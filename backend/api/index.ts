@@ -7,7 +7,31 @@ export const config = {
   },
 };
 
+// 허용 도메인 목록
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'https://ezone-mes-frontend-v2pa.vercel.app',
+];
+
+function setCorsHeaders(req: any, res: any) {
+  const origin = req.headers?.origin || '';
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[2];
+  res.setHeader('Access-Control-Allow-Origin', allowed);
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+}
+
 export default async function handler(req: any, res: any) {
+  // OPTIONS preflight는 즉시 200으로 응답 (Fastify 초기화 불필요)
+  if (req.method === 'OPTIONS') {
+    setCorsHeaders(req, res);
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+
   try {
     const app = await initApp();
     await app.ready();
@@ -35,6 +59,8 @@ export default async function handler(req: any, res: any) {
 
     res.end(response.rawPayload);
   } catch (err: any) {
+    // 서버 에러 시에도 CORS 헤더 포함 → 브라우저에서 에러 내용 확인 가능
+    setCorsHeaders(req, res);
     res.statusCode = 500;
     res.end(JSON.stringify({ error: err.message, stack: err.stack }));
   }
