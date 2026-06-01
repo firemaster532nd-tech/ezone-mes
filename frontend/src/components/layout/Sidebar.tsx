@@ -254,10 +254,11 @@ const adminNavItems: NavSection[] = [
     label: '설정',
     icon: Settings,
     children: [
-      { label: '사용자 관리', path: '/settings/users' },
-      { label: '부서 관리', path: '/settings/departments' },
-      { label: '권한 관리', path: '/settings/permissions' },
-      { label: '백업 / 초기화', path: '/settings/backup' },
+      { label: '사용자 관리',       path: '/settings/users' },
+      { label: '부서 관리',         path: '/settings/departments' },
+      { label: '권한 관리',         path: '/settings/permissions' },
+      { label: '이카운트 ERP 연동', path: '/settings/ecount' },
+      { label: '백업 / 초기화',     path: '/settings/backup' },
     ],
   },
 ];

@@ -51,6 +51,7 @@ import { ProjectWorkOrderPage } from '@/pages/production/ProjectWorkOrderPage';
 import { ProjectLotMatrixPage } from '@/pages/quality/ProjectLotMatrixPage';
 import PurchaseOrdersPage from '@/pages/sales/PurchaseOrdersPage';
 import { SocketWorkOrderPage } from '@/pages/production/SocketWorkOrderPage';
+import { EcountSyncPage } from '@/pages/settings/EcountSyncPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -116,10 +117,11 @@ export const router = createBrowserRouter([
       { path: 'reports', element: <ReportsPage /> },
       { path: 'reports/loss', element: <LossReportPage /> },
       // 설정
-      { path: 'settings/backup', element: <BackupPage /> },
-      { path: 'settings/users', element: <UsersPage /> },
-      { path: 'settings/departments', element: <DepartmentsPage /> },
-      { path: 'settings/permissions', element: <PermissionsPage /> },
+      { path: 'settings/backup',      element: <BackupPage /> },
+      { path: 'settings/users',        element: <UsersPage /> },
+      { path: 'settings/departments',  element: <DepartmentsPage /> },
+      { path: 'settings/permissions',  element: <PermissionsPage /> },
+      { path: 'settings/ecount',       element: <EcountSyncPage /> },
     ],
   },
 ]);
