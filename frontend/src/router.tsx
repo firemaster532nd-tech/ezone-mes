@@ -50,6 +50,7 @@ import { ProjectPage } from '@/pages/orders/ProjectPage';
 import { ProjectWorkOrderPage } from '@/pages/production/ProjectWorkOrderPage';
 import { ProjectLotMatrixPage } from '@/pages/quality/ProjectLotMatrixPage';
 import PurchaseOrdersPage from '@/pages/sales/PurchaseOrdersPage';
+import { SocketWorkOrderPage } from '@/pages/production/SocketWorkOrderPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -73,6 +74,7 @@ export const router = createBrowserRouter([
       { path: 'production/tbm', element: <TbmPage /> },
       { path: 'production/tbm-print/:id', element: <TbmPrintPage /> },
       { path: 'production/project-work-orders', element: <ProjectWorkOrderPage /> },
+      { path: 'production/socket-work-orders',  element: <SocketWorkOrderPage /> },
       // 재고관리
       { path: 'inventory/dashboard', element: <InventoryDashboardPage /> },
       { path: 'inventory/initialize', element: <InitialInventoryPage /> },
