@@ -6,9 +6,9 @@ import { requireAuth, requireRole } from '../lib/auth-plugin.js';
 // 이카운트 오픈 API V2 연동 라우트
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ECOUNT_BASE = 'https://oapi';
+const ECOUNT_BASE = 'http://sboapi';
 const ECOUNT_SUFFIX = '.ecount.com/OAPI/V2';
-const ZONE_POST_URL = 'https://oapi.ecount.com/OAPI/V2/ZONE';
+const ZONE_POST_URL = 'http://sboapi.ecount.com/OAPI/V2/ZONE';
 
 // ── 세션 캐시 (메모리, 8시간) ────────────────────────────────────────────────
 let cachedSession: { session_id: string; zone: string; expires: number } | null = null;
@@ -227,6 +227,24 @@ export async function ecountRoutes(app: FastifyInstance) {
     );
     cachedSession = null; // 세션 캐시 초기화
     return { ok: true, id: rows[0].id };
+  });
+
+  // ── GET /api/ecount/myip ─ Vercel 서버 실제 외부 IP 확인 ─────────────────
+  app.get('/api/ecount/myip', { preHandler: requireRole('admin') }, async () => {
+    try {
+      const r = await fetch('https://api.ipify.org?format=json', { signal: AbortSignal.timeout(8000) });
+      const data = await r.json() as any;
+      return { server_ip: data.ip, note: '이 IP를 이카운트 IP등록에 추가하세요' };
+    } catch (e: any) {
+      // ipify 실패시 다른 서비스 시도
+      try {
+        const r2 = await fetch('https://ifconfig.me/ip', { signal: AbortSignal.timeout(8000) });
+        const ip = (await r2.text()).trim();
+        return { server_ip: ip, note: '이 IP를 이카운트 IP등록에 추가하세요' };
+      } catch (e2: any) {
+        return { server_ip: 'unknown', error: e.message };
+      }
+    }
   });
 
   // ── POST /api/ecount/test-connect ─ 연결 테스트 ──────────────────────────
