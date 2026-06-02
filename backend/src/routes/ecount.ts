@@ -6,9 +6,9 @@ import { requireAuth, requireRole } from '../lib/auth-plugin.js';
 // 이카운트 오픈 API V2 연동 라우트
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ECOUNT_BASE = 'https://sboapi';
+const ECOUNT_BASE = 'http://sboapi';
 const ECOUNT_SUFFIX = '.ecount.com/OAPI/V2';
-const ZONE_URL = 'https://sboapi.ecount.com/api/ecount/zone';
+const ZONE_POST_URL = 'http://sboapi.ecount.com/OAPI/V2/ZONE';
 
 // ── 세션 캐시 (메모리, 8시간) ────────────────────────────────────────────────
 let cachedSession: { session_id: string; zone: string; expires: number } | null = null;
@@ -19,11 +19,16 @@ async function getSession(cfg: EcountConfig): Promise<{ session_id: string; zone
     return { session_id: cachedSession.session_id, zone: cachedSession.zone };
   }
 
-  // 1) Zone 조회
-  const zoneRes = await fetch(`${ZONE_URL}?COM_CODE=${cfg.com_code}`);
-  if (!zoneRes.ok) throw new Error('이카운트 Zone 조회 실패');
+  // 1) Zone 조회 (POST 방식)
+  const zoneRes = await fetch(ZONE_POST_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ COM_CODE: cfg.com_code }),
+  });
+  if (!zoneRes.ok) throw new Error('이카운트 Zone 조회 실패: ' + zoneRes.status);
   const zoneData = await zoneRes.json() as any;
-  const zone = zoneData?.Data?.ZONE || zoneData?.ZONE || '7';
+  const zone = zoneData?.Data?.ZONE || zoneData?.ZONE;
+  if (!zone) throw new Error('Zone 정보를 가져올 수 없습니다: ' + JSON.stringify(zoneData).slice(0, 200));
 
   // 2) 로그인 → SESSION_ID
   const loginUrl = `${ECOUNT_BASE}${zone}${ECOUNT_SUFFIX}/OAPILogin`;
@@ -43,7 +48,13 @@ async function getSession(cfg: EcountConfig): Promise<{ session_id: string; zone
     throw new Error(`이카운트 로그인 실패: ${loginRes.status} ${txt.slice(0, 200)}`);
   }
   const loginData = await loginRes.json() as any;
-  const session_id = loginData?.Data?.SESSION_ID || loginData?.SESSION_ID;
+  // 이카운트 V2: 성공 시 Code='00', SESSION_ID는 Data.Datas.SESSION_ID
+  const code = loginData?.Data?.Code;
+  if (code !== '00') {
+    const msg = loginData?.Data?.Message || JSON.stringify(loginData).slice(0, 300);
+    throw new Error(`이카운트 로그인 실패 (Code ${code}): ${msg}`);
+  }
+  const session_id = loginData?.Data?.Datas?.SESSION_ID;
   if (!session_id) throw new Error('SESSION_ID 수신 실패: ' + JSON.stringify(loginData).slice(0, 300));
 
   // 8시간 캐시
