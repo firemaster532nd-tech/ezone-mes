@@ -6,9 +6,9 @@ import { requireAuth, requireRole } from '../lib/auth-plugin.js';
 // 이카운트 오픈 API V2 연동 라우트
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ECOUNT_BASE = 'http://sboapi';
+const ECOUNT_BASE = 'https://oapi';
 const ECOUNT_SUFFIX = '.ecount.com/OAPI/V2';
-const ZONE_POST_URL = 'http://sboapi.ecount.com/OAPI/V2/ZONE';
+const ZONE_POST_URL = 'https://oapi.ecount.com/OAPI/V2/ZONE';
 
 // ── 세션 캐시 (메모리, 8시간) ────────────────────────────────────────────────
 let cachedSession: { session_id: string; zone: string; expires: number } | null = null;
