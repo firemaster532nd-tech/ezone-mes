@@ -198,8 +198,8 @@ export async function ecountRoutes(app: FastifyInstance) {
 
   // item_master에 이카운트 품목코드 컬럼 추가
   await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS ecount_prod_cd VARCHAR(50)`).catch(() => {});
-  // company에 이카운트 거래처코드 컬럼 추가
-  await pool.query(`ALTER TABLE company ADD COLUMN IF NOT EXISTS ecount_cust_cd VARCHAR(50)`).catch(() => {});
+  // company_master에 이카운트 거래처코드 컬럼 추가
+  await pool.query(`ALTER TABLE company_master ADD COLUMN IF NOT EXISTS ecount_cust_cd VARCHAR(50)`).catch(() => {});
 
   // ── GET /api/ecount/config ─ 설정 조회 ───────────────────────────────────
   app.get('/api/ecount/config', { preHandler: requireRole('admin') }, async (_req, reply) => {
@@ -322,19 +322,19 @@ export async function ecountRoutes(app: FastifyInstance) {
         if (!custCd) continue;
 
         const { rows: existing } = await pool.query(
-          `SELECT company_id FROM company WHERE ecount_cust_cd=$1 OR company_code=$1 LIMIT 1`,
+          `SELECT company_id FROM company_master WHERE ecount_cust_cd=$1 OR company_code=$1 LIMIT 1`,
           [custCd],
         );
 
         if (existing.length > 0) {
           await pool.query(
-            `UPDATE company SET company_name=$1, biz_no=$2, ceo_name=$3, address=$4, phone=$5, ecount_cust_cd=$6, updated_at=NOW()
+            `UPDATE company_master SET company_name=$1, biz_no=$2, ceo_name=$3, address=$4, phone=$5, ecount_cust_cd=$6, updated_at=NOW()
              WHERE company_id=$7`,
             [custNm, bizNo, ceo, addr, tel, custCd, existing[0].company_id],
           ).catch(() => {});
         } else {
           await pool.query(
-            `INSERT INTO company (company_code, company_name, biz_no, ceo_name, address, phone, ecount_cust_cd, is_active)
+            `INSERT INTO company_master (company_code, company_name, biz_no, ceo_name, address, phone, ecount_cust_cd, is_active)
              VALUES ($1,$2,$3,$4,$5,$6,$7,TRUE)
              ON CONFLICT (company_code) DO UPDATE SET company_name=$2, ecount_cust_cd=$7, updated_at=NOW()`,
             [custCd, custNm, bizNo, ceo, addr, tel, custCd],
@@ -572,7 +572,7 @@ export async function ecountRoutes(app: FastifyInstance) {
 
     // 현재 저장된 건수
     const counts: Record<string, number> = {};
-    for (const [t, tbl] of [['item', 'item_master'], ['customer', 'company'], ['stock', 'ecount_stock'], ['purchase', 'ecount_purchase'], ['sale', 'ecount_sale']] as [string, string][]) {
+    for (const [t, tbl] of [['item', 'item_master'], ['customer', 'company_master'], ['stock', 'ecount_stock'], ['purchase', 'ecount_purchase'], ['sale', 'ecount_sale']] as [string, string][]) {
       const { rows } = await pool.query(`SELECT COUNT(*)::int AS cnt FROM ${tbl} ${t === 'item' ? "WHERE ecount_prod_cd IS NOT NULL" : t === 'customer' ? "WHERE ecount_cust_cd IS NOT NULL" : ''}`);
       counts[t] = rows[0]?.cnt ?? 0;
     }
