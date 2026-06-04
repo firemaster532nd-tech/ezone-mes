@@ -229,6 +229,107 @@ export async function ecountRoutes(app: FastifyInstance) {
     return { ok: true, id: rows[0].id };
   });
 
+  // ── POST /api/ecount/push/:type ─ 로컬 스크립트에서 데이터 수신 ───────────
+  // PC에서 직접 이카운트 API를 호출 후 결과를 MES에 전달하는 엔드포인트
+  app.post('/api/ecount/push/:type', { preHandler: requireRole('admin') }, async (req, reply) => {
+    const { type } = req.params as any;
+    const { data } = req.body as any;
+    if (!Array.isArray(data)) return reply.code(400).send({ error: 'data 배열이 필요합니다.' });
+
+    const startedAt = new Date();
+    try {
+      if (type === 'items') {
+        let synced = 0;
+        for (const item of data) {
+          const prodCd = item.PROD_CD || item.prod_cd;
+          const prodNm = item.PROD_DV_NM || item.PROD_NM || item.prod_nm || '';
+          const unit   = item.UNIT || item.unit || 'ea';
+          if (!prodCd) continue;
+          const { rows } = await pool.query(`SELECT item_id FROM item_master WHERE ecount_prod_cd=$1 OR item_code=$1 LIMIT 1`, [prodCd]);
+          if (rows.length > 0) {
+            await pool.query(`UPDATE item_master SET item_name=$1,unit=$2,ecount_prod_cd=$3,updated_at=NOW() WHERE item_id=$4`,
+              [prodNm, unit, prodCd, rows[0].item_id]).catch(() => {});
+          } else {
+            await pool.query(`INSERT INTO item_master (item_code,item_name,unit,ecount_prod_cd,is_active) VALUES($1,$2,$3,$4,TRUE)
+              ON CONFLICT (item_code) DO UPDATE SET item_name=$2,ecount_prod_cd=$4,updated_at=NOW()`,
+              [prodCd, prodNm, unit, prodCd]).catch(() => {});
+          }
+          synced++;
+        }
+        await logSync('item', 'success', data.length, synced, undefined, startedAt);
+        return { ok: true, type, total: data.length, synced };
+
+      } else if (type === 'customers') {
+        let synced = 0;
+        for (const c of data) {
+          const cd = c.CUST_CD||c.cust_cd; const nm = c.CUST_NM||c.cust_nm||'';
+          const biz = c.BIZ_NO||c.biz_no||null; const ceo = c.CEO_NM||c.ceo_nm||null;
+          const addr = c.ADDR||c.addr||null; const tel = c.TEL_NO||c.tel_no||null;
+          if (!cd) continue;
+          const { rows } = await pool.query(`SELECT company_id FROM company_master WHERE ecount_cust_cd=$1 OR company_code=$1 LIMIT 1`, [cd]);
+          if (rows.length > 0) {
+            await pool.query(`UPDATE company_master SET company_name=$1,biz_no=$2,ceo_name=$3,address=$4,phone=$5,ecount_cust_cd=$6,updated_at=NOW() WHERE company_id=$7`,
+              [nm,biz,ceo,addr,tel,cd,rows[0].company_id]).catch(() => {});
+          } else {
+            await pool.query(`INSERT INTO company_master (company_code,company_name,biz_no,ceo_name,address,phone,ecount_cust_cd,is_active) VALUES($1,$2,$3,$4,$5,$6,$7,TRUE)
+              ON CONFLICT (company_code) DO UPDATE SET company_name=$2,ecount_cust_cd=$7,updated_at=NOW()`,
+              [cd,nm,biz,ceo,addr,tel,cd]).catch(() => {});
+          }
+          synced++;
+        }
+        await logSync('customer', 'success', data.length, synced, undefined, startedAt);
+        return { ok: true, type, total: data.length, synced };
+
+      } else if (type === 'stock') {
+        await pool.query(`TRUNCATE TABLE ecount_stock`);
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          for (const s of data) {
+            await client.query(`INSERT INTO ecount_stock (prod_cd,prod_nm,wh_cd,wh_nm,qty,unit) VALUES($1,$2,$3,$4,$5,$6)`,
+              [s.PROD_CD||s.prod_cd||'', s.PROD_DV_NM||s.PROD_NM||s.prod_nm||'',
+               s.WH_CD||s.wh_cd||'', s.WH_NM||s.wh_nm||'',
+               parseFloat(s.QTY||s.qty||'0')||0, s.UNIT||s.unit||'ea']);
+          }
+          await client.query('COMMIT');
+        } catch(e) { await client.query('ROLLBACK'); throw e; }
+        finally { client.release(); }
+        await logSync('stock', 'success', data.length, data.length, undefined, startedAt);
+        return { ok: true, type, total: data.length, synced: data.length };
+
+      } else if (type === 'purchases' || type === 'sales') {
+        const tbl = type === 'purchases' ? 'ecount_purchase' : 'ecount_sale';
+        const logType = type === 'purchases' ? 'purchase' : 'sale';
+        await pool.query(`TRUNCATE TABLE ${tbl}`);
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          for (const p of data) {
+            const sd = p.SLIP_DATE||p.slip_date||p.IO_DATE;
+            await client.query(`INSERT INTO ${tbl} (slip_date,cust_cd,cust_nm,prod_cd,prod_nm,qty,price,supply_amt,vat_amt,total_amt,io_type_nm,memo)
+              VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+              [ sd ? sd.slice(0,8).replace(/(\d{4})(\d{2})(\d{2})/,'$1-$2-$3') : null,
+                p.CUST_CD||p.cust_cd||'', p.CUST_NM||p.cust_nm||'',
+                p.PROD_CD||p.prod_cd||'', p.PROD_DV_NM||p.PROD_NM||p.prod_nm||'',
+                parseFloat(p.QTY||p.qty||'0')||0, parseFloat(p.PRICE||p.price||'0')||0,
+                parseFloat(p.SUPPLY_AMT||p.supply_amt||'0')||0, parseFloat(p.VAT_AMT||p.vat_amt||'0')||0,
+                parseFloat(p.TOTAL_AMT||p.total_amt||'0')||0,
+                p.IO_TYPE_NM||p.io_type_nm||'', p.MEMO||p.memo||null ]);
+          }
+          await client.query('COMMIT');
+        } catch(e) { await client.query('ROLLBACK'); throw e; }
+        finally { client.release(); }
+        await logSync(logType, 'success', data.length, data.length, undefined, startedAt);
+        return { ok: true, type, total: data.length, synced: data.length };
+
+      } else {
+        return reply.code(400).send({ error: `알 수 없는 type: ${type}` });
+      }
+    } catch (err: any) {
+      return reply.code(500).send({ error: err.message });
+    }
+  });
+
   // ── GET /api/ecount/myip ─ Vercel 서버 실제 외부 IP 확인 ─────────────────
   app.get('/api/ecount/myip', { preHandler: requireRole('admin') }, async () => {
     try {
