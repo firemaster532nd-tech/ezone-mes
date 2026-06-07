@@ -33,14 +33,19 @@ interface PO {
 interface PoItem {
   po_item_id: number;
   seq_no: number;
+  product_type: string | null;
   structure: string | null;
-  width_mm: number | null;
-  height_mm: number | null;
-  qty: number;
+  width_mm: number | null;    // pipe_width_mm alias
+  height_mm: number | null;   // pipe_height_mm alias
+  qty: number;                // 항상 1 (백엔드에서 분리됨)
   division: string | null;
   install_location: string | null;
-  material: string | null;
   remark: string | null;
+  sheet_name: string | null;
+  // qty > 1 분리 정보
+  global_seq: number;         // 전체 일련번호
+  explode_index: number;      // 같은 소켓의 n번째 (1-based)
+  explode_total: number;      // 원래 수량
 }
 
 interface CalcRow {
@@ -528,21 +533,25 @@ function CreateModal({
     if (poItems.length === 0) { alert('항목이 없습니다.'); return; }
     setSubmitting(true);
     try {
+      // 백엔드에서 이미 qty=1로 분리된 항목들 — 그대로 저장
       const itemsWithCalc = poItems.map(item => {
         const W = item.width_mm ?? 0;
         const H = item.height_mm ?? 0;
-        const q = item.qty ?? 1;
         return {
           po_item_id: item.po_item_id,
-          seq_no: item.seq_no,
-          structure: item.structure,
+          seq_no: item.global_seq,           // 분리 후 전체 일련번호
+          product_type: item.product_type || item.structure,
+          structure: item.structure || item.product_type,
           width_mm: W,
           height_mm: H,
-          qty: q,
+          qty: 1,                            // 항상 1개
           division: item.division,
           install_location: item.install_location,
           remark: item.remark,
-          calc_data: calcData(woType, W, H, q),
+          // 분리 메타
+          explode_index: item.explode_index,
+          explode_total: item.explode_total,
+          calc_data: calcData(woType, W, H, 1),
         };
       });
 
@@ -640,7 +649,7 @@ function CreateModal({
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-semibold text-gray-600">
-                  발주 항목 {loadingItems ? '(로딩중...)' : `(${poItems.length}건)`}
+                  발주 항목 {loadingItems ? '(로딩중...)' : `(${poItems.length}건 — 소켓 ${poItems.length}개 개별)`}
                 </label>
                 {!loadingItems && poItems.length === 0 && (
                   <span className="text-xs text-amber-600 flex items-center gap-1">
@@ -680,45 +689,70 @@ function CreateModal({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {poItems.map(item => {
-                          const W = item.width_mm ?? 0;
-                          const H = item.height_mm ?? 0;
-                          const q = item.qty ?? 1;
-                          const rows = calcData(woType, W, H, q);
+                        {poItems.map((item, rowIdx) => {
+                          const W = item.width_mm;
+                          const H = item.height_mm;
+                          const rows = calcData(woType, W ?? 0, H ?? 0, 1);
+                          const isMulti = item.explode_total > 1;
                           return (
-                            <tr key={item.po_item_id} className="hover:bg-gray-50">
-                              <td className="px-3 py-2 text-gray-400">{item.seq_no}</td>
-                              <td className="px-3 py-2 font-medium text-gray-800 max-w-[120px] truncate">
-                                {item.structure || '-'}
+                            <tr key={`${item.po_item_id}-${item.explode_index}`}
+                              className={rowIdx % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-gray-50/60 hover:bg-gray-100/60'}>
+                              {/* 일련번호 */}
+                              <td className="px-3 py-2 text-gray-400 font-mono">{item.global_seq}</td>
+                              {/* 구조체 + 분리표시 */}
+                              <td className="px-3 py-2">
+                                <div className="font-medium text-gray-800 text-xs">{item.structure || item.product_type || '-'}</div>
+                                {isMulti && (
+                                  <div className="text-[10px] text-blue-500 font-mono mt-0.5">
+                                    {item.explode_index}/{item.explode_total}번
+                                  </div>
+                                )}
                               </td>
-                              <td className="px-3 py-2 text-center font-mono">{W || <span className="text-gray-300">-</span>}</td>
-                              <td className="px-3 py-2 text-center font-mono">{H || <span className="text-gray-300">-</span>}</td>
-                              <td className="px-3 py-2 text-center font-mono font-bold">{q}</td>
+                              {/* 가로(W) — 항상 표시 */}
+                              <td className="px-3 py-2 text-center">
+                                {W != null && W > 0
+                                  ? <span className="font-mono font-semibold text-gray-800">{W}</span>
+                                  : <span className="text-gray-300 text-xs">미입력</span>}
+                              </td>
+                              {/* 세로(H) — 항상 표시 */}
+                              <td className="px-3 py-2 text-center">
+                                {H != null && H > 0
+                                  ? <span className="font-mono font-semibold text-gray-800">{H}</span>
+                                  : <span className="text-gray-300 text-xs">미입력</span>}
+                              </td>
+                              {/* 수량 — 항상 1 */}
+                              <td className="px-3 py-2 text-center">
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">1</span>
+                              </td>
                               {woType === 'INSPECT' && (
                                 <>
-                                  <td className="px-3 py-2 text-gray-500">{item.division || '-'}</td>
-                                  <td className="px-3 py-2 text-gray-500 max-w-[100px] truncate">{item.install_location || '-'}</td>
+                                  <td className="px-3 py-2 text-gray-500 text-xs">{item.division || '-'}</td>
+                                  <td className="px-3 py-2 text-gray-500 text-xs max-w-[100px] truncate">{item.install_location || '-'}</td>
                                 </>
                               )}
                               {woType !== 'INSPECT' && woType !== 'LABEL' && (
                                 <td className="px-3 py-2">
-                                  <div className="space-y-0.5">
-                                    {rows.map((row, i) => (
-                                      <div key={i} className="flex gap-2 text-[10px]">
-                                        <span className="text-gray-400 truncate max-w-[120px]">{row.label}</span>
-                                        <span className={cn('font-mono font-bold shrink-0', TAB_ACCENT_TEXT[woType])}>
-                                          {row.length !== null ? `${row.length}mm` : ''} × {row.qty}ea
-                                        </span>
-                                      </div>
-                                    ))}
-                                  </div>
+                                  {W && H ? (
+                                    <div className="space-y-0.5">
+                                      {rows.map((row, i) => (
+                                        <div key={i} className="flex gap-2 text-[10px]">
+                                          <span className="text-gray-400 truncate max-w-[110px]">{row.label}</span>
+                                          <span className={cn('font-mono font-bold shrink-0', TAB_ACCENT_TEXT[woType])}>
+                                            {row.length !== null ? `${row.length}mm` : ''} × {row.qty}ea
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-amber-500 flex items-center gap-1">
+                                      <AlertTriangle className="h-3 w-3" /> 규격 없음
+                                    </span>
+                                  )}
                                 </td>
                               )}
                               {woType === 'LABEL' && (
                                 <td className="px-3 py-2 text-center">
-                                  <span className={cn('font-mono font-bold text-sm', TAB_ACCENT_TEXT[woType])}>
-                                    {q}
-                                  </span>
+                                  <span className={cn('font-mono font-bold text-sm', TAB_ACCENT_TEXT[woType])}>1</span>
                                 </td>
                               )}
                             </tr>

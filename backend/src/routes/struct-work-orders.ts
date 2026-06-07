@@ -297,13 +297,26 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
     return { data: { success: true } };
   });
 
-  // ── GET /api/purchase-orders/po-items — PO 항목 조회 (작업지시 생성용) ─
-  // po_id + 공정타입으로 필터링된 항목 반환
+  // ── GET /api/po-items-for-wo — PO 항목 조회 (작업지시 생성용) ─
+  // po_id + 공정타입으로 필터링 후 qty=1씩 분리하여 반환
   app.get('/api/po-items-for-wo', { preHandler: requireAuth }, async (req) => {
     const { po_id, wo_type } = req.query as any;
     if (!po_id) return { data: [] };
     const items = await pool.query(
-      `SELECT poi.*, po.project_name, po.project_id
+      `SELECT
+         poi.po_item_id,
+         poi.seq_no,
+         poi.product_type,
+         poi.product_type  AS structure,
+         poi.pipe_width_mm  AS width_mm,
+         poi.pipe_height_mm AS height_mm,
+         poi.qty,
+         poi.division,
+         poi.install_location,
+         poi.remark,
+         poi.sheet_name,
+         po.project_name,
+         po.project_id
        FROM purchase_order_item poi
        JOIN purchase_order po ON po.po_id = poi.po_id
        WHERE poi.po_id=$1 AND poi.item_type='socket'
@@ -311,15 +324,33 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
       [parseInt(po_id)]
     );
     let rows = items.rows;
+
     // 공정 타입별 필터링
     if (wo_type === 'CUT_VM' || wo_type === 'BEND_VM') {
       rows = rows.filter((r: any) => VM_TYPES.has(r.product_type) || VAG_TYPES.has(r.product_type));
     } else if (wo_type === 'CUT_VT' || wo_type === 'BEND_VT' || wo_type === 'BEND_VT_RE') {
       rows = rows.filter((r: any) => VT_TYPES.has(r.product_type));
     } else if (wo_type === 'CUT_THERMAL') {
-      // 차열재: VM + VT 모두
       rows = rows.filter((r: any) => VM_TYPES.has(r.product_type) || VT_TYPES.has(r.product_type) || VAG_TYPES.has(r.product_type));
     }
-    return { data: rows };
+
+    // ★ qty > 1인 항목을 1개씩 분리 (소켓은 1개 단위로 작업)
+    const exploded: any[] = [];
+    let globalSeq = 1;
+    for (const row of rows) {
+      const qty = parseInt(row.qty) || 1;
+      for (let i = 0; i < qty; i++) {
+        exploded.push({
+          ...row,
+          qty: 1,                        // 무조건 1개
+          explode_index: i + 1,          // 분리 순서 (같은 소켓의 n번째)
+          explode_total: qty,            // 원래 수량
+          global_seq: globalSeq++,       // 전체 일련번호
+        });
+      }
+    }
+
+    return { data: exploded };
   });
 }
+
