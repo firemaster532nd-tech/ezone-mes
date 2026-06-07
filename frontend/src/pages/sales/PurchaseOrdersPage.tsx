@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import {
   Upload, FileSpreadsheet, X, ChevronDown, ChevronRight,
   Building2, User, MapPin, Calendar, Package, Layers,
-  CheckCircle2, AlertCircle, Eye, Trash2, ExternalLink
+  CheckCircle2, Eye, Trash2, ExternalLink, Download, Wrench
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -462,9 +462,258 @@ function DetailModal({ po, onClose }: { po: PurchaseOrder & { items?: PoItem[]; 
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// 소켓류발주 탭
+// ────────────────────────────────────────────────────────────────────────────
+const STRUCT_LABELS: Record<string, { color: string; bg: string }> = {
+  'VT-01':    { color: 'text-purple-700', bg: 'bg-purple-100' },
+  'VT-049':   { color: 'text-blue-700',   bg: 'bg-blue-100' },
+  'VT-064':   { color: 'text-indigo-700', bg: 'bg-indigo-100' },
+  'VA-064':   { color: 'text-cyan-700',   bg: 'bg-cyan-100' },
+  'VAG-1.69': { color: 'text-teal-700',   bg: 'bg-teal-100' },
+  'HTG-064':  { color: 'text-orange-700', bg: 'bg-orange-100' },
+  'HTG-1.69': { color: 'text-rose-700',   bg: 'bg-rose-100' },
+};
+
+function SocketOrderTab({ list }: { list: PurchaseOrder[] }) {
+  const [selectedPoId, setSelectedPoId] = useState<number | null>(null);
+  const [preview, setPreview] = useState<any | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  const selectedPo = list.find(p => p.po_id === selectedPoId);
+
+  const handleSelect = async (po: PurchaseOrder) => {
+    if (selectedPoId === po.po_id) { setSelectedPoId(null); setPreview(null); return; }
+    setSelectedPoId(po.po_id);
+    setLoading(true);
+    try {
+      const res = await api.get<{ data: any }>(`/purchase-orders/${po.po_id}`);
+      const items: PoItem[] = res.data.items || [];
+      // 구조체별 집계
+      const structMap = new Map<string, { items: PoItem[]; totalQty: number }>();
+      for (const item of items) {
+        if (item.item_type !== 'socket' || !item.product_type) continue;
+        const code = item.product_type.trim();
+        if (!structMap.has(code)) structMap.set(code, { items: [], totalQty: 0 });
+        structMap.get(code)!.items.push(item);
+        structMap.get(code)!.totalQty += item.qty || 1;
+      }
+      setPreview({ po, structMap });
+    } catch {
+      toast.error('발주 명세 로드 실패');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!selectedPoId) return;
+    setDownloading(true);
+    try {
+      // Blob 방식으로 파일 다운로드
+      const token = localStorage.getItem('ezone_mes_token');
+      const res = await fetch(`/api/purchase-orders/${selectedPoId}/socket-order`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error('다운로드 실패');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const cd = res.headers.get('content-disposition') || '';
+      const match = cd.match(/filename\*=UTF-8''(.+)/);
+      a.download = match ? decodeURIComponent(match[1]) : '소켓발주서.xlsx';
+      a.href = url;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('소켓발주서 다운로드 완료!');
+    } catch (e: any) {
+      toast.error(`다운로드 실패: ${e.message}`);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const SOCK_CALC: Partial<Record<string, (w: number, h: number, qty: number) => { socketW: number; socketH: number; orderQty: number; depth: number }>> = {
+    'VT-01':    (w, h, q) => ({ socketW: w, socketH: h, orderQty: q * 2, depth: 200 }),
+    'VT-049':   (w, h, q) => ({ socketW: w, socketH: h, orderQty: q * 1, depth: 200 }),
+    'VT-064':   (w, h, q) => ({ socketW: w, socketH: h, orderQty: q * 1, depth: 200 }),
+    'VA-064':   (w, h, q) => ({ socketW: w, socketH: h, orderQty: q * 1, depth: 200 }),
+    'VAG-1.69': (w, h, q) => ({ socketW: Math.round(w / 2 - 30), socketH: h, orderQty: q * 2, depth: 200 }),
+    'HTG-064':  (w, h, q) => ({ socketW: w, socketH: h, orderQty: q * 1, depth: 300 }),
+    'HTG-1.69': (w, h, q) => ({ socketW: Math.round(w / 2 - 30), socketH: h, orderQty: q * 2, depth: 300 }),
+  };
+
+  return (
+    <div className="flex gap-6">
+      {/* 왼쪽: 발주서 선택 목록 */}
+      <div className="w-80 flex-shrink-0">
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b bg-gray-50">
+            <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+              <FileSpreadsheet className="h-4 w-4 text-green-500" />
+              발주서 선택
+            </h3>
+            <p className="text-xs text-gray-400 mt-0.5">클릭하면 소켓 계산 미리보기</p>
+          </div>
+          {list.length === 0 ? (
+            <div className="p-6 text-center text-sm text-gray-400">
+              등록된 발주서가 없습니다.
+            </div>
+          ) : (
+            <div className="divide-y max-h-[600px] overflow-y-auto">
+              {list.map(po => (
+                <button
+                  key={po.po_id}
+                  onClick={() => handleSelect(po)}
+                  className={cn(
+                    'w-full text-left px-4 py-3 transition-colors hover:bg-blue-50',
+                    selectedPoId === po.po_id && 'bg-blue-50 border-l-4 border-l-blue-500'
+                  )}
+                >
+                  <p className="text-sm font-semibold text-gray-800 truncate">{po.project_name}</p>
+                  <p className="text-xs text-gray-500 mt-0.5 truncate">{po.contractor || po.biz_name || '-'}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
+                      {po.item_count}건
+                    </span>
+                    <span className="text-[10px] text-gray-400">
+                      {new Date(po.created_at).toLocaleDateString('ko-KR')}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 오른쪽: 미리보기 + 다운로드 */}
+      <div className="flex-1">
+        {!selectedPoId ? (
+          <div className="bg-white rounded-2xl border shadow-sm flex flex-col items-center justify-center py-20 text-gray-400">
+            <Wrench className="h-12 w-12 mb-3 text-gray-300" />
+            <p className="text-sm font-medium">왼쪽에서 발주서를 선택하세요</p>
+            <p className="text-xs mt-1">구조체별 소켓 발주 수량을 자동 계산합니다</p>
+          </div>
+        ) : loading ? (
+          <div className="bg-white rounded-2xl border shadow-sm flex items-center justify-center py-20">
+            <div className="h-6 w-6 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin mr-3" />
+            <span className="text-sm text-gray-500">계산 중...</span>
+          </div>
+        ) : preview ? (
+          <div className="space-y-4">
+            {/* 현장 정보 */}
+            <div className="bg-white rounded-2xl border shadow-sm p-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-gray-800">{preview.po.project_name}</h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{preview.po.contractor || preview.po.biz_name}</p>
+                </div>
+                <button
+                  onClick={handleDownload}
+                  disabled={downloading}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-green-600 text-white rounded-xl font-medium text-sm hover:bg-green-700 disabled:opacity-50 transition-colors shadow-sm"
+                >
+                  {downloading ? (
+                    <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />생성 중...</>
+                  ) : (
+                    <><Download className="h-4 w-4" />소켓발주서 Excel 다운로드</>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* 구조체별 소켓 계산 결과 */}
+            {preview.structMap.size === 0 ? (
+              <div className="bg-white rounded-2xl border shadow-sm p-8 text-center text-gray-400">
+                <p className="text-sm">소켓 명세가 없거나 구조명이 인식되지 않습니다.</p>
+                <p className="text-xs mt-1">발주서의 구조명(VT-01, VT-049 등)이 있는지 확인하세요.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {[...preview.structMap.entries()].map(([code, { items: sItems, totalQty }]: [string, any]) => {
+                  const label = STRUCT_LABELS[code] || { color: 'text-gray-700', bg: 'bg-gray-100' };
+                  const calc = SOCK_CALC[code];
+                  return (
+                    <div key={code} className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+                      <div className="flex items-center justify-between px-5 py-3 border-b bg-gray-50">
+                        <div className="flex items-center gap-2">
+                          <span className={cn('px-2.5 py-1 rounded-lg text-sm font-bold', label.bg, label.color)}>
+                            {code}
+                          </span>
+                          <span className="text-sm text-gray-500">관통재 {sItems.length}종 / 합계 {totalQty}개소</span>
+                        </div>
+                        {calc && (
+                          <span className="text-xs text-gray-400">
+                            {code === 'VT-01' ? '동일크기 ×2 발주' :
+                             code === 'VAG-1.69' || code === 'HTG-1.69' ? '가로/2-30 ×2 발주' : '규격 그대로 발주'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 border-t">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-gray-500">관통재 가로×세로</th>
+                              <th className="px-4 py-2 text-left text-gray-500">관통재 수량</th>
+                              <th className="px-4 py-2 text-left text-blue-600 font-semibold">소켓 가로</th>
+                              <th className="px-4 py-2 text-left text-blue-600 font-semibold">소켓 세로</th>
+                              <th className="px-4 py-2 text-left text-blue-600 font-semibold">폭</th>
+                              <th className="px-4 py-2 text-right text-green-600 font-semibold">발주수량</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {sItems.map((item: PoItem, idx: number) => {
+                              const w = item.pipe_width_mm || 0;
+                              const h = item.pipe_height_mm || 0;
+                              const q = item.qty || 1;
+                              const c = calc ? calc(w, h, q) : null;
+                              return (
+                                <tr key={idx} className="hover:bg-blue-50/30">
+                                  <td className="px-4 py-2 font-mono text-gray-700">{w} × {h}</td>
+                                  <td className="px-4 py-2 text-center text-gray-700">{q}</td>
+                                  <td className="px-4 py-2 font-mono text-blue-700 font-semibold">{c?.socketW ?? '-'}</td>
+                                  <td className="px-4 py-2 font-mono text-blue-700 font-semibold">{c?.socketH ?? '-'}</td>
+                                  <td className="px-4 py-2 font-mono text-blue-700">{c?.depth ?? '-'}</td>
+                                  <td className="px-4 py-2 font-mono text-green-700 font-bold text-right">{c?.orderQty ?? '-'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          {sItems.length > 0 && calc && (
+                            <tfoot className="bg-green-50 border-t">
+                              <tr>
+                                <td colSpan={5} className="px-4 py-2 text-right font-semibold text-gray-700">
+                                  {code} 소계
+                                </td>
+                                <td className="px-4 py-2 font-bold text-green-700 text-right">
+                                  {sItems.reduce((s: number, item: PoItem) => {
+                                    const c2 = calc(item.pipe_width_mm || 0, item.pipe_height_mm || 0, item.qty || 1);
+                                    return s + c2.orderQty;
+                                  }, 0)}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          )}
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // 메인 페이지
 // ────────────────────────────────────────────────────────────────────────────
 export default function PurchaseOrdersPage() {
+  const [activeTab, setActiveTab] = useState<'manage' | 'socket'>('manage');
   const [list, setList] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [parsing, setParsing] = useState(false);
@@ -570,9 +819,41 @@ export default function PurchaseOrdersPage() {
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
-      <PageHeader title="발주서 관리" subtitle="Excel 발주서를 업로드하여 프로젝트 및 발주 명세를 자동 등록합니다" />
+      <PageHeader title="발주서 관리" description="Excel 발주서를 업로드하고, 소켓발주서를 자동 생성합니다" />
+
+      {/* 탭 */}
+      <div className="px-6 pt-4 flex gap-1 border-b bg-gray-50">
+        <button
+          onClick={() => setActiveTab('manage')}
+          className={cn(
+            'flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-t-xl border border-b-0 transition-colors',
+            activeTab === 'manage'
+              ? 'bg-white text-blue-600 border-gray-200'
+              : 'bg-gray-100 text-gray-500 hover:bg-gray-200 border-transparent'
+          )}
+        >
+          <FileSpreadsheet className="h-4 w-4" />
+          배합원료발주
+        </button>
+        <button
+          onClick={() => { setActiveTab('socket'); if (list.length === 0) fetchList(); }}
+          className={cn(
+            'flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-t-xl border border-b-0 transition-colors',
+            activeTab === 'socket'
+              ? 'bg-white text-green-600 border-gray-200'
+              : 'bg-gray-100 text-gray-500 hover:bg-gray-200 border-transparent'
+          )}
+        >
+          <Wrench className="h-4 w-4" />
+          소켓류발주
+        </button>
+      </div>
 
       <div className="flex-1 overflow-auto p-6 space-y-6">
+        {activeTab === 'socket' ? (
+          <SocketOrderTab list={list} />
+        ) : (
+        <>
         {/* 업로드 영역 */}
         <div className="bg-white rounded-2xl shadow-sm border p-6 space-y-4">
           <h2 className="font-semibold text-gray-800 flex items-center gap-2">
@@ -693,6 +974,8 @@ export default function PurchaseOrdersPage() {
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
 
       {/* 미리보기 모달 */}

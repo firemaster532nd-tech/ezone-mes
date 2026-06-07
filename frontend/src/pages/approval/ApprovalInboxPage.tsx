@@ -40,7 +40,7 @@ interface Worker {
 const DOC_TYPE_LABELS: Record<string, string> = {
   INCOMING_INSP: '인수검사', PROCESS_INSP: '중간검사', SELF_INSP: '자주검사',
   SHIPMENT: '출하', WORK_ORDER: '작업지시', DAILY_LOG: '공정일지', TBM: 'TBM', INVENTORY: '재고',
-  PURCHASE_REQUEST: '자재발주서',
+  PURCHASE_REQUEST: '자재발주서', SOCKET_ORDER: '소켓발주서',
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
@@ -396,6 +396,9 @@ function ApprovalCard({
           {approval.doc_type === 'PURCHASE_REQUEST' && (
             <PrItemsPreview prId={approval.doc_id} />
           )}
+          {approval.doc_type === 'SOCKET_ORDER' && (
+            <SocketOrderPreview soId={approval.doc_id} />
+          )}
 
           {/* 결재 이력 */}
           <div className="mb-3 flex items-center gap-2 text-xs flex-wrap">
@@ -571,6 +574,14 @@ function ApprovalList({
                   <p className="mb-3 text-sm text-gray-600">{ap.doc_summary}</p>
                 )}
 
+                {/* 발주 품목 상세 */}
+                {ap.doc_type === 'PURCHASE_REQUEST' && (
+                  <PrItemsPreview prId={ap.doc_id} />
+                )}
+                {ap.doc_type === 'SOCKET_ORDER' && (
+                  <SocketOrderPreview soId={ap.doc_id} />
+                )}
+
                 {/* 결재 흐름 */}
                 <div className="mb-3 flex items-center gap-2 text-xs flex-wrap">
                   <span className="rounded bg-white border px-2 py-1">
@@ -727,6 +738,213 @@ function PrItemsPreview({ prId }: { prId: number }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/* ═══════ 소켓발주서 전체 미리보기 (결재함용) ═══════ */
+function SocketOrderPreview({ soId }: { soId: number }) {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get(`/socket-orders/${soId}`)
+      .then((res: any) => setData(res.data))
+      .catch(() => setData(null))
+      .finally(() => setLoading(false));
+  }, [soId]);
+
+  if (loading) return <div className="text-xs text-gray-400 mb-3 py-2">소켓발주서 로딩중...</div>;
+  if (!data) return null;
+
+  const items: any[] = data.items_json || [];
+  if (items.length === 0) return null;
+
+  // ── 소켓 계산 설정 ──
+  const STRUCT_CALC: Record<string, (w: number, h: number, q: number) => { sw: number; sh: number; oq: number; depth: number }> = {
+    'VT-01':     (w, h, q) => ({ sw: w,                      sh: h, oq: q * 2, depth: 200 }),
+    'VT-049':    (w, h, q) => ({ sw: w,                      sh: h, oq: q * 1, depth: 200 }),
+    'VT-064':    (w, h, q) => ({ sw: w,                      sh: h, oq: q * 1, depth: 200 }),
+    'VA-064':    (w, h, q) => ({ sw: w,                      sh: h, oq: q * 1, depth: 200 }),
+    'VAG-1.69':  (w, h, q) => ({ sw: Math.round(w/2-30),     sh: h, oq: q * 2, depth: 200 }),
+    'HTG-064':   (w, h, q) => ({ sw: w,                      sh: h, oq: q * 1, depth: 300 }),
+    'HTG-064DC': (w, h, q) => ({ sw: w,                      sh: h, oq: q * 1, depth: 300 }),
+    'HTG-1.69':  (w, h, q) => ({ sw: Math.round(w/2-30),     sh: h, oq: q * 2, depth: 300 }),
+  };
+  const STRUCT_COLORS: Record<string, string> = {
+    'VT-01': 'bg-purple-100 text-purple-700', 'VT-049': 'bg-blue-100 text-blue-700',
+    'VT-064': 'bg-indigo-100 text-indigo-700', 'VA-064': 'bg-cyan-100 text-cyan-700',
+    'VAG-1.69': 'bg-teal-100 text-teal-700', 'HTG-064': 'bg-orange-100 text-orange-700',
+    'HTG-064DC': 'bg-amber-100 text-amber-700', 'HTG-1.69': 'bg-rose-100 text-rose-700',
+  };
+
+  // ── 구조체별 그룹핑 ──
+  const grouped = new Map<string, any[]>();
+  for (const item of items) {
+    const code = (item.product_type || '').trim();
+    if (!grouped.has(code)) grouped.set(code, []);
+    grouped.get(code)!.push(item);
+  }
+
+  // ── 평철 계산 ──
+  function calcBrackets(code: string, w: number, h: number, q: number) {
+    const sw = Math.round(w / 2 - 30);
+    const rows: { t: number; bw: number; l: number; qty: number }[] = [];
+    const add = (t: number, bw: number, l: number, qty: number) => {
+      if (qty > 0 && l > 0) rows.push({ t, bw, l: Math.round(l), qty });
+    };
+    switch (code) {
+      case 'VT-049': case 'VT-064': case 'VA-064':
+        add(1.6, 60, w-1, q*4); add(1.6, 60, h-30, q*4); break;
+      case 'VT-01':
+        add(1.6, 60, Math.round(w/2-16), q*16); add(1.6, 60, Math.round(h/2-20), q*32);
+        add(1.6, 225, Math.round(w/2-16), q*8); add(1.6, 237, h-1, q*4); break;
+      case 'VAG-1.69':
+        add(1.6, 60, sw-1, q*4); add(1.6, 60, h-30, q*4); break;
+      case 'HTG-064': case 'HTG-064DC':
+        add(1.6, 60, w-5, q*2); add(1.6, 274, w-5, q*2);
+        add(1.6, 60, h-35, q*4); add(1.6, 50, h, q*3); break;
+      case 'HTG-1.69':
+        add(1.6, 60, sw-5, q*4); add(1.6, 274, sw-5, q*4);
+        add(1.6, 60, h-35, q*4); add(1.6, 50, h, q*6); break;
+    }
+    return rows;
+  }
+
+  const bracketAgg = new Map<string, { t: number; bw: number; l: number; qty: number }>();
+  for (const item of items) {
+    const c = (item.product_type || '').trim();
+    for (const b of calcBrackets(c, item.pipe_width_mm||0, item.pipe_height_mm||0, item.qty||1)) {
+      const key = `${b.t}_${b.bw}_${b.l}`;
+      const e = bracketAgg.get(key);
+      if (e) e.qty += b.qty;
+      else bracketAgg.set(key, { ...b });
+    }
+  }
+  const bracketList = [...bracketAgg.values()].sort((a, b) => a.bw - b.bw || a.l - b.l);
+  const bracketTotal = bracketList.reduce((s, r) => s + r.qty, 0);
+
+  const socketTotal = items.reduce((s, item) => {
+    const calc = STRUCT_CALC[(item.product_type||'').trim()];
+    const c = calc ? calc(item.pipe_width_mm||0, item.pipe_height_mm||0, item.qty||1) : null;
+    return s + (c?.oq ?? 0);
+  }, 0);
+
+  return (
+    <div className="mb-4 border-2 border-blue-200 rounded-xl overflow-hidden bg-white">
+      {/* 발주서 헤더 */}
+      <div className="px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 flex items-center justify-between">
+        <div>
+          <h4 className="text-sm font-bold text-white">소켓/평철 발주서 원본</h4>
+          <p className="text-xs text-blue-200 mt-0.5">{data.project_name}</p>
+        </div>
+        <div className="flex gap-3 text-right">
+          <div className="text-center">
+            <p className="text-lg font-bold text-white">{socketTotal}<span className="text-xs font-normal text-blue-200">ea</span></p>
+            <p className="text-[10px] text-blue-200">소켓 합계</p>
+          </div>
+          <div className="text-center">
+            <p className="text-lg font-bold text-orange-300">{bracketTotal}<span className="text-xs font-normal text-orange-200">개</span></p>
+            <p className="text-[10px] text-blue-200">평철 합계</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 소켓 섹션 ── */}
+      <div className="px-4 py-2 bg-blue-50 border-b border-blue-100">
+        <h5 className="text-xs font-bold text-blue-700">🔌 소켓 발주 명세</h5>
+      </div>
+      <div className="divide-y divide-gray-50">
+        {[...grouped.entries()].map(([code, codeItems]) => {
+          const clr = STRUCT_COLORS[code] || 'bg-gray-100 text-gray-700';
+          const calc = STRUCT_CALC[code];
+          const total = codeItems.reduce((s, item) => {
+            const c = calc ? calc(item.pipe_width_mm||0, item.pipe_height_mm||0, item.qty||1) : null;
+            return s + (c?.oq ?? 0);
+          }, 0);
+          return (
+            <div key={code}>
+              {/* 구조체 소제목 */}
+              <div className="flex items-center justify-between px-4 py-1.5 bg-gray-50/80">
+                <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${clr}`}>{code}</span>
+                <span className="text-xs font-semibold text-blue-600">{total}ea</span>
+              </div>
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50/50 text-gray-400 text-[10px]">
+                    <th className="px-3 py-1 text-left">관통재(가로×세로)</th>
+                    <th className="px-3 py-1 text-center">수량</th>
+                    <th className="px-3 py-1 text-center text-blue-500">소켓 가로</th>
+                    <th className="px-3 py-1 text-center text-blue-500">소켓 세로</th>
+                    <th className="px-3 py-1 text-center text-blue-500">폭(mm)</th>
+                    <th className="px-3 py-1 text-right text-green-600 font-semibold">발주수량</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {codeItems.map((item: any, idx: number) => {
+                    const w = item.pipe_width_mm||0, h = item.pipe_height_mm||0, q = item.qty||1;
+                    const c = calc ? calc(w, h, q) : null;
+                    return (
+                      <tr key={idx} className="hover:bg-blue-50/30">
+                        <td className="px-3 py-1.5 font-mono text-gray-700">{w}×{h}</td>
+                        <td className="px-3 py-1.5 text-center text-gray-600">{q}</td>
+                        <td className="px-3 py-1.5 text-center font-mono font-semibold text-blue-600">{c?.sw??'-'}</td>
+                        <td className="px-3 py-1.5 text-center font-mono font-semibold text-blue-600">{c?.sh??'-'}</td>
+                        <td className="px-3 py-1.5 text-center font-mono text-blue-500">{c?.depth??'-'}</td>
+                        <td className="px-3 py-1.5 text-right font-mono font-bold text-green-700">{c?.oq??'-'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
+      </div>
+      {/* 소켓 합계 행 */}
+      <div className="flex justify-end px-4 py-2 bg-blue-50 border-t border-blue-100">
+        <span className="text-xs font-bold text-blue-700">소켓 총합계: {socketTotal}ea</span>
+      </div>
+
+      {/* ── 평철(브라켓) 섹션 ── */}
+      {bracketList.length > 0 && (
+        <>
+          <div className="px-4 py-2 bg-orange-50 border-t-2 border-orange-200 border-b border-orange-100 flex items-center justify-between">
+            <h5 className="text-xs font-bold text-orange-700">🔩 평철(브라켓) 발주 명세</h5>
+            <span className="text-xs font-semibold text-orange-600">총 {bracketTotal}개</span>
+          </div>
+          <table className="w-full text-xs">
+            <thead className="bg-orange-50/60">
+              <tr className="text-gray-400 text-[10px]">
+                <th className="px-3 py-1.5 text-center w-7">No</th>
+                <th className="px-3 py-1.5 text-center">재질</th>
+                <th className="px-3 py-1.5 text-center text-orange-600 font-semibold">두께(T)</th>
+                <th className="px-3 py-1.5 text-center text-orange-600 font-semibold">폭(mm)</th>
+                <th className="px-3 py-1.5 text-center text-orange-600 font-semibold">길이(mm)</th>
+                <th className="px-3 py-1.5 text-right text-green-600 font-semibold">수량(개)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {bracketList.map((b, idx) => (
+                <tr key={idx} className={`hover:bg-orange-50/30 ${b.bw >= 200 ? 'bg-amber-50/40' : ''}`}>
+                  <td className="px-3 py-1.5 text-center text-gray-400">{idx+1}</td>
+                  <td className="px-3 py-1.5 text-center text-gray-600">GI</td>
+                  <td className="px-3 py-1.5 text-center font-mono text-orange-600">{b.t}</td>
+                  <td className="px-3 py-1.5 text-center font-mono font-bold text-orange-700">{b.bw}</td>
+                  <td className="px-3 py-1.5 text-center font-mono font-bold text-orange-700">{b.l}</td>
+                  <td className="px-3 py-1.5 text-right font-mono font-bold text-green-700">{b.qty}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="bg-orange-100 border-t-2 border-orange-200">
+              <tr>
+                <td colSpan={5} className="px-3 py-2 text-right font-bold text-orange-800 text-xs">총 합계</td>
+                <td className="px-3 py-2 text-right font-bold text-green-700">{bracketTotal}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </>
+      )}
     </div>
   );
 }

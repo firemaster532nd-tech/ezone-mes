@@ -554,4 +554,304 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
     if (!rows[0]) return reply.code(404).send({ error: 'not_found' });
     return { data: rows[0] };
   });
+
+  // ── GET /api/purchase-orders/:id/socket-order ── 소켓발주서 Excel 생성
+  app.get<{ Params: { id: string } }>(
+    '/api/purchase-orders/:id/socket-order',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const id = parseInt(req.params.id, 10);
+
+      // PO 정보
+      const poRes = await pool.query(
+        `SELECT po.*, pm.project_code FROM purchase_order po
+         LEFT JOIN project_master pm ON po.project_id = pm.project_id
+         WHERE po.po_id = $1 AND po.status = 'ACTIVE'`,
+        [id]
+      );
+      if (!poRes.rows[0]) return reply.code(404).send({ error: 'not_found' });
+      const po = poRes.rows[0];
+
+      // 소켓 명세 (product_type이 있는 것만)
+      const itemsRes = await pool.query(
+        `SELECT * FROM purchase_order_item
+         WHERE po_id = $1 AND item_type = 'socket'
+         ORDER BY seq_no`,
+        [id]
+      );
+      const items: any[] = itemsRes.rows;
+
+      // ── 구조체 계산 설정 ──
+      type StructCode = 'VT-01' | 'VT-049' | 'VT-064' | 'VA-064' | 'VAG-1.69' | 'HTG-064' | 'HTG-1.69';
+
+      const STRUCT_CONFIG: Record<string, {
+        widthCalc: (w: number) => number;
+        qtyMult: number;
+        depth: number;
+        section: StructCode;
+        location: string;
+      }> = {
+        'VT-01':     { widthCalc: w => w,                       qtyMult: 2, depth: 200, section: 'VT-01',   location: '단면' },
+        'VT-049':    { widthCalc: w => w,                       qtyMult: 1, depth: 200, section: 'VT-049',  location: '단면' },
+        'VT-064':    { widthCalc: w => w,                       qtyMult: 1, depth: 200, section: 'VT-064',  location: '단면' },
+        'VA-064':    { widthCalc: w => w,                       qtyMult: 1, depth: 200, section: 'VA-064',  location: '단면' },
+        'VAG-1.69':  { widthCalc: w => Math.round(w / 2 - 30), qtyMult: 2, depth: 200, section: 'VAG-1.69', location: '양면' },
+        'HTG-064':   { widthCalc: w => w,                       qtyMult: 1, depth: 300, section: 'HTG-064', location: '입상' },
+        'HTG-064DC': { widthCalc: w => w,                       qtyMult: 1, depth: 300, section: 'HTG-064', location: '입상' },
+        'HTG-1.69':  { widthCalc: w => Math.round(w / 2 - 30), qtyMult: 2, depth: 300, section: 'HTG-1.69', location: '입상' },
+      };
+
+      interface SockRow {
+        material: string; productName: string; location: string;
+        structure: string; width: number; height: number; depth: number;
+        qty: number; remark: string;
+      }
+
+      const sections: Record<StructCode, SockRow[]> = {
+        'VT-01': [], 'VT-049': [], 'VT-064': [], 'VA-064': [],
+        'VAG-1.69': [], 'HTG-064': [], 'HTG-1.69': [],
+      };
+
+      // 동일 구조+규격 그룹핑 (중복 합산)
+      const grouped = new Map<string, { config: typeof STRUCT_CONFIG[string]; w: number; h: number; qty: number; item: any }>();
+      for (const item of items) {
+        const code = (item.product_type || '').trim();
+        const cfg = STRUCT_CONFIG[code];
+        if (!cfg) continue;
+        const w = item.pipe_width_mm || 0;
+        const h = item.pipe_height_mm || 0;
+        if (!w || !h) continue;
+        const key = `${cfg.section}|${cfg.widthCalc(w)}|${h}|${cfg.depth}`;
+        const existing = grouped.get(key);
+        if (existing) {
+          existing.qty += (item.qty || 1) * cfg.qtyMult;
+        } else {
+          grouped.set(key, { config: cfg, w: cfg.widthCalc(w), h, qty: (item.qty || 1) * cfg.qtyMult, item });
+        }
+      }
+
+      for (const [, g] of grouped) {
+        const cfg = g.config;
+        sections[cfg.section].push({
+          material: g.item.material || 'GI',
+          productName: '일반형',
+          location: g.item.structure || cfg.location,
+          structure: (g.item.product_type || '').trim(),
+          width: g.w,
+          height: g.h,
+          depth: cfg.depth,
+          qty: g.qty,
+          remark: po.project_name || '',
+        });
+      }
+
+      // ── Excel 생성 ──
+      const wb = XLSX.utils.book_new();
+      const aoa: any[][] = [];
+
+      const today = new Date().toLocaleDateString('ko-KR');
+      const pjName = po.project_name || '현장명';
+      const bizName = po.biz_name || '';
+
+      // 헤더 (행1~10)
+      aoa.push(['발 주 서', '', '', '', '', '', '', '', '', '']);                            // 1
+      aoa.push(['', '', '수 신:', '', '', bizName, '', '', '', '']);                         // 2
+      aoa.push(['', '', '수 신 자:', '', '', '구매담당자', '', '', '', '']);                 // 3
+      aoa.push(['', '', '발주일자:', '', '', today, '', '', '', '']);                        // 4
+      aoa.push(['', '', '공급자:', '', '', '㈜ 이지원', '', '', '', '']);                    // 5
+      aoa.push(['', '', '주소:', '', '', '경기도 화성시 장안면 수촌리', '', '', '', '']);    // 6
+      aoa.push(['', '', '연락처:', '', '', '070-8870-0300', '', '', '', '']);                // 7
+      aoa.push(['아래와 같이 발주합니다.', '', '', '', '', '', '', '', '', '']);             // 8
+      aoa.push(['순번', '재질', '품명', '위치', '구조명', '가로', '세로', '폭', '발주', '비고(현장명)']); // 9
+      aoa.push(['', '', '', '', '', '(mm)', '(mm)', '(mm)', '(EA)', '']);                   // 10
+
+      // 헬퍼: 빈 행 추가
+      const emptyRow = (seq: number) => [seq, 'GI', '일반형', '', '', '', '', '', '', ''];
+
+      let seq = 1;
+
+      // ── VT-01 섹션 (27슬롯) ──
+      const vt01 = sections['VT-01'];
+      for (let i = 0; i < 27; i++) {
+        if (i < vt01.length) {
+          const r = vt01[i];
+          aoa.push([seq++, r.material, r.productName, r.location, r.structure, r.width, r.height, r.depth, r.qty, r.remark]);
+        } else {
+          aoa.push(emptyRow(seq++));
+        }
+      }
+      aoa.push(['VT-01 소계', '', '', '', '', '', '', '', vt01.reduce((s, r) => s + r.qty, 0), '']); // 38
+
+      // ── VT-049 섹션 (11슬롯) ──
+      const vt049 = sections['VT-049'];
+      for (let i = 0; i < 11; i++) {
+        if (i < vt049.length) {
+          const r = vt049[i];
+          aoa.push([seq++, r.material, r.productName, r.location, r.structure, r.width, r.height, r.depth, r.qty, r.remark]);
+        } else {
+          aoa.push(emptyRow(seq++));
+        }
+      }
+      aoa.push(['VT-049 소계', '', '', '', '', '', '', '', vt049.reduce((s, r) => s + r.qty, 0), '']); // 50
+
+      // ── VT-064 섹션 (1슬롯) ──
+      const vt064 = sections['VT-064'];
+      if (vt064.length > 0) {
+        const r = vt064[0];
+        aoa.push([seq++, r.material, r.productName, r.location, r.structure, r.width, r.height, r.depth, r.qty, r.remark]);
+      } else {
+        aoa.push(emptyRow(seq++));
+      }
+      aoa.push(['VT-064 소계', '', '', '', '', '', '', '', vt064.reduce((s, r) => s + r.qty, 0), '']); // 52
+
+      // ── VA-064 섹션 (1슬롯) ──
+      const va064 = sections['VA-064'];
+      if (va064.length > 0) {
+        const r = va064[0];
+        aoa.push([seq++, r.material, r.productName, r.location, r.structure, r.width, r.height, r.depth, r.qty, r.remark]);
+      } else {
+        aoa.push(emptyRow(seq++));
+      }
+      aoa.push(['VA-064 소계', '', '', '', '', '', '', '', va064.reduce((s, r) => s + r.qty, 0), '']); // 54
+
+      // ── VAG-1.69 섹션 ──
+      const vag169 = sections['VAG-1.69'];
+      for (const r of vag169) {
+        aoa.push([seq++, r.material, r.productName, r.location, r.structure, r.width, r.height, r.depth, r.qty, r.remark]);
+      }
+      if (vag169.length > 0) {
+        aoa.push(['VAG-1.69 소계', '', '', '', '', '', '', '', vag169.reduce((s, r) => s + r.qty, 0), '']);
+      }
+
+      // ── HTG 섹션 ──
+      const htg064 = sections['HTG-064'];
+      for (const r of htg064) {
+        aoa.push([seq++, r.material, r.productName, r.location, r.structure, r.width, r.height, r.depth, r.qty, r.remark]);
+      }
+      if (htg064.length > 0) {
+        aoa.push(['HTG-064 소계', '', '', '', '', '', '', '', htg064.reduce((s, r) => s + r.qty, 0), '']);
+      }
+
+      const htg169 = sections['HTG-1.69'];
+      for (const r of htg169) {
+        aoa.push([seq++, r.material, r.productName, r.location, r.structure, r.width, r.height, r.depth, r.qty, r.remark]);
+      }
+      if (htg169.length > 0) {
+        aoa.push(['HTG-1.69 소계', '', '', '', '', '', '', '', htg169.reduce((s, r) => s + r.qty, 0), '']);
+      }
+
+      // 총합계
+      const totalQty = Object.values(sections).flat().reduce((s, r) => s + r.qty, 0);
+      aoa.push(['총합계', '', '', '', '', '', '', '', totalQty, '']);
+
+      // ── 평철(브라켓) 섹션 ──
+      aoa.push(['']);
+      aoa.push(['평철사이즈(일반형)', '', '', '', '', '', '', '', '', '']);
+      aoa.push(['재질', '두께(T)', '폭(mm)', '길이(mm)', '수량', '재질', '두께(T)', '폭(mm)', '길이(mm)', '수량', '', '비고']);
+
+      // 브라켓 계산
+      const bracketRows: any[][] = [];
+      const addBracket = (material: string, t: number, w: number, len: number, qty: number, remark: string) => {
+        if (qty > 0 && len > 0) bracketRows.push([material, t, w, Math.round(len), qty, '', '', '', '', '', '', remark]);
+      };
+
+      // 구조체별 브라켓 계산 (원본 아이템 기반)
+      for (const item of items) {
+        const code = (item.product_type || '').trim();
+        const cfg = STRUCT_CONFIG[code];
+        if (!cfg) continue;
+        const W = item.pipe_width_mm || 0;
+        const H = item.pipe_height_mm || 0;
+        const D = item.qty || 1;
+        if (!W || !H) continue;
+
+        const sw = cfg.widthCalc(W); // 소켓 가로
+
+        if (code === 'VT-049' || code === 'VT-064' || code === 'VA-064') {
+          addBracket('SS400', 1.6, 60,  W - 1,  D * 4, `${code} 브라켓(상하)`);
+          addBracket('SS400', 1.6, 60,  H - 30, D * 4, `${code} 브라켓(좌우)`);
+        } else if (code === 'VT-01') {
+          addBracket('SS400', 1.6, 60,  W / 2 - 16, D * 16, 'VT-01 브라켓(상하)');
+          addBracket('SS400', 1.6, 60,  H / 2 - 20, D * 32, 'VT-01 브라켓(좌우)');
+          addBracket('SS400', 1.6, 225, W / 2 - 16, D * 8,  'VT-01 중앙받침대');
+          addBracket('SS400', 1.6, 237, H - 1,      D * 4,  'VT-01 세로보강대');
+        } else if (code === 'VAG-1.69') {
+          addBracket('SS400', 0.6, 60,  sw - 5, D * 4, 'VAG-1.69 브라켓(상하1)');
+          addBracket('SS400', 0.6, 204, sw - 5, D * 4, 'VAG-1.69 브라켓(상하2)');
+          addBracket('SS400', 0.6, 235, sw,     D * 2, 'VAG-1.69 중앙받침대1');
+          addBracket('SS400', 0.6, 190, sw,     D * 2, 'VAG-1.69 중앙받침대2');
+          addBracket('SS400', 1.6, 60,  H,      D * 2, 'VAG-1.69 결합철판');
+          addBracket('SS400', 1.6, 60,  H - 35, D * cfg.qtyMult * 4, 'VAG-1.69 좌우철판');
+        } else if (code === 'HTG-064' || code === 'HTG-064DC') {
+          addBracket('SS400', 0.6, 60,  W - 5,  D * 2, `${code} 브라켓(상하1)`);
+          addBracket('SS400', 0.6, 274, W - 5,  D * 2, `${code} 브라켓(상하2)`);
+          addBracket('SS400', 1.6, 60,  H - 35, D * 4, `${code} 브라켓(좌우)`);
+          addBracket('SS400', 1.6, 50,  H,      D * 3, `${code} 보강대`);
+        } else if (code === 'HTG-1.69') {
+          addBracket('SS400', 0.6, 60,  sw - 5, D * 4, 'HTG-1.69 브라켓(상하1)');
+          addBracket('SS400', 0.6, 274, sw - 5, D * 4, 'HTG-1.69 브라켓(상하2)');
+          addBracket('SS400', 0.6, 318, sw,     D * 8, 'HTG-1.69 중앙받침대1');
+          addBracket('SS400', 0.6, 255, sw,     D * 8, 'HTG-1.69 중앙받침대2');
+          addBracket('SS400', 1.6, 60,  H,      D * 2, 'HTG-1.69 결합철판');
+          addBracket('SS400', 1.6, 50,  H,      D * 6, 'HTG-1.69 보강대');
+        }
+      }
+
+      // 두 열 레이아웃으로 배치 (양식 맞춤)
+      const halfLen = Math.ceil(bracketRows.length / 2);
+      for (let i = 0; i < halfLen; i++) {
+        const left = bracketRows[i] || [];
+        const right = bracketRows[i + halfLen] || [];
+        aoa.push([
+          left[0] || '', left[1] || '', left[2] || '', left[3] || '', left[4] || '',
+          right[0] || '', right[1] || '', right[2] || '', right[3] || '', right[4] || '',
+          '', (left[11] || right[11] || ''),
+        ]);
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+      // 열 너비 설정
+      ws['!cols'] = [
+        { wch: 6 },  // A: 순번
+        { wch: 6 },  // B: 재질
+        { wch: 10 }, // C: 품명
+        { wch: 8 },  // D: 위치
+        { wch: 10 }, // E: 구조명
+        { wch: 8 },  // F: 가로
+        { wch: 8 },  // G: 세로
+        { wch: 7 },  // H: 폭
+        { wch: 7 },  // I: 발주
+        { wch: 30 }, // J: 비고
+      ];
+
+      XLSX.utils.book_append_sheet(wb, ws, '소켓발주서');
+
+      // ── 계산 요약 시트 ──
+      const summaryAoa: any[][] = [
+        ['현장명', pjName],
+        ['발주일자', today],
+        [''],
+        ['구조명', '소켓가로', '소켓세로', '폭', '발주수량'],
+      ];
+      for (const [section, rows] of Object.entries(sections)) {
+        for (const r of rows) {
+          summaryAoa.push([r.structure, r.width, r.height, r.depth, r.qty]);
+        }
+      }
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa);
+      XLSX.utils.book_append_sheet(wb, wsSummary, '계산요약');
+
+      const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+
+      const safeName = pjName.replace(/[<>:"/\\|?*]/g, '_').substring(0, 50);
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const fileName = `소켓발주서_${safeName}_${dateStr}.xlsx`;
+
+      return reply
+        .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        .header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`)
+        .send(buf);
+    }
+  );
 }

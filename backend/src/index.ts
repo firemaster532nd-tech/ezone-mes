@@ -44,6 +44,11 @@ import { projectRoutes } from './routes/projects.js';
 import { purchaseOrderRoutes } from './routes/purchase-orders.js';
 import { socketWorkOrderRoutes } from './routes/socket-work-orders.js';
 import { ecountRoutes } from './routes/ecount.js';
+import { socketOrderRoutes } from './routes/socket-orders.js';
+import { socketStockRoutes } from './routes/socket-stock.js';
+import { bendingWorkOrderRoutes } from './routes/bending-work-orders.js';
+import { materialStockRoutes } from './routes/material-stock.js';
+import { structWorkOrderRoutes } from './routes/struct-work-orders.js';
 
 let appInstance: any = null;
 
@@ -97,6 +102,11 @@ export const initApp = async () => {
   await app.register(purchaseOrderRoutes);
   await app.register(socketWorkOrderRoutes);
   await app.register(ecountRoutes);
+  await app.register(socketOrderRoutes);
+  await app.register(socketStockRoutes);
+  await app.register(bendingWorkOrderRoutes);
+  await app.register(materialStockRoutes);
+  await app.register(structWorkOrderRoutes);
 
   // Health check
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));

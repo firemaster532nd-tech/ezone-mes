@@ -48,6 +48,7 @@ const DOC_TYPE_LABELS: Record<string, string> = {
   TBM: 'TBM',
   INVENTORY: '재고',
   PURCHASE_REQUEST: '자재발주서',
+  SOCKET_ORDER: '소켓발주서',
 };
 
 export async function approvalRoutes(app: FastifyInstance) {

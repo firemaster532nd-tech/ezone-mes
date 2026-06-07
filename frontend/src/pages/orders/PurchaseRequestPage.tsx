@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { toast } from 'sonner';
 
 interface PrItem {
   pri_id: number;
@@ -68,6 +69,536 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   RECEIVED: { label: '입고완료', color: 'bg-teal-100 text-teal-700' },
   CANCELLED: { label: '취소', color: 'bg-red-100 text-red-700' },
 };
+
+// ────────────────────────────────────────────────────────────────────────────
+// 소켓류발주 탭 (발주서 관리에서 발주서 선택 → 소켓 자동 계산 → Excel)
+// ────────────────────────────────────────────────────────────────────────────
+const STRUCT_CALC: Record<string, (w: number, h: number, q: number) => { sw: number; sh: number; oq: number; depth: number }> = {
+  'VT-01':    (w, h, q) => ({ sw: w,                      sh: h, oq: q * 2, depth: 200 }),
+  'VT-049':   (w, h, q) => ({ sw: w,                      sh: h, oq: q * 1, depth: 200 }),
+  'VT-064':   (w, h, q) => ({ sw: w,                      sh: h, oq: q * 1, depth: 200 }),
+  'VA-064':   (w, h, q) => ({ sw: w,                      sh: h, oq: q * 1, depth: 200 }),
+  'VAG-1.69': (w, h, q) => ({ sw: Math.round(w / 2 - 30), sh: h, oq: q * 2, depth: 200 }),
+  'HTG-064':  (w, h, q) => ({ sw: w,                      sh: h, oq: q * 1, depth: 300 }),
+  'HTG-064DC':(w, h, q) => ({ sw: w,                      sh: h, oq: q * 1, depth: 300 }),
+  'HTG-1.69': (w, h, q) => ({ sw: Math.round(w / 2 - 30), sh: h, oq: q * 2, depth: 300 }),
+};
+
+const STRUCT_COLORS: Record<string, string> = {
+  'VT-01': 'bg-purple-100 text-purple-700',
+  'VT-049': 'bg-blue-100 text-blue-700',
+  'VT-064': 'bg-indigo-100 text-indigo-700',
+  'VA-064': 'bg-cyan-100 text-cyan-700',
+  'VAG-1.69': 'bg-teal-100 text-teal-700',
+  'HTG-064': 'bg-orange-100 text-orange-700',
+  'HTG-064DC': 'bg-amber-100 text-amber-700',
+  'HTG-1.69': 'bg-rose-100 text-rose-700',
+};
+
+interface PO {
+  po_id: number; project_name: string; biz_name: string | null;
+  contractor: string | null; item_count: number; created_at: string;
+}
+
+function SocketOrderTabContent() {
+  const { user } = useAuth();
+  const [poList, setPoList] = useState<PO[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [items, setItems] = useState<any[]>([]);
+  const [editedItems, setEditedItems] = useState<any[]>([]);
+  const [loadingList, setLoadingList] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [workers, setWorkers] = useState<any[]>([]);
+  const [reviewerId, setReviewerId] = useState<number | null>(null);
+  const [approverId, setApproverId] = useState<number | null>(null);
+  const [soId, setSoId] = useState<number | null>(null);
+  const [approvalStatus, setApprovalStatus] = useState<string | null>(null);
+  const [approvalInfo, setApprovalInfo] = useState<any>(null);
+
+  useEffect(() => {
+    setLoadingList(true);
+    api.get<{ data: PO[] }>('/purchase-orders')
+      .then(r => setPoList(r.data || []))
+      .catch(() => toast.error('발주서 목록 로드 실패'))
+      .finally(() => setLoadingList(false));
+  }, []);
+
+  const handleSelect = async (po: PO) => {
+    if (selectedId === po.po_id) {
+      setSelectedId(null); setItems([]); setEditedItems([]);
+      setSoId(null); setApprovalStatus(null); setApprovalInfo(null);
+      return;
+    }
+    setSelectedId(po.po_id);
+    setLoadingDetail(true);
+    setSoId(null); setApprovalStatus(null); setApprovalInfo(null);
+    try {
+      const res = await api.get<{ data: any }>(`/purchase-orders/${po.po_id}`);
+      const filtered = (res.data.items || []).filter((i: any) => i.item_type === 'socket' && i.product_type);
+      setItems(filtered);
+      setEditedItems(filtered.map((i: any) => ({ ...i })));
+      const soRes = await api.get<{ data: any[] }>(`/socket-orders?po_id=${po.po_id}`);
+      if (soRes.data && soRes.data.length > 0) {
+        const so = soRes.data[0];
+        setSoId(so.so_id);
+        setApprovalStatus(so.approval_status || so.status);
+        setApprovalInfo(so);
+        if (so.items_json && so.items_json.length > 0) setEditedItems(so.items_json);
+      }
+    } catch { toast.error('명세 로드 실패'); }
+    finally { setLoadingDetail(false); }
+  };
+
+  const updateItem = (idx: number, field: string, value: any) => {
+    setEditedItems(prev => prev.map((item, i) =>
+      i === idx ? { ...item, [field]: isNaN(Number(value)) ? value : Number(value) } : item
+    ));
+  };
+
+  const handleOpenSubmitModal = async () => {
+    if (!selectedId || editedItems.length === 0) return;
+    if (workers.length === 0) {
+      try {
+        const r = await api.get<{ data: any[] }>('/workers?is_active=true');
+        setWorkers(r.data || []);
+      } catch { toast.error('직원 목록 로드 실패'); return; }
+    }
+    setShowModal(true);
+  };
+
+  const handleSubmitApproval = async () => {
+    if (!reviewerId || !approverId) { toast.error('검토자와 승인자를 선택해주세요'); return; }
+    if (!selectedId) return;
+    setSubmitting(true);
+    try {
+      const selectedPo = poList.find(p => p.po_id === selectedId);
+      const saveRes = await api.post<{ data: any }>('/socket-orders', {
+        po_id: selectedId,
+        project_name: selectedPo?.project_name || '',
+        items_json: editedItems,
+        writer_id: (user as any)?.worker_id,
+      });
+      const newSoId = saveRes.data.so_id;
+      setSoId(newSoId);
+      await api.post(`/socket-orders/${newSoId}/submit`, {
+        writer_id: (user as any)?.worker_id,
+        reviewer_id: reviewerId,
+        approver_id: approverId,
+      });
+      setApprovalStatus('SUBMITTED');
+      setShowModal(false);
+      toast.success('결재함으로 전송되었습니다!');
+    } catch (e: any) { toast.error(e?.message || '제출 실패'); }
+    finally { setSubmitting(false); }
+  };
+
+  const handleDownload = async () => {
+    if (!soId) return;
+    setDownloading(true);
+    try {
+      const token = localStorage.getItem('ezone_mes_token');
+      const res = await fetch(`/api/socket-orders/${soId}/download`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) { const j = await res.json(); throw new Error(j?.error || '실패'); }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const cd = res.headers.get('content-disposition') || '';
+      const m = cd.match(/filename\*=UTF-8''(.+)/);
+      a.download = m ? decodeURIComponent(m[1]) : '소켓발주서.xlsx';
+      a.href = url; a.click(); URL.revokeObjectURL(url);
+      toast.success('소켓발주서 다운로드 완료!');
+    } catch (e: any) { toast.error(e?.message || '다운로드 실패'); }
+    finally { setDownloading(false); }
+  };
+
+  const handleReceive = async () => {
+    if (!soId) return;
+    if (!confirm('입고 처리하면 소켓/평철 재고가 자동 등록됩니다.\n계속하시겠습니까?')) return;
+    try {
+      await api.post(`/socket-orders/${soId}/receive`, {
+        worker_id: (user as any)?.worker_id,
+      });
+      setApprovalStatus('RECEIVED');
+      toast.success('입고 처리 완료! 재고가 등록되었습니다.');
+    } catch (e: any) { toast.error(e?.message || '입고 처리 실패'); }
+  };
+
+  const grouped = new Map<string, any[]>();
+  for (const item of editedItems) {
+    const code = (item.product_type || '').trim();
+    if (!grouped.has(code)) grouped.set(code, []);
+    grouped.get(code)!.push(item);
+  }
+
+  type BracketRow = { label: string; t: number; bw: number; l: number; qty: number; code: string };
+  function calcBrackets(code: string, w: number, h: number, q: number): BracketRow[] {
+    const sw = Math.round(w / 2 - 30);
+    const base = { code };
+    switch (code) {
+      case 'VT-049': case 'VT-064': case 'VA-064':
+        return [
+          { ...base, label: 'bracket-H', t: 1.6, bw: 60,  l: w - 1,  qty: q * 4 },
+          { ...base, label: 'bracket-V', t: 1.6, bw: 60,  l: h - 30, qty: q * 4 },
+        ];
+      case 'VT-01':
+        return [
+          { ...base, label: 'bracket-H', t: 1.6, bw: 60,  l: Math.round(w/2 - 16), qty: q * 16 },
+          { ...base, label: 'bracket-V', t: 1.6, bw: 60,  l: Math.round(h/2 - 20), qty: q * 32 },
+          { ...base, label: 'support-C', t: 1.6, bw: 225, l: Math.round(w/2 - 16), qty: q * 8  },
+          { ...base, label: 'reinforce', t: 1.6, bw: 237, l: h,                   qty: q * 4  },
+        ];
+      case 'VAG-1.69':
+        return [
+          { ...base, label: 'bracket-H', t: 1.6, bw: 60,  l: sw - 1, qty: q * 4 },
+          { ...base, label: 'bracket-V', t: 1.6, bw: 60,  l: h - 30, qty: q * 4 },
+        ];
+      case 'HTG-064': case 'HTG-064DC':
+        return [
+          { ...base, label: 'bracket-HA', t: 1.6, bw: 60,  l: w - 5,  qty: q * 2 },
+          { ...base, label: 'bracket-HB', t: 1.6, bw: 274, l: w - 5,  qty: q * 2 },
+          { ...base, label: 'bracket-V',  t: 1.6, bw: 60,  l: h - 35, qty: q * 4 },
+          { ...base, label: 'reinforce',  t: 1.6, bw: 50,  l: h,      qty: q * 3 },
+        ];
+      case 'HTG-1.69':
+        return [
+          { ...base, label: 'bracket-HA', t: 1.6, bw: 60,  l: sw - 5, qty: q * 4 },
+          { ...base, label: 'bracket-HB', t: 1.6, bw: 274, l: sw - 5, qty: q * 4 },
+          { ...base, label: 'bracket-V',  t: 1.6, bw: 60,  l: h - 35, qty: q * 4 },
+          { ...base, label: 'reinforce',  t: 1.6, bw: 50,  l: h,      qty: q * 6 },
+        ];
+      default: return [];
+    }
+  }
+
+  const bracketAgg = new Map<string, { t: number; bw: number; l: number; qty: number; codes: string[] }>();
+  for (const item of editedItems) {
+    const c = (item.product_type || '').trim();
+    const rows = calcBrackets(c, item.pipe_width_mm || 0, item.pipe_height_mm || 0, item.qty || 1);
+    for (const b of rows) {
+      const key = `${b.t}_${b.bw}_${b.l}`;
+      if (!bracketAgg.has(key)) bracketAgg.set(key, { t: b.t, bw: b.bw, l: b.l, qty: 0, codes: [] });
+      const e = bracketAgg.get(key)!;
+      e.qty += b.qty;
+      if (!e.codes.includes(c)) e.codes.push(c);
+    }
+  }
+  const bracketList = [...bracketAgg.values()].sort((a, b) => a.bw - b.bw || a.l - b.l);
+  const bracketTotal = bracketList.reduce((s, r) => s + r.qty, 0);
+
+  const selectedPo = poList.find(p => p.po_id === selectedId);
+  const isApproved = approvalStatus === 'APPROVED';
+  const isSubmitted = ['SUBMITTED', 'REVIEW', 'PENDING_APPROVE'].includes(approvalStatus || '');
+  const isEditable = !isSubmitted && !isApproved;
+
+  const APSTATUS: Record<string, { label: string; color: string; icon: string }> = {
+    DRAFT:           { label: '작성중',     color: 'bg-gray-100 text-gray-600',    icon: '📝' },
+    SUBMITTED:       { label: '결재요청중', color: 'bg-blue-100 text-blue-700',    icon: '📤' },
+    REVIEW:          { label: '검토중',     color: 'bg-yellow-100 text-yellow-700',icon: '🔍' },
+    PENDING_APPROVE: { label: '승인대기',   color: 'bg-orange-100 text-orange-700',icon: '⏳' },
+    APPROVED:        { label: '결재완료',   color: 'bg-green-100 text-green-700',  icon: '✅' },
+    REJECTED:        { label: '반려',       color: 'bg-red-100 text-red-700',      icon: '❌' },
+    RETURNED:        { label: '재작성요청', color: 'bg-purple-100 text-purple-700',icon: '↩️' },
+    RECEIVED:        { label: '입고완료',   color: 'bg-teal-100 text-teal-700',    icon: '📦' },
+  };
+  const apSt = APSTATUS[approvalStatus || ''] || null;
+
+  const EditCell = ({ value, field, idx }: { value: number; field: string; idx: number }) =>
+    isEditable ? (
+      <input
+        type="number"
+        value={value}
+        onChange={e => updateItem(idx, field, e.target.value)}
+        className="w-20 text-center border border-blue-300 rounded px-1 py-0.5 text-xs font-mono focus:outline-none focus:border-blue-500 bg-blue-50"
+        min={1}
+      />
+    ) : (
+      <span className="font-mono">{value}</span>
+    );
+
+  return (
+    <div className="flex gap-6">
+      {/* Submit Modal */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-[480px] p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-1">결재함으로 보내기</h3>
+            <p className="text-sm text-gray-500 mb-5">검토자와 승인자를 선택하세요. 선택된 담당자만 결재함에서 확인 가능합니다.</p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">검토자 <span className="text-red-500">*</span></label>
+                <select
+                  value={reviewerId || ''}
+                  onChange={e => setReviewerId(Number(e.target.value))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                >
+                  <option value="">-- 검토자 선택 --</option>
+                  {workers.map(w => (
+                    <option key={w.worker_id} value={w.worker_id}>
+                      {w.worker_name} {w.position ? `(${w.position})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">승인자 <span className="text-red-500">*</span></label>
+                <select
+                  value={approverId || ''}
+                  onChange={e => setApproverId(Number(e.target.value))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+                >
+                  <option value="">-- 승인자 선택 --</option>
+                  {workers.map(w => (
+                    <option key={w.worker_id} value={w.worker_id}>
+                      {w.worker_name} {w.position ? `(${w.position})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6 justify-end">
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 rounded-lg border text-sm text-gray-600 hover:bg-gray-50">취소</button>
+              <button
+                onClick={handleSubmitApproval}
+                disabled={submitting || !reviewerId || !approverId}
+                className="px-5 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-40"
+              >
+                {submitting ? '전송 중...' : '결재 요청'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Left: PO list */}
+      <div className="w-72 flex-shrink-0">
+        <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b bg-gray-50">
+            <h3 className="text-sm font-semibold text-gray-700">📋 발주서 선택</h3>
+            <p className="text-xs text-gray-400 mt-0.5">클릭 시 소켓+평철 자동 계산</p>
+          </div>
+          {loadingList ? (
+            <div className="p-6 text-center text-sm text-gray-400">로드 중...</div>
+          ) : poList.length === 0 ? (
+            <div className="p-6 text-center text-sm text-gray-400">등록된 발주서 없음</div>
+          ) : (
+            <div className="divide-y max-h-[70vh] overflow-y-auto">
+              {poList.map(po => (
+                <button
+                  key={po.po_id}
+                  onClick={() => handleSelect(po)}
+                  className={`w-full text-left px-4 py-3 hover:bg-blue-50 transition-colors ${
+                    selectedId === po.po_id ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-gray-800 truncate">{po.project_name}</p>
+                  <p className="text-xs text-gray-500 truncate">{po.contractor || po.biz_name || '-'}</p>
+                  <div className="flex gap-2 mt-1">
+                    <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">{po.item_count}건</span>
+                    <span className="text-[10px] text-gray-400">{new Date(po.created_at).toLocaleDateString('ko-KR')}</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Right: Preview + Actions */}
+      <div className="flex-1 min-w-0">
+        {!selectedId ? (
+          <div className="bg-white rounded-xl border shadow-sm flex flex-col items-center justify-center py-24 text-gray-400">
+            <span className="text-5xl mb-4">🔧</span>
+            <p className="text-sm font-medium">왼쪽에서 발주서를 선택하세요</p>
+            <p className="text-xs mt-1">소켓+평철 발주 수량이 자동 계산됩니다</p>
+          </div>
+        ) : loadingDetail ? (
+          <div className="bg-white rounded-xl border shadow-sm flex items-center justify-center py-24">
+            <div className="h-6 w-6 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin mr-3" />
+            <span className="text-sm text-gray-500">계산 중...</span>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Header card */}
+            <div className="bg-white rounded-xl border shadow-sm p-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-bold text-gray-800">{selectedPo?.project_name}</h3>
+                  <p className="text-sm text-gray-500">{selectedPo?.contractor || selectedPo?.biz_name || '-'}</p>
+                  <div className="flex gap-3 mt-1.5 text-xs text-gray-400">
+                    <span>소켓 <b className="text-blue-600">{editedItems.length}건</b></span>
+                    <span>평철규격 <b className="text-orange-600">{bracketList.length}종</b></span>
+                    {isEditable && <span className="text-green-600 font-semibold">✏️ 수정 가능</span>}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2 items-end">
+                  {apSt && (
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${apSt.color}`}>
+                      {apSt.icon} {apSt.label}
+                    </span>
+                  )}
+                  <div className="flex gap-2">
+                    {isEditable && editedItems.length > 0 && (
+                      <button
+                        onClick={handleOpenSubmitModal}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+                      >
+                        📤 결재함으로 보내기
+                      </button>
+                    )}
+                    {isApproved && soId && (
+                      <button
+                        onClick={handleDownload}
+                        disabled={downloading}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-40 transition-colors shadow-sm"
+                      >
+                        {downloading ? '생성중...' : '📥 발주서 Excel'}
+                      </button>
+                    )}
+                    {isApproved && soId && (
+                      <button
+                        onClick={handleReceive}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-teal-600 text-white rounded-xl text-sm font-semibold hover:bg-teal-700 transition-colors shadow-sm"
+                      >
+                        📦 입고 확인
+                      </button>
+                    )}
+                    {approvalStatus === 'RECEIVED' && (
+                      <span className="text-xs text-teal-600 font-semibold self-center">📦 입고완료 (재고 등록됨)</span>
+                    )}
+                    {isSubmitted && (
+                      <span className="text-xs text-gray-400 self-center">결재 완료 후 다운로드 가능</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {editedItems.length === 0 ? (
+              <div className="bg-white rounded-xl border shadow-sm p-10 text-center text-gray-400">
+                <p className="text-sm">소켓 명세가 없거나 구조명이 인식되지 않습니다.</p>
+                <p className="text-xs mt-1">발주서의 구조명(VT-01, VT-049 등)을 확인하세요.</p>
+              </div>
+            ) : (
+              <>{/* Socket section */}
+              <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b bg-blue-50 flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-blue-800">🔌 소켓 발주</h4>
+                  {isEditable && <span className="text-xs text-blue-500">가로·세로·수량 클릭하여 수정 가능</span>}
+                </div>
+                <div className="space-y-2 p-3">
+                  {[...grouped.entries()].map(([code, codeItems]) => {
+                    const clr = STRUCT_COLORS[code] || 'bg-gray-100 text-gray-700';
+                    const calc = STRUCT_CALC[code];
+                    const total = codeItems.reduce((s, item) => {
+                      const c = calc ? calc(item.pipe_width_mm||0, item.pipe_height_mm||0, item.qty||1) : null;
+                      return s + (c?.oq ?? 0);
+                    }, 0);
+                    return (
+                      <div key={code} className="border rounded-lg overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b">
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${clr}`}>{code}</span>
+                          <span className="text-sm font-bold text-blue-700">{total}ea</span>
+                        </div>
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50/50">
+                            <tr className="text-gray-400">
+                              <th className="px-3 py-1.5 text-left">관통재(가로×세로)</th>
+                              <th className="px-3 py-1.5 text-center">수량</th>
+                              <th className="px-3 py-1.5 text-center text-blue-600">소켓가로</th>
+                              <th className="px-3 py-1.5 text-center text-blue-600">소켓세로</th>
+                              <th className="px-3 py-1.5 text-center text-blue-600">폭</th>
+                              <th className="px-3 py-1.5 text-right text-green-600">발주수량</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-50">
+                            {codeItems.map((item: any, idx: number) => {
+                              const globalIdx = editedItems.indexOf(item);
+                              const w = item.pipe_width_mm||0, h = item.pipe_height_mm||0, q = item.qty||1;
+                              const c = calc ? calc(w, h, q) : null;
+                              return (
+                                <tr key={idx} className="hover:bg-blue-50/20">
+                                  <td className="px-3 py-1.5 font-mono">{w}×{h}</td>
+                                  <td className="px-3 py-1.5 text-center">
+                                    <EditCell value={q} field="qty" idx={globalIdx} />
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center">
+                                    <EditCell value={c?.sw??w} field="pipe_width_mm" idx={globalIdx} />
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center">
+                                    <EditCell value={c?.sh??h} field="pipe_height_mm" idx={globalIdx} />
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center font-mono text-blue-600">{c?.depth??'-'}</td>
+                                  <td className="px-3 py-1.5 text-right font-mono font-bold text-green-700">{c?.oq??'-'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Bracket section */}
+              <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b bg-orange-50 flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-orange-800">🔩 평철(브라켓) 발주</h4>
+                  <span className="text-xs text-orange-700 font-semibold">총 {bracketTotal}개</span>
+                </div>
+                {bracketList.length === 0 ? (
+                  <div className="p-6 text-center text-sm text-gray-400">계산된 평철 없음</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-orange-50/50">
+                        <tr className="text-gray-500">
+                          <th className="px-4 py-2 text-center w-8">순번</th>
+                          <th className="px-4 py-2 text-center">재질</th>
+                          <th className="px-4 py-2 text-center text-orange-700">두께(T)</th>
+                          <th className="px-4 py-2 text-center text-orange-700">폭(mm)</th>
+                          <th className="px-4 py-2 text-center text-orange-700">길이(mm)</th>
+                          <th className="px-4 py-2 text-right text-green-700 font-semibold">수량(개)</th>
+                          <th className="px-4 py-2 text-left text-gray-400">적용</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {bracketList.map((b, idx) => (
+                          <tr key={idx} className={`hover:bg-orange-50/30 ${b.bw >= 200 ? 'bg-amber-50/40' : ''}`}>
+                            <td className="px-4 py-2 text-center text-gray-400">{idx + 1}</td>
+                            <td className="px-4 py-2 text-center text-gray-600">GI</td>
+                            <td className="px-4 py-2 text-center font-mono text-orange-700">{b.t}</td>
+                            <td className="px-4 py-2 text-center font-mono font-bold text-orange-700">{b.bw}</td>
+                            <td className="px-4 py-2 text-center font-mono font-bold text-orange-700">{b.l}</td>
+                            <td className="px-4 py-2 text-right font-mono font-bold text-green-700">{b.qty}</td>
+                            <td className="px-4 py-2 text-xs text-gray-400">{b.codes.join(', ')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-orange-100 border-t-2 border-orange-200">
+                        <tr>
+                          <td colSpan={5} className="px-4 py-2.5 text-right font-bold text-orange-800">총 합계</td>
+                          <td className="px-4 py-2.5 text-right font-bold text-green-700 text-sm">{bracketTotal}</td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function PurchaseRequestPage() {
   const navigate = useNavigate();
@@ -350,26 +881,60 @@ export default function PurchaseRequestPage() {
   const isDraft = selectedPR?.status === 'DRAFT';
   const isOrdered = selectedPR?.status === 'ORDERED' || selectedPR?.status === 'RECEIVED';
 
+  const [activeTab, setActiveTab] = useState<'rm' | 'socket'>('rm');
+
   return (
     <div className="p-6 max-w-[1400px] mx-auto">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">자재 발주서</h1>
           <p className="text-sm text-gray-500 mt-1">수주 BOM 전개 → 소요자재 산출 → 구매 연계용 자재 발주 준비</p>
         </div>
-        <button
-          onClick={async () => {
-            try {
-              const res = await api.post<{ data: any }>('/purchase-requests/create-rm', {});
-              alert(`배합원료 발주서 ${res.data.pr_number} 생성`);
-              await fetchPRs();
-            } catch (err: any) { alert(err?.message || '생성 실패'); }
-          }}
-          className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700"
-        >+ 배합원료 발주</button>
+        {activeTab === 'rm' && (
+          <button
+            onClick={async () => {
+              try {
+                const res = await api.post<{ data: any }>('/purchase-requests/create-rm', {});
+                alert(`배합원료 발주서 ${res.data.pr_number} 생성`);
+                await fetchPRs();
+              } catch (err: any) { alert(err?.message || '생성 실패'); }
+            }}
+            className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700"
+          >+ 배합원료 발주</button>
+        )}
       </div>
 
+      {/* 탭 버튼 */}
+      <div className="flex gap-1 mb-5 border-b">
+        <button
+          onClick={() => setActiveTab('rm')}
+          className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-t-xl border border-b-0 transition-colors ${
+            activeTab === 'rm'
+              ? 'bg-white text-amber-600 border-gray-200 -mb-px z-10'
+              : 'bg-gray-100 text-gray-500 hover:bg-gray-200 border-transparent'
+          }`}
+        >
+          🧪 배합원료발주
+        </button>
+        <button
+          onClick={() => setActiveTab('socket')}
+          className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-t-xl border border-b-0 transition-colors ${
+            activeTab === 'socket'
+              ? 'bg-white text-green-600 border-gray-200 -mb-px z-10'
+              : 'bg-gray-100 text-gray-500 hover:bg-gray-200 border-transparent'
+          }`}
+        >
+          🔧 소켓류발주
+        </button>
+      </div>
+
+      {/* 소켓류발주 탭 */}
+      {activeTab === 'socket' && <SocketOrderTabContent />}
+
+      {/* 배합원료발주 탭 */}
+      {activeTab === 'rm' && (
       <div className="grid grid-cols-12 gap-6">
+
         {/* 좌측: 발주서 목록 (일별 그룹) */}
         <div className="col-span-4">
           <div className="bg-white rounded-xl border shadow-sm">
@@ -634,6 +1199,7 @@ export default function PurchaseRequestPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* 입고등록 모달 */}
       {receivingItem && (

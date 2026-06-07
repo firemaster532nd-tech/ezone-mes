@@ -52,6 +52,8 @@ import { ProjectLotMatrixPage } from '@/pages/quality/ProjectLotMatrixPage';
 import PurchaseOrdersPage from '@/pages/sales/PurchaseOrdersPage';
 import { SocketWorkOrderPage } from '@/pages/production/SocketWorkOrderPage';
 import { EcountSyncPage } from '@/pages/settings/EcountSyncPage';
+import SocketStockPage from '@/pages/inventory/SocketStockPage';
+import { StructWorkOrderPage } from '@/pages/production/StructWorkOrderPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -76,11 +78,13 @@ export const router = createBrowserRouter([
       { path: 'production/tbm-print/:id', element: <TbmPrintPage /> },
       { path: 'production/project-work-orders', element: <ProjectWorkOrderPage /> },
       { path: 'production/socket-work-orders',  element: <SocketWorkOrderPage /> },
+      { path: 'production/struct-work-orders',   element: <StructWorkOrderPage /> },
       // 재고관리
       { path: 'inventory/dashboard', element: <InventoryDashboardPage /> },
       { path: 'inventory/initialize', element: <InitialInventoryPage /> },
       { path: 'inventory/closing', element: <InventoryClosingPage /> },
       { path: 'inventory/import', element: <InventoryImportPage /> },
+      { path: 'inventory/socket-stock', element: <SocketStockPage /> },
       // 품질관리
       { path: 'quality/incoming', element: <IncomingInspectionPage /> },
       { path: 'quality/process-inspection', element: <ProcessInspectionPage /> },
