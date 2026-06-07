@@ -116,7 +116,7 @@ async function genWoNumber(type: string): Promise<string> {
   const prefix = {
     INSPECT: 'INS', CUT_VM: 'CVM', CUT_VT: 'CVT',
     CUT_THERMAL: 'CTH', BEND_VM: 'BVM', BEND_VT: 'BVT',
-    BEND_VT_RE: 'BRE', LABEL: 'LBL',
+    BEND_VT_RE: 'BRE', THERMAL_OUTER: 'THO', PACKING: 'PKG', LABEL: 'LBL',
   }[type] || 'WO';
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const r = await pool.query(
@@ -191,12 +191,18 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
         const W = it.width_mm || 0, H = it.height_mm || 0, Q = it.qty || 1;
         // 공정별 자동 계산
         let calc_data: any = null;
-        if (wo_type === 'CUT_VM')       calc_data = calcCutVM(W, H, Q);
-        else if (wo_type === 'CUT_VT')  calc_data = calcCutVT(W, H, Q);
-        else if (wo_type === 'CUT_THERMAL') calc_data = calcCutThermal(W, H, Q);
-        else if (wo_type === 'BEND_VM') calc_data = { brackets: calcBracketVM(it.product_type, W, H, Q) };
-        else if (wo_type === 'BEND_VT') calc_data = { brackets: calcBracketVT(W, H, Q) };
-        else if (wo_type === 'BEND_VT_RE') calc_data = { brackets: calcBracketVTRe(W, H, Q) };
+        if (wo_type === 'CUT_VM')            calc_data = calcCutVM(W, H, Q);
+        else if (wo_type === 'CUT_VT')       calc_data = calcCutVT(W, H, Q);
+        else if (wo_type === 'CUT_THERMAL')  calc_data = calcCutThermal(W, H, Q);
+        else if (wo_type === 'BEND_VM')      calc_data = { brackets: calcBracketVM(it.product_type, W, H, Q) };
+        else if (wo_type === 'BEND_VT')      calc_data = { brackets: calcBracketVT(W, H, Q) };
+        else if (wo_type === 'BEND_VT_RE')   calc_data = { brackets: calcBracketVTRe(W, H, Q) };
+        else if (wo_type === 'THERMAL_OUTER') calc_data = {
+          outer_top: W + 60, outer_top_qty: Q * 2,
+          outer_side: H,     outer_side_qty: Q * 2,
+        };
+        else if (wo_type === 'PACKING')      calc_data = { packing_qty: Q };
+        // INSPECT, LABEL: calc_data = null
 
         await client.query(`
           INSERT INTO struct_work_order_item

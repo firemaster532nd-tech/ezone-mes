@@ -12,7 +12,7 @@ import {
 // ────────────────────────────────────────────────────────────────────────────
 // 타입
 // ────────────────────────────────────────────────────────────────────────────
-type WoType = 'INSPECT' | 'CUT_VM' | 'CUT_VT' | 'CUT_THERMAL' | 'BEND_VM' | 'BEND_VT' | 'BEND_VT_RE' | 'LABEL';
+type WoType = 'INSPECT' | 'CUT_VM' | 'CUT_VT' | 'CUT_THERMAL' | 'BEND_VM' | 'BEND_VT' | 'BEND_VT_RE' | 'THERMAL_OUTER' | 'PACKING' | 'LABEL';
 type WoStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED';
 
 interface Project {
@@ -74,47 +74,55 @@ interface StructWO {
 // 탭 설정
 // ────────────────────────────────────────────────────────────────────────────
 const WO_TABS: { type: WoType; label: string; color: string; accent: string; iconColor: string }[] = [
-  { type: 'INSPECT',      label: '🔍 소켓 인수검사',    color: 'border-blue-500',    accent: 'bg-blue-500',    iconColor: 'text-blue-600' },
-  { type: 'CUT_VM',       label: '✂️ 재단-VM형',         color: 'border-emerald-500', accent: 'bg-emerald-500', iconColor: 'text-emerald-600' },
-  { type: 'CUT_VT',       label: '✂️ 재단-VT형',         color: 'border-emerald-500', accent: 'bg-emerald-500', iconColor: 'text-emerald-600' },
-  { type: 'CUT_THERMAL',  label: '🌡 차열재 재단',       color: 'border-teal-500',    accent: 'bg-teal-500',    iconColor: 'text-teal-600' },
-  { type: 'BEND_VM',      label: '🔨 절곡-VM브라켓',     color: 'border-orange-500',  accent: 'bg-orange-500',  iconColor: 'text-orange-600' },
-  { type: 'BEND_VT',      label: '🔨 절곡-VT브라켓',     color: 'border-amber-500',   accent: 'bg-amber-500',   iconColor: 'text-amber-600' },
-  { type: 'BEND_VT_RE',   label: '🔨 절곡-VT보강대',     color: 'border-amber-500',   accent: 'bg-amber-500',   iconColor: 'text-amber-600' },
-  { type: 'LABEL',        label: '🏷 라벨 소요량',        color: 'border-purple-500',  accent: 'bg-purple-500',  iconColor: 'text-purple-600' },
+  { type: 'INSPECT',       label: '🔍 소켓 인수검사',    color: 'border-blue-500',    accent: 'bg-blue-500',    iconColor: 'text-blue-600' },
+  { type: 'CUT_VM',        label: '✂️ 재단-VM형',         color: 'border-emerald-500', accent: 'bg-emerald-500', iconColor: 'text-emerald-600' },
+  { type: 'CUT_VT',        label: '✂️ 재단-VT형',         color: 'border-emerald-500', accent: 'bg-emerald-500', iconColor: 'text-emerald-600' },
+  { type: 'CUT_THERMAL',   label: '🌡 차열재 재단',       color: 'border-teal-500',    accent: 'bg-teal-500',    iconColor: 'text-teal-600' },
+  { type: 'BEND_VM',       label: '🔨 절곡-VM브라켓',     color: 'border-orange-500',  accent: 'bg-orange-500',  iconColor: 'text-orange-600' },
+  { type: 'BEND_VT',       label: '🔨 절곡-VT브라켓',     color: 'border-amber-500',   accent: 'bg-amber-500',   iconColor: 'text-amber-600' },
+  { type: 'BEND_VT_RE',    label: '🔨 절곡-VT보강대',     color: 'border-amber-500',   accent: 'bg-amber-500',   iconColor: 'text-amber-600' },
+  { type: 'THERMAL_OUTER', label: '🔥 외부차열재 작업',   color: 'border-rose-500',    accent: 'bg-rose-500',    iconColor: 'text-rose-600' },
+  { type: 'PACKING',       label: '📦 포장 작업',          color: 'border-violet-500',  accent: 'bg-violet-500',  iconColor: 'text-violet-600' },
+  { type: 'LABEL',         label: '🏷 라벨 소요량',        color: 'border-purple-500',  accent: 'bg-purple-500',  iconColor: 'text-purple-600' },
 ];
 
 const TAB_ACCENT_TEXT: Record<WoType, string> = {
-  INSPECT:     'text-blue-700',
-  CUT_VM:      'text-emerald-700',
-  CUT_VT:      'text-emerald-700',
-  CUT_THERMAL: 'text-teal-700',
-  BEND_VM:     'text-orange-700',
-  BEND_VT:     'text-amber-700',
-  BEND_VT_RE:  'text-amber-700',
-  LABEL:       'text-purple-700',
+  INSPECT:       'text-blue-700',
+  CUT_VM:        'text-emerald-700',
+  CUT_VT:        'text-emerald-700',
+  CUT_THERMAL:   'text-teal-700',
+  BEND_VM:       'text-orange-700',
+  BEND_VT:       'text-amber-700',
+  BEND_VT_RE:    'text-amber-700',
+  THERMAL_OUTER: 'text-rose-700',
+  PACKING:       'text-violet-700',
+  LABEL:         'text-purple-700',
 };
 
 const TAB_ACCENT_BG: Record<WoType, string> = {
-  INSPECT:     'bg-blue-50',
-  CUT_VM:      'bg-emerald-50',
-  CUT_VT:      'bg-emerald-50',
-  CUT_THERMAL: 'bg-teal-50',
-  BEND_VM:     'bg-orange-50',
-  BEND_VT:     'bg-amber-50',
-  BEND_VT_RE:  'bg-amber-50',
-  LABEL:       'bg-purple-50',
+  INSPECT:       'bg-blue-50',
+  CUT_VM:        'bg-emerald-50',
+  CUT_VT:        'bg-emerald-50',
+  CUT_THERMAL:   'bg-teal-50',
+  BEND_VM:       'bg-orange-50',
+  BEND_VT:       'bg-amber-50',
+  BEND_VT_RE:    'bg-amber-50',
+  THERMAL_OUTER: 'bg-rose-50',
+  PACKING:       'bg-violet-50',
+  LABEL:         'bg-purple-50',
 };
 
 const TAB_ACCENT_RING: Record<WoType, string> = {
-  INSPECT:     'ring-blue-400',
-  CUT_VM:      'ring-emerald-400',
-  CUT_VT:      'ring-emerald-400',
-  CUT_THERMAL: 'ring-teal-400',
-  BEND_VM:     'ring-orange-400',
-  BEND_VT:     'ring-amber-400',
-  BEND_VT_RE:  'ring-amber-400',
-  LABEL:       'ring-purple-400',
+  INSPECT:       'ring-blue-400',
+  CUT_VM:        'ring-emerald-400',
+  CUT_VT:        'ring-emerald-400',
+  CUT_THERMAL:   'ring-teal-400',
+  BEND_VM:       'ring-orange-400',
+  BEND_VT:       'ring-amber-400',
+  BEND_VT_RE:    'ring-amber-400',
+  THERMAL_OUTER: 'ring-rose-400',
+  PACKING:       'ring-violet-400',
+  LABEL:         'ring-purple-400',
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -158,6 +166,18 @@ function calcData(type: WoType, W: number, H: number, qty: number): CalcRow[] {
       ];
     case 'INSPECT':
       return [];
+    case 'THERMAL_OUTER':
+      // 외부차열재 작업: 소켓 외부에 차열재(세라믹울) 부착
+      // 상하(W+60) × 2장, 좌우(H) × 2장 — 차열재 재단과 동일한 규격
+      return [
+        { label: '상하 외부차열재 (W+60)', length: W + 60, qty: 2 },
+        { label: '좌우 외부차열재 (H)',    length: H,      qty: 2 },
+      ];
+    case 'PACKING':
+      // 포장작업: 소켓 1개 포장 단위
+      return [
+        { label: '포장 단위',  length: null, qty: 1 },
+      ];
     case 'LABEL':
       return [
         { label: '라벨 (합계)',          length: null, qty: qty },
