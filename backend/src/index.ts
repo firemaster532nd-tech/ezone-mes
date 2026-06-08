@@ -49,6 +49,8 @@ import { socketStockRoutes } from './routes/socket-stock.js';
 import { bendingWorkOrderRoutes } from './routes/bending-work-orders.js';
 import { materialStockRoutes } from './routes/material-stock.js';
 import { structWorkOrderRoutes } from './routes/struct-work-orders.js';
+import { subWorkOrderRoutes } from './routes/sub-work-orders.js';
+import { fnWorkOrderRoutes } from './routes/fn-work-orders.js';
 
 let appInstance: any = null;
 
@@ -107,6 +109,8 @@ export const initApp = async () => {
   await app.register(bendingWorkOrderRoutes);
   await app.register(materialStockRoutes);
   await app.register(structWorkOrderRoutes);
+  await app.register(subWorkOrderRoutes);
+  await app.register(fnWorkOrderRoutes);
 
   // Health check
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));

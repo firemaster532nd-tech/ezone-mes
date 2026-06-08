@@ -54,6 +54,8 @@ import { SocketWorkOrderPage } from '@/pages/production/SocketWorkOrderPage';
 import { EcountSyncPage } from '@/pages/settings/EcountSyncPage';
 import SocketStockPage from '@/pages/inventory/SocketStockPage';
 import { StructWorkOrderPage } from '@/pages/production/StructWorkOrderPage';
+import { SubWorkOrderPage } from '@/pages/production/SubWorkOrderPage';
+import { FnWorkOrderPage } from '@/pages/production/FnWorkOrderPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -79,6 +81,8 @@ export const router = createBrowserRouter([
       { path: 'production/project-work-orders', element: <ProjectWorkOrderPage /> },
       { path: 'production/socket-work-orders',  element: <SocketWorkOrderPage /> },
       { path: 'production/struct-work-orders',   element: <StructWorkOrderPage /> },
+      { path: 'production/sub-work-orders',       element: <SubWorkOrderPage /> },
+      { path: 'production/fn-work-orders',        element: <FnWorkOrderPage /> },
       // 재고관리
       { path: 'inventory/dashboard', element: <InventoryDashboardPage /> },
       { path: 'inventory/initialize', element: <InitialInventoryPage /> },
