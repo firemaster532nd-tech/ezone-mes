@@ -56,6 +56,7 @@ interface PoItem {
   global_seq: number;
   explode_index: number;
   explode_total: number;
+  socket_lot_number?: string; // ★ 소켓 인수검사 로트번호 (사용자 입력)
 }
 
 interface CalcRow {
@@ -797,6 +798,8 @@ function SubCreateModal({
   const [submitting, setSubmitting] = useState(false);
 
   const currentTabCfg = WO_TABS.find(t => t.type === woType)!;
+  // 소켓 인수검사 로트번호가 필요한 공정 여부
+  const needsLotInput = !['FLASH_I','FLASH_Z','FLASH_L','GAP_SHEET_CUT','GAP_WOOL_CUT','GAP_ASSY'].includes(woType);
 
   useEffect(() => {
     setSelectedPoId('');
@@ -812,7 +815,7 @@ function SubCreateModal({
     if (!selectedPoId || !woType) return;
     setLoadingItems(true);
     api.get<{ data: PoItem[] }>(`/po-items-for-wo?po_id=${selectedPoId}&wo_type=${woType}`)
-      .then(r => setPoItems(r.data ?? []))
+      .then(r => setPoItems((r.data ?? []).map(item => ({ ...item, socket_lot_number: '' }))))
       .catch(() => setPoItems([]))
       .finally(() => setLoadingItems(false));
   }, [selectedPoId, woType]);
@@ -828,6 +831,17 @@ function SubCreateModal({
   const handleSubmit = async () => {
     if (!selectedPoId) { alert('발주서를 선택하세요.'); return; }
     if (poItems.length === 0) { alert('항목이 없습니다.'); return; }
+
+    // ★ 소켓 인수검사 로트번호 필수 체크 (THERMAL_ATTACH 제외 공정들)
+    const needsLot = !['FLASH_I','FLASH_Z','FLASH_L','GAP_SHEET_CUT','GAP_WOOL_CUT','GAP_ASSY'].includes(woType);
+    if (needsLot) {
+      const missing = poItems.filter(it => !(it.socket_lot_number ?? '').trim());
+      if (missing.length > 0) {
+        alert(`❗ 소켓 인수검사 로트번호가 입력되지 않은 항목이 ${missing.length}건 있습니다.\n모든 소켓의 인수검사 로트번호를 입력하세요.`);
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const itemsWithCalc = poItems.map(item => {
@@ -847,6 +861,7 @@ function SubCreateModal({
           explode_index: item.explode_index,
           explode_total: item.explode_total,
           calc_data: calcSubData(woType, W, H, item.qty ?? 1),
+          socket_lot_number: item.socket_lot_number || null, // ★ 로트번호
         };
       });
 
@@ -863,7 +878,7 @@ function SubCreateModal({
       }
 
       const res = await api.post<{ data: any }>('/sub-work-orders', payload);
-      alert(`✅ ${res.data?.sub_wo_number ?? ''} 생성 완료`);
+      alert(`✅ ${res.data?.swo_number ?? ''} 작업지시 생성 완료`);
       onCreated();
     } catch (e: any) {
       alert(e?.body?.error || '생성 실패');
@@ -985,10 +1000,13 @@ function SubCreateModal({
                       <thead className="bg-gray-50 border-b">
                         <tr>
                           <th className="px-3 py-2 text-left text-gray-500 font-medium">No</th>
-                          <th className="px-3 py-2 text-left text-gray-500 font-medium">구조체</th>
-                          <th className="px-3 py-2 text-center text-gray-500 font-medium">W</th>
-                          <th className="px-3 py-2 text-center text-gray-500 font-medium">H</th>
+                          <th className="px-3 py-2 text-left text-gray-500 font-medium">구조체 / 규격</th>
+                          <th className="px-3 py-2 text-center text-gray-500 font-medium">W(mm)</th>
+                          <th className="px-3 py-2 text-center text-gray-500 font-medium">H(mm)</th>
                           <th className="px-3 py-2 text-center text-gray-500 font-medium">수량</th>
+                          <th className="px-3 py-2 text-left text-rose-600 font-semibold bg-rose-50">
+                            ★ 소켓 인수검사 로트번호
+                          </th>
                           <th className="px-3 py-2 text-left text-gray-500 font-medium">공정 계산</th>
                         </tr>
                       </thead>
@@ -1004,24 +1022,55 @@ function SubCreateModal({
                             >
                               <td className="px-3 py-2 text-gray-400 font-mono">{item.global_seq}</td>
                               <td className="px-3 py-2">
-                                <div className="font-medium text-gray-800">{item.structure || item.product_type || '-'}</div>
+                                <div className="font-semibold text-gray-800 text-xs">{item.structure || item.product_type || '-'}</div>
                                 {item.explode_total > 1 && (
                                   <div className="text-[10px] text-blue-500 font-mono mt-0.5">
                                     {item.explode_index}/{item.explode_total}번
                                   </div>
                                 )}
+                                {item.install_location && (
+                                  <div className="text-[10px] text-gray-400 mt-0.5">{item.install_location}</div>
+                                )}
                               </td>
-                              <td className="px-3 py-2 text-center font-mono font-semibold text-gray-800">
-                                {W > 0 ? W : <span className="text-gray-300">-</span>}
+                              {/* 행 내 W/H 표시 */}
+                              <td className="px-3 py-2 text-center">
+                                <span className={cn('font-mono font-bold text-xs',
+                                  (item.width_mm ?? 0) > 0 ? 'text-gray-800' : 'text-gray-300'
+                                )}>
+                                  {(item.width_mm ?? 0) > 0 ? item.width_mm : '-'}
+                                </span>
                               </td>
-                              <td className="px-3 py-2 text-center font-mono font-semibold text-gray-800">
-                                {H > 0 ? H : <span className="text-gray-300">-</span>}
+                              <td className="px-3 py-2 text-center">
+                                <span className={cn('font-mono font-bold text-xs',
+                                  (item.height_mm ?? 0) > 0 ? 'text-gray-800' : 'text-gray-300'
+                                )}>
+                                  {(item.height_mm ?? 0) > 0 ? item.height_mm : '-'}
+                                </span>
                               </td>
                               <td className="px-3 py-2 text-center">
                                 <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-rose-100 text-rose-700 text-xs font-bold">
                                   {item.qty ?? 1}
                                 </span>
                               </td>
+                              {/* ★ 소켓 인수검사 로트번호 입력 */}
+                              <td className="px-2 py-1.5 bg-rose-50/40">
+                                <input
+                                  type="text"
+                                  value={item.socket_lot_number ?? ''}
+                                  onChange={e => {
+                                    const val = e.target.value;
+                                    setPoItems(prev => prev.map((pi, idx) =>
+                                      idx === rowIdx ? { ...pi, socket_lot_number: val } : pi
+                                    ));
+                                  }}
+                                  placeholder="예: SWO-20260602-001"
+                                  className="w-full border border-rose-200 focus:border-rose-400 rounded px-2 py-1 text-[11px] font-mono bg-white focus:outline-none focus:ring-1 focus:ring-rose-300 min-w-[150px]"
+                                />
+                                {!(item.socket_lot_number ?? '').trim() && needsLotInput && (
+                                  <p className="text-[9px] text-red-500 mt-0.5">로트번호 필수</p>
+                                )}
+                              </td>
+                              {/* 공정 계산 */}
                               <td className="px-3 py-2">
                                 {W > 0 && H > 0 ? (
                                   <div className="space-y-0.5">

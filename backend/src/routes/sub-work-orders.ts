@@ -99,16 +99,16 @@ async function migrateSubWO() {
     );
 
     CREATE TABLE IF NOT EXISTS sub_work_order_item (
-      item_id       SERIAL PRIMARY KEY,
-      swo_id        INTEGER REFERENCES sub_work_order(swo_id) ON DELETE CASCADE,
-      seq_no        INTEGER,
-      po_item_id    INTEGER,
-      structure     TEXT,
-      width_mm      INTEGER,
-      height_mm     INTEGER,
-      qty           INTEGER DEFAULT 1,
-      calc_data     JSONB,
-      remarks       TEXT
+      item_id            SERIAL PRIMARY KEY,
+      swo_id             INTEGER REFERENCES sub_work_order(swo_id) ON DELETE CASCADE,
+      seq_no             INTEGER,
+      po_item_id         INTEGER,
+      structure          TEXT,
+      width_mm           INTEGER,
+      height_mm          INTEGER,
+      qty                INTEGER DEFAULT 1,
+      calc_data          JSONB,
+      remarks            TEXT
     );
 
     CREATE TABLE IF NOT EXISTS assembly_lot (
@@ -134,6 +134,12 @@ async function migrateSubWO() {
       qty           INTEGER DEFAULT 0,
       updated_at    TIMESTAMPTZ DEFAULT NOW()
     );
+  `);
+
+  // 소켓 인수검사 로트번호 컨럼 추가 (IF NOT EXISTS)
+  await pool.query(`
+    ALTER TABLE sub_work_order_item
+      ADD COLUMN IF NOT EXISTS socket_lot_number VARCHAR(100);
   `);
 }
 
@@ -250,13 +256,14 @@ export async function subWorkOrderRoutes(app: FastifyInstance) {
 
         await client.query(
           `INSERT INTO sub_work_order_item
-             (swo_id, seq_no, po_item_id, structure, width_mm, height_mm, qty, calc_data, remarks)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+             (swo_id, seq_no, po_item_id, structure, width_mm, height_mm, qty, calc_data, remarks, socket_lot_number)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
           [
             swo_id, i + 1, it.po_item_id || null,
             it.structure || null, w || null, h || null, qty,
             calc_data ? JSON.stringify(calc_data) : null,
             it.remarks || null,
+            it.socket_lot_number || null,
           ],
         );
       }
