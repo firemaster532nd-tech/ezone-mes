@@ -6,8 +6,8 @@ import { requireAuth } from '../lib/auth-plugin.js';
 // DB 마이그레이션
 // ─────────────────────────────────────────────────────────────────────────────
 async function migrateFnStock() {
+  // 1. 테이블 생성만 (인덱스 없이)
   await pool.query(`
-    -- 완제품 재고 (발포소켓 몸체)
     CREATE TABLE IF NOT EXISTS fn_finished_stock (
       stock_id    SERIAL PRIMARY KEY,
       diameter_mm INTEGER NOT NULL,
@@ -15,9 +15,6 @@ async function migrateFnStock() {
       qty         INTEGER DEFAULT 0,
       updated_at  TIMESTAMPTZ DEFAULT NOW()
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_fn_finished ON fn_finished_stock(diameter_mm, spec);
-
-    -- 부자재 재고
     CREATE TABLE IF NOT EXISTS fn_material_stock (
       stock_id    SERIAL PRIMARY KEY,
       item_name   VARCHAR(50) NOT NULL,
@@ -26,54 +23,51 @@ async function migrateFnStock() {
       unit        VARCHAR(10) DEFAULT 'ea',
       updated_at  TIMESTAMPTZ DEFAULT NOW()
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_fn_material ON fn_material_stock(item_name, spec);
-
-    -- 인수검사 + 입고이력 (로트번호 포함)
     CREATE TABLE IF NOT EXISTS fn_stock_tx (
-      tx_id          SERIAL PRIMARY KEY,
-      tx_date        DATE DEFAULT CURRENT_DATE,
-      tx_type        VARCHAR(10) NOT NULL,   -- IN / OUT / ADJUST / PRODUCE
-      stock_type     VARCHAR(10) NOT NULL,   -- FINISHED / MATERIAL
-      stock_id       INTEGER,
-      item_name      TEXT,
-      spec           TEXT,
-      qty            INTEGER,
-      lot_number     VARCHAR(50),            -- ★ 입고로트번호
-      inspect_result VARCHAR(10),            -- PASS / FAIL / PENDING
-      memo           TEXT,
-      created_by     INTEGER,
-      created_at     TIMESTAMPTZ DEFAULT NOW()
+      tx_id       SERIAL PRIMARY KEY,
+      tx_date     DATE DEFAULT CURRENT_DATE,
+      tx_type     VARCHAR(10) NOT NULL,
+      stock_type  VARCHAR(10) NOT NULL,
+      stock_id    INTEGER,
+      item_name   TEXT,
+      spec        TEXT,
+      qty         INTEGER,
+      memo        TEXT,
+      created_by  INTEGER,
+      created_at  TIMESTAMPTZ DEFAULT NOW()
     );
-    CREATE INDEX IF NOT EXISTS idx_fn_stock_tx_date ON fn_stock_tx(tx_date DESC);
-    CREATE INDEX IF NOT EXISTS idx_fn_stock_tx_lot  ON fn_stock_tx(lot_number);
-
-    -- 일일 생산량 기록 (엑셀 시트 형식)
     CREATE TABLE IF NOT EXISTS fn_daily_production (
       prod_id     SERIAL PRIMARY KEY,
       prod_date   DATE NOT NULL,
-      item_name   TEXT NOT NULL,    -- 발포소켓 몸체(100) / 보호철판/100 등
+      item_name   TEXT NOT NULL,
       diameter_mm INTEGER,
       spec        TEXT,
       qty         INTEGER DEFAULT 0,
-      lot_number  VARCHAR(50),      -- 생산 로트
+      lot_number  VARCHAR(50),
       worker_name TEXT,
       memo        TEXT,
       created_at  TIMESTAMPTZ DEFAULT NOW()
     );
-    CREATE UNIQUE INDEX IF NOT EXISTS uq_fn_daily ON fn_daily_production(prod_date, item_name, spec);
-    CREATE INDEX IF NOT EXISTS idx_fn_daily_date ON fn_daily_production(prod_date DESC);
-
-    -- 기존 lot_number 컬럼 없으면 추가
-    ALTER TABLE fn_stock_tx ADD COLUMN IF NOT EXISTS lot_number     VARCHAR(50);
-    ALTER TABLE fn_stock_tx ADD COLUMN IF NOT EXISTS inspect_result VARCHAR(10);
   `);
 
-  // 초기 데이터
+  // 2. 컬럼 추가 (반드시 인덱스보다 먼저)
+  await pool.query(`ALTER TABLE fn_stock_tx ADD COLUMN IF NOT EXISTS lot_number     VARCHAR(50)`);
+  await pool.query(`ALTER TABLE fn_stock_tx ADD COLUMN IF NOT EXISTS inspect_result VARCHAR(10)`);
+
+  // 3. 인덱스 (컬럼이 존재하는 상태에서)
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_fn_finished ON fn_finished_stock(diameter_mm, spec)`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_fn_material ON fn_material_stock(item_name, spec)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_fn_stock_tx_date ON fn_stock_tx(tx_date DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_fn_stock_tx_lot  ON fn_stock_tx(lot_number)`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_fn_daily ON fn_daily_production(prod_date, item_name, spec)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_fn_daily_date ON fn_daily_production(prod_date DESC)`);
+
+  // 4. 초기 데이터
   await pool.query(`
     INSERT INTO fn_finished_stock (diameter_mm, spec, qty) VALUES
-      (100, '몸통', 900),(100, '150H', 0),(100, '170H', 0),(100, '180H', 0),
-      (100, '190H', 0),(100, '200H', 0),(100, '210H', 0),(100, '240H', 0),
-      (100, '250H', 0),(100, '260H', 0),(75, '몸통', 0),(50, '몸통', 1260)
+      (100,'몸통',900),(100,'150H',0),(100,'170H',0),(100,'180H',0),
+      (100,'190H',0),(100,'200H',0),(100,'210H',0),(100,'240H',0),
+      (100,'250H',0),(100,'260H',0),(75,'몸통',0),(50,'몸통',1260)
     ON CONFLICT (diameter_mm, spec) DO NOTHING;
 
     INSERT INTO fn_material_stock (item_name, spec, qty, unit) VALUES
