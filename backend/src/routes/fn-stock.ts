@@ -91,15 +91,45 @@ async function migrateFnStock() {
 export async function fnStockRoutes(app: FastifyInstance) {
   await migrateFnStock();
 
-  // ── GET 완제품 재고 ──────────────────────────────────────────────────────
+  // ── GET 완제품 재고 (최근 로트번호 포함) ──────────────────────────────────
   app.get('/api/fn-stock/finished', { preHandler: requireAuth }, async () => {
-    const r = await pool.query(`SELECT * FROM fn_finished_stock ORDER BY diameter_mm DESC, spec`);
+    const r = await pool.query(`
+      SELECT f.*,
+        (
+          SELECT t.lot_number FROM fn_stock_tx t
+          WHERE t.stock_id = f.stock_id AND t.stock_type = 'FINISHED' AND t.tx_type = 'IN'
+            AND t.lot_number IS NOT NULL
+          ORDER BY t.created_at DESC LIMIT 1
+        ) AS last_lot_number,
+        (
+          SELECT t.tx_date FROM fn_stock_tx t
+          WHERE t.stock_id = f.stock_id AND t.stock_type = 'FINISHED' AND t.tx_type = 'IN'
+          ORDER BY t.created_at DESC LIMIT 1
+        ) AS last_receive_date
+      FROM fn_finished_stock f
+      ORDER BY f.diameter_mm DESC, f.spec
+    `);
     return { data: r.rows };
   });
 
-  // ── GET 부자재 재고 ──────────────────────────────────────────────────────
+  // ── GET 부자재 재고 (최근 로트번호 포함) ────────────────────────────────
   app.get('/api/fn-stock/material', { preHandler: requireAuth }, async () => {
-    const r = await pool.query(`SELECT * FROM fn_material_stock ORDER BY item_name, spec`);
+    const r = await pool.query(`
+      SELECT m.*,
+        (
+          SELECT t.lot_number FROM fn_stock_tx t
+          WHERE t.stock_id = m.stock_id AND t.stock_type = 'MATERIAL' AND t.tx_type = 'IN'
+            AND t.lot_number IS NOT NULL
+          ORDER BY t.created_at DESC LIMIT 1
+        ) AS last_lot_number,
+        (
+          SELECT t.tx_date FROM fn_stock_tx t
+          WHERE t.stock_id = m.stock_id AND t.stock_type = 'MATERIAL'
+          ORDER BY t.created_at DESC LIMIT 1
+        ) AS last_tx_date
+      FROM fn_material_stock m
+      ORDER BY m.item_name, m.spec
+    `);
     return { data: r.rows };
   });
 

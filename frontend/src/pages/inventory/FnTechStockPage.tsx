@@ -7,8 +7,14 @@ import {
 } from 'lucide-react';
 
 // ─── 타입 ───────────────────────────────────────────────────────────────────
-interface FinishedStock { stock_id?: number; id?: number; diameter_mm: number; spec: string; qty: number; }
-interface MaterialStock  { stock_id?: number; id?: number; item_name: string; spec: string; qty: number; unit?: string; }
+interface FinishedStock {
+  stock_id?: number; id?: number; diameter_mm: number; spec: string; qty: number;
+  last_lot_number?: string; last_receive_date?: string;
+}
+interface MaterialStock  {
+  stock_id?: number; id?: number; item_name: string; spec: string; qty: number; unit?: string;
+  last_lot_number?: string; last_tx_date?: string;
+}
 interface TxRecord {
   tx_id: number; tx_date: string; tx_type: string; stock_type: string;
   item_name: string; spec: string; qty: number; lot_number?: string;
@@ -351,13 +357,18 @@ function DailyProductionTab() {
                 </td>
                 {days.map(d => {
                   const qty = getCellQty(row.item_name, row.spec, d);
+                  const lot = getCellLot(row.item_name, row.spec, d);
                   const isWeekend = [0,6].includes(new Date(year,month-1,d).getDay());
                   return (
                     <td key={d}
                       onClick={() => openEdit(row.item_name, row.spec, d)}
-                      className={`px-1 py-1.5 text-center cursor-pointer hover:bg-blue-50 transition border-r border-gray-100 ${isWeekend ? 'bg-gray-50' : ''}`}>
+                      title={lot ? `LOT: ${lot}` : ''}
+                      className={`px-1 py-1 text-center cursor-pointer hover:bg-blue-50 transition border-r border-gray-100 ${isWeekend ? 'bg-gray-50' : ''}`}>
                       {qty > 0 ? (
-                        <span className="font-bold text-blue-700">{qty.toLocaleString()}</span>
+                        <div>
+                          <span className="font-bold text-blue-700 text-xs block">{qty.toLocaleString()}</span>
+                          {lot && <span className="text-[9px] text-blue-400 block truncate max-w-[50px] leading-tight font-mono">{lot.split('(')[0]}</span>}
+                        </div>
                       ) : (
                         <span className="text-gray-200">-</span>
                       )}
@@ -598,10 +609,21 @@ export function FnTechStockPage() {
                   </div>
                   <div className="p-5 grid grid-cols-3 gap-4">
                     {material.filter(group.filter).map(m => (
-                      <div key={m.spec} className="relative text-center p-4 rounded-xl bg-gray-50 border border-gray-100">
+                      <div key={m.spec} className="relative p-4 rounded-xl bg-gray-50 border border-gray-100">
                         <p className="text-xs text-gray-500 mb-1">{m.spec}</p>
                         <p className={`text-3xl font-bold ${qtyColor(m.qty)}`}>{m.qty.toLocaleString()}</p>
                         <p className="text-xs text-gray-400 mt-1">{m.unit ?? 'ea'}</p>
+                        {/* 최근 입고 로트 */}
+                        {m.last_lot_number ? (
+                          <div className="mt-2 pt-2 border-t border-gray-200">
+                            <p className="text-[10px] text-gray-400 mb-0.5">최근 입고 LOT</p>
+                            <p className="text-[11px] font-mono text-blue-600 break-all leading-tight">{m.last_lot_number}</p>
+                          </div>
+                        ) : (
+                          <div className="mt-2 pt-2 border-t border-gray-200">
+                            <p className="text-[10px] text-gray-300 italic">LOT 미등록</p>
+                          </div>
+                        )}
                         {m.qty < 0 && <div className="mt-2 flex items-center justify-center gap-1 text-red-500 text-xs"><AlertTriangle className="h-3 w-3"/>재고부족</div>}
                         <button onClick={() => setAdjustId(m.stock_id ?? m.id ?? 0)}
                           className="absolute top-2 right-2 text-gray-300 hover:text-blue-500 transition">
@@ -619,12 +641,20 @@ export function FnTechStockPage() {
                 <div className="p-5 grid grid-cols-2 gap-4">
                   {material.filter(m => !['보호철판','시트(재단)'].includes(m.item_name)).map(m => (
                     <div key={`${m.item_name}-${m.spec}`}
-                      className="flex items-center justify-between p-4 rounded-xl bg-gray-50 border border-gray-100">
-                      <div><p className="text-sm font-medium text-gray-700">{m.item_name}</p><p className="text-xs text-gray-400">{m.spec}</p></div>
-                      <div className="text-right">
-                        <p className={`text-2xl font-bold ${qtyColor(m.qty)}`}>{m.qty.toLocaleString()}</p>
-                        <p className="text-xs text-gray-400">{m.unit ?? 'ea'}</p>
+                      className="p-4 rounded-xl bg-gray-50 border border-gray-100">
+                      <div className="flex items-start justify-between">
+                        <div><p className="text-sm font-medium text-gray-700">{m.item_name}</p><p className="text-xs text-gray-400">{m.spec}</p></div>
+                        <div className="text-right">
+                          <p className={`text-2xl font-bold ${qtyColor(m.qty)}`}>{m.qty.toLocaleString()}</p>
+                          <p className="text-xs text-gray-400">{m.unit ?? 'ea'}</p>
+                        </div>
                       </div>
+                      {m.last_lot_number && (
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          <p className="text-[10px] text-gray-400">최근 입고 LOT</p>
+                          <p className="text-[11px] font-mono text-blue-600 break-all">{m.last_lot_number}</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -648,7 +678,7 @@ export function FnTechStockPage() {
                       <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500">품목</th>
                       <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500">규격</th>
                       <th className="px-3 py-3 text-right text-xs font-semibold text-gray-500">수량</th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 font-mono">입고 로트번호</th>
+                      <th className="px-3 py-3 text-left text-xs font-semibold text-blue-600 bg-blue-50">입고 로트번호</th>
                       <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500">인수검사</th>
                       <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500">메모</th>
                     </tr>
@@ -677,8 +707,10 @@ export function FnTechStockPage() {
                             {tx.tx_type==='IN'?'+':'-'}{Math.abs(tx.qty ?? 0).toLocaleString()}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 font-mono text-xs text-blue-700">
-                          {tx.lot_number ?? <span className="text-gray-300">-</span>}
+                        <td className="px-3 py-2.5 font-mono text-xs">
+                          {tx.lot_number
+                            ? <span className="text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded">{tx.lot_number}</span>
+                            : <span className="text-gray-300">-</span>}
                         </td>
                         <td className="px-3 py-2.5">{inspectBadge(tx.inspect_result)}</td>
                         <td className="px-3 py-2.5 text-gray-400 text-xs">{tx.memo}</td>
