@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -6,7 +6,8 @@ import { toast } from 'sonner';
 import { 
   Search, X, Plus, Pencil, Trash2, FolderGit2, 
   Calendar, FileText, Building2, ClipboardList, CheckCircle,
-  Phone, User, ShieldAlert, Award, Clock, ChevronDown, ChevronUp
+  Phone, User, ShieldAlert, Award, Clock, ChevronDown, ChevronUp,
+  Upload, FileSpreadsheet, AlertCircle
 } from 'lucide-react';
 
 interface DeliverySchedule {
@@ -68,6 +69,10 @@ export function ProjectPage() {
   // 모달 상태
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  // ★ 발주서 파일 첨부
+  const [poFile, setPoFile] = useState<File | null>(null);
+  const [poUploading, setPoUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState({
     project_code: '',
@@ -191,6 +196,7 @@ export function ProjectPage() {
         deliveries: [],
       });
     }
+    setPoFile(null); // 파일 초기화
     setIsModalOpen(true);
   };
 
@@ -272,14 +278,48 @@ export function ProjectPage() {
     };
 
     try {
+      let savedProjectId: number | null = null;
       if (editingProject) {
         await api.put(`/projects/${editingProject.project_id}`, payload);
+        savedProjectId = editingProject.project_id;
         toast.success('프로젝트가 수정되었습니다.');
       } else {
-        await api.post('/projects', payload);
+        const res = await api.post<{ data: any }>('/projects', payload);
+        savedProjectId = res.data?.project_id ?? null;
         toast.success('프로젝트가 신규 등록되었습니다.');
       }
+
+      // ★ 발주서 파일이 첨부된 경우 → purchase-orders/upload 호출
+      if (poFile && savedProjectId) {
+        setPoUploading(true);
+        try {
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = reader.result as string;
+              resolve(result.split(',')[1]); // base64 only
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(poFile);
+          });
+
+          const upRes = await api.post<{ data: any }>('/purchase-orders/upload', {
+            file_base64: base64,
+            file_name: poFile.name,
+            // 이미 생성된 project_id를 연결하기 위해 project_name 전달
+            // (upload API 내부에서 동일 project_name이면 기존 프로젝트와 연결)
+            force_project_name: formData.project_name,
+          });
+          toast.success(`📄 발주서 등록 완료 — ${upRes.data?.item_count ?? 0}개 항목 / ${upRes.data?.project_name ?? ''}`);
+        } catch (upErr: any) {
+          toast.error(`발주서 업로드 실패: ${upErr?.body?.message || upErr?.message || '오류'}`);
+        } finally {
+          setPoUploading(false);
+        }
+      }
+
       setIsModalOpen(false);
+      setPoFile(null);
       fetchData();
       if (expandedProjectId) {
         setExpandedProjectId(null);
@@ -785,6 +825,68 @@ export function ProjectPage() {
                 )}
               </div>
 
+              {/* ★ 발주서 엑셀 첨부 */}
+              <div className="border-t border-slate-100 pt-4">
+                <h4 className="text-xs font-black text-emerald-700 uppercase tracking-wider flex items-center gap-1 mb-3">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  발주서 엑셀 첨부 (발주서관리 자동 등록)
+                </h4>
+                <div
+                  className={cn(
+                    'border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all',
+                    poFile ? 'border-emerald-400 bg-emerald-50' : 'border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30'
+                  )}
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => {
+                    e.preventDefault();
+                    const f = e.dataTransfer.files[0];
+                    if (f && f.name.match(/\.xlsx?$/i)) setPoFile(f);
+                    else toast.error('엑셀 파일(.xlsx)만 첨부 가능합니다.');
+                  }}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (f) setPoFile(f);
+                      e.target.value = '';
+                    }}
+                  />
+                  {poFile ? (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-emerald-700">
+                        <FileSpreadsheet className="h-5 w-5" />
+                        <span className="text-sm font-bold">{poFile.name}</span>
+                        <span className="text-xs text-emerald-500">({(poFile.size / 1024).toFixed(0)} KB)</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); setPoFile(null); }}
+                        className="p-1 rounded hover:bg-red-100 text-red-400 hover:text-red-600 transition-colors"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Upload className="h-8 w-8 mx-auto text-slate-300" />
+                      <p className="text-sm font-semibold text-slate-400">발주서 엑셀 파일을 클릭하거나 드래그하여 첨부</p>
+                      <p className="text-xs text-slate-300">.xlsx 파일 • 첨부 시 발주서관리에 자동 등록됩니다</p>
+                    </div>
+                  )}
+                </div>
+                {poFile && (
+                  <p className="mt-2 text-[11px] text-emerald-600 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    저장 시 발주서 파싱 → 발주서관리에 자동으로 연동됩니다.
+                  </p>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">비고 / 참고사항</label>
                 <textarea
@@ -807,9 +909,15 @@ export function ProjectPage() {
               </button>
               <button
                 onClick={handleSave}
-                className="px-6 py-2 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-500 font-bold shadow hover:shadow-md transition-all"
+                disabled={poUploading}
+                className={cn(
+                  'px-6 py-2 text-sm rounded-lg font-bold shadow hover:shadow-md transition-all',
+                  poUploading
+                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-500'
+                )}
               >
-                저장하기
+                {poUploading ? '발주서 업로드 중...' : '저장하기'}
               </button>
             </div>
           </div>
