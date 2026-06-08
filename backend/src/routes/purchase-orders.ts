@@ -502,25 +502,84 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
     }
   });
 
-  // ── GET /api/purchase-orders ── 발주서 목록
+  // ── GET /api/purchase-orders ── 발주서 목록 (발주서가 없는 프로젝트도 포함)
   app.get('/api/purchase-orders', { preHandler: requireAuth }, async (req) => {
     const { search } = req.query as { search?: string };
-    let q = `
-      SELECT po.*, pm.project_code,
-        (SELECT COUNT(*) FROM purchase_order_item WHERE po_id = po.po_id) AS item_count
+
+    const searchParam = search ? `%${search}%` : null;
+
+    // ① 발주서가 있는 항목
+    const poQuery = `
+      SELECT
+        po.po_id,
+        po.project_id,
+        pm.project_code,
+        COALESCE(po.project_name, pm.project_name) AS project_name,
+        po.file_name,
+        po.order_date,
+        po.delivery_date,
+        po.biz_name, po.biz_no, po.biz_ceo, po.biz_address, po.biz_manager, po.biz_contact,
+        po.submitter, po.submitter_address,
+        po.construction_site, po.contractor, po.contractor_address,
+        po.supervisor, po.supervisor_office, po.supervisor_address,
+        po.site_address, po.consignee, po.builder_name, po.special_notes,
+        po.status, po.created_at,
+        (SELECT COUNT(*) FROM purchase_order_item WHERE po_id = po.po_id)::int AS item_count,
+        'PO' AS source_type,
+        pm.customer_name,
+        pm.remarks AS project_remarks,
+        pm.status AS project_status
       FROM purchase_order po
       LEFT JOIN project_master pm ON po.project_id = pm.project_id
       WHERE po.status = 'ACTIVE'
+      ${search ? `AND (po.project_name ILIKE $1 OR po.contractor ILIKE $1 OR po.file_name ILIKE $1 OR pm.project_name ILIKE $1)` : ''}
     `;
-    const params: any[] = [];
-    if (search) {
-      params.push(`%${search}%`);
-      q += ` AND (po.project_name ILIKE $1 OR po.contractor ILIKE $1 OR po.file_name ILIKE $1)`;
-    }
-    q += ` ORDER BY po.created_at DESC`;
-    const { rows } = await pool.query(q, params);
+
+    // ② 발주서가 없는 프로젝트 (project_master에만 있는 경우)
+    const projOnlyQuery = `
+      SELECT
+        NULL::int AS po_id,
+        pm.project_id,
+        pm.project_code,
+        pm.project_name,
+        '(발주서 미첨부)' AS file_name,
+        pm.order_date::text AS order_date,
+        pm.delivery_date::text AS delivery_date,
+        NULL AS biz_name, NULL AS biz_no, NULL AS biz_ceo, NULL AS biz_address,
+        NULL AS biz_manager, NULL AS biz_contact,
+        NULL AS submitter, NULL AS submitter_address,
+        NULL AS construction_site,
+        pm.customer_name AS contractor, NULL AS contractor_address,
+        NULL AS supervisor, NULL AS supervisor_office, NULL AS supervisor_address,
+        NULL AS site_address, NULL AS consignee, NULL AS builder_name,
+        pm.remarks AS special_notes,
+        pm.status,
+        pm.created_at,
+        0 AS item_count,
+        'PROJECT_ONLY' AS source_type,
+        pm.customer_name,
+        pm.remarks AS project_remarks,
+        pm.status AS project_status
+      FROM project_master pm
+      WHERE pm.status = 'ACTIVE'
+        AND NOT EXISTS (
+          SELECT 1 FROM purchase_order po
+          WHERE po.project_id = pm.project_id AND po.status = 'ACTIVE'
+        )
+      ${search ? `AND (pm.project_name ILIKE $1 OR pm.customer_name ILIKE $1 OR pm.project_code ILIKE $1)` : ''}
+    `;
+
+    const params = searchParam ? [searchParam] : [];
+    const combined = `
+      (${poQuery})
+      UNION ALL
+      (${projOnlyQuery})
+      ORDER BY created_at DESC
+    `;
+    const { rows } = await pool.query(combined, params);
     return { data: rows };
   });
+
 
   // ── GET /api/purchase-orders/:id ── 발주서 상세
   app.get<{ Params: { id: string } }>('/api/purchase-orders/:id', { preHandler: requireAuth }, async (req, reply) => {

@@ -10,7 +10,7 @@ import {
 import { cn } from '@/lib/utils';
 
 interface PurchaseOrder {
-  po_id: number;
+  po_id: number | null;
   project_id: number | null;
   project_code: string | null;
   project_name: string;
@@ -40,6 +40,11 @@ interface PurchaseOrder {
   special_notes: string | null;
   item_count: number;
   created_at: string;
+  // ★ 연동 타입
+  source_type: 'PO' | 'PROJECT_ONLY';
+  customer_name: string | null;
+  project_remarks: string | null;
+  project_status: string | null;
 }
 
 interface PoItem {
@@ -795,8 +800,18 @@ export default function PurchaseOrdersPage() {
     }
   };
 
-  // 상세 보기
+  // 상세 보기 — PROJECT_ONLY는 /projects/:id 조회
   const handleDetail = async (po: PurchaseOrder) => {
+    if (po.source_type === 'PROJECT_ONLY') {
+      // 발주서 없는 프로젝트는 프로젝트 상세를 바로 표시
+      setDetailPo({
+        ...po,
+        po_id: -1, // 더미값
+        items: [],
+        sheets: [],
+      } as any);
+      return;
+    }
     try {
       const res = await api.get<{ data: any }>(`/purchase-orders/${po.po_id}`);
       setDetailPo(res.data);
@@ -805,8 +820,12 @@ export default function PurchaseOrdersPage() {
     }
   };
 
-  // 삭제
+  // 삭제 — PROJECT_ONLY는 삭제 불가
   const handleDelete = async (po: PurchaseOrder) => {
+    if (po.source_type === 'PROJECT_ONLY') {
+      toast.error('현장 프로젝트는 발주서관리에서 삭제할 수 없습니다. 현장프로젝트관리에서 삭제하세요.');
+      return;
+    }
     if (!confirm(`"${po.project_name}" 발주서를 삭제하시겠습니까?`)) return;
     try {
       await api.delete(`/purchase-orders/${po.po_id}`);
@@ -910,7 +929,7 @@ export default function PurchaseOrdersPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    {['현장명 (프로젝트)', '시공사', '납기 요청일', '제출인', '명세 건수', '등록일', ''].map(h => (
+                    {['', '현장명 (프로젝트)', '시공사 / 발주자', '납기 요청일', '제출인', '명세 건수', '등록일', ''].map(h => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                         {h}
                       </th>
@@ -918,24 +937,51 @@ export default function PurchaseOrdersPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {list.map(po => (
-                    <tr key={po.po_id} className="hover:bg-gray-50 transition-colors">
+                  {list.map((po, idx) => (
+                    <tr
+                      key={`${po.source_type}-${po.po_id ?? po.project_id}-${idx}`}
+                      className={cn(
+                        'hover:bg-gray-50 transition-colors',
+                        po.source_type === 'PROJECT_ONLY' && 'bg-amber-50/40 hover:bg-amber-50'
+                      )}
+                    >
+                      {/* 소스 타입 배지 */}
+                      <td className="px-3 py-3 w-24">
+                        {po.source_type === 'PROJECT_ONLY' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
+                            불일치
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200 whitespace-nowrap">
+                            발주서
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <div>
                           <p className="font-semibold text-gray-900">{po.project_name}</p>
                           {po.project_code && (
                             <p className="text-xs text-blue-600 font-mono">{po.project_code}</p>
                           )}
+                          {po.source_type === 'PROJECT_ONLY' && (
+                            <p className="text-[10px] text-amber-600 mt-0.5">발주서 미첨부 — 현장 프로젝트만 등록됨</p>
+                          )}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-gray-700">{po.contractor || '-'}</td>
+                      <td className="px-4 py-3 text-gray-700">{po.contractor || po.customer_name || '-'}</td>
                       <td className="px-4 py-3 text-gray-700 font-mono text-xs">{po.delivery_date || '-'}</td>
                       <td className="px-4 py-3 text-gray-700">{po.submitter || '-'}</td>
                       <td className="px-4 py-3">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                          <Package className="h-3 w-3" />
-                          {po.item_count}건
-                        </span>
+                        {po.source_type === 'PROJECT_ONLY' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-semibold">
+                            발주서 없음
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
+                            <Package className="h-3 w-3" />
+                            {po.item_count}건
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-gray-500 text-xs">
                         {new Date(po.created_at).toLocaleDateString('ko-KR')}
@@ -958,13 +1004,23 @@ export default function PurchaseOrdersPage() {
                               <ExternalLink className="h-4 w-4" />
                             </button>
                           )}
-                          <button
-                            onClick={() => handleDelete(po)}
-                            className="p-1.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors"
-                            title="삭제"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          {po.source_type === 'PROJECT_ONLY' ? (
+                            // PROJECT_ONLY: 발주서 첨부 미리보기 버튼
+                            <span
+                              className="p-1.5 rounded text-amber-400 cursor-help"
+                              title="현장프로젝트관리에서 발주서를 첨부하면 여기에 표시됩니다"
+                            >
+                              <Upload className="h-4 w-4" />
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleDelete(po)}
+                              className="p-1.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors"
+                              title="삭제"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
