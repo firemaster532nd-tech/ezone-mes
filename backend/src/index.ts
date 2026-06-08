@@ -51,6 +51,7 @@ import { materialStockRoutes } from './routes/material-stock.js';
 import { structWorkOrderRoutes } from './routes/struct-work-orders.js';
 import { subWorkOrderRoutes } from './routes/sub-work-orders.js';
 import { fnWorkOrderRoutes } from './routes/fn-work-orders.js';
+import { fnStockRoutes } from './routes/fn-stock.js';
 
 let appInstance: any = null;
 
@@ -111,6 +112,7 @@ export const initApp = async () => {
   await app.register(structWorkOrderRoutes);
   await app.register(subWorkOrderRoutes);
   await app.register(fnWorkOrderRoutes);
+  await app.register(fnStockRoutes);
 
   // Health check
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));

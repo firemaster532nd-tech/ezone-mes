@@ -56,6 +56,7 @@ import SocketStockPage from '@/pages/inventory/SocketStockPage';
 import { StructWorkOrderPage } from '@/pages/production/StructWorkOrderPage';
 import { SubWorkOrderPage } from '@/pages/production/SubWorkOrderPage';
 import { FnWorkOrderPage } from '@/pages/production/FnWorkOrderPage';
+import { FnTechStockPage } from '@/pages/inventory/FnTechStockPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -89,6 +90,7 @@ export const router = createBrowserRouter([
       { path: 'inventory/closing', element: <InventoryClosingPage /> },
       { path: 'inventory/import', element: <InventoryImportPage /> },
       { path: 'inventory/socket-stock', element: <SocketStockPage /> },
+      { path: 'inventory/fn-tech-stock', element: <FnTechStockPage /> },
       // 품질관리
       { path: 'quality/incoming', element: <IncomingInspectionPage /> },
       { path: 'quality/process-inspection', element: <ProcessInspectionPage /> },
