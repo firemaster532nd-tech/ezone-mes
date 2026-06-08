@@ -83,7 +83,7 @@ const shopNavItems: NavSection[] = [
       { label: '초기 재고 설정', path: '/inventory/initialize' },
       { label: '수불대장 엑셀 연동', path: '/inventory/import' },
       { label: '소켓/평철 재고 관리', path: '/inventory/socket-stock' },
-      { label: '🔧 에프엔테크 재고현황', path: '/inventory/fn-tech-stock' },
+      { label: '에프엔테크 재고현황', path: '/inventory/fn-tech-stock' },
     ],
   },
   {
@@ -236,7 +236,7 @@ const adminNavItems: NavSection[] = [
       { label: '수불대장 엑셀 연동', path: '/inventory/import' },
       { label: '월말 실사/마감', path: '/inventory/closing' },
       { label: '소켓/평철 재고 관리', path: '/inventory/socket-stock' },
-      { label: '🔧 에프엔테크 재고현황', path: '/inventory/fn-tech-stock' },
+      { label: '에프엔테크 재고현황', path: '/inventory/fn-tech-stock' },
       { label: '출하 목록', path: '/shipment/list' },
       { label: '거래명세서 관리', path: '/shipment/statements' },
       { label: '품질관리서', path: '/shipment/list' },
