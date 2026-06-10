@@ -178,12 +178,7 @@ const shopNavItems: NavSection[] = [
       { label: 'BOM 관리', path: '/master/bom' },
     ],
   },
-  // ── LOT 라벨 재출력 (독립 메뉴) ──
-  {
-    label: '🏷️ LOT 라벨 재출력',
-    icon: Package,
-    path: '/inventory/label-reprint',
-  },
+
 ];
 
 // ─── 관리 모드: 업무 흐름 순서 (수주→발주→생산→품질→출하) ───
@@ -288,12 +283,7 @@ const adminNavItems: NavSection[] = [
       { label: '백업 / 초기화',     path: '/settings/backup' },
     ],
   },
-  // ── LOT 라벨 재출력 (독립 메뉴) ──
-  {
-    label: '🏷️ LOT 라벨 재출력',
-    icon: Package,
-    path: '/inventory/label-reprint',
-  },
+
 ];
 
 export function Sidebar() {
