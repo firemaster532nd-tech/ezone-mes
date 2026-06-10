@@ -1015,11 +1015,32 @@ export default function PurchaseRequestPage() {
                 })()}
 
                 {/* 상태 변경 버튼 + 다운로드 */}
-                <div className="flex gap-2 items-center">
+                <div className="flex gap-2 items-center flex-wrap">
                   {selectedPR.status === 'DRAFT' && (
                     <button onClick={() => updateStatus('SUBMITTED')}
                       className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
                       제출
+                    </button>
+                  )}
+                  {/* 결재 없이 바로 주문 확정 (DRAFT, SUBMITTED, APPROVED 모두 허용) */}
+                  {['DRAFT', 'SUBMITTED', 'APPROVED'].includes(selectedPR.status) && (
+                    <button
+                      onClick={async () => {
+                        if (!selectedPR) return;
+                        if (!confirm(`"${selectedPR.pr_number}" 발주서를 주문 확정 처리하시겠습니까?\n확정 후 주문내역 메뉴에서 자재입고를 진행할 수 있습니다.`)) return;
+                        try {
+                          await api.patch(`/purchase-requests/${selectedPR.pr_id}/confirm-order`, {});
+                          toast.success('주문 확정 완료! 주문내역에서 자재입고를 진행하세요.');
+                          await fetchPRs();
+                          await selectPR(selectedPR);
+                          navigate('/orders/material-orders');
+                        } catch (e: any) {
+                          toast.error(e?.message || '주문 확정 실패');
+                        }
+                      }}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm"
+                    >
+                      ✅ 주문 확정 → 주문내역으로
                     </button>
                   )}
                   {selectedPR.status === 'SUBMITTED' && (
@@ -1032,6 +1053,15 @@ export default function PurchaseRequestPage() {
                     <button onClick={() => updateStatus('ORDERED')}
                       className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700">
                       발주 완료
+                    </button>
+                  )}
+                  {/* ORDERED / RECEIVED: 주문내역 이동 버튼 */}
+                  {['ORDERED', 'RECEIVED'].includes(selectedPR.status) && (
+                    <button
+                      onClick={() => navigate('/orders/material-orders')}
+                      className="px-4 py-2 bg-blue-50 border border-blue-300 text-blue-700 rounded-lg text-sm font-semibold hover:bg-blue-100 flex items-center gap-1.5"
+                    >
+                      📦 주문내역에서 입고 관리
                     </button>
                   )}
                   {/* 입고는 품목별 개별 처리 - 전체 입고 완료는 자동 */}

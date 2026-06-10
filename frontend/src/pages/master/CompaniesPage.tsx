@@ -688,7 +688,9 @@ export function CompaniesPage() {
                     <div className="grid grid-cols-4 items-start gap-4 border-b border-gray-100 pb-3">
                       <div className="flex items-center gap-1">
                         <span className="text-sm font-bold text-gray-600">세무신고거래처</span>
-                        <HelpCircle className="h-4.5 w-4.5 text-gray-400" title="세무신고(전자세금계산서) 발행 주체가 별도로 존재하는 경우 선택합니다." />
+                        <span title="세무신고(전자세금계산서) 발행 주체가 별도로 존재하는 경우 선택합니다.">
+                          <HelpCircle className="h-4.5 w-4.5 text-gray-400" />
+                        </span>
                       </div>
                       <div className="col-span-3 space-y-2.5">
                         <div className="flex items-center gap-6">

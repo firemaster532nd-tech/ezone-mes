@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Plus, ClipboardCheck, MoreHorizontal, Trash2, FileText, Printer, Info, ChevronDown, ChevronUp, AlertTriangle, Pencil } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AttachmentSection } from '@/components/shared/AttachmentSection';
 
 interface Inspection {
@@ -79,6 +79,7 @@ interface FormDetail {
     cert_standard?: number;
     unit: string;
     frequency: string;
+    direction?: string;
   }>;
 }
 
@@ -109,6 +110,7 @@ interface PendingReceiving {
 
 export function IncomingInspectionPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [data, setData] = useState<Inspection[]>([]);
   const [filter, setFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -117,6 +119,12 @@ export function IncomingInspectionPage() {
   const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const [toast, setToast] = useState<{ message: string; type: 'PASS' | 'FAIL' } | null>(null);
   const [pendingList, setPendingList] = useState<PendingReceiving[]>([]);
+  // URL 파라미터로 전달받은 주문내역 정보
+  const urlPriId = searchParams.get('pri_id');
+  const urlFormCode = searchParams.get('form_code');
+  const urlItemName = searchParams.get('item_name');
+  const urlQty = searchParams.get('qty');
+  const urlSpec = searchParams.get('spec');
 
   const fetchData = () => {
     let params = '?insp_type=INCOMING';
@@ -129,6 +137,13 @@ export function IncomingInspectionPage() {
       .then((r) => setPendingList(r.data || []))
       .catch(() => setPendingList([]));
   };
+
+  // URL 파라미터 있을 경우 검사 모달 자동 오픈
+  useEffect(() => {
+    if (urlPriId || urlFormCode) {
+      setShowCreate(true);
+    }
+  }, [urlPriId, urlFormCode]);
 
   useEffect(() => { fetchData(); fetchPending(); }, [filter]);
 
@@ -274,12 +289,41 @@ export function IncomingInspectionPage() {
                     </td>
                     <td className="px-3 py-3 font-mono text-xs">{ins.form_code ?? '-'}</td>
                     <td className="px-3 py-3 font-mono text-xs">
-                      <button
-                        onClick={() => setShowDetail(ins.insp_id)}
-                        className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
-                      >
-                        {ins.lot_number ?? '-'}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setShowDetail(ins.insp_id)}
+                          className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                        >
+                          {ins.lot_number ?? '-'}
+                        </button>
+                        {ins.lot_number && (
+                          <button
+                            title="라벨 출력"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const params = new URLSearchParams({
+                                lotNumber: ins.lot_number || '',
+                                itemName:  ins.item_name || '',
+                                itemCode:  ins.item_code || '',
+                                spec:      '',
+                                qty:       '1',
+                                unit:      'EA',
+                                lotDate:   ins.inspected_at?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+                                category:  ins.item_category || '',
+                                lotType:   'IN',
+                              });
+                              window.open(
+                                `/lot-label.html?${params.toString()}`,
+                                '_blank',
+                                'width=920,height=760,menubar=no,toolbar=no,scrollbars=yes'
+                              );
+                            }}
+                            className="p-0.5 rounded text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          >
+                            🏷️
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-3">
                       <button
@@ -341,6 +385,28 @@ export function IncomingInspectionPage() {
                     className="w-full px-3 py-2 text-left text-shop-sm hover:bg-gray-50 flex items-center gap-2">
                     <Printer size={14} /> 성적서 인쇄
                   </button>
+                  <button onClick={() => {
+                    const params = new URLSearchParams({
+                      lotNumber: ins.lot_number || '',
+                      itemName:  ins.item_name || '',
+                      itemCode:  ins.item_code || '',
+                      spec:      '',
+                      qty:       '1',
+                      unit:      'EA',
+                      lotDate:   ins.inspected_at?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+                      category:  ins.item_category || '',
+                      lotType:   'IN',
+                    });
+                    window.open(
+                      `/lot-label.html?${params.toString()}`,
+                      '_blank',
+                      'width=920,height=760,menubar=no,toolbar=no,scrollbars=yes'
+                    );
+                    setMenuOpen(null);
+                  }}
+                    className="w-full px-3 py-2 text-left text-shop-sm hover:bg-gray-50 flex items-center gap-2">
+                    <Printer size={14} /> 라벨 출력
+                  </button>
                   <button onClick={() => handleDelete(ins)}
                     className="w-full px-3 py-2 text-left text-shop-sm hover:bg-red-50 text-red-600 flex items-center gap-2">
                     <Trash2 size={14} /> 삭제
@@ -381,6 +447,11 @@ export function IncomingInspectionPage() {
               setTimeout(() => setToast(null), 3000);
             }
           }}
+          initialPriId={urlPriId ? parseInt(urlPriId) : undefined}
+          initialFormCode={urlFormCode || undefined}
+          initialItemName={urlItemName || undefined}
+          initialQty={urlQty || undefined}
+          initialSpec={urlSpec || undefined}
         />
       )}
     </div>
@@ -711,7 +782,76 @@ function InspectionDetailModal({ inspId, onClose, onUpdated }: { inspId: number;
   );
 }
 
-function CreateInspectionModal({ onClose, onCreated }: { onClose: () => void; onCreated: (judgeResult?: string) => void }) {
+// ── 라벨 수량 입력 + 출력 버튼 컴포넌트 (React state 기반) ──
+function LabelQtyButton({
+  defaultQty, unit, onPrint,
+}: {
+  defaultQty: number;
+  unit: string;
+  onPrint: (qty: number) => void;
+}) {
+  const [labelQty, setLabelQty] = useState(defaultQty);
+  return (
+    <div className="space-y-2">
+      {/* 수량 조절 */}
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500 whitespace-nowrap font-semibold">라벨 수량</span>
+        <button
+          onClick={() => setLabelQty(q => Math.max(1, q - 1))}
+          className="w-8 h-8 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 font-bold text-lg flex items-center justify-center"
+        >−</button>
+        <input
+          type="number"
+          min={1} max={9999}
+          value={labelQty}
+          onChange={e => setLabelQty(Math.max(1, parseInt(e.target.value) || 1))}
+          className="w-20 border-2 border-blue-300 rounded-lg px-2 py-1.5 text-base font-bold text-center text-blue-700 focus:outline-none focus:border-blue-500"
+        />
+        <button
+          onClick={() => setLabelQty(q => Math.min(9999, q + 1))}
+          className="w-8 h-8 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 font-bold text-lg flex items-center justify-center"
+        >+</button>
+        <span className="text-sm text-gray-500">{unit}</span>
+      </div>
+      {/* 빠른 선택 */}
+      <div className="flex gap-1.5 flex-wrap">
+        {[1, 5, 10, 20, 50].map(n => (
+          <button key={n} onClick={() => setLabelQty(n)}
+            className={cn(
+              'px-3 py-1 rounded-lg text-xs font-bold border transition-all',
+              labelQty === n
+                ? 'bg-blue-600 border-blue-600 text-white'
+                : 'border-gray-200 text-gray-600 hover:bg-gray-100'
+            )}>{n}장</button>
+        ))}
+        <button onClick={() => setLabelQty(defaultQty)}
+          className="px-3 py-1 rounded-lg text-xs font-bold border border-blue-200 text-blue-600 hover:bg-blue-50">
+          입고수량({defaultQty})
+        </button>
+      </div>
+      {/* 출력 버튼 */}
+      <button
+        onClick={() => onPrint(labelQty)}
+        className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"
+      >
+        🖨️ QR 라벨 {labelQty}장 출력 (Godex ZA120U)
+      </button>
+    </div>
+  );
+}
+
+function CreateInspectionModal({
+  onClose, onCreated,
+  initialPriId, initialFormCode, initialItemName, initialQty, initialSpec
+}: {
+  onClose: () => void;
+  onCreated: (judgeResult?: string) => void;
+  initialPriId?: number;
+  initialFormCode?: string;
+  initialItemName?: string;
+  initialQty?: string;
+  initialSpec?: string;
+}) {
   const [presets, setPresets] = useState<FormPreset[]>([]);
   const [items, setItems] = useState<Array<{ item_id: number; item_code: string; item_name: string; item_category: string; unit: string }>>([]);
   const [selectedCategory, setSelectedCategory] = useState<'RM' | 'SM'>('SM');
@@ -726,6 +866,7 @@ function CreateInspectionModal({ onClose, onCreated }: { onClose: () => void; on
     item_no: number; quality_item: string; check_item: string; check_method: string;
     cert_standard: string; unit: string; frequency: string;
     n1: string; n2: string; n3: string; is_applicable: boolean;
+    direction?: string;
   }>>([]);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ pass: boolean; lot_number: string; inventory_created: boolean } | null>(null);
@@ -780,6 +921,40 @@ function CreateInspectionModal({ onClose, onCreated }: { onClose: () => void; on
     api.get<{ data: FormPreset[] }>('/inspections/incoming-presets').then((r) => setPresets(r.data));
     api.get<{ data: any[] }>('/items').then((r) => setItems(r.data));
   }, []);
+
+  // URL 파라미터 초기값 적용 (아이템 목록 로드 후)
+  useEffect(() => {
+    if (items.length === 0) return;
+    if (initialFormCode) {
+      setSelectedForm(initialFormCode);
+      // 카테고리 자동 설정
+      if (initialFormCode.startsWith('D10')) setSelectedCategory('RM');
+      else setSelectedCategory('SM');
+      // 양식 상세 로드
+      api.get<{ data: FormDetail }>(`/inspections/incoming-presets/${initialFormCode}`)
+        .then((r) => {
+          setFormDetail(r.data);
+          setMeasurements(
+            r.data.items.map((item: any) => ({
+              item_no: item.item_no, quality_item: item.quality_item, check_item: item.check_item,
+              check_method: item.check_method, cert_standard: item.cert_standard?.toString() ?? '',
+              direction: item.direction || 'MIN',
+              unit: item.unit, frequency: item.frequency,
+              n1: '', n2: '', n3: '', is_applicable: true,
+            }))
+          );
+        })
+        .catch(() => {});
+    }
+    if (initialItemName) {
+      // 품목명으로 item_id 매칭
+      const matched = items.find(i =>
+        i.item_name.includes(initialItemName) || initialItemName.includes(i.item_name)
+      );
+      if (matched) setSelectedItem(String(matched.item_id));
+    }
+    if (initialQty) setQty(initialQty);
+  }, [items.length, initialFormCode, initialItemName, initialQty]);
 
   const filteredPresets = presets.filter((p) => p.category === selectedCategory);
   const filteredItems = items.filter((i) => i.item_category === selectedCategory);
@@ -1000,42 +1175,115 @@ function CreateInspectionModal({ onClose, onCreated }: { onClose: () => void; on
   // 샘플링 모드에 따라 n2/n3 표시 여부 결정
   const showN2N3 = !samplingMode || samplingMode.mode !== 'FULL';
 
-  // 결과 화면
+  // ── 결과 화면 (인수검사 완료 후) ───────────────────────────
   if (result) {
+    const itemObj   = items.find(i => String(i.item_id) === selectedItem);
+    const thickness = specThickness || (itemObj?.item_name.match(/(\d+\.?\d*)T/)?.[1] ?? '');
+    // 규격 문자열 조합
+    const specStr = [
+      specThickness ? `${specThickness}T` : '',
+      specWidth     ? `${specWidth}mm`     : '',
+      specLength    ? `× ${specLength}mm`  : '',
+      specDensity   ? `${specDensity}kg/m³` : '',
+    ].filter(Boolean).join(' × ').replace(' × ×', ' ×');
+
+    // 라벨 팝업 오픈
+    const openLabel = (labelQty: number) => {
+      const params = new URLSearchParams({
+        lotNumber: result.lot_number,
+        itemName:  itemObj?.item_name ?? '',
+        itemCode:  itemObj?.item_code ?? '',
+        spec:      specStr,
+        qty:       String(labelQty),
+        unit:      itemObj?.unit ?? 'EA',
+        lotDate:   inspDate,
+        category:  selectedCategory,
+        thickness: thickness,
+        lotType:   'IN',
+      });
+      window.open(
+        `/lot-label.html?${params.toString()}`,
+        '_blank',
+        'width=920,height=760,menubar=no,toolbar=no,scrollbars=yes'
+      );
+    };
+
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-        <div className="bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
-          <div className="text-center space-y-4">
-            <div className={cn('w-14 h-14 mx-auto rounded-full flex items-center justify-center',
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4">
+
+          {/* 판정 결과 헤더 */}
+          <div className={cn('rounded-t-2xl px-6 py-5 text-center',
+            result.pass ? 'bg-green-50 border-b border-green-200' : 'bg-red-50 border-b border-red-200')}>
+            <div className={cn('w-14 h-14 mx-auto rounded-full flex items-center justify-center mb-3',
               result.pass ? 'bg-green-100' : 'bg-red-100')}>
-              {result.pass
-                ? <ClipboardCheck size={28} className="text-green-600" />
-                : <ClipboardCheck size={28} className="text-red-600" />}
+              <ClipboardCheck size={28} className={result.pass ? 'text-green-600' : 'text-red-600'} />
             </div>
-            <h3 className="text-shop-lg font-bold text-gray-900">
-              인수검사 {result.pass ? '합격' : '불합격'}
+            <h3 className="text-lg font-bold text-gray-900">
+              인수검사 {result.pass ? '✅ 합격' : '❌ 불합격'}
             </h3>
-            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-              <div className="text-shop-sm text-gray-500">검사 LOT</div>
-              <div className="text-shop-lg font-mono font-bold">{result.lot_number}</div>
-              {supplierLot && (
-                <div className="text-xs text-gray-500">공급업체 LOT: {supplierLot}</div>
-              )}
+            {result.pass
+              ? <p className="text-xs text-green-600 mt-1">재고 자동 입고 완료</p>
+              : <p className="text-xs text-red-600 mt-1">재고 미반영 — 반품 또는 재검사 진행</p>
+            }
+          </div>
+
+          {/* LOT 정보 미리보기 */}
+          <div className="px-6 py-4 space-y-2 border-b">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">라벨 출력 정보</p>
+            {/* 로트번호 */}
+            <div className="flex items-center gap-2 bg-blue-50 rounded-lg px-3 py-2">
+              <span className="text-xs font-bold text-blue-400 w-12">로트번호</span>
+              <span className="font-mono font-bold text-blue-700 text-sm flex-1">{result.lot_number}</span>
             </div>
-            {result.pass ? (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                <p className="text-shop-sm text-green-700 font-medium">재고 자동 입고 완료</p>
-                <p className="text-xs text-green-600 mt-1">합격 판정에 따라 재고현황에 자동 반영되었습니다.</p>
-              </div>
-            ) : (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                <p className="text-shop-sm text-red-700 font-medium">재고 미반영</p>
-                <p className="text-xs text-red-600 mt-1">불합격으로 재고에 반영되지 않았습니다. 반품 또는 재검사를 진행하세요.</p>
+            {/* 품목명 */}
+            <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+              <span className="text-xs font-bold text-gray-400 w-12">품목명</span>
+              <span className="font-semibold text-gray-800 text-sm flex-1">{itemObj?.item_name || '-'}</span>
+            </div>
+            {/* 규격 */}
+            {specStr && (
+              <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                <span className="text-xs font-bold text-gray-400 w-12">규격</span>
+                <span className="text-gray-700 text-sm flex-1">{specStr}</span>
+                {thickness && (
+                  <span className="text-xs bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded">
+                    {thickness}T
+                  </span>
+                )}
               </div>
             )}
-            <button onClick={() => onCreated(autoJudgeResult ?? (result.pass ? 'PASS' : 'FAIL'))}
-              className="w-full px-4 py-2 bg-process-cut text-white rounded-md text-shop-sm font-medium hover:opacity-90">
-              확인
+            {supplierLot && (
+              <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+                <span className="text-xs font-bold text-gray-400 w-12">공급LOT</span>
+                <span className="font-mono text-gray-600 text-xs flex-1">{supplierLot}</span>
+              </div>
+            )}
+          </div>
+
+          {/* 라벨 수량 지정 + 출력 */}
+          <div className="px-6 py-4 space-y-3 border-b">
+            <p className="text-xs font-bold text-gray-700">🏷️ Godex ZA120U 라벨 출력 (80×60mm)</p>
+            <p className="text-xs text-gray-500">
+              라벨 수량을 지정하세요. 수량만큼 개별 QR 라벨이 생성됩니다.<br/>
+              각 라벨에 <strong>로트번호 · 품목명 · 규격</strong>이 인쇄됩니다.
+            </p>
+
+            {/* 수량 입력 — React state */}
+            <LabelQtyButton
+              defaultQty={Math.ceil(parseFloat(qty) || 1)}
+              unit={itemObj?.unit || 'EA'}
+              onPrint={openLabel}
+            />
+          </div>
+
+          {/* 확인 버튼 */}
+          <div className="px-6 py-4">
+            <button
+              onClick={() => onCreated(autoJudgeResult ?? (result.pass ? 'PASS' : 'FAIL'))}
+              className="w-full px-4 py-2.5 bg-gray-800 hover:bg-gray-900 text-white rounded-xl text-sm font-medium"
+            >
+              확인 (닫기)
             </button>
           </div>
         </div>

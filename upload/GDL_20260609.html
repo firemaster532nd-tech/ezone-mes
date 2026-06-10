@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>[프로젝트 추진 공지] 자재관리 통합 운영체계 정립 | (주)이지원</title>
+<style>
+  :root{
+    --logo:#DC2626; --navy:#1F3864; --blue:#2E75B6;
+    --ok-bg:#D1FAE5; --ok-bd:#10B981; --warn-bg:#FEF3C7; --warn-bd:#F59E0B; --ng-bg:#FEE2E2; --ng-bd:#EF4444;
+    --line:#D9DEE8; --soft:#F4F6FB; --ink:#1f2430; --muted:#5b6472;
+  }
+  *{box-sizing:border-box;}
+  body{ font-family:"Malgun Gothic","맑은 고딕",Apple SD Gothic Neo,sans-serif; color:var(--ink);
+    margin:0; background:#E9ECF3; line-height:1.62; font-size:14px; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  .page{ max-width:990px; margin:24px auto; background:#fff; padding:40px 46px 60px; box-shadow:0 6px 26px rgba(20,30,60,.12);}
+  .brand{ display:flex; align-items:center; gap:12px; border-bottom:3px solid var(--navy); padding-bottom:14px;}
+  .logo{ font-weight:800; font-size:24px;} .logo .ez{ color:var(--logo);} .logo .one{ color:var(--navy);}
+  .brand .sub{ color:var(--muted); font-size:12px; margin-left:auto; text-align:right;}
+  .ann{ display:inline-block; background:var(--logo); color:#fff; font-size:12px; font-weight:700; padding:3px 10px; border-radius:4px; letter-spacing:1px; margin-top:16px;}
+  .doc-type{ display:inline-block; background:var(--navy); color:#fff; font-size:12px; font-weight:700; padding:3px 10px; border-radius:4px; letter-spacing:1px; margin:16px 0 0 6px;}
+  h1.title{ font-size:24px; color:var(--navy); margin:12px 0 4px; line-height:1.32;}
+  .title-en{ color:var(--muted); font-size:12.5px; margin:0 0 16px;}
+  .approval{ border-collapse:collapse; font-size:11.5px; float:right; margin:0 0 10px 14px;}
+  .approval td{ border:1px solid var(--navy); text-align:center;}
+  .approval .lab{ background:var(--navy); color:#fff; width:30px; padding:6px 2px; writing-mode:vertical-rl; letter-spacing:2px;}
+  .approval .cell{ width:84px; height:56px;}
+  .approval .role{ background:var(--soft); color:var(--navy); font-weight:700; height:20px; padding:2px; font-size:10.5px;}
+  .meta{ width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:8px;}
+  .meta th,.meta td{ border:1px solid var(--line); padding:6px 10px; text-align:left;}
+  .meta th{ background:var(--soft); color:var(--navy); width:108px; font-weight:700; white-space:nowrap;}
+  .blank{ color:#c2c8d4; font-style:italic;}
+  .toc{ background:var(--soft); border:1px solid var(--line); border-radius:8px; padding:12px 18px; font-size:12.6px; margin:14px 0;}
+  .toc b{ color:var(--navy);} .toc ol{ margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px;} .toc li{ margin:3px 0;}
+  h2{ font-size:16.5px; color:#fff; background:var(--navy); margin:30px 0 12px; padding:8px 14px; border-radius:5px; display:flex; align-items:center; gap:9px;}
+  h2 .no{ background:#fff; color:var(--navy); width:24px; height:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:800;}
+  h3{ font-size:14.5px; color:var(--blue); margin:18px 0 8px; padding-left:10px; border-left:4px solid var(--blue);}
+  p{ margin:8px 0;}
+  table.data{ width:100%; border-collapse:collapse; font-size:12.5px; margin:10px 0;}
+  table.data th,table.data td{ border:1px solid var(--line); padding:7px 9px; vertical-align:top;}
+  table.data th{ background:var(--blue); color:#fff; font-weight:700; text-align:center;}
+  table.data tr:nth-child(even) td{ background:#FAFBFE;}
+  table.data td.c{ text-align:center;}
+  .col-a{ background:#F0F6FF !important;} .col-b{ background:#FFF6F0 !important;}
+  code,.code{ font-family:Consolas,"D2Coding",monospace; background:#EEF1F8; color:var(--navy); padding:1px 6px; border-radius:4px; font-size:12.2px; font-weight:600;}
+  .badge{ display:inline-block; padding:1px 9px; border-radius:11px; font-size:11.2px; font-weight:700; border:1px solid; white-space:nowrap;}
+  .b-ok{ background:var(--ok-bg); border-color:var(--ok-bd); color:#065F46;} .b-warn{ background:var(--warn-bg); border-color:var(--warn-bd); color:#92400E;} .b-ng{ background:var(--ng-bg); border-color:var(--ng-bd); color:#991B1B;}
+  .callout{ border-left:5px solid var(--blue); background:#F1F6FC; padding:12px 16px; border-radius:0 6px 6px 0; margin:14px 0;}
+  .callout.rec{ border-color:var(--ok-bd); background:#EDFBF3;} .callout.warn{ border-color:var(--logo); background:#FFF5F5;} .callout.purpose{ border-color:var(--navy); background:#F3F5FB;}
+  .callout b{ color:var(--navy);}
+  ul.clean{ margin:8px 0; padding-left:20px;} ul.clean li{ margin:6px 0;}
+  sup.ref{ color:var(--blue); font-weight:700; font-size:10px;}
+  .refs{ font-size:11.5px; color:var(--muted);} .refs li{ margin:4px 0; word-break:break-all;}
+  .pillars{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:12px 0;}
+  .pillar{ border:1px solid var(--line); border-top:4px solid var(--blue); border-radius:8px; padding:11px 13px; background:#FAFBFE;}
+  .pillar h4{ margin:0 0 5px; color:var(--navy); font-size:13.5px;} .pillar p{ margin:0; font-size:11.6px; color:var(--muted); line-height:1.5;}
+  .pillar.p1{ border-top-color:#1F3864;} .pillar.p2{ border-top-color:#DC2626;} .pillar.p3{ border-top-color:#2E75B6;} .pillar.p4{ border-top-color:#10B981;}
+  .docfoot{ margin-top:38px; border-top:2px solid var(--navy); padding-top:8px; font-size:11px; color:var(--muted); display:flex; justify-content:space-between;}
+  .rev{ font-size:11.5px; color:var(--muted); margin-top:6px;}
+  @media print{ body{background:#fff;} .page{box-shadow:none;margin:0;max-width:none;padding:12mm 14mm;} h2{break-after:avoid;} table,.callout,svg,.pillars{break-inside:avoid;} .toc ol,.pillars{columns:2;} }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="brand">
+    <div class="logo"><span class="ez">EZ</span><span class="one">ONE</span></div>
+    <div class="sub">(주)이지원 · 품질팀<br>전사 추진 공지</div>
+  </div>
+
+  <span class="ann">📢 프로젝트 추진 공지</span><span class="doc-type">GDL · 추진계획</span>
+  <h1 class="title">자재관리 통합 운영체계 정립 프로젝트<br>— MES·ERP 연동 / 공장 레이아웃 / 반제품 식별·보관 —</h1>
+  <p class="title-en">Integrated Material Management System Establishment Project — MES·ERP Integration, Plant Layout, Semi-finished Identification &amp; Storage</p>
+
+  <table class="approval">
+    <tr><td class="lab" rowspan="2">결재</td><td class="role">작성·주관</td><td class="role">검토</td><td class="role">승인</td></tr>
+    <tr><td class="cell"></td><td class="cell"></td><td class="cell"></td></tr>
+  </table>
+
+  <table class="meta">
+    <tr><th>문서번호</th><td>GDL-C302-2026-PJT</td><th>작성일</th><td>2026-06-09</td></tr>
+    <tr><th>주관</th><td class="blank">(추후 지정)</td><th>요청방향</th><td>SELF (전사 공지·내부 추진)</td></tr>
+    <tr><th>프로젝트 기간</th><td>2026-06 ~ 2026-12 (6개월, 4단계)</td><th>피드백 마감</th><td>2026-06-23</td></tr>
+    <tr><th>배포대상</th><td colspan="3">전 임직원 공지 · 품질팀 · 생산/공정 · 현장 적재 · 구매·자재 · 정보시스템 · 경영진</td></tr>
+    <tr><th>관련 사규</th><td colspan="3">C-302 추적성 · C-801 차열시트 · C-601 공정 · C-701 중간검사 · C-304 출하관리 (프로젝트 종료 시 동시 개정 연동)</td></tr>
+    <tr><th>관련 표준</th><td colspan="3">ISO 9001:2015 8.5.2 식별·추적성 · 8.5.4 보존 · 10.2 부적합·시정조치</td></tr>
+  </table>
+
+  <div class="toc">
+    <b>목차</b>
+    <ol>
+      <li>추진 공지·취지</li>
+      <li>추진 배경·목적·기대효과</li>
+      <li>프로젝트 개요·범위(4대 축)</li>
+      <li>공장 레이아웃 재배치 개선안</li>
+      <li>반제품 식별·보관 정립</li>
+      <li>MES·ERP 연동 아키텍처</li>
+      <li>FIFO·재고·추적성 통제</li>
+      <li>추진 로드맵(6개월·4단계)</li>
+      <li>추진 조직·역할(RACI)</li>
+      <li>산출물·리스크·KPI</li>
+      <li>진행 시 참고사항·출처</li>
+    </ol>
+  </div>
+
+  <!-- ===== 0. 공지·취지 ===== -->
+  <h2><span class="no">0</span>추진 공지 · 취지</h2>
+  <div class="callout purpose">
+    <b>공지</b> — (주)이지원은 반제품·차열시트 등 공정 자재의 <b>식별·보관·투입·추적</b> 전 과정을 표준화하고 이를 <b>MES·ERP 전산화</b>로 연결하는
+    「자재관리 통합 운영체계 정립 프로젝트」를 <b>정식 프로젝트로 추진</b>할 예정임을 공지합니다. 본 문서는 프로젝트의 <b>추진 취지·범위·로드맵·참고사항</b>을 정의한 기준 문서이며,
+    각 부서는 본 계획에 따라 협조·참여합니다. 세부 운영 지침은 연계 문서 <span class="code">GDL-C302-2026-INT</span>(통합 운영체계)를 따릅니다.
+  </div>
+  <p><b>왜 지금인가</b> — 현재 LOT 식별·보관·분출이 수기 대장 중심으로 운영되어 ① 로트 <b>혼용 위험</b>, ② 보관 위치·재고의 <b>실시간 가시성 부족</b>, ③ 혼용 발생 시 <b>추적·회수 범위 특정 곤란</b>이라는 구조적 리스크가 있습니다.
+  특히 외관이 유사한 <b>차열시트(C-801)</b>의 두께·규격 혼용은 구조체 <b>내화성능 미달</b>이라는 중대 품질사고로 직결되므로, 체계 정립을 더 이상 미룰 수 없습니다.</p>
+
+  <!-- ===== 1. 배경·목적 ===== -->
+  <h2><span class="no">1</span>추진 배경 · 목적 · 기대효과</h2>
+  <table class="data">
+    <tr><th style="width:150px;">구분</th><th>현재(As-Is)</th><th>목표(To-Be)</th></tr>
+    <tr><td class="c"><b>식별</b></td><td>수기 라벨·표기 누락 가능</td><td>생산 즉시 LOT·QR 라벨 자동 발행</td></tr>
+    <tr><td class="c"><b>보관</b></td><td>지정장소·로케이션 모호, 혼재 가능</td><td>로케이션 코드+스캔 대조, 1로케이션 1LOT</td></tr>
+    <tr><td class="c"><b>레이아웃</b></td><td>동선 역류·구역 경계 불명</td><td>일방향 동선·구역 재배치·스캔 게이트</td></tr>
+    <tr><td class="c"><b>투입</b></td><td>FIFO 수기 판단(후입선출 위험)</td><td>시스템이 선입 LOT 제시·후입 스캔 차단</td></tr>
+    <tr><td class="c"><b>재고·추적</b></td><td>실시간 파악 곤란, 역추적 수작업</td><td>LOT·위치 실시간 가시화, 자동 추적성</td></tr>
+  </table>
+  <p><b>목적</b> — 자재 혼용을 원천 차단하고 사규 <span class="code">C-302</span>·<span class="code">ISO 9001 8.5.2</span>가 요구하는 추적성을 확보한다.
+  <b>기대효과</b> — 품질사고 예방, 검사·재고 업무 효율화, 인증 대응력 강화, 데이터 기반 생산관리 기반 마련.</p>
+
+  <!-- ===== 2. 개요·범위 ===== -->
+  <h2><span class="no">2</span>프로젝트 개요 · 범위 (4대 축)</h2>
+  <div class="pillars">
+    <div class="pillar p1"><h4>축1. 식별·보관</h4><p>반제품·차열시트 라벨(LOT·QR), 지정 로케이션, 1로트 1구획 정립</p></div>
+    <div class="pillar p2"><h4>축2. 공장 레이아웃</h4><p>일방향 동선·구역 재배치·스캔 게이트·HOLD 분리</p></div>
+    <div class="pillar p3"><h4>축3. MES·ERP 연동</h4><p>이카운트 ERP + 경량 MES, Open API 양방향 연동</p></div>
+    <div class="pillar p4"><h4>축4. FIFO·추적성</h4><p>선입선출 통제, 실시간 재고·LOT 추적성 확보</p></div>
+  </div>
+  <table class="data">
+    <tr><th style="width:120px;">범위</th><th>포함(In-Scope)</th><th>제외(Out-of-Scope)</th></tr>
+    <tr><td class="c"><b>대상</b></td><td>재단 전 반제품, 차열시트, 조립 전 부품, 입고 대기 자재</td><td>출하 후 물류·시공 현장(별도 C-304)</td></tr>
+    <tr><td class="c"><b>업무</b></td><td>식별·보관·투입·재고·추적·전산연동·레이아웃</td><td>회계/급여 등 비(非)자재 모듈 신규 개발</td></tr>
+    <tr><td class="c"><b>시스템</b></td><td>이카운트 ERP 활용·경량 MES·Open API 연동</td><td>자체 ERP 전면 개발(보류, §10 트리거 시 재검토)</td></tr>
+  </table>
+
+  <!-- ===== 3. 레이아웃 ===== -->
+  <h2><span class="no">3</span>공장 레이아웃 재배치 개선안</h2>
+  <p>자재 동선을 <b>일방향(입고→생산→보관→투입→조립→출하)</b>으로 정렬하여 역류·교차를 제거하고, 각 전이 지점에 <b>스캔 게이트(◉)</b>를 두어 식별·로케이션·FIFO를 강제한다. 차열시트는 두께별 통로를 분리하고 HOLD 격리존을 주동선과 떼어 배치한다.</p>
+
+  <svg viewBox="0 0 920 380" width="100%" role="img" aria-label="공장 레이아웃 개선안" style="border:1px solid var(--line); border-radius:8px; background:#FBFCFE;">
+    <defs>
+      <marker id="fa" markerWidth="11" markerHeight="11" refX="7" refY="3.5" orient="auto"><path d="M0,0 L8,3.5 L0,7 Z" fill="#10B981"/></marker>
+    </defs>
+    <g font-family="Malgun Gothic">
+      <text x="18" y="26" font-size="14" font-weight="800" fill="#1F3864">개선 레이아웃 — 일방향 자재 동선 / ◉ 스캔 게이트 / 🟢 흐름</text>
+
+      <!-- 입고/검사 -->
+      <rect x="20" y="44" width="120" height="150" rx="7" fill="#EEF1F5" stroke="#94A3B8" stroke-width="2"/>
+      <rect x="20" y="44" width="120" height="22" rx="7" fill="#94A3B8"/><text x="80" y="59" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">① 입고·인수검사</text>
+      <text x="80" y="120" font-size="10" fill="#5b6472" text-anchor="middle">C-701 합격</text>
+      <text x="80" y="138" font-size="10" fill="#DC2626" text-anchor="middle" font-weight="700">◉ 입고 스캔</text>
+      <!-- 생산/배합 -->
+      <rect x="170" y="44" width="140" height="150" rx="7" fill="#EAEFF8" stroke="#1F3864" stroke-width="2"/>
+      <rect x="170" y="44" width="140" height="22" rx="7" fill="#1F3864"/><text x="240" y="59" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">② 배합·압출·재단</text>
+      <text x="240" y="118" font-size="10" fill="#5b6472" text-anchor="middle">배합 LOT 부여</text>
+      <text x="240" y="136" font-size="10" fill="#DC2626" text-anchor="middle" font-weight="700">◉ 라벨/QR 발행</text>
+      <!-- 보관 A -->
+      <rect x="340" y="44" width="120" height="72" rx="7" fill="#EAEFF8" stroke="#1F3864" stroke-width="2"/>
+      <rect x="340" y="44" width="120" height="20" rx="7" fill="#1F3864"/><text x="400" y="58" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">A. 재단전 반제품</text>
+      <text x="400" y="92" font-size="9.5" fill="#5b6472" text-anchor="middle">A-01~ 로케이션</text>
+      <text x="400" y="107" font-size="9.5" fill="#DC2626" text-anchor="middle" font-weight="700">◉ 보관 스캔</text>
+      <!-- 보관 B 차열시트 -->
+      <rect x="340" y="122" width="120" height="72" rx="7" fill="#FDEEEE" stroke="#DC2626" stroke-width="2.5"/>
+      <rect x="340" y="122" width="120" height="20" rx="7" fill="#DC2626"/><text x="400" y="136" font-size="10.5" font-weight="700" fill="#fff" text-anchor="middle">B. 차열시트</text>
+      <text x="400" y="167" font-size="9" fill="#991B1B" text-anchor="middle">두께별 통로분리</text>
+      <text x="400" y="182" font-size="9" fill="#991B1B" text-anchor="middle">1.5T·2.0T·3.0T</text>
+      <!-- 보관 C -->
+      <rect x="490" y="44" width="120" height="150" rx="7" fill="#EAF2FB" stroke="#2E75B6" stroke-width="2"/>
+      <rect x="490" y="44" width="120" height="22" rx="7" fill="#2E75B6"/><text x="550" y="59" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">C. 조립전 부품</text>
+      <text x="550" y="120" font-size="9.5" fill="#5b6472" text-anchor="middle">C-01~ 로케이션</text>
+      <text x="550" y="138" font-size="9.5" fill="#2E75B6" text-anchor="middle" font-weight="700">자재 준비</text>
+      <!-- 조립 -->
+      <rect x="640" y="44" width="120" height="150" rx="7" fill="#EAEFF8" stroke="#1F3864" stroke-width="2"/>
+      <rect x="640" y="44" width="120" height="22" rx="7" fill="#1F3864"/><text x="700" y="59" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">③ 조립</text>
+      <text x="700" y="118" font-size="10" fill="#5b6472" text-anchor="middle">구조체 LOT</text>
+      <text x="700" y="136" font-size="10" fill="#DC2626" text-anchor="middle" font-weight="700">◉ FIFO 투입 스캔</text>
+      <!-- 출하 -->
+      <rect x="790" y="44" width="110" height="150" rx="7" fill="#EAEFF8" stroke="#1F3864" stroke-width="2"/>
+      <rect x="790" y="44" width="110" height="22" rx="7" fill="#1F3864"/><text x="845" y="59" font-size="11" font-weight="700" fill="#fff" text-anchor="middle">④ 출하</text>
+      <text x="845" y="120" font-size="10" fill="#5b6472" text-anchor="middle">C-304</text>
+      <text x="845" y="138" font-size="10" fill="#5b6472" text-anchor="middle">출하지시서</text>
+
+      <!-- flow arrows (green) -->
+      <g stroke="#10B981" stroke-width="3" fill="none" marker-end="url(#fa)">
+        <line x1="140" y1="119" x2="168" y2="119"/>
+        <line x1="310" y1="100" x2="338" y2="80"/>
+        <line x1="310" y1="150" x2="338" y2="158"/>
+        <line x1="460" y1="80" x2="488" y2="100"/>
+        <line x1="460" y1="158" x2="640" y2="150" stroke-dasharray="2 0"/>
+        <line x1="610" y1="119" x2="638" y2="119"/>
+        <line x1="760" y1="119" x2="788" y2="119"/>
+      </g>
+
+      <!-- HOLD off-line -->
+      <rect x="170" y="300" width="200" height="64" rx="7" fill="#FFF0F0" stroke="#DC2626" stroke-width="2.5" stroke-dasharray="7 4"/>
+      <rect x="170" y="300" width="200" height="20" rx="7" fill="#DC2626"/><text x="270" y="314" font-size="10.5" font-weight="800" fill="#fff" text-anchor="middle">⚠ HOLD 격리존 (주동선 분리)</text>
+      <text x="270" y="340" font-size="9.5" fill="#991B1B" text-anchor="middle">혼용·로트미상·불합격 → 별도 격리</text>
+      <text x="270" y="354" font-size="9.5" fill="#991B1B" text-anchor="middle">판정 전 주동선 재진입 금지</text>
+
+      <!-- improvement callouts -->
+      <text x="410" y="300" font-size="11" font-weight="700" fill="#1F3864">개선 포인트</text>
+      <text x="410" y="318" font-size="10" fill="#5b6472">· 일방향 동선(역류·교차 제거)</text>
+      <text x="410" y="334" font-size="10" fill="#5b6472">· 4개 스캔 게이트(◉) 신설</text>
+      <text x="410" y="350" font-size="10" fill="#5b6472">· 차열시트 두께별 통로 분리</text>
+      <text x="410" y="366" font-size="10" fill="#5b6472">· HOLD존 주동선 격리 배치</text>
+      <text x="700" y="318" font-size="10" fill="#5b6472">· 재단전(A)·조립전(C) 존 명확 구분</text>
+      <text x="700" y="334" font-size="10" fill="#5b6472">· 보관→투입 최단 동선</text>
+      <text x="700" y="350" font-size="10" fill="#5b6472">· 통로폭·표지·바닥색 표준화</text>
+    </g>
+  </svg>
+
+  <h3>레이아웃 재배치 원칙</h3>
+  <table class="data">
+    <tr><th style="width:46px;">No</th><th>원칙</th><th>내용</th></tr>
+    <tr><td class="c"><b>1</b></td><td>일방향 동선</td><td>입고→생산→보관→투입→조립→출하의 단일 방향 흐름으로 역류·교차 동선을 제거한다.</td></tr>
+    <tr><td class="c"><b>2</b></td><td>스캔 게이트</td><td>입고·라벨발행·보관·투입 4개 전이점에 바코드/QR 스캔 게이트를 두어 식별·로케이션·FIFO를 강제한다.</td></tr>
+    <tr><td class="c"><b>3</b></td><td>구역 명확 분리</td><td>재단전 반제품(A)·차열시트(B)·조립전 부품(C)을 물리·표지·바닥색으로 구분한다.</td></tr>
+    <tr><td class="c"><b>4</b></td><td>차열시트 통로 분리</td><td>두께(1.5/2.0/3.0T)별 전용 통로·로케이션. 동일 셀 두께 혼재 금지(C-801).</td></tr>
+    <tr><td class="c"><b>5</b></td><td>HOLD 격리</td><td>격리존을 주동선에서 분리 배치하고 판정 전 재진입을 차단한다.</td></tr>
+  </table>
+
+  <!-- ===== 4. 식별·보관 ===== -->
+  <h2><span class="no">4</span>반제품 식별·보관 정립 (요약)</h2>
+  <p>세부 라벨 양식·보관 도식은 연계 지침 <span class="code">GDL-C302-2026-INT</span> §3~4를 따른다. 핵심 규칙은 다음과 같다.</p>
+  <ul class="clean">
+    <li><b>1단위 1표기</b> — 모든 적치 단위(파렛트·롤·번들)에 LOT·로케이션·QR 라벨을 보이는 위치에 부착.</li>
+    <li><b>1로케이션 1LOT</b> — 하나의 보관 셀에 단일 로트만. 입고 시 라벨↔적치위치 <b>스캔 대조</b>로 정위치 검증.</li>
+    <li><b>무표기 투입금지</b> — 로트 미상·라벨 훼손·판정 미표기 자재는 즉시 HOLD.</li>
+    <li><b>표기-실물 일치</b> — 분할·이동 시 신규 라벨 재발행(잔량 갱신).</li>
+  </ul>
+  <table class="data">
+    <tr><th style="width:150px;">대상</th><th>유효 LOT (형식)</th><th style="width:120px;">로케이션 예</th></tr>
+    <tr><td>재단 전 반제품</td><td><span class="code">배합 LOT</span> 260223-S01</td><td class="c">A-01</td></tr>
+    <tr><td>차열시트(공정투입)</td><td><span class="code">입고 LOT</span> 260211EG001</td><td class="c">B-1.5</td></tr>
+    <tr><td>조립 전 부품</td><td><span class="code">원/부자재 LOT</span> 260211MB001</td><td class="c">C-01</td></tr>
+  </table>
+
+  <!-- ===== 5. MES/ERP ===== -->
+  <h2><span class="no">5</span>MES·ERP 연동 아키텍처 (요약)</h2>
+  <p><b>ERP(이카운트)는 전사 재고·LOT 원장·회계</b>를, <b>MES는 현장 실시간 실행(라벨·스캔·FIFO·실적)</b>을 담당하며 <b>Open API로 양방향 연동</b>한다. 둘은 대체가 아니라 계획-실행을 잇는 보완 관계다<sup class="ref">[6]</sup>.</p>
+  <table class="data">
+    <tr><th>기능</th><th style="width:120px;">ERP(이카운트)</th><th style="width:120px;">MES(현장)</th><th>비고</th></tr>
+    <tr><td>작업지시</td><td class="c">◎ 생성</td><td class="c">○ 실행</td><td>ERP 지시→MES 실행<sup class="ref">[2]</sup></td></tr>
+    <tr><td>자재 투입(분출)</td><td class="c">○ BOM 차감</td><td class="c">◎ 실시간 스캔</td><td>MES 실적→ERP 재고<sup class="ref">[2][6]</sup></td></tr>
+    <tr><td>반제품 라벨/QR</td><td class="c">△ LOT 부여</td><td class="c">◎ 현장 출력</td><td>라벨에 ERP LOT 인쇄</td></tr>
+    <tr><td>보관 로케이션</td><td class="c">○ 위치 재고</td><td class="c">◎ 스캔 검증</td><td>지정장소 확인</td></tr>
+    <tr><td>재고 현황</td><td class="c">◎ 원장·집계</td><td class="c">○ 현장 재공</td><td>실시간 가시화<sup class="ref">[1]</sup></td></tr>
+    <tr><td>FIFO 통제</td><td class="c">○ 선입 제시</td><td class="c">◎ 후입 차단</td><td>혼용 방지</td></tr>
+    <tr><td>LOT 추적성</td><td class="c">◎ 통합 원장</td><td class="c">○ 실적 수집</td><td>양방향(C-302)<sup class="ref">[1]</sup></td></tr>
+  </table>
+  <div class="callout rec"><b>전산화 방향(확정)</b> — 「이카운트 ERP + 경량 MES 연동」 채택. 핵심기능이 이카운트에 내장<sup class="ref">[1][2]</sup>되고 API로 라벨·MES 연동<sup class="ref">[3]</sup>이 가능하다.
+  자체 ERP 전면개발은 과투자(구축비 3,000만원~2억<sup class="ref">[5]</sup> ≈ 이카운트 월 4만원<sup class="ref">[4]</sup>으로 60년 이상)로 <b>보류</b>한다.</div>
+
+  <!-- ===== 6. FIFO ===== -->
+  <h2><span class="no">6</span>FIFO · 재고 · 추적성 통제 (요약)</h2>
+  <ul class="clean">
+    <li><b>FIFO</b> — 동일 품목·규격은 입고/생산일 빠른 LOT부터 투입. 차열시트는 동일 두께 내에서만 적용. 투입 시 시스템이 선입 LOT 제시·후입 스캔 차단.</li>
+    <li><b>재고 현황</b> — LOT·로케이션·FIFO 순위 실시간 조회. 생산·분출 거래 즉시 재고 반영.</li>
+    <li><b>추적성</b> — 자재 LOT↔작업지시↔구조체 LOT를 연결하여 양방향 추적(C-302). 혼용 의심 시 §7 HOLD·역추적.</li>
+  </ul>
+  <p class="rev">상세 분출 기록은 양식 <span class="code">FRM-C302-2026-IS01</span>(자재분출 관리대장) 또는 이카운트 자재불출 화면을 사용한다.</p>
+
+  <!-- ===== 7. 로드맵 ===== -->
+  <h2><span class="no">7</span>추진 로드맵 (6개월 · 4단계)</h2>
+  <svg viewBox="0 0 920 250" width="100%" role="img" aria-label="추진 로드맵 간트" style="border:1px solid var(--line); border-radius:8px; background:#FBFCFE;">
+    <g font-family="Malgun Gothic">
+      <text x="18" y="26" font-size="14" font-weight="800" fill="#1F3864">추진 일정 (2026-06 ~ 2026-12)</text>
+      <!-- month grid -->
+      <g font-size="10.5" fill="#5b6472" text-anchor="middle">
+        <line x1="190" y1="40" x2="190" y2="230" stroke="#E3E8F0"/>
+        <text x="232" y="52">6월</text><line x1="275" y1="40" x2="275" y2="230" stroke="#E3E8F0"/>
+        <text x="317" y="52">7월</text><line x1="360" y1="40" x2="360" y2="230" stroke="#E3E8F0"/>
+        <text x="402" y="52">8월</text><line x1="445" y1="40" x2="445" y2="230" stroke="#E3E8F0"/>
+        <text x="487" y="52">9월</text><line x1="530" y1="40" x2="530" y2="230" stroke="#E3E8F0"/>
+        <text x="572" y="52">10월</text><line x1="615" y1="40" x2="615" y2="230" stroke="#E3E8F0"/>
+        <text x="657" y="52">11월</text><line x1="700" y1="40" x2="700" y2="230" stroke="#E3E8F0"/>
+        <text x="742" y="52">12월</text><line x1="785" y1="40" x2="785" y2="230" stroke="#E3E8F0"/>
+      </g>
+      <!-- bars -->
+      <g font-size="11">
+        <text x="18" y="78" fill="#1F3864" font-weight="700">1. 설계·정의</text>
+        <rect x="190" y="66" width="170" height="20" rx="5" fill="#1F3864"/><text x="275" y="80" fill="#fff" text-anchor="middle" font-size="10">현황진단·요구·코드체계·레이아웃설계</text>
+        <text x="18" y="116" fill="#2E75B6" font-weight="700">2. 구축·매핑</text>
+        <rect x="360" y="104" width="170" height="20" rx="5" fill="#2E75B6"/><text x="445" y="118" fill="#fff" text-anchor="middle" font-size="10">ERP셋업·LOT매핑·라벨·1차재배치</text>
+        <text x="18" y="154" fill="#DC2626" font-weight="700">3. 연동·시범</text>
+        <rect x="530" y="142" width="170" height="20" rx="5" fill="#DC2626"/><text x="615" y="156" fill="#fff" text-anchor="middle" font-size="10">MES·API연동·차열시트 파일럿</text>
+        <text x="18" y="192" fill="#10B981" font-weight="700">4. 안정화</text>
+        <rect x="700" y="180" width="85" height="20" rx="5" fill="#10B981"/><text x="742" y="194" fill="#fff" text-anchor="middle" font-size="10">확대·표준화</text>
+      </g>
+      <!-- gates -->
+      <g font-size="9.5" fill="#92400E" text-anchor="middle">
+        <polygon points="360,214 366,222 360,230 354,222" fill="#F59E0B"/><text x="360" y="246">G1 설계승인</text>
+        <polygon points="530,214 536,222 530,230 524,222" fill="#F59E0B"/><text x="530" y="246">G2 구축완료</text>
+        <polygon points="700,214 706,222 700,230 694,222" fill="#F59E0B"/><text x="700" y="246">G3 검증</text>
+        <polygon points="785,214 791,222 785,230 779,222" fill="#F59E0B"/><text x="785" y="246">G4 종료</text>
+      </g>
+    </g>
+  </svg>
+  <table class="data">
+    <tr><th style="width:120px;">단계</th><th>주요 활동</th><th style="width:160px;">산출물</th><th style="width:90px;">게이트</th></tr>
+    <tr><td class="c"><b>1. 설계·정의</b><br>(6~7월)</td><td>현황진단, 요구정의, LOT·로케이션·약호 코드체계 확정, 레이아웃 개선 설계</td><td>요구정의서, 코드체계표, 레이아웃 도면</td><td class="c">G1 설계승인</td></tr>
+    <tr><td class="c"><b>2. 구축·매핑</b><br>(8~9월)</td><td>이카운트 생산·재고 모듈 셋업, LOT 매핑, 라벨/QR 양식, 레이아웃 1차 재배치</td><td>ERP 설정, 라벨양식, 재배치 1차</td><td class="c">G2 구축완료</td></tr>
+    <tr><td class="c"><b>3. 연동·시범</b><br>(10~11월)</td><td>경량 MES 도입, Open API 연동, 차열시트 라인 파일럿, FIFO 스캔 차단 검증</td><td>연동 모듈, 파일럿 결과서</td><td class="c">G3 검증</td></tr>
+    <tr><td class="c"><b>4. 안정화·표준화</b><br>(12월)</td><td>전사 확대, 사규(C-302/C-601 등) 개정 반영, 교육, 효과 측정</td><td>개정 사규, 교육자료, 효과보고서</td><td class="c">G4 종료</td></tr>
+  </table>
+
+  <!-- ===== 8. 조직·RACI ===== -->
+  <h2><span class="no">8</span>추진 조직 · 역할 (RACI)</h2>
+  <p class="rev">R=실행 / A=승인책임 / C=협의 / I=공유. ※ 담당자 지정은 추진 확정 시 별도 임명(결재란 참조).</p>
+  <table class="data">
+    <tr><th style="width:200px;">역할</th><th class="c" style="width:90px;">설계·정의</th><th class="c" style="width:90px;">구축·매핑</th><th class="c" style="width:90px;">연동·시범</th><th class="c" style="width:90px;">안정화</th></tr>
+    <tr><td><b>프로젝트 총괄(PM)</b></td><td class="c">A</td><td class="c">A</td><td class="c">A</td><td class="c">A</td></tr>
+    <tr><td><b>품질 주관</b></td><td class="c">R</td><td class="c">C</td><td class="c">R</td><td class="c">R</td></tr>
+    <tr><td><b>생산·현장</b></td><td class="c">C</td><td class="c">R</td><td class="c">R</td><td class="c">C</td></tr>
+    <tr><td><b>정보시스템·연동</b></td><td class="c">C</td><td class="c">R</td><td class="c">R</td><td class="c">C</td></tr>
+    <tr><td><b>구매·자재</b></td><td class="c">C</td><td class="c">C</td><td class="c">C</td><td class="c">I</td></tr>
+    <tr><td><b>인수검사</b></td><td class="c">C</td><td class="c">C</td><td class="c">C</td><td class="c">I</td></tr>
+    <tr><td><b>경영진</b></td><td class="c">A/I</td><td class="c">I</td><td class="c">I</td><td class="c">A</td></tr>
+  </table>
+
+  <!-- ===== 9. 산출물·리스크·KPI ===== -->
+  <h2><span class="no">9</span>산출물 · 리스크 · 성공지표(KPI)</h2>
+  <h3>주요 산출물</h3>
+  <ul class="clean">
+    <li><b>문서</b> — 코드체계표(LOT·로케이션·약호), 레이아웃 개선 도면, 라벨/QR 양식, 자재분출 운영기준, 개정 사규(C-302/C-601/C-801), 교육자료.</li>
+    <li><b>시스템</b> — 이카운트 생산·재고 설정, 경량 MES, Open API 연동 모듈, 재고·추적성 대시보드.</li>
+  </ul>
+  <h3>리스크 · 대응</h3>
+  <table class="data">
+    <tr><th style="width:200px;">리스크</th><th>대응</th></tr>
+    <tr><td>기존 재고 데이터 정합성 오류</td><td>이관 전 전수 LOT 실사·검증, 단계적 이관, 검증 체크포인트 운영</td></tr>
+    <tr><td>현장 정착 저항·운영 미숙</td><td>단계별 교육, 시각자료 게시, 파일럿→확대, 현장 피드백 반영</td></tr>
+    <tr><td>API 개발·연동 일정 지연</td><td>표준 기능 우선 적용, 연동분 분리 일정, 외부 전문 지원 병행</td></tr>
+    <tr><td>레이아웃 재배치 중 생산 차질</td><td>비가동 시간 활용·구역 단위 단계 이전, 임시 동선 운영</td></tr>
+    <tr><td>차열시트 두께 혼용 잔존</td><td>두께별 통로·색상 분리, 투입 전 2인 대조, FIFO 스캔 차단</td></tr>
+  </table>
+  <h3>성공지표(KPI)</h3>
+  <table class="data">
+    <tr><th>지표</th><th class="c" style="width:160px;">목표</th></tr>
+    <tr><td>로트 혼용·오투입 발생</td><td class="c"><b>0 건</b></td></tr>
+    <tr><td>라벨 부착률(적치 단위)</td><td class="c"><b>100%</b></td></tr>
+    <tr><td>재고 정확도(실사 대비)</td><td class="c"><b>≥ 99%</b></td></tr>
+    <tr><td>FIFO 준수율</td><td class="c"><b>≥ 98%</b></td></tr>
+    <tr><td>LOT 역추적 소요시간</td><td class="c"><b>수일 → 분 단위</b></td></tr>
+  </table>
+
+  <!-- ===== 10. 참고·출처 ===== -->
+  <h2><span class="no">10</span>진행 시 참고사항 · 출처</h2>
+  <table class="data">
+    <tr><th style="width:160px;">참고 항목</th><th>내용</th></tr>
+    <tr><td><b>코드체계 사전확정</b></td><td>시스템 입력 전 LOT·로케이션·약호 코드를 반드시 확정·표준화(혼선 방지의 출발점).</td></tr>
+    <tr><td><b>사규 동시개정</b></td><td>C-302(추적성)·C-601(공정)·C-801(차열시트)·C-701·C-304를 프로젝트 결과와 동시 개정 연동.</td></tr>
+    <tr><td><b>표준 부합</b></td><td>ISO 9001:2015 8.5.2(식별·추적성)·8.5.4(보존)·10.2(시정조치) 요구사항 충족 설계.</td></tr>
+    <tr><td><b>변경관리</b></td><td>기존 v1.0 문서는 원형 유지, 신규부터 v2.0 적용. 게이트별 승인 후 다음 단계 진행.</td></tr>
+    <tr><td><b>데이터 이관</b></td><td>현 재고 LOT 전수 실사 후 이관, 정합성 검증 통과 시 가동.</td></tr>
+    <tr><td><b>교육·게시</b></td><td>라벨 양식·레이아웃·FIFO 시각자료를 보관장·차열시트 구역에 상시 게시, 단계별 현장교육.</td></tr>
+    <tr><td><b>외부 지원</b></td><td>정부 <b>스마트공장 기초구축 지원사업</b>(MES 도입) 공고·신청 일정 확인 후 연계 검토<sup class="ref">[8]</sup>.</td></tr>
+  </table>
+
+  <h3>참고 출처</h3>
+  <ol class="refs">
+    <li>[1] 이카운트 — 시리얼/Lot No. 재고·이력 관리. https://www.ecount.com/us/ecount/product/inventory_serial-number-management/</li>
+    <li>[2] 이카운트 — 생산관리/BOM(작업지시·자재불출). https://www.ecount.com/us/ecount/product/production_overview</li>
+    <li>[3] 이카운트 — ECOUNT Open API. https://www.ecount.com/us/ecount/product/erp_open-api</li>
+    <li>[4] 이카운트 — 가격정책(월 4만원·사용자 무제한·유지보수 포함, 가입비 20만원). https://www.ecount.com/us/ecount/join/pricing</li>
+    <li>[5] 위시켓 — ERP 패키지 vs 자체개발 비용·장단점(구축비 3,000만원~2억). https://blog.wishket.com/blog/erp-program-vs-custom-build</li>
+    <li>[6] AHHA Labs — MES와 ERP의 차이·연동. https://ahha.ai/2023/12/08/mes_vs_erp/</li>
+    <li>[7] 위키백과 — 이카운트(제조업 41.6%·8만 기업, ISO 27001/ISMS). https://ko.wikipedia.org/wiki/이카운트</li>
+    <li>[8] 정부 스마트공장 기초구축 지원사업(MES 도입 지원) 공고 예시. https://emaxict.com/?idx=99922&mode=view</li>
+  </ol>
+
+  <p class="rev">개정이력 — Rev.0 (2026-06-09) 프로젝트 추진 공지·계획 제정. 연계 문서: GDL-C302-2026-INT(통합 운영), FRM-C302-2026-IS01(자재분출), REV-C302-2026-01(전산화 검토). 근거: C-302·C-601·C-801·C-701·C-304 / ISO 9001:2015.</p>
+  <div class="docfoot"><span>GDL-C302-2026-PJT</span><span>(주)이지원 EZ ONE · 품질팀</span><span>A4</span></div>
+
+</div>
+</body>
+</html>

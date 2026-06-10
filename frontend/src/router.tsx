@@ -57,13 +57,23 @@ import { StructWorkOrderPage } from '@/pages/production/StructWorkOrderPage';
 import { SubWorkOrderPage } from '@/pages/production/SubWorkOrderPage';
 import { FnWorkOrderPage } from '@/pages/production/FnWorkOrderPage';
 import { FnTechStockPage } from '@/pages/inventory/FnTechStockPage';
+import MaterialOrdersPage from '@/pages/orders/MaterialOrdersPage';
+import ShipmentOrdersPage from '@/pages/shipment/ShipmentOrdersPage';
+import { ShipmentInputPage } from '@/pages/shipment/ShipmentInputPage';
+import ExitPassPrintPage from '@/pages/shipment/ExitPassPrintPage';
+import ReturnReceiptPage from '@/pages/shipment/ReturnReceiptPage';
+import ShipmentPendingPage from '@/pages/shipment/ShipmentPendingPage';
+import LocationManagementPage from '@/pages/inventory/LocationManagementPage';
+import ShipmentStagingPage from '@/pages/shipment/ShipmentStagingPage';
+import LabelReprintPage from '@/pages/inventory/LabelReprintPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
 
   // ══ 인쇄 전용 페이지 (새 탭/팝업용 — token을 URL 쿼리로 전달) ══
-  // 거래명세서 인쇄 (AuthGuard 없이 독립 렌더링)
+  // 출차증 인쇄 (AuthGuard 없이 독립 렌더링)
   { path: '/print/statements/:id', element: <StatementPrintPage /> },
+  { path: '/print/exit-pass/:id', element: <ExitPassPrintPage /> },
 
   {
     path: '/',
@@ -104,6 +114,7 @@ export const router = createBrowserRouter([
       // 수주/발주
       { path: 'orders', element: <OrderBomPage /> },
       { path: 'orders/purchase-requests', element: <PurchaseRequestPage /> },
+      { path: 'orders/material-orders', element: <MaterialOrdersPage /> },
       { path: 'orders/quotations', element: <QuotationPage /> },
       { path: 'orders/unordered', element: <UnorderedPage /> },
       { path: 'orders/quotations/print/:id', element: <QuotationPrintPage /> },
@@ -114,6 +125,14 @@ export const router = createBrowserRouter([
       { path: 'shipment/quality-report/:id', element: <QualityReportPage /> },
       { path: 'shipment/statements', element: <StatementListPage /> },
       { path: 'shipment/statements/new', element: <StatementEditPage /> },
+      { path: 'shipment/orders', element: <ShipmentOrdersPage /> },
+      { path: 'shipment/input', element: <ShipmentInputPage /> },
+      { path: 'shipment/returns', element: <ReturnReceiptPage /> },
+      { path: 'shipment/pending', element: <ShipmentPendingPage /> },
+      { path: 'shipment/staging', element: <ShipmentStagingPage /> },
+      // 재고관리 - 로케이션
+      { path: 'inventory/location', element: <LocationManagementPage /> },
+      { path: 'inventory/label-reprint', element: <LabelReprintPage /> },
       // 마스터관리
       { path: 'master/certifications', element: <CertificationsPage /> },
       { path: 'master/certifications/:id', element: <CertificationDetail /> },

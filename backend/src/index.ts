@@ -52,6 +52,8 @@ import { structWorkOrderRoutes } from './routes/struct-work-orders.js';
 import { subWorkOrderRoutes } from './routes/sub-work-orders.js';
 import { fnWorkOrderRoutes } from './routes/fn-work-orders.js';
 import { fnStockRoutes } from './routes/fn-stock.js';
+import { shipmentOrderRoutes } from './routes/shipment-orders.js';
+import { returnReceiptRoutes } from './routes/return-receipts.js';
 
 let appInstance: any = null;
 
@@ -113,10 +115,67 @@ export const initApp = async () => {
   await app.register(subWorkOrderRoutes);
   await app.register(fnWorkOrderRoutes);
   await app.register(fnStockRoutes);
+  await app.register(shipmentOrderRoutes);
+  await app.register(returnReceiptRoutes);
 
   // Health check
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
-  
+
+    // ── 신규 메뉴 자동 등록 마이그레이션 ──────────────────────────
+    // menu 테이블에 없는 신규 페이지를 서버 시작 시 자동으로 추가
+    // ON CONFLICT DO NOTHING → 이미 있으면 무시
+    try {
+      const { pool } = await import('./db/pool.js');
+      // 1. INVENTORY 부모 메뉴 가져오기
+      const parentRes = await pool.query(
+        `SELECT menu_id FROM menu WHERE menu_code = 'INVENTORY' LIMIT 1`
+      );
+      const inventoryParentId = parentRes.rows[0]?.menu_id ?? null;
+
+      // 기존 메뉴 한글명 동기화/변경
+      await pool.query(`UPDATE menu SET menu_name = '출하조회' WHERE menu_code = 'SHIPMENT_ORDERS'`);
+      await pool.query(`UPDATE menu SET menu_name = '출하현황' WHERE menu_code = 'SHIPMENT_PENDING'`);
+
+      const newMenus = [
+        // ── 재고 신규 메뉴 ──
+        { menu_code: 'INVENTORY_LABEL_REPRINT', menu_name: 'LOT 라벨 재출력',    path: '/inventory/label-reprint', parent_menu_id: inventoryParentId, sort_order: 69 },
+        { menu_code: 'INVENTORY_LOCATION',      menu_name: '로케이션 관리',        path: '/inventory/location',      parent_menu_id: inventoryParentId, sort_order: 68 },
+        // ── 출하 신규 메뉴 ──
+        { menu_code: 'SHIPMENT_ORDERS',   menu_name: '출하조회',       path: '/shipment/orders',     parent_menu_id: null, sort_order: 80 },
+        { menu_code: 'SHIPMENT_INPUT',    menu_name: '출하입력',       path: '/shipment/input',      parent_menu_id: null, sort_order: 80.5 },
+        { menu_code: 'SHIPMENT_STAGING',  menu_name: '포장·출하 스캔',   path: '/shipment/staging',    parent_menu_id: null, sort_order: 81 },
+        { menu_code: 'SHIPMENT_PENDING',  menu_name: '출하현황',        path: '/shipment/pending',    parent_menu_id: null, sort_order: 82 },
+        { menu_code: 'SHIPMENT_RETURNS',  menu_name: '반품입고',          path: '/shipment/returns',    parent_menu_id: null, sort_order: 83 },
+        // ── 거래명세서 ──
+        { menu_code: 'STATEMENT_LIST',    menu_name: '거래명세서 관리',   path: '/shipment/statements', parent_menu_id: null, sort_order: 84 },
+      ];
+
+      for (const m of newMenus) {
+        await pool.query(
+          `INSERT INTO menu (menu_code, menu_name, path, parent_menu_id, sort_order, is_active)
+           VALUES ($1, $2, $3, $4, $5, TRUE)
+           ON CONFLICT (menu_code) DO NOTHING`,
+          [m.menu_code, m.menu_name, m.path, m.parent_menu_id, m.sort_order]
+        );
+      }
+
+      // 신규 메뉴를 모든 부서에 can_read=TRUE로 자동 부여
+      const newCodes = newMenus.map(m => m.menu_code);
+      await pool.query(`
+        INSERT INTO department_permission (dept_id, menu_id, can_read, can_write, can_update, can_delete)
+        SELECT d.dept_id, m.menu_id, TRUE, TRUE, TRUE, FALSE
+        FROM department d
+        CROSS JOIN menu m
+        WHERE m.menu_code = ANY($1::text[])
+          AND d.is_active = TRUE
+        ON CONFLICT (dept_id, menu_id) DO NOTHING
+      `, [newCodes]);
+
+      console.log('✅ Menu migration done: inventory + shipment + statement menus granted to all departments');
+    } catch (e) {
+      console.warn('⚠ Menu migration skipped:', e);
+    }
+
   appInstance = app;
   return app;
 };

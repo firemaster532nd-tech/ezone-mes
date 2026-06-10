@@ -46,6 +46,7 @@ const shopNavItems: NavSection[] = [
       { label: '수주 관리 / BOM', path: '/orders' },
       { label: '자재 발주서', path: '/orders/purchase-requests' },
       { label: '현장별 프로젝트', path: '/orders/projects' },
+      { label: '📦 주문내역 → 입고신청', path: '/orders/material-orders' },
     ],
   },
   {
@@ -120,6 +121,8 @@ const shopNavItems: NavSection[] = [
     children: [
       { label: '인수검사', path: '/quality/incoming' },
       { label: '재고 현황', path: '/inventory/dashboard' },
+      { label: '📍 로케이션 관리', path: '/inventory/location' },
+      { label: '🏷️ LOT 라벨 재출력', path: '/inventory/label-reprint' },
     ],
   },
   {
@@ -139,9 +142,12 @@ const shopNavItems: NavSection[] = [
     icon: Truck,
     step: '⑦',
     children: [
-      { label: '출하 목록', path: '/shipment/list' },
-      { label: '거래명세서 관리', path: '/shipment/statements' },
-      { label: '품질관리서', path: '/shipment/list' },
+      { label: '출하조회',           path: '/shipment/orders' },
+      { label: '출하입력',           path: '/shipment/input' },
+      { label: '출하현황',           path: '/shipment/pending' },
+      { label: '🚨 포장·출하 스캔',    path: '/shipment/staging' },
+      { label: '📝 거래명세서 관리',   path: '/shipment/statements' },
+      { label: '🔄 반품입고',          path: '/shipment/returns' },
     ],
     dividerAfter: true,
   },
@@ -172,6 +178,12 @@ const shopNavItems: NavSection[] = [
       { label: 'BOM 관리', path: '/master/bom' },
     ],
   },
+  // ── LOT 라벨 재출력 (독립 메뉴) ──
+  {
+    label: '🏷️ LOT 라벨 재출력',
+    icon: Package,
+    path: '/inventory/label-reprint',
+  },
 ];
 
 // ─── 관리 모드: 업무 흐름 순서 (수주→발주→생산→품질→출하) ───
@@ -187,6 +199,7 @@ const adminNavItems: NavSection[] = [
       { label: '수주 관리 / BOM', path: '/orders' },
       { label: '자재 발주서', path: '/orders/purchase-requests' },
       { label: '현장별 프로젝트', path: '/orders/projects' },
+      { label: '📦 주문내역 → 입고신청', path: '/orders/material-orders' },
     ],
   },
   {
@@ -232,14 +245,18 @@ const adminNavItems: NavSection[] = [
     icon: ArrowRightLeft,
     children: [
       { label: '재고 현황', path: '/inventory/dashboard' },
-      { label: '초기 재고 설정', path: '/inventory/initialize' },
       { label: '수불대장 엑셀 연동', path: '/inventory/import' },
       { label: '월말 실사/마감', path: '/inventory/closing' },
       { label: '소켓/평철 재고 관리', path: '/inventory/socket-stock' },
       { label: '에프엔테크 재고현황', path: '/inventory/fn-tech-stock' },
-      { label: '출하 목록', path: '/shipment/list' },
-      { label: '거래명세서 관리', path: '/shipment/statements' },
-      { label: '품질관리서', path: '/shipment/list' },
+      { label: '📍 로케이션 관리', path: '/inventory/location' },
+      { label: '🏷️ LOT 라벨 재출력', path: '/inventory/label-reprint' },
+      { label: '출하조회', path: '/shipment/orders' },
+      { label: '출하입력', path: '/shipment/input' },
+      { label: '출하현황', path: '/shipment/pending' },
+      { label: '🚨 포장·출하 스캔', path: '/shipment/staging' },
+      { label: '📝 거래명세서 관리', path: '/shipment/statements' },
+      { label: '🔄 반품입고', path: '/shipment/returns' },
     ],
   },
   {
@@ -271,6 +288,12 @@ const adminNavItems: NavSection[] = [
       { label: '백업 / 초기화',     path: '/settings/backup' },
     ],
   },
+  // ── LOT 라벨 재출력 (독립 메뉴) ──
+  {
+    label: '🏷️ LOT 라벨 재출력',
+    icon: Package,
+    path: '/inventory/label-reprint',
+  },
 ];
 
 export function Sidebar() {
@@ -285,11 +308,14 @@ export function Sidebar() {
   const canSwitchMode = isAdmin || user?.allowed_modes === 'both';
   const currentMode = canSwitchMode ? mode : 'shop';
 
-  // path → can_read 룩업 (admin은 항상 true)
+  // path → can_read 룩업 (admin은 항상 true, 권한 DB에 없는 경로는 기본 허용)
   const pathReadable = (path?: string) => {
     if (!path) return true;
     if (isAdmin) return true;
-    return permissions.some((p: { path: string | null; can_read: boolean }) => p.path === path && p.can_read);
+    // 권한 DB에 해당 path 레코드 자체가 없으면 → 기본 허용 (신규 메뉴 자동 노출)
+    const found = permissions.find((p: { path: string | null; can_read: boolean }) => p.path === path);
+    if (!found) return true;
+    return found.can_read;
   };
 
   // 섹션/링크를 권한으로 필터링: 그룹 노드는 자식 1개 이상이 보일 때만 노출

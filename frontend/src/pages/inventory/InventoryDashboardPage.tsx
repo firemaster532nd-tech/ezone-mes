@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { Package, TrendingDown, Layers, Plus, ArrowUp, List, LayoutGrid, ChevronDown, ChevronRight, AlertTriangle, History, Pencil, Trash2, BookOpen, X } from 'lucide-react';
+import { Package, TrendingDown, Layers, Plus, ArrowUp, List, LayoutGrid, ChevronDown, ChevronRight, AlertTriangle, History, Pencil, Trash2, BookOpen, X, Printer, Tag } from 'lucide-react';
 
 interface DashboardCard {
   category: string;
@@ -128,6 +129,7 @@ interface LedgerEntry {
 }
 
 export function InventoryDashboardPage() {
+  const navigate = useNavigate();
   const [dashboard, setDashboard] = useState<DashboardCard[]>([]);
   const [summary, setSummary] = useState<InventorySummary[]>([]);
   const [lotInventory, setLotInventory] = useState<LotInventory[]>([]);
@@ -212,9 +214,35 @@ export function InventoryDashboardPage() {
     } catch { alert('삭제 실패'); }
   };
 
+  // LOT 라벨 출력 함수
+  const openLotLabel = (lot: LotInventory) => {
+    const params = new URLSearchParams({
+      lotNumber: lot.lot_number || '',
+      itemName: lot.item_name || '',
+      itemCode: lot.item_code || '',
+      spec: '',
+      qty: '1',
+      unit: lot.unit || 'EA',
+      lotDate: lot.lot_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+      category: lot.item_category || '',
+      lotType: lot.lot_type === 'ASSEMBLY' ? 'ASM' : lot.lot_type === 'STRUCT' ? 'STR' : 'IN',
+    });
+    window.open(
+      `/lot-label.html?${params.toString()}`,
+      '_blank',
+      'width=920,height=760,menubar=no,toolbar=no,scrollbars=yes'
+    );
+  };
+
   return (
     <div>
       <PageHeader title="재고 현황" description="원재료/부자재/반제품/완제품 재고 대시보드">
+        <button
+          onClick={() => navigate('/inventory/label-reprint')}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md text-shop-sm font-medium hover:opacity-90"
+        >
+          <Tag size={16} /> LOT 라벨 재출력
+        </button>
         <button
           onClick={() => setShowTxnModal(true)}
           className="flex items-center gap-2 px-4 py-2 bg-process-cut text-white rounded-md text-shop-sm font-medium hover:opacity-90"
@@ -436,6 +464,7 @@ export function InventoryDashboardPage() {
                                   <th className="py-1.5 text-right font-medium">잔량</th>
                                   <th className="py-1.5 text-left font-medium">상태</th>
                                   <th className="py-1.5 text-left font-medium">입고일</th>
+                                  <th className="py-1.5 text-center font-medium">라벨</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -456,6 +485,15 @@ export function InventoryDashboardPage() {
                                         <span className={cn('px-1.5 py-0.5 rounded text-xs', st.color)}>{st.label}</span>
                                       </td>
                                       <td className="py-1.5 text-gray-500">{lot.lot_date ? new Date(lot.lot_date).toLocaleDateString('ko-KR') : '-'}</td>
+                                      <td className="py-1.5 text-center">
+                                        <button
+                                          onClick={() => openLotLabel(lot)}
+                                          className="p-1 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors"
+                                          title={`${lot.lot_number} 라벨 출력`}
+                                        >
+                                          <Printer size={12} />
+                                        </button>
+                                      </td>
                                     </tr>
                                   );
                                 })}
@@ -488,6 +526,7 @@ export function InventoryDashboardPage() {
                 <th className="px-4 py-3 text-left font-medium text-gray-500">검사판정</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-500">LOT상태</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-500">입고일</th>
+                <th className="px-4 py-3 text-center font-medium text-gray-500">라벨</th>
               </tr>
             </thead>
             <tbody>
@@ -522,6 +561,15 @@ export function InventoryDashboardPage() {
                       </td>
                       <td className="px-4 py-3 text-xs text-gray-500">
                         {lot.lot_date ? new Date(lot.lot_date).toLocaleDateString('ko-KR') : '-'}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => openLotLabel(lot)}
+                          className="p-1.5 rounded hover:bg-blue-50 text-gray-400 hover:text-blue-600 transition-colors"
+                          title={`${lot.lot_number} 라벨 출력`}
+                        >
+                          <Printer size={14} />
+                        </button>
                       </td>
                     </tr>
                   );

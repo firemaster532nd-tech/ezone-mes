@@ -214,8 +214,11 @@ export async function authRoutes(app: FastifyInstance) {
         [worker_id],
       ),
       pool.query(
+        // can_read=TRUE인 권한만 반환 (CROSS JOIN으로 FALSE가 다 포함되는 문제 방지)
+        // admin은 effective_permission에서 role='admin'으로 모두 TRUE
         `SELECT menu_code, path, can_read, can_write, can_update, can_delete
-         FROM effective_permission WHERE worker_id = $1`,
+         FROM effective_permission
+         WHERE worker_id = $1 AND can_read = TRUE`,
         [worker_id],
       ),
     ]);

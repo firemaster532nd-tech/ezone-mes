@@ -72,13 +72,13 @@ export function filterVisibleMenus(
       // 그룹 노드(path 없음)는 자식이 하나라도 보이면 노출
       if (!node.path) {
         if (node.is_admin_only && role !== 'admin') return null;
-        if (children && children.length > 0) return { ...node, children };
+        if (children && children.length > 0) return { ...node, children } as MenuNode;
         return null;
       }
       // 리프 노드: admin_only면 admin만, 아니면 read 권한 체크
       if (node.is_admin_only && role !== 'admin') return null;
-      if (role === 'admin') return { ...node, children };
-      return can(permMap, node.menu_code, 'read') ? { ...node, children } : null;
+      if (role === 'admin') return { ...node, children } as MenuNode;
+      return can(permMap, node.menu_code, 'read') ? ({ ...node, children } as MenuNode) : null;
     })
     .filter((n): n is MenuNode => n !== null);
 }

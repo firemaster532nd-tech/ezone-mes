@@ -1686,6 +1686,97 @@ export async function orderRoutes(app: FastifyInstance) {
     return { data: rows };
   });
 
+  // ── GET /api/purchase-requests/ordered ── 주문내역 목록 (ORDERED / RECEIVED)
+  app.get('/api/purchase-requests/ordered', async (req) => {
+    const { search, status: statusFilter } = req.query as { search?: string; status?: string };
+
+    let whereClause = `WHERE pr.status IN ('ORDERED','RECEIVED','PARTIAL')`;
+    const params: any[] = [];
+
+    if (statusFilter && statusFilter !== 'ALL') {
+      params.push(statusFilter);
+      whereClause += ` AND pr.status = $${params.length}`;
+    }
+
+    if (search) {
+      params.push(`%${search}%`);
+      whereClause += ` AND (pr.pr_number ILIKE $${params.length} OR pr.supplier_name ILIKE $${params.length} OR so.project_name ILIKE $${params.length})`;
+    }
+
+    const { rows: prs } = await pool.query(`
+      SELECT pr.*,
+        so.order_number, so.customer_name, so.project_name,
+        (SELECT COUNT(*) FROM purchase_request_item pri WHERE pri.pr_id = pr.pr_id) AS item_count,
+        (SELECT COUNT(*) FROM purchase_request_item pri WHERE pri.pr_id = pr.pr_id AND pri.receiving_status = 'RECEIVED') AS received_count
+      FROM purchase_request pr
+      LEFT JOIN sales_order so ON so.order_id = pr.order_id
+      ${whereClause}
+      ORDER BY pr.pr_date DESC, pr.pr_id DESC
+    `, params);
+
+    // 각 PR별 품목 상세 + 인수검사 / LOT 연결 정보
+    const result = await Promise.all(prs.map(async (pr: any) => {
+      const { rows: items } = await pool.query(`
+        SELECT pri.*,
+          im.item_subcategory, im.spec AS item_spec_master,
+          lt.lot_number, lt.supplier_lot, lt.inspection_lot,
+          ins.insp_id AS linked_insp_id, ins.result AS insp_result, ins.form_code AS insp_form_code,
+          ins.inspected_at
+        FROM purchase_request_item pri
+        LEFT JOIN item_master im ON im.item_id = pri.item_id
+        LEFT JOIN lot_transaction lt ON lt.lot_id = pri.lot_id
+        LEFT JOIN inspection ins ON ins.insp_id = pri.insp_id
+        WHERE pri.pr_id = $1
+        ORDER BY pri.sort_order, pri.pri_id
+      `, [pr.pr_id]);
+      return { ...pr, items };
+    }));
+
+    return { data: result };
+  });
+
+  // ── PATCH /api/purchase-requests/:id/confirm-order ── 주문 확정
+  app.patch('/api/purchase-requests/:id/confirm-order', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { ordered_at } = (req.body as any) || {};
+
+    const prRes = await pool.query(`SELECT * FROM purchase_request WHERE pr_id = $1`, [id]);
+    if (prRes.rows.length === 0) {
+      return reply.status(404).send({ error: '발주서를 찾을 수 없습니다.' });
+    }
+    const pr = prRes.rows[0];
+    if (pr.status === 'RECEIVED' || pr.status === 'CANCELLED') {
+      return reply.status(400).send({ error: `현재 상태(${pr.status})에서는 주문 확정할 수 없습니다.` });
+    }
+
+    const confirmedAt = ordered_at || new Date().toISOString();
+
+    // purchase_request status → ORDERED + ordered_at 기록
+    await pool.query(`
+      ALTER TABLE purchase_request ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMPTZ
+    `);
+    await pool.query(`
+      UPDATE purchase_request
+      SET status = 'ORDERED', ordered_at = $1, updated_at = NOW()
+      WHERE pr_id = $2
+    `, [confirmedAt, id]);
+
+    // approval 테이블 동기화 (있을 경우)
+    await pool.query(`
+      UPDATE approval SET status = 'APPROVED', updated_at = NOW()
+      WHERE doc_type = 'PURCHASE_REQUEST' AND doc_id = $1 AND status NOT IN ('APPROVED','REJECTED')
+    `, [id]);
+
+    const updated = await pool.query(`
+      SELECT pr.*, so.project_name, so.customer_name
+      FROM purchase_request pr
+      LEFT JOIN sales_order so ON so.order_id = pr.order_id
+      WHERE pr.pr_id = $1
+    `, [id]);
+
+    return { data: updated.rows[0] };
+  });
+
   app.get('/api/purchase-requests/:id', async (req) => {
     const { id } = req.params as { id: string };
     const pr = await pool.query(`
@@ -1696,6 +1787,7 @@ export async function orderRoutes(app: FastifyInstance) {
     const items = await pool.query(`SELECT pri.*, im.roll_length_m, im.roll_spec, im.spec AS item_spec, im.item_subcategory FROM purchase_request_item pri LEFT JOIN item_master im ON im.item_id = pri.item_id WHERE pri.pr_id = $1 ORDER BY pri.sort_order`, [id]);
     return { data: { ...pr.rows[0], items: items.rows } };
   });
+
 
   // GET /api/purchase-requests/:id/download-xlsx - 발주 상세 XLSX 다운로드 (4시트 개선)
   app.get('/api/purchase-requests/:id/download-xlsx', async (req, reply) => {

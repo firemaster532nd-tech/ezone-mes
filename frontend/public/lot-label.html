@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>LOT 라벨 출력 | ㈜에프엔테크 MES</title>
+<script src="/qrcode.min.js"></script>
+<style>
+/* ──── 공통 ──── */
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'맑은 고딕','Malgun Gothic',sans-serif;background:#e8ecf4;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+
+/* ──── 화면 헤더 ──── */
+#screen-ui{background:#1e3a8a;color:#fff;}
+.top-bar{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;gap:12px;flex-wrap:wrap;}
+.top-bar h1{font-size:15px;font-weight:700;display:flex;align-items:center;gap:8px;}
+.badge-model{background:#93c5fd;color:#1e3a8a;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+.btn{padding:7px 14px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:.15s;}
+.btn:hover{filter:brightness(1.1);}
+.btn-print{background:#22c55e;color:#fff;}
+.btn-ezpl{background:#f59e0b;color:#fff;}
+.btn-close{background:rgba(255,255,255,.2);color:#fff;}
+
+/* ──── 설정바 ──── */
+.cfg-bar{background:#1e40af;padding:10px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-top:1px solid rgba(255,255,255,.1);}
+.cfg-group{display:flex;align-items:center;gap:6px;}
+.cfg-bar label{font-size:11px;color:#bfdbfe;font-weight:700;white-space:nowrap;}
+.cfg-bar input,.cfg-bar select{border:1px solid #3b82f6;border-radius:6px;padding:5px 8px;font-size:12px;background:#1d4ed8;color:#fff;outline:none;}
+.cfg-bar input::placeholder{color:#93c5fd;}
+.cfg-sep{width:1px;height:20px;background:rgba(255,255,255,.2);margin:0 4px;}
+.info-chip{font-size:11px;color:#93c5fd;margin-left:auto;}
+
+/* ──── 미리보기 영역 ──── */
+.preview-wrap{padding:24px;display:flex;flex-wrap:wrap;gap:20px;}
+
+/* ══════════════════════════════════════
+   라벨 본체 — 80×60mm 비율 (화면: 320×240px)
+   품목명 / 규격 / 로트번호 명확 표시
+══════════════════════════════════════ */
+.label{
+  width:320px;height:240px;
+  background:#fff;
+  border:2px dashed #94a3b8;
+  border-radius:4px;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  box-shadow:0 3px 10px rgba(0,0,0,.15);
+  page-break-inside:avoid;break-inside:avoid;
+}
+
+/* 헤더 줄 */
+.lbl-head{
+  display:flex;align-items:center;justify-content:space-between;
+  background:#1e3a8a;color:#fff;
+  padding:4px 8px;
+  flex-shrink:0;height:22px;
+}
+.lbl-company{font-size:10px;font-weight:700;letter-spacing:.3px;}
+.lbl-type-badge{font-size:9px;font-weight:800;background:#ef4444;color:#fff;padding:1px 6px;border-radius:3px;}
+.lbl-type-badge.asm{background:#8b5cf6;}
+.lbl-type-badge.struct{background:#0284c7;}
+
+/* 바디 — QR 왼쪽, 필드 오른쪽 */
+.lbl-body{display:flex;flex:1;min-height:0;}
+
+/* QR 영역 */
+.lbl-qr{
+  width:110px;flex-shrink:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:#f8fafc;
+  border-right:1px solid #e2e8f0;
+  padding:5px;gap:2px;
+}
+.lbl-qr canvas{width:96px!important;height:96px!important;}
+.lbl-qr-lot{font-size:7px;font-family:Consolas,monospace;color:#64748b;text-align:center;word-break:break-all;line-height:1.2;}
+
+/* 필드 영역 (오른쪽) */
+.lbl-fields{
+  flex:1;padding:5px 7px;
+  display:flex;flex-direction:column;
+  gap:0;
+  justify-content:center;
+  overflow:hidden;
+}
+
+/* 필드 한 줄 */
+.lbl-field{
+  display:flex;align-items:baseline;
+  border-bottom:1px dotted #e2e8f0;
+  padding:2px 0;
+  min-height:0;
+}
+.lbl-field:last-child{border-bottom:none;}
+.lbl-field-key{
+  font-size:8px;font-weight:700;color:#94a3b8;
+  width:28px;flex-shrink:0;letter-spacing:.3px;
+  text-transform:uppercase;
+}
+.lbl-field-val{
+  font-size:11px;font-weight:700;color:#0f172a;
+  flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;
+  line-height:1.4;
+}
+/* 로트번호: 파란색 모노폰트 */
+.lbl-field-val.lot-val{
+  font-size:10px;font-family:Consolas,'D2Coding',monospace;
+  color:#1d4ed8;letter-spacing:.3px;word-break:break-all;white-space:normal;line-height:1.3;
+}
+/* 규격: 회색 강조 */
+.lbl-field-val.spec-val{
+  font-size:10px;color:#475569;
+}
+/* 두께 강조 (차열시트 C-801) */
+.lbl-field-val.thick-val{
+  font-size:22px;font-weight:900;color:#dc2626;line-height:1;
+  letter-spacing:-1px;
+}
+/* 수량 */
+.lbl-field-val.qty-val{
+  font-size:14px;font-weight:900;color:#1e40af;line-height:1;
+}
+
+/* 푸터 */
+.lbl-foot{
+  display:flex;align-items:center;justify-content:space-between;
+  background:#f1f5f9;border-top:1px solid #e2e8f0;
+  padding:3px 8px;flex-shrink:0;height:18px;
+}
+.lbl-date{font-size:8px;color:#64748b;}
+.lbl-location{font-size:9px;font-weight:800;color:#065f46;background:#d1fae5;padding:1px 6px;border-radius:3px;}
+.lbl-serial{font-size:8px;color:#94a3b8;}
+
+/* HOLD */
+.label.hold-style .lbl-head{background:#dc2626;}
+.label.hold-style .lbl-type-badge{background:#7f1d1d;}
+.label.hold-style .lbl-field-val.lot-val{color:#dc2626;}
+
+/* ──── 인쇄 설정 ──── */
+@media print{
+  body{background:#fff;}
+  #screen-ui{display:none!important;}
+  .preview-wrap{padding:0;gap:0;}
+  .label{
+    width:80mm;height:60mm;
+    border:none;box-shadow:none;border-radius:0;
+    page-break-after:always;break-after:page;
+  }
+  .label:last-child{page-break-after:avoid;break-after:avoid;}
+  .lbl-qr{width:28mm;}
+  .lbl-qr canvas{width:22mm!important;height:22mm!important;}
+  .lbl-qr-lot{font-size:5pt;}
+  .lbl-field-key{font-size:6pt;width:20px;}
+  .lbl-field-val{font-size:9pt;}
+  .lbl-field-val.lot-val{font-size:7.5pt;}
+  .lbl-field-val.thick-val{font-size:18pt;}
+  .lbl-field-val.qty-val{font-size:11pt;}
+  .lbl-date,.lbl-serial{font-size:6pt;}
+  .lbl-location{font-size:7pt;}
+  @page{size:80mm 60mm;margin:0;}
+}
+</style>
+</head>
+<body>
+
+<!-- ── 화면 전용 UI ── -->
+<div id="screen-ui">
+  <div class="top-bar">
+    <h1>🏷️ LOT 라벨 출력
+      <span class="badge-model">Godex ZA120U · 80×60mm</span>
+    </h1>
+    <div class="btn-row">
+      <button class="btn btn-ezpl" onclick="downloadEZPL()">⬇ EZPL (.prn) Godex 전송</button>
+      <button class="btn btn-print" onclick="window.print()">🖨 브라우저 인쇄 (80×60)</button>
+      <button class="btn btn-close" onclick="window.close()">✕ 닫기</button>
+    </div>
+  </div>
+  <div class="cfg-bar">
+    <!-- 라벨 수량 지정 -->
+    <div class="cfg-group">
+      <label>📋 라벨 수량</label>
+      <input type="number" id="qty-input" value="1" min="1" max="9999"
+        style="width:65px;font-size:14px;font-weight:700;text-align:center;"
+        oninput="render()">
+      <span style="color:#93c5fd;font-size:11px;">장</span>
+    </div>
+    <div class="cfg-sep"></div>
+    <div class="cfg-group">
+      <label>시작번호</label>
+      <input type="number" id="serial-input" value="1" min="1" style="width:55px" oninput="render()">
+    </div>
+    <div class="cfg-sep"></div>
+    <div class="cfg-group">
+      <label>회사명</label>
+      <input type="text" id="company-input" value="㈜에프엔테크" style="width:110px" oninput="render()">
+    </div>
+    <div class="cfg-sep"></div>
+    <div class="cfg-group">
+      <label>📍 로케이션</label>
+      <input type="text" id="location-input" style="width:70px" placeholder="B-2.0" oninput="render()">
+    </div>
+    <div class="cfg-sep"></div>
+    <!-- 품목명/규격 직접 편집 -->
+    <div class="cfg-group">
+      <label>품목명</label>
+      <input type="text" id="itemname-input" style="width:120px" placeholder="품목명" oninput="render()">
+    </div>
+    <div class="cfg-group">
+      <label>규격</label>
+      <input type="text" id="spec-input" style="width:120px" placeholder="규격(두께×폭×길이)" oninput="render()">
+    </div>
+    <span class="info-chip">※ 인쇄 전 프린터 용지 80×60mm 설정</span>
+  </div>
+</div>
+
+<div class="preview-wrap" id="preview-area">
+  <div style="padding:40px;color:#94a3b8;">로딩 중...</div>
+</div>
+
+<script>
+// ── URL 파라미터 파싱 ──────────────────────────────────────────
+const P = new URLSearchParams(location.search);
+function safeDecode(key) {
+  const val = P.get(key);
+  if (!val) return '';
+  try {
+    if (!val.includes('%')) return val;
+    return decodeURIComponent(val);
+  } catch (e) {
+    return val;
+  }
+}
+
+const LOT = {
+  id:        P.get('lotId')       || '',
+  number:    P.get('lotNumber')   || 'LOT-UNKNOWN',
+  itemName:  safeDecode('itemName'),
+  itemCode:  safeDecode('itemCode'),
+  spec:      safeDecode('spec'),
+  qty:       parseInt(P.get('qty') || '1', 10),
+  unit:      P.get('unit')        || 'EA',
+  lotDate:   P.get('lotDate')     || new Date().toISOString().slice(0,10),
+  category:  P.get('category')   || '',
+  thickness: P.get('thickness')  || '',   // 차열시트 두께 (1.5, 2.0, 3.0)
+  location:  safeDecode('location'),
+  lotType:   P.get('lotType')    || 'IN', // IN/ASM/STR
+};
+
+// ── 초기값 적용 ──────────────────────────────────────────────
+document.getElementById('qty-input').value        = LOT.qty;
+document.getElementById('location-input').value   = LOT.location;
+document.getElementById('itemname-input').value   = LOT.itemName;
+document.getElementById('spec-input').value       = LOT.spec;
+
+// ── 헬퍼 ─────────────────────────────────────────────────────
+function getLotTypeLabel(){
+  return LOT.lotType==='ASM' ? '조립LOT' : LOT.lotType==='STR' ? '구조체LOT' : '입고LOT';
+}
+function getLotTypeBadgeClass(){
+  return LOT.lotType==='ASM' ? 'asm' : LOT.lotType==='STR' ? 'struct' : '';
+}
+// 현재 입력값 읽기
+function getItemName(){ return document.getElementById('itemname-input').value.trim() || LOT.itemName || '-'; }
+function getSpec(){     return document.getElementById('spec-input').value.trim()     || LOT.spec || ''; }
+function getLocation(){ return document.getElementById('location-input').value.trim()|| LOT.location || ''; }
+function getCompany(){  return document.getElementById('company-input').value.trim() || '㈜에프엔테크'; }
+
+// 차열시트 여부 (두께 파라미터가 있으면)
+function isHeatSheet(){ return !!LOT.thickness; }
+
+// ── QR 생성 ───────────────────────────────────────────────────
+async function genQR(text, canvas){
+  return new Promise((res,rej)=>{
+    QRCode.toCanvas(canvas, text,
+      {width:96, margin:1, color:{dark:'#000000',light:'#ffffff'}},
+      e=>e?rej(e):res());
+  });
+}
+
+// ── 라벨 렌더링 ──────────────────────────────────────────────
+async function render(){
+  const qty      = Math.max(1, parseInt(document.getElementById('qty-input').value)||1);
+  const serial0  = Math.max(1, parseInt(document.getElementById('serial-input').value)||1);
+  const itemName = getItemName();
+  const spec     = getSpec();
+  const loc      = getLocation() || (isHeatSheet() ? `B-${LOT.thickness}` : '');
+  const company  = getCompany();
+  const area     = document.getElementById('preview-area');
+  area.innerHTML = '';
+
+  for(let i=0; i<qty; i++){
+    const sn      = serial0 + i;
+    // 수량이 1장이면 시리얼 없이, 여러 장이면 -001/-002... 붙임
+    const qrData  = qty===1 ? LOT.number : `${LOT.number}-${String(sn).padStart(3,'0')}`;
+    const isHold  = loc.startsWith('H-');
+
+    const div = document.createElement('div');
+    div.className = 'label' + (isHold ? ' hold-style' : '');
+
+    // 규격 표시: 차열시트면 두께 강조, 아니면 일반 텍스트
+    const specHtml = isHeatSheet()
+      ? `<div class="lbl-field">
+           <span class="lbl-field-key">두께</span>
+           <span class="lbl-field-val thick-val">${LOT.thickness}T</span>
+         </div>
+         ${spec ? `<div class="lbl-field">
+           <span class="lbl-field-key">규격</span>
+           <span class="lbl-field-val spec-val">${spec}</span>
+         </div>` : ''}`
+      : spec
+        ? `<div class="lbl-field">
+             <span class="lbl-field-key">규격</span>
+             <span class="lbl-field-val spec-val">${spec}</span>
+           </div>`
+        : '';
+
+    div.innerHTML = `
+      <div class="lbl-head">
+        <span class="lbl-company">${company}</span>
+        <span class="lbl-type-badge ${getLotTypeBadgeClass()}">${getLotTypeLabel()}</span>
+      </div>
+      <div class="lbl-body">
+        <div class="lbl-qr">
+          <canvas id="qc-${i}"></canvas>
+          <div class="lbl-qr-lot">${qrData}</div>
+        </div>
+        <div class="lbl-fields">
+          <div class="lbl-field">
+            <span class="lbl-field-key">LOT</span>
+            <span class="lbl-field-val lot-val">${qrData}</span>
+          </div>
+          <div class="lbl-field">
+            <span class="lbl-field-key">품목</span>
+            <span class="lbl-field-val">${itemName}</span>
+          </div>
+          ${specHtml}
+          <div class="lbl-field">
+            <span class="lbl-field-key">수량</span>
+            <span class="lbl-field-val qty-val">1 <small style="font-size:9px;font-weight:600;color:#64748b">${LOT.unit}</small></span>
+          </div>
+        </div>
+      </div>
+      <div class="lbl-foot">
+        <span class="lbl-date">입고: ${LOT.lotDate}</span>
+        ${loc ? `<span class="lbl-location">📍 ${loc}</span>` : '<span></span>'}
+        ${qty>1 ? `<span class="lbl-serial">${sn}/${qty}</span>` : '<span></span>'}
+      </div>`;
+
+    area.appendChild(div);
+    await genQR(qrData, div.querySelector(`#qc-${i}`));
+  }
+}
+
+// ── EZPL 생성 (Godex ZA120U 전용) ────────────────────────────
+function downloadEZPL(){
+  const qty      = Math.max(1, parseInt(document.getElementById('qty-input').value)||1);
+  const serial0  = Math.max(1, parseInt(document.getElementById('serial-input').value)||1);
+  const itemName = getItemName();
+  const spec     = getSpec();
+  const loc      = getLocation() || (isHeatSheet() ? `B-${LOT.thickness}` : '');
+  const company  = getCompany();
+
+  let prn = '';
+  for(let i=0; i<qty; i++){
+    const sn     = serial0 + i;
+    const qrData = qty===1 ? LOT.number : `${LOT.number}-${String(sn).padStart(3,'0')}`;
+
+    prn += `\x02L\r\n`;
+    prn += `D11\r\n`;
+    prn += `ZT\r\n`;
+
+    // QR 코드 (좌측)
+    prn += `b10,30,QR,5,M,${qrData}\r\n`;
+    // QR 하단 로트번호 (소자)
+    prn += `421070155012${qrData.substring(0,20)}\r\n`;
+
+    // 우측 필드
+    prn += `421005030015${company}    ${getLotTypeLabel()}\r\n`;
+
+    // 필드 레이블 + 값
+    prn += `421255010013LOT:\r\n`;
+    prn += `421300010014${qrData}\r\n`;
+
+    prn += `421255050013품목:\r\n`;
+    prn += `421300050015${itemName.substring(0,14)}\r\n`;
+
+    if(isHeatSheet()){
+      prn += `421255085013두께:\r\n`;
+      prn += `541300085003${LOT.thickness}T\r\n`;  // 확대 폰트
+    }
+    if(spec){
+      prn += `421255100013규격:\r\n`;
+      prn += `421300100014${spec.substring(0,16)}\r\n`;
+    }
+
+    prn += `421255130013수량:\r\n`;
+    prn += `431300130013 1 ${LOT.unit}\r\n`;
+
+    // 구분선
+    prn += `L0,168,640,1,1\r\n`;
+
+    // 푸터
+    prn += `421010175016입고:${LOT.lotDate}\r\n`;
+    if(loc)  prn += `421320175015📍${loc}\r\n`;
+    if(qty>1)prn += `421570175014${sn}/${qty}\r\n`;
+
+    prn += `E\r\n`;
+  }
+
+  const blob = new Blob([prn], {type:'text/plain;charset=utf-8'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `LOT_${LOT.number.replace(/[^A-Za-z0-9\-]/g,'_')}_${qty}ea.prn`;
+  a.click();
+  URL.revokeObjectURL(url);
+  setTimeout(()=>alert(
+    `✅ EZPL 파일 (${qty}장) 다운로드 완료!\n\n`+
+    `📌 Godex ZA120U 전송:\n`+
+    `  copy /b "${a.download}" COM1  (또는 해당 포트)\n`+
+    `  또는 GoLabel 소프트웨어로 전송`
+  ),200);
+}
+
+// ── 초기 렌더링 ──────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>
