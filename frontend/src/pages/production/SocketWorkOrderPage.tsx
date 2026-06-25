@@ -837,57 +837,150 @@ function DetailSwoModal({ swo, onClose, onRefresh }: { swo: SWO; onClose: () => 
             ))}
           </div>
 
-          {/* 품목 목록 + 실적 입력 */}
+          {/* 품목 목록 + 실적 입력 — 구조체별 그룹 */}
           <div>
-            <h3 className="text-xs font-semibold text-gray-700 mb-2">발주 품목 ({d?.items?.length || 0}건)</h3>
-            <div className="border rounded-xl overflow-hidden">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-gray-500">NO</th>
-                    <th className="px-3 py-2 text-left text-gray-500">재질/품목</th>
-                    <th className="px-3 py-2 text-left text-gray-500">구조</th>
-                    <th className="px-3 py-2 text-center text-gray-500">규격</th>
-                    <th className="px-3 py-2 text-center text-gray-500">지시수량</th>
-                    <th className="px-3 py-2 text-center text-gray-500">실적수량</th>
-                    <th className="px-3 py-2 text-center text-gray-500">상태</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {d?.items?.map((item: any) => (
-                    <tr key={item.swi_id} className={cn('hover:bg-gray-50', item.is_incomplete && 'bg-yellow-50/40')}>
-                      <td className="px-3 py-2 text-gray-500">{item.seq_no}</td>
-                      <td className="px-3 py-2">
-                        <span className="font-mono">{item.material || item.item_name || '-'}</span>
-                        {item.is_incomplete && <AlertTriangle className="h-3 w-3 text-yellow-500 inline ml-1" />}
-                      </td>
-                      <td className="px-3 py-2 max-w-[100px] truncate">{item.structure || item.product_type || '-'}</td>
-                      <td className="px-3 py-2 text-center font-mono">
-                        {item.pipe_width_mm && item.pipe_height_mm
-                          ? `${item.pipe_width_mm}×${item.pipe_height_mm}`
-                          : <span className="text-gray-300">-</span>}
-                      </td>
-                      <td className="px-3 py-2 text-center font-mono font-bold">{item.planned_qty}</td>
-                      <td className="px-3 py-2 text-center">
-                        <input
-                          type="number"
-                          min={0}
-                          value={actuals[item.swi_id] ?? 0}
-                          onChange={e => setActuals(prev => ({ ...prev, [item.swi_id]: parseInt(e.target.value) || 0 }))}
-                          className="w-16 text-center border rounded px-1 py-0.5 text-xs"
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        {(actuals[item.swi_id] ?? 0) >= item.planned_qty
-                          ? <span className="text-green-600 text-[10px] font-medium">완료</span>
-                          : <span className="text-gray-400 text-[10px]">진행</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <h3 className="text-xs font-semibold text-gray-700 mb-2">
+              작업 항목 ({d?.items?.length || 0}건)
+            </h3>
+
+            {(() => {
+              if (!d?.items?.length) return (
+                <div className="text-center py-8 text-gray-400 text-sm border rounded-xl">항목 없음</div>
+              );
+
+              // ── 구조체별 색상 팔레트 (C302 표5 순서)
+              const STRUCT_COLORS: Record<string, {
+                header: string; badge: string; row: string; rowAlt: string; border: string;
+              }> = {
+                'V-03':       { header:'bg-slate-700 text-white',   badge:'bg-slate-200 text-slate-800',   row:'bg-slate-50',    rowAlt:'bg-white',       border:'border-slate-300' },
+                'VS-01':      { header:'bg-stone-600 text-white',   badge:'bg-stone-200 text-stone-800',   row:'bg-stone-50',    rowAlt:'bg-white',       border:'border-stone-300' },
+                'VT-01':      { header:'bg-blue-700 text-white',    badge:'bg-blue-100 text-blue-800',     row:'bg-blue-50/60',  rowAlt:'bg-blue-50/20',  border:'border-blue-300' },
+                'VT-049':     { header:'bg-indigo-700 text-white',  badge:'bg-indigo-100 text-indigo-800', row:'bg-indigo-50/60',rowAlt:'bg-indigo-50/20',border:'border-indigo-300' },
+                'VT-064':     { header:'bg-violet-700 text-white',  badge:'bg-violet-100 text-violet-800', row:'bg-violet-50/60',rowAlt:'bg-violet-50/20',border:'border-violet-300' },
+                'VA-064':     { header:'bg-purple-700 text-white',  badge:'bg-purple-100 text-purple-800', row:'bg-purple-50/60',rowAlt:'bg-purple-50/20',border:'border-purple-300' },
+                'VAG-1.69':   { header:'bg-fuchsia-700 text-white', badge:'bg-fuchsia-100 text-fuchsia-800',row:'bg-fuchsia-50/60',rowAlt:'bg-fuchsia-50/20',border:'border-fuchsia-300' },
+                'HAG-1.69':   { header:'bg-pink-700 text-white',    badge:'bg-pink-100 text-pink-800',     row:'bg-pink-50/60',  rowAlt:'bg-pink-50/20',  border:'border-pink-300' },
+                'HTG(DC)-064':{ header:'bg-rose-700 text-white',    badge:'bg-rose-100 text-rose-800',     row:'bg-rose-50/60',  rowAlt:'bg-rose-50/20',  border:'border-rose-300' },
+                'HTG-064DC':  { header:'bg-rose-700 text-white',    badge:'bg-rose-100 text-rose-800',     row:'bg-rose-50/60',  rowAlt:'bg-rose-50/20',  border:'border-rose-300' },
+                'HTG-1.69':   { header:'bg-orange-700 text-white',  badge:'bg-orange-100 text-orange-800', row:'bg-orange-50/60',rowAlt:'bg-orange-50/20',border:'border-orange-300' },
+                'HTG-064':    { header:'bg-amber-700 text-white',   badge:'bg-amber-100 text-amber-800',   row:'bg-amber-50/60', rowAlt:'bg-amber-50/20', border:'border-amber-300' },
+                'VTI-064':    { header:'bg-yellow-700 text-white',  badge:'bg-yellow-100 text-yellow-800', row:'bg-yellow-50/60',rowAlt:'bg-yellow-50/20',border:'border-yellow-300' },
+                'BDCV-1S':    { header:'bg-teal-700 text-white',    badge:'bg-teal-100 text-teal-800',     row:'bg-teal-50/60',  rowAlt:'bg-teal-50/20',  border:'border-teal-300' },
+                'BDRV-3S':    { header:'bg-cyan-700 text-white',    badge:'bg-cyan-100 text-cyan-800',     row:'bg-cyan-50/60',  rowAlt:'bg-cyan-50/20',  border:'border-cyan-300' },
+              };
+              const DEFAULT_COLOR = { header:'bg-gray-600 text-white', badge:'bg-gray-100 text-gray-800', row:'bg-gray-50/60', rowAlt:'bg-white', border:'border-gray-300' };
+
+              // 구조체 키: construction_seq + product_type
+              const getGroupKey = (item: any) =>
+                `${item.construction_seq ?? 1}__${item.product_type || item.structure || '미지정'}`;
+
+              // 그룹화 (순서 유지)
+              const groupOrder: string[] = [];
+              const groups: Record<string, any[]> = {};
+              for (const item of d.items) {
+                const key = getGroupKey(item);
+                if (!groups[key]) { groupOrder.push(key); groups[key] = []; }
+                groups[key].push(item);
+              }
+
+              return (
+                <div className="space-y-3">
+                  {groupOrder.map(key => {
+                    const [cSeq, ptRaw] = key.split('__');
+                    const pt = ptRaw || '미지정';
+                    const col = STRUCT_COLORS[pt] || DEFAULT_COLOR;
+                    const groupItems = groups[key];
+                    const groupTotal = groupItems.length;
+                    const groupDone = groupItems.filter((it: any) => (actuals[it.swi_id] ?? 0) >= it.planned_qty).length;
+
+                    return (
+                      <div key={key} className={cn('rounded-xl border overflow-hidden', col.border)}>
+                        {/* 구조체 헤더 행 */}
+                        <div className={cn('flex items-center justify-between px-3 py-2', col.header)}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm">{pt}</span>
+                            {parseInt(cSeq) > 1 && (
+                              <span className="text-[10px] font-semibold opacity-80 bg-white/20 px-1.5 py-0.5 rounded">
+                                {cSeq}차
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs opacity-90">
+                            <span>{groupTotal}개</span>
+                            {groupDone > 0 && (
+                              <span className="bg-white/30 px-1.5 py-0.5 rounded font-semibold">
+                                완료 {groupDone}/{groupTotal}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* 소켓 항목 테이블 */}
+                        <table className="w-full text-xs">
+                          <thead className="border-b border-gray-200">
+                            <tr className="bg-white/60">
+                              <th className="px-3 py-1.5 text-left text-gray-500 w-10">No</th>
+                              <th className="px-3 py-1.5 text-center text-gray-500">규격 W×H (mm)</th>
+                              <th className="px-3 py-1.5 text-center text-gray-500 w-16">지시수량</th>
+                              <th className="px-3 py-1.5 text-center text-gray-500 w-20">실적수량</th>
+                              <th className="px-3 py-1.5 text-center text-gray-500 w-14">상태</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {groupItems.map((item: any, idx: number) => {
+                              const actual = actuals[item.swi_id] ?? 0;
+                              const isDone = actual >= item.planned_qty;
+                              return (
+                                <tr
+                                  key={item.swi_id}
+                                  className={cn(
+                                    'transition-colors',
+                                    idx % 2 === 0 ? col.row : col.rowAlt,
+                                    item.is_incomplete && 'opacity-70',
+                                  )}
+                                >
+                                  <td className="px-3 py-1.5 text-gray-400 tabular-nums">{item.seq_no}</td>
+                                  <td className="px-3 py-1.5 text-center font-mono font-semibold text-gray-800">
+                                    {item.pipe_width_mm && item.pipe_height_mm
+                                      ? `${item.pipe_width_mm} × ${item.pipe_height_mm}`
+                                      : <span className="text-gray-300 font-normal">미입력</span>}
+                                    {item.is_incomplete && (
+                                      <AlertTriangle className="h-3 w-3 text-yellow-500 inline ml-1" />
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center font-bold text-gray-700">
+                                    {item.planned_qty ?? 1}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      value={actual}
+                                      onChange={e => setActuals(prev => ({
+                                        ...prev,
+                                        [item.swi_id]: parseInt(e.target.value) || 0,
+                                      }))}
+                                      className="w-14 text-center border rounded px-1 py-0.5 text-xs bg-white"
+                                    />
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center">
+                                    {isDone
+                                      ? <span className="text-green-600 text-[10px] font-semibold bg-green-50 px-1.5 py-0.5 rounded-full">완료</span>
+                                      : <span className="text-gray-400 text-[10px]">진행</span>}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
+
         </div>
 
         {/* 푸터 */}

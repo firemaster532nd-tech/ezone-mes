@@ -54,6 +54,9 @@ import { fnWorkOrderRoutes } from './routes/fn-work-orders.js';
 import { fnStockRoutes } from './routes/fn-stock.js';
 import { shipmentOrderRoutes } from './routes/shipment-orders.js';
 import { returnReceiptRoutes } from './routes/return-receipts.js';
+import { shipmentReadyRoutes } from './routes/shipment-ready.js';
+import { returnRoutes } from './routes/returns.js';
+import { socketIncomingRoutes } from './routes/socket-incoming.js';
 
 let appInstance: any = null;
 
@@ -117,6 +120,9 @@ export const initApp = async () => {
   await app.register(fnStockRoutes);
   await app.register(shipmentOrderRoutes);
   await app.register(returnReceiptRoutes);
+  await app.register(returnRoutes);
+  await app.register(shipmentReadyRoutes);
+  await app.register(socketIncomingRoutes);
 
   // Health check
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
@@ -141,13 +147,18 @@ export const initApp = async () => {
         { menu_code: 'INVENTORY_LABEL_REPRINT', menu_name: 'LOT 라벨 재출력',    path: '/inventory/label-reprint', parent_menu_id: inventoryParentId, sort_order: 69 },
         { menu_code: 'INVENTORY_LOCATION',      menu_name: '로케이션 관리',        path: '/inventory/location',      parent_menu_id: inventoryParentId, sort_order: 68 },
         // ── 출하 신규 메뉴 ──
-        { menu_code: 'SHIPMENT_ORDERS',   menu_name: '출하조회',       path: '/shipment/orders',     parent_menu_id: null, sort_order: 80 },
-        { menu_code: 'SHIPMENT_INPUT',    menu_name: '출하입력',       path: '/shipment/input',      parent_menu_id: null, sort_order: 80.5 },
-        { menu_code: 'SHIPMENT_STAGING',  menu_name: '포장·출하 스캔',   path: '/shipment/staging',    parent_menu_id: null, sort_order: 81 },
-        { menu_code: 'SHIPMENT_PENDING',  menu_name: '출하현황',        path: '/shipment/pending',    parent_menu_id: null, sort_order: 82 },
-        { menu_code: 'SHIPMENT_RETURNS',  menu_name: '반품입고',          path: '/shipment/returns',    parent_menu_id: null, sort_order: 83 },
+        { menu_code: 'SHIPMENT_ORDERS',   menu_name: '출하조회',        path: '/shipment/orders',     parent_menu_id: null, sort_order: 80 },
+        { menu_code: 'SHIPMENT_INPUT',    menu_name: '출하입력',        path: '/shipment/input',      parent_menu_id: null, sort_order: 81 },
+        { menu_code: 'SHIPMENT_STAGING',  menu_name: '포장·출하 스캔',  path: '/shipment/staging',    parent_menu_id: null, sort_order: 82 },
+        { menu_code: 'SHIPMENT_PENDING',  menu_name: '출하현황',         path: '/shipment/pending',    parent_menu_id: null, sort_order: 83 },
+        { menu_code: 'SHIPMENT_READY',    menu_name: '출하대기현황',      path: '/shipment/ready',      parent_menu_id: null, sort_order: 84 },
+        { menu_code: 'SHIPMENT_RETURNS',  menu_name: '반품입고',          path: '/shipment/returns',    parent_menu_id: null, sort_order: 85 },
         // ── 거래명세서 ──
-        { menu_code: 'STATEMENT_LIST',    menu_name: '거래명세서 관리',   path: '/shipment/statements', parent_menu_id: null, sort_order: 84 },
+        { menu_code: 'STATEMENT_LIST',    menu_name: '거래명세서 관리',   path: '/shipment/statements', parent_menu_id: null, sort_order: 86 },
+        // ── 자재발주대기 (소켓발주서 승인 후 발주 관리) ──
+        { menu_code: 'SOCKET_ORDER_WAIT', menu_name: '자재발주대기',      path: '/orders/socket-order-wait', parent_menu_id: null, sort_order: 25 },
+        // ── 소켓 인수검사 ──
+        { menu_code: 'SOCKET_INCOMING', menu_name: '소켓 인수검사', path: '/quality/socket-incoming', parent_menu_id: null, sort_order: 62 },
       ];
 
       for (const m of newMenus) {
@@ -170,6 +181,38 @@ export const initApp = async () => {
           AND d.is_active = TRUE
         ON CONFLICT (dept_id, menu_id) DO NOTHING
       `, [newCodes]);
+
+      // ── socket_incoming_inspection 테이블 생성 (없으면) ──
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS socket_incoming_inspection (
+          sii_id           SERIAL PRIMARY KEY,
+          so_id            INTEGER NOT NULL REFERENCES socket_order(so_id),
+          seq_no           INTEGER NOT NULL,
+          construction_seq INTEGER DEFAULT 1,
+          item_seq         INTEGER,
+          product_type     VARCHAR(50),
+          pipe_width_mm    INTEGER,
+          pipe_height_mm   INTEGER,
+          width_mm         INTEGER,
+          height_mm        INTEGER,
+          depth_mm         INTEGER,
+          insp_lot_no      VARCHAR(50),
+          insp_result      VARCHAR(10) DEFAULT 'PENDING',
+          insp_note        TEXT,
+          inspected_by     INTEGER,
+          inspected_at     TIMESTAMP,
+          created_at       TIMESTAMP DEFAULT NOW()
+        )
+      `);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_sii_so_id ON socket_incoming_inspection(so_id)`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_sii_seq  ON socket_incoming_inspection(so_id, seq_no)`);
+
+      // socket_order 테이블에 INSPECTING 상태 지원 확인 (CHECK 콘스트레인트 없는 경우 무시)
+      try {
+        await pool.query(`ALTER TABLE socket_order DROP CONSTRAINT IF EXISTS socket_order_status_check`);
+      } catch (_) {}
+
+      console.log('✅ socket_incoming_inspection 테이블 준비 완료');
 
       console.log('✅ Menu migration done: inventory + shipment + statement menus granted to all departments');
     } catch (e) {

@@ -8,3 +8,14 @@ pgdata/
 .pgdata/
 uploads/
 package-lock.json
+
+# 대용량 사규/문서 폴더 제외 (100MB 초과 HWP 파일 포함)
+upload/(주)이지원 사규(2026년 4월 업데이트 진행중)/
+upload/(주)이지원 품질인정서 원본(G4B)/
+
+# 대용량 파일 형식 제외
+*.hwp
+*.hwpx
+
+# 기타 업로드 대용량 파일
+upload/출하대기현황샘플.xlsx

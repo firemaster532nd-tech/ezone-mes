@@ -46,13 +46,18 @@ const shopNavItems: NavSection[] = [
       { label: '수주 관리 / BOM', path: '/orders' },
       { label: '자재 발주서', path: '/orders/purchase-requests' },
       { label: '현장별 프로젝트', path: '/orders/projects' },
-      { label: '📦 주문내역 → 입고신청', path: '/orders/material-orders' },
+      { label: '주문내역 → 입고신청', path: '/orders/material-orders' },
     ],
   },
   {
     label: '결재함',
     icon: Inbox,
     path: '/approval/inbox',
+  },
+  {
+    label: '자재발주대기',
+    icon: Package,
+    path: '/orders/socket-order-wait',
     dividerAfter: true,
   },
   {
@@ -68,8 +73,8 @@ const shopNavItems: NavSection[] = [
       { label: '현장별 작업지시',     path: '/production/project-work-orders' },
       { label: '소켓 작업지시서',     path: '/production/socket-work-orders' },
       { label: '구조체 작업지시',     path: '/production/struct-work-orders' },
-      { label: '🔥 부자재별 작업지시', path: '/production/sub-work-orders' },
-      { label: '🔧 에프엔테크 작업지시', path: '/production/fn-work-orders' },
+      { label: '부자재별 작업지시', path: '/production/sub-work-orders' },
+      { label: '에프엔테크 작업지시', path: '/production/fn-work-orders' },
     ],
     dividerAfter: true,
   },
@@ -121,8 +126,8 @@ const shopNavItems: NavSection[] = [
     children: [
       { label: '인수검사', path: '/quality/incoming' },
       { label: '재고 현황', path: '/inventory/dashboard' },
-      { label: '📍 로케이션 관리', path: '/inventory/location' },
-      { label: '🏷️ LOT 라벨 재출력', path: '/inventory/label-reprint' },
+      { label: '로케이션 관리', path: '/inventory/location' },
+      { label: 'LOT 라벨 재출력', path: '/inventory/label-reprint' },
     ],
   },
   {
@@ -142,12 +147,13 @@ const shopNavItems: NavSection[] = [
     icon: Truck,
     step: '⑦',
     children: [
+      { label: '출하대기현황',       path: '/shipment/ready' },
       { label: '출하조회',           path: '/shipment/orders' },
       { label: '출하입력',           path: '/shipment/input' },
       { label: '출하현황',           path: '/shipment/pending' },
-      { label: '🚨 포장·출하 스캔',    path: '/shipment/staging' },
-      { label: '📝 거래명세서 관리',   path: '/shipment/statements' },
-      { label: '🔄 반품입고',          path: '/shipment/returns' },
+      { label: '포장·출하 스캔',    path: '/shipment/staging' },
+      { label: '거래명세서 관리',   path: '/shipment/statements' },
+      { label: '반품입고',          path: '/shipment/returns' },
     ],
     dividerAfter: true,
   },
@@ -194,7 +200,7 @@ const adminNavItems: NavSection[] = [
       { label: '수주 관리 / BOM', path: '/orders' },
       { label: '자재 발주서', path: '/orders/purchase-requests' },
       { label: '현장별 프로젝트', path: '/orders/projects' },
-      { label: '📦 주문내역 → 입고신청', path: '/orders/material-orders' },
+      { label: '주문내역 → 입고신청', path: '/orders/material-orders' },
     ],
   },
   {
@@ -206,6 +212,12 @@ const adminNavItems: NavSection[] = [
     ],
   },
   {
+    label: '자재발주대기',
+    icon: Package,
+    path: '/orders/socket-order-wait',
+    dividerAfter: true,
+  },
+  {
     label: '생산관리',
     icon: ClipboardList,
     children: [
@@ -213,8 +225,8 @@ const adminNavItems: NavSection[] = [
       { label: '현장별 작업지시',      path: '/production/project-work-orders' },
       { label: '소켓 작업지시서',      path: '/production/socket-work-orders' },
       { label: '구조체 작업지시',      path: '/production/struct-work-orders' },
-      { label: '🔥 부자재별 작업지시',  path: '/production/sub-work-orders' },
-      { label: '🔧 에프엔테크 작업지시', path: '/production/fn-work-orders' },
+      { label: '부자재별 작업지시',  path: '/production/sub-work-orders' },
+      { label: '에프엔테크 작업지시', path: '/production/fn-work-orders' },
       { label: '공정 실행',           path: '/production/process-execution' },
       { label: '생산 현황',           path: '/production/production-dashboard' },
       { label: '공정일지',            path: '/production/daily-log' },
@@ -244,14 +256,15 @@ const adminNavItems: NavSection[] = [
       { label: '월말 실사/마감', path: '/inventory/closing' },
       { label: '소켓/평철 재고 관리', path: '/inventory/socket-stock' },
       { label: '에프엔테크 재고현황', path: '/inventory/fn-tech-stock' },
-      { label: '📍 로케이션 관리', path: '/inventory/location' },
-      { label: '🏷️ LOT 라벨 재출력', path: '/inventory/label-reprint' },
+      { label: '로케이션 관리', path: '/inventory/location' },
+      { label: 'LOT 라벨 재출력', path: '/inventory/label-reprint' },
+      { label: '출하대기현황', path: '/shipment/ready' },
       { label: '출하조회', path: '/shipment/orders' },
       { label: '출하입력', path: '/shipment/input' },
       { label: '출하현황', path: '/shipment/pending' },
-      { label: '🚨 포장·출하 스캔', path: '/shipment/staging' },
-      { label: '📝 거래명세서 관리', path: '/shipment/statements' },
-      { label: '🔄 반품입고', path: '/shipment/returns' },
+      { label: '포장·출하 스캔', path: '/shipment/staging' },
+      { label: '거래명세서 관리', path: '/shipment/statements' },
+      { label: '반품입고', path: '/shipment/returns' },
     ],
   },
   {
@@ -292,6 +305,7 @@ export function Sidebar() {
   const setMode = (m: SidebarMode) => { _setMode(m); localStorage.setItem('sidebar_mode', m); };
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
   const [approvalCount, setApprovalCount] = useState(0);
+  const [socketWaitCount, setSocketWaitCount] = useState(0);
   const location = useLocation();
   const { user, permissions, isAdmin } = useAuth();
   // 관리모드 접근 가능: admin 또는 allowed_modes='both' 이면 모드 토글 표시
@@ -335,6 +349,19 @@ export function Sidebar() {
     return () => clearInterval(interval);
   }, [user]);
 
+  // 자재발주대기 건수 폴링 (APPROVED 상태)
+  useEffect(() => {
+    if (!user) return;
+    const fetchWaitCount = () => {
+      api.get<{ data: any[] }>('/socket-orders/wait?status=APPROVED')
+        .then((res) => setSocketWaitCount(res.data?.length ?? 0))
+        .catch(() => {});
+    };
+    fetchWaitCount();
+    const interval = setInterval(fetchWaitCount, 60000);
+    return () => clearInterval(interval);
+  }, [user]);
+
   const navItems = filterNav(currentMode === 'shop' ? shopNavItems : adminNavItems);
 
   const toggleSection = (label: string) => {
@@ -346,6 +373,51 @@ export function Sidebar() {
     });
   };
 
+  // 모드별 색상 테마
+  const theme = currentMode === 'shop'
+    ? {
+        aside:       'bg-slate-800 border-slate-700',
+        logo:        'border-slate-700',
+        logoText:    'text-white',
+        logoIcon:    'text-teal-400',
+        collapseBtn: 'text-slate-400 hover:bg-slate-700 hover:text-white',
+        modeBar:     'border-slate-700',
+        modeActive:  'bg-teal-600 text-white',
+        modeInactive:'text-slate-400 hover:bg-slate-700 hover:text-white',
+        navDivider:  'border-slate-700',
+        linkActive:  'bg-teal-600/30 text-teal-300 font-semibold',
+        linkHover:   'text-slate-300 hover:bg-slate-700 hover:text-white',
+        linkText:    'text-slate-300',
+        childBorder: 'border-slate-600',
+        childActive: 'bg-teal-600/25 text-teal-300 font-semibold',
+        childHover:  'text-slate-400 hover:bg-slate-700 hover:text-white',
+        sectionActive:'text-teal-300 font-semibold',
+        sectionHover: 'text-slate-300 hover:bg-slate-700',
+        stepColor:   'text-teal-400',
+        label:       '🔧 실무',
+      }
+    : {
+        aside:       'bg-violet-950 border-violet-800',
+        logo:        'border-violet-800',
+        logoText:    'text-white',
+        logoIcon:    'text-violet-400',
+        collapseBtn: 'text-violet-400 hover:bg-violet-800 hover:text-white',
+        modeBar:     'border-violet-800',
+        modeActive:  'bg-violet-600 text-white',
+        modeInactive:'text-violet-400 hover:bg-violet-800 hover:text-white',
+        navDivider:  'border-violet-800',
+        linkActive:  'bg-violet-600/30 text-violet-300 font-semibold',
+        linkHover:   'text-violet-300 hover:bg-violet-900 hover:text-white',
+        linkText:    'text-violet-300',
+        childBorder: 'border-violet-800',
+        childActive: 'bg-violet-600/25 text-violet-300 font-semibold',
+        childHover:  'text-violet-400 hover:bg-violet-900 hover:text-white',
+        sectionActive:'text-violet-300 font-semibold',
+        sectionHover: 'text-violet-300 hover:bg-violet-900',
+        stepColor:   'text-violet-400',
+        label:       '⚙️ 관리',
+      };
+
   // Auto-open section containing active route
   const isSectionActive = (section: NavSection) => {
     if (section.path) return location.pathname === section.path;
@@ -354,20 +426,21 @@ export function Sidebar() {
 
   return (
     <aside className={cn(
-      'flex flex-col border-r border-gray-200 bg-white transition-all duration-200',
+      'flex flex-col border-r transition-all duration-200',
+      theme.aside,
       collapsed ? 'w-16' : 'w-64'
     )}>
       {/* Logo */}
-      <div className="flex h-16 items-center justify-between border-b px-4">
+      <div className={cn('flex h-16 items-center justify-between border-b px-4', theme.logo)}>
         {!collapsed && (
           <div className="flex items-center gap-2">
-            <Factory className="h-6 w-6 text-process-mix" />
-            <span className="font-bold text-shop-lg">EZONE MES</span>
+            <Factory className={cn('h-6 w-6', theme.logoIcon)} />
+            <span className={cn('font-bold text-shop-lg', theme.logoText)}>EZONE MES</span>
           </div>
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
-          className="rounded-md p-1.5 hover:bg-gray-100"
+          className={cn('rounded-md p-1.5 transition-colors', theme.collapseBtn)}
         >
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </button>
@@ -375,14 +448,12 @@ export function Sidebar() {
 
       {/* Mode Toggle */}
       {!collapsed && canSwitchMode && (
-        <div className="flex border-b border-gray-200">
+        <div className={cn('flex border-b', theme.modeBar)}>
           <button
             onClick={() => { setMode('shop'); setOpenSections(new Set()); }}
             className={cn(
-              'flex-1 py-2.5 text-xs font-semibold transition-colors',
-              currentMode === 'shop'
-                ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              'flex-1 py-2.5 text-xs font-bold transition-all',
+              currentMode === 'shop' ? theme.modeActive : theme.modeInactive
             )}
           >
             <span className="flex items-center justify-center gap-1">
@@ -393,10 +464,8 @@ export function Sidebar() {
           <button
             onClick={() => { setMode('admin'); setOpenSections(new Set()); }}
             className={cn(
-              'flex-1 py-2.5 text-xs font-semibold transition-colors',
-              currentMode === 'admin'
-                ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-600'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+              'flex-1 py-2.5 text-xs font-bold transition-all',
+              currentMode === 'admin' ? theme.modeActive : theme.modeInactive
             )}
           >
             <span className="flex items-center justify-center gap-1">
@@ -417,7 +486,12 @@ export function Sidebar() {
                 item={{ label: section.label, icon: section.icon, path: section.path }}
                 collapsed={collapsed}
                 step={section.step}
-                badge={section.path === '/approval/inbox' ? approvalCount : undefined}
+                theme={theme}
+                badge={
+                  section.path === '/approval/inbox' ? approvalCount :
+                  section.path === '/orders/socket-order-wait' ? socketWaitCount :
+                  undefined
+                }
               />
             ) : (
               /* 접이식 섹션 */
@@ -426,13 +500,15 @@ export function Sidebar() {
                 collapsed={collapsed}
                 isOpen={openSections.has(section.label) || !!isSectionActive(section)}
                 onToggle={() => toggleSection(section.label)}
+                theme={theme}
+                childBadges={{ '/orders/socket-order-wait': socketWaitCount }}
               />
             )}
             {section.dividerAfter && !collapsed && (
-              <div className="my-2 border-t border-gray-100" />
+              <div className={cn('my-2 border-t', theme.navDivider)} />
             )}
             {section.dividerAfter && collapsed && (
-              <div className="my-1 border-t border-gray-100 mx-2" />
+              <div className={cn('my-1 border-t mx-2', theme.navDivider)} />
             )}
           </div>
         ))}
@@ -446,18 +522,21 @@ function SidebarSection({
   collapsed,
   isOpen,
   onToggle,
+  theme,
+  childBadges = {},
 }: {
   section: NavSection;
   collapsed: boolean;
   isOpen: boolean;
   onToggle: () => void;
+  theme: Record<string, string>;
+  childBadges?: Record<string, number>;
 }) {
   const Icon = section.icon;
   const location = useLocation();
   const hasActiveChild = section.children?.some((c) => location.pathname === c.path);
 
   if (collapsed) {
-    // 축소 모드에서는 첫 번째 child로 링크
     const firstChild = section.children?.[0];
     if (!firstChild) return null;
     return (
@@ -465,7 +544,7 @@ function SidebarSection({
         to={firstChild.path}
         className={() => cn(
           'flex items-center justify-center rounded-button px-3 py-2 text-shop-sm transition-colors mb-0.5',
-          hasActiveChild ? 'bg-blue-50 text-process-mix font-medium' : 'text-gray-700 hover:bg-gray-100'
+          hasActiveChild ? theme.linkActive : theme.linkHover
         )}
         title={section.label}
       >
@@ -480,34 +559,39 @@ function SidebarSection({
         onClick={onToggle}
         className={cn(
           'flex w-full items-center gap-2 rounded-button px-3 py-2 text-shop-sm transition-colors',
-          hasActiveChild ? 'text-process-mix font-medium' : 'text-gray-600 hover:bg-gray-50'
+          hasActiveChild ? theme.sectionActive : theme.sectionHover
         )}
       >
         {section.step && (
-          <span className="text-xs font-bold text-blue-500 w-5 text-center flex-shrink-0">
+          <span className={cn('text-xs font-bold w-5 text-center flex-shrink-0', theme.stepColor)}>
             {section.step}
           </span>
         )}
         <Icon className="h-4.5 w-4.5 flex-shrink-0" />
         <span className="flex-1 text-left">{section.label}</span>
         <ChevronDown className={cn(
-          'h-3.5 w-3.5 text-gray-400 transition-transform',
+          'h-3.5 w-3.5 transition-transform opacity-60',
           isOpen && 'rotate-180'
         )} />
       </button>
       {isOpen && section.children && (
-        <div className="ml-5 mt-0.5 space-y-0.5 border-l border-gray-100 pl-3">
+        <div className={cn('ml-5 mt-0.5 space-y-0.5 border-l pl-3', theme.childBorder)}>
           {section.children.map((child) => (
             <NavLink
               key={child.path}
               to={child.path}
               className={({ isActive }) => cn(
-                'block rounded-button px-3 py-1.5 text-shop-sm transition-colors',
-                isActive ? 'bg-blue-50 text-process-mix font-medium' : 'text-gray-600 hover:bg-gray-50',
-                child.disabled && 'text-gray-300 cursor-not-allowed pointer-events-none'
+                'flex items-center gap-2 rounded-button px-3 py-1.5 text-shop-sm transition-colors',
+                isActive ? theme.childActive : theme.childHover,
+                child.disabled && 'opacity-30 cursor-not-allowed pointer-events-none'
               )}
             >
-              {child.label}
+              <span className="flex-1">{child.label}</span>
+              {childBadges[child.path] > 0 && (
+                <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
+                  {childBadges[child.path]}
+                </span>
+              )}
             </NavLink>
           ))}
         </div>
@@ -521,18 +605,21 @@ function SidebarLink({
   collapsed,
   step,
   badge,
+  theme,
 }: {
   item: { label: string; icon: React.ElementType; path?: string; disabled?: boolean };
   collapsed: boolean;
   step?: string;
   badge?: number;
+  theme: Record<string, string>;
 }) {
   const Icon = item.icon;
 
   if (item.disabled || !item.path) {
     return (
       <div className={cn(
-        'flex items-center gap-3 rounded-button px-3 py-2 text-shop-sm text-gray-300 cursor-not-allowed mb-0.5',
+        'flex items-center gap-3 rounded-button px-3 py-2 text-shop-sm opacity-30 cursor-not-allowed mb-0.5',
+        theme.linkText,
         collapsed && 'justify-center'
       )}>
         <Icon className="h-5 w-5 flex-shrink-0" />
@@ -546,25 +633,25 @@ function SidebarLink({
       to={item.path}
       className={({ isActive }) => cn(
         'flex items-center gap-2 rounded-button px-3 py-2 text-shop-sm transition-colors mb-0.5 relative',
-        isActive ? 'bg-blue-50 text-process-mix font-medium' : 'text-gray-700 hover:bg-gray-100',
+        isActive ? theme.linkActive : theme.linkHover,
         collapsed && 'justify-center'
       )}
       title={collapsed ? item.label : undefined}
     >
       {!collapsed && step && (
-        <span className="text-xs font-bold text-blue-500 w-5 text-center flex-shrink-0">
+        <span className={cn('text-xs font-bold w-5 text-center flex-shrink-0', theme.stepColor)}>
           {step}
         </span>
       )}
       <Icon className="h-5 w-5 flex-shrink-0" />
       {!collapsed && <span className="flex-1">{item.label}</span>}
       {!collapsed && badge !== undefined && badge > 0 && (
-        <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
+        <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-500 px-1.5 text-[10px] font-bold text-white">
           {badge}
         </span>
       )}
       {collapsed && badge !== undefined && badge > 0 && (
-        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
           {badge}
         </span>
       )}

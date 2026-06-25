@@ -5,36 +5,54 @@ import { requireAuth } from '../lib/auth-plugin.js';
 // ─────────────────────────────────────────────────────────────────────────────
 // 재단 계산식 (엑셀 작업지시서 실측 검증 완료)
 // ─────────────────────────────────────────────────────────────────────────────
-function calcCutVM(w: number, h: number, qty: number) {
-  // VM형(VA-064, VT-049, VT-064): 내부용 + 외부용
+
+// 단면시공 일 때 플래싱/세라믹울 qty 보정 (SINGLE = 옢0.5)
+function singleFactor(ct: 'SINGLE' | 'DOUBLE' | null | undefined): number {
+  return ct === 'SINGLE' ? 0.5 : 1;
+}
+
+function calcCutVM(w: number, h: number, qty: number, ct?: 'SINGLE' | 'DOUBLE' | null) {
+  // VM형(VA-064, VT-049, VT-064)
+  // 플래싱(외부용): 단면 시 전체 qty의 1/2
+  const sf = singleFactor(ct);
   return {
+    // 내부용 (단면/양면 무관)
     inner_w: w - 5,       inner_w_qty: qty * 4,
     inner_h: h - 30,      inner_h_qty: qty * 4,
-    outer_top: w + 60,    outer_top_qty: qty * 2,
-    outer_side: h,        outer_side_qty: qty * 2,
+    // 외부용 플래싱 (단면 시 1/2)
+    outer_top: w + 60,    outer_top_qty: Math.round(qty * 2 * sf),
+    outer_side: h,        outer_side_qty: Math.round(qty * 2 * sf),
+    construction_type: ct ?? 'DOUBLE',
   };
 }
 
-function calcCutVT(w: number, h: number, qty: number) {
-  // VT형(VT-01): 분할 구조 — 내부 가로/세로 = W/2-20, H/2-20
+function calcCutVT(w: number, h: number, qty: number, ct?: 'SINGLE' | 'DOUBLE' | null) {
+  // VT형(VT-01): 분할 구조
+  // 플래싱(외부용): 다면 시 전체 qty의 1/2
+  const sf = singleFactor(ct);
   return {
+    // 내부용 (다면/양면 무관)
     inner_w: Math.round(w / 2 - 20),  inner_w_qty: qty * 16,
     inner_h: Math.round(h / 2 - 20),  inner_h_qty: qty * 16,
-    outer_top: w + 60,                 outer_top_qty: qty * 4,
-    outer_side: h,                     outer_side_qty: qty * 4,
+    // 외부용 플래싱 (다면 시 1/2)
+    outer_top: w + 60,                 outer_top_qty: Math.round(qty * 4 * sf),
+    outer_side: h,                     outer_side_qty: Math.round(qty * 4 * sf),
+    construction_type: ct ?? 'DOUBLE',
   };
 }
 
-function calcCutThermal(w: number, h: number, qty: number) {
-  // 차열재(세라믹울) 재단: 소켓 외부용만
+function calcCutThermal(w: number, h: number, qty: number, ct?: 'SINGLE' | 'DOUBLE' | null) {
+  // 차열재(세라믹울) 재단: 다면 시 1/2
+  const sf = singleFactor(ct);
   return {
-    outer_top: w + 60,   outer_top_qty: qty * 2,
-    outer_side: h,       outer_side_qty: qty * 2,
+    outer_top: w + 60,   outer_top_qty: Math.round(qty * 2 * sf),
+    outer_side: h,       outer_side_qty: Math.round(qty * 2 * sf),
+    construction_type: ct ?? 'DOUBLE',
   };
 }
 
 function calcBracketVM(code: string, w: number, h: number, qty: number) {
-  // VM형 절곡 브라켓 (VA-064, VT-049, VT-064)
+  // VM형 절곱 브라켓 (VA-064, VT-049, VT-064) — 다면/양면 무관
   return [
     { label: '상하 브라켓', t: 1.6, bw: 60, l: w - 1, qty: qty * 4 },
     { label: '좌우 브라켓', t: 1.6, bw: 60, l: h - 30, qty: qty * 4 },
@@ -42,7 +60,7 @@ function calcBracketVM(code: string, w: number, h: number, qty: number) {
 }
 
 function calcBracketVT(w: number, h: number, qty: number) {
-  // VT-01 절곡 브라켓 (상하/좌우)
+  // VT-01 절곱 브라켓 — 다면/양면 무관
   return [
     { label: '상하 브라켓', t: 1.6, bw: 60, l: Math.round(w / 2 - 16), qty: qty * 16 },
     { label: '좌우 브라켓', t: 1.6, bw: 60, l: Math.round(h / 2 - 20), qty: qty * 32 },
@@ -50,7 +68,7 @@ function calcBracketVT(w: number, h: number, qty: number) {
 }
 
 function calcBracketVTRe(w: number, h: number, qty: number) {
-  // VT-01 절곡 보강대 (받침대+보강대)
+  // VT-01 절곱 보강대 — 다면/양면 무관
   return [
     { label: '중앙받침대', t: 1.6, bw: 225, l: Math.round(w / 2 - 16), qty: qty * 8 },
     { label: '세로보강대', t: 1.6, bw: 237, l: h, qty: qty * 4 },
@@ -100,6 +118,7 @@ async function migrateStructWO() {
       width_mm     INTEGER,
       height_mm    INTEGER,
       qty          INTEGER DEFAULT 1,
+      construction_type VARCHAR(10) DEFAULT 'DOUBLE',
       calc_data    JSONB,
       stock_type   VARCHAR(20),
       stock_id     INTEGER,
@@ -109,6 +128,8 @@ async function migrateStructWO() {
       remarks      TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_struct_woi_wo ON struct_work_order_item(wo_id);
+    -- construction_type 컨럼 없으면 추가
+    ALTER TABLE struct_work_order_item ADD COLUMN IF NOT EXISTS construction_type VARCHAR(10) DEFAULT 'DOUBLE';
   `);
 }
 
@@ -189,33 +210,52 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         const W = it.width_mm || 0, H = it.height_mm || 0, Q = it.qty || 1;
-        // 공정별 자동 계산
+        const CT: 'SINGLE' | 'DOUBLE' = it.construction_type === 'SINGLE' ? 'SINGLE' : 'DOUBLE';
+        // 공정별 자동 계산 (단면/양면 반영)
         let calc_data: any = null;
-        if (wo_type === 'CUT_VM')            calc_data = calcCutVM(W, H, Q);
-        else if (wo_type === 'CUT_VT')       calc_data = calcCutVT(W, H, Q);
-        else if (wo_type === 'CUT_THERMAL')  calc_data = calcCutThermal(W, H, Q);
+        if (wo_type === 'CUT_VM')            calc_data = calcCutVM(W, H, Q, CT);
+        else if (wo_type === 'CUT_VT')       calc_data = calcCutVT(W, H, Q, CT);
+        else if (wo_type === 'CUT_THERMAL')  calc_data = calcCutThermal(W, H, Q, CT);
         else if (wo_type === 'BEND_VM')      calc_data = { brackets: calcBracketVM(it.product_type, W, H, Q) };
         else if (wo_type === 'BEND_VT')      calc_data = { brackets: calcBracketVT(W, H, Q) };
         else if (wo_type === 'BEND_VT_RE')   calc_data = { brackets: calcBracketVTRe(W, H, Q) };
         else if (wo_type === 'THERMAL_OUTER') calc_data = {
-          outer_top: W + 60, outer_top_qty: Q * 2,
-          outer_side: H,     outer_side_qty: Q * 2,
+          outer_top: W + 60, outer_top_qty: Math.round(Q * 2 * singleFactor(CT)),
+          outer_side: H,     outer_side_qty: Math.round(Q * 2 * singleFactor(CT)),
+          construction_type: CT,
         };
         else if (wo_type === 'PACKING')      calc_data = { packing_qty: Q };
         // INSPECT, LABEL: calc_data = null
 
         await client.query(`
           INSERT INTO struct_work_order_item
-            (wo_id,seq_no,po_item_id,product_type,width_mm,height_mm,qty,calc_data,stock_type,stock_id,remarks)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+            (wo_id,seq_no,po_item_id,product_type,width_mm,height_mm,qty,construction_type,calc_data,stock_type,stock_id,remarks)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
         `, [woId, i+1, it.po_item_id||null, it.product_type||null,
-            W, H, Q, calc_data ? JSON.stringify(calc_data) : null,
+            W, H, Q, CT, calc_data ? JSON.stringify(calc_data) : null,
             it.stock_type||null, it.stock_id||null, it.remarks||null]);
       }
       await client.query('COMMIT');
       return { data: wo.rows[0] };
     } catch (e) { await client.query('ROLLBACK'); throw e; }
     finally { client.release(); }
+  });
+
+  // ── PATCH /api/struct-work-orders/:id ────────────────────────────────────
+  app.patch('/api/struct-work-orders/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const id = parseInt((req.params as any).id);
+    const { worker_name, remarks, delivery_date } = req.body as any;
+    const existing = await pool.query('SELECT * FROM struct_work_order WHERE wo_id=$1', [id]);
+    if (!existing.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    const r = await pool.query(
+      `UPDATE struct_work_order
+         SET worker_name=COALESCE($1, worker_name),
+             remarks=COALESCE($2, remarks),
+             delivery_date=COALESCE($3::date, delivery_date)
+       WHERE wo_id=$4 RETURNING *`,
+      [worker_name ?? null, remarks ?? null, delivery_date ?? null, id]
+    );
+    return { data: r.rows[0] };
   });
 
   // ── PATCH /api/struct-work-orders/:id/start ────────────────────────────
@@ -317,16 +357,25 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
          poi.pipe_width_mm  AS width_mm,
          poi.pipe_height_mm AS height_mm,
          poi.qty,
-         poi.division,
-         poi.install_location,
          poi.remark,
          poi.sheet_name,
+         poi.construction_type,
          po.project_name,
          po.project_id
        FROM purchase_order_item poi
        JOIN purchase_order po ON po.po_id = poi.po_id
        WHERE poi.po_id=$1 AND poi.item_type='socket'
-       ORDER BY poi.sheet_name, poi.seq_no`,
+       ORDER BY
+         COALESCE(poi.sheet_name, '') ASC,
+         CASE poi.product_type
+           WHEN 'VT-049'    THEN 1  WHEN 'VT-064'    THEN 2
+           WHEN 'VT-01'     THEN 3  WHEN 'VA-064'    THEN 4
+           WHEN 'VAG-1.69'  THEN 5  WHEN 'HTG-064'   THEN 6
+           WHEN 'HTG-064DC' THEN 7  WHEN 'HTG-1.69'  THEN 8
+           ELSE 9
+         END,
+         COALESCE(poi.pipe_width_mm,0) ASC,
+         COALESCE(poi.pipe_height_mm,0) ASC`,
       [parseInt(po_id)]
     );
     let rows = items.rows;

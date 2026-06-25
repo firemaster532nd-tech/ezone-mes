@@ -284,6 +284,15 @@ export async function approvalRoutes(app: FastifyInstance) {
         );
       }
     }
+    // ── 소켓발주서 결재 연동: 검토 반려/반송 시 socket_order 상태 되돌리기 ──
+    if (ap.doc_type === 'SOCKET_ORDER' && ap.doc_id) {
+      if (newStatus === 'REJECTED' || newStatus === 'RETURNED') {
+        await pool.query(
+          `UPDATE socket_order SET status = $1, updated_at = NOW() WHERE so_id = $2 AND status IN ('SUBMITTED','APPROVED')`,
+          [newStatus, ap.doc_id]
+        );
+      }
+    }
 
     return { data: result.rows[0] };
   });
@@ -341,6 +350,25 @@ export async function approvalRoutes(app: FastifyInstance) {
       } else if (newStatus === 'RETURNED') {
         await pool.query(
           `UPDATE purchase_request SET status = 'DRAFT' WHERE pr_id = $1 AND status = 'SUBMITTED'`,
+          [ap.doc_id]
+        );
+      }
+    }
+    // ── 소켓발주서 결재 연동: 최종 승인/반려/반송 시 socket_order 상태 자동 변경 ──
+    if (ap.doc_type === 'SOCKET_ORDER' && ap.doc_id) {
+      if (newStatus === 'APPROVED') {
+        await pool.query(
+          `UPDATE socket_order SET status = 'APPROVED', updated_at = NOW() WHERE so_id = $1 AND status IN ('SUBMITTED','DRAFT')`,
+          [ap.doc_id]
+        );
+      } else if (newStatus === 'REJECTED') {
+        await pool.query(
+          `UPDATE socket_order SET status = 'REJECTED', updated_at = NOW() WHERE so_id = $1 AND status = 'SUBMITTED'`,
+          [ap.doc_id]
+        );
+      } else if (newStatus === 'RETURNED') {
+        await pool.query(
+          `UPDATE socket_order SET status = 'RETURNED', updated_at = NOW() WHERE so_id = $1 AND status = 'SUBMITTED'`,
           [ap.doc_id]
         );
       }
@@ -407,6 +435,13 @@ export async function approvalRoutes(app: FastifyInstance) {
     if (ap.doc_type === 'PURCHASE_REQUEST' && ap.doc_id) {
       await pool.query(
         `UPDATE purchase_request SET status = 'DRAFT' WHERE pr_id = $1 AND status IN ('SUBMITTED', 'APPROVED')`,
+        [ap.doc_id]
+      );
+    }
+    // 소켓발주서인 경우 socket_order 상태를 DRAFT로 복원
+    if (ap.doc_type === 'SOCKET_ORDER' && ap.doc_id) {
+      await pool.query(
+        `UPDATE socket_order SET status = 'DRAFT', updated_at = NOW() WHERE so_id = $1 AND status IN ('SUBMITTED','APPROVED')`,
         [ap.doc_id]
       );
     }

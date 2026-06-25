@@ -185,6 +185,8 @@ function parsePurchaseOrderExcel(buffer: Buffer) {
         const remark      = String(row[15] || '').trim();
 
         if (material || structure || productType) {
+          // 단면/양면 감지: structure 엔 "벽체(단면)" / "벽체(양면)" 패턴
+          const constructionType: 'SINGLE' | 'DOUBLE' = structure.includes('단면') ? 'SINGLE' : 'DOUBLE';
           sheetItems.push({
             seq_no: noNum,
             item_type: 'socket',
@@ -200,6 +202,7 @@ function parsePurchaseOrderExcel(buffer: Buffer) {
             spec: null,
             remark,
             sheet_name: sheetName,
+            construction_type: constructionType,
           });
         }
       }
@@ -317,10 +320,15 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
       item_name         VARCHAR(200),
       spec              VARCHAR(300),
       remark            TEXT,
+      lot_number        VARCHAR(60),
       linked_item_id    INT REFERENCES item_master(item_id) ON DELETE SET NULL,
       created_at        TIMESTAMPTZ DEFAULT NOW()
     )
   `).catch(() => {});
+
+  // lot_number 컬럼 추가 (기존 테이블)
+  await pool.query(`ALTER TABLE purchase_order_item ADD COLUMN IF NOT EXISTS lot_number VARCHAR(60)`).catch(() => {});
+
 
   // ── POST /api/purchase-orders/parse ── 업로드 전 미리보기 (저장 없음)
   // { file_base64: string, file_name: string }
@@ -339,7 +347,7 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
   });
 
   // ── POST /api/purchase-orders/upload ── 업로드 + 파싱 + DB 저장
-  // { file_base64: string, file_name: string }
+  // { file_base64: string, file_name: string, project_id?: number }
   app.post('/api/purchase-orders/upload', { preHandler: requireAuth }, async (req, reply) => {
     const body = req.body as any;
     if (!body?.file_base64) {
@@ -347,6 +355,9 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
     }
 
     const fileName: string = body.file_name || 'upload.xlsx';
+    // ★ 프론트에서 명시적으로 선택한 프로젝트 ID (없으면 자동 매칭)
+    const explicitProjectId: number | null = body.project_id ? parseInt(body.project_id) : null;
+
     let buffer: Buffer;
     try {
       buffer = Buffer.from(body.file_base64, 'base64');
@@ -370,11 +381,23 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
 
       const { project } = parsed;
 
-      // 프로젝트 자동 생성 or 기존 프로젝트 연결
+      // ── 프로젝트 연결 로직 ──────────────────────────────────────────
       let projectId: number | null = null;
 
-      if (project.project_name && project.project_name !== '미등록 현장') {
-        // 동일 현장명 프로젝트 검색
+      if (explicitProjectId) {
+        // ① 프론트에서 명시적으로 선택한 경우: 존재 여부 확인 후 바로 사용
+        const chk = await client.query(
+          `SELECT project_id FROM project_master WHERE project_id = $1`,
+          [explicitProjectId]
+        );
+        if (chk.rows.length > 0) {
+          projectId = explicitProjectId;
+        } else {
+          await client.query('ROLLBACK');
+          return reply.code(400).send({ error: 'project_not_found', message: '선택한 프로젝트를 찾을 수 없습니다.' });
+        }
+      } else if (project.project_name && project.project_name !== '미등록 현장') {
+        // ② 명시적 선택 없음: 현장명 자동 매칭 or 신규 생성
         const existProj = await client.query(
           `SELECT project_id FROM project_master WHERE project_name = $1 LIMIT 1`,
           [project.project_name]
@@ -414,6 +437,7 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
           projectId = newProj.rows[0].project_id;
         }
       }
+
 
       // 발주서 저장
       const poRes = await client.query(
@@ -456,30 +480,119 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
       const poId = poRes.rows[0].po_id;
 
       // 발주 명세 저장
+      // ※ 소켓(item_type='socket')은 qty=1씩 개별 행으로 저장 (LOT 1:1 매핑 원칙)
       for (const item of parsed.items) {
+        if (item.item_type === 'socket') {
+          // qty만큼 개별 행으로 분리하여 삽입 (각 구조체 = 1개)
+          const socketQty = item.qty && item.qty > 0 ? item.qty : 1;
+          for (let qi = 0; qi < socketQty; qi++) {
+            await client.query(
+              `INSERT INTO purchase_order_item (
+                po_id, sheet_name, seq_no, item_type, material, structure,
+                pipe_width_mm, pipe_height_mm, opening_width_mm, opening_height_mm,
+                qty, product_type, item_name, spec, remark, construction_type
+               ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,1,$11,$12,$13,$14,$15)`,
+              [
+                poId,
+                item.sheet_name,
+                item.seq_no,
+                item.item_type,
+                item.material || null,
+                item.structure || null,
+                item.pipe_width_mm,
+                item.pipe_height_mm,
+                item.opening_width_mm,
+                item.opening_height_mm,
+                item.product_type || null,
+                item.item_name || null,
+                item.spec || null,
+                item.remark || null,
+                (item as any).construction_type || 'DOUBLE',
+              ]
+            );
+          }
+        } else {
+          // 부자재·추가품목은 qty 그대로 1행
+          await client.query(
+            `INSERT INTO purchase_order_item (
+              po_id, sheet_name, seq_no, item_type, material, structure,
+              pipe_width_mm, pipe_height_mm, opening_width_mm, opening_height_mm,
+              qty, product_type, item_name, spec, remark, construction_type
+             ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'DOUBLE')`,
+            [
+              poId,
+              item.sheet_name,
+              item.seq_no,
+              item.item_type,
+              item.material || null,
+              item.structure || null,
+              item.pipe_width_mm,
+              item.pipe_height_mm,
+              item.opening_width_mm,
+              item.opening_height_mm,
+              item.qty,
+              item.product_type || null,
+              item.item_name || null,
+              item.spec || null,
+              item.remark || null,
+            ]
+          );
+        }
+      }
+
+      // ── 완제품 LOT 자동 부여 ──────────────────────────────────────────────
+      // 형식: YYMMDD-구조체명-001 (발주일자 기준, 구조체별 연속 순번)
+      // 정렬 우선순위: ① 구조체 종류 → ② 차수(sheet_name) → ③ 가로(W) → ④ 세로(H)
+
+      // 발주일자 → YYMMDD
+      let lotDateStr = '';
+      if (project.order_date) {
+        const dm = project.order_date.match(/(\d{4})[^\d]+(\d{1,2})[^\d]+(\d{1,2})/);
+        if (dm) {
+          const yy = dm[1].slice(2);
+          const mm = dm[2].padStart(2, '0');
+          const dd = dm[3].padStart(2, '0');
+          lotDateStr = `${yy}${mm}${dd}`;
+        }
+      }
+      if (!lotDateStr) {
+        const t = new Date();
+        lotDateStr = `${String(t.getFullYear()).slice(2)}${String(t.getMonth()+1).padStart(2,'0')}${String(t.getDate()).padStart(2,'0')}`;
+      }
+
+      // 소켓 항목 정렬 조회
+      // 우선순위: ① 차수(sheet_name) → ② 구조체 종류 → ③ 가로(W) → ④ 세로(H)
+      const socketLotRows = await client.query(`
+        SELECT po_item_id, product_type, sheet_name, pipe_width_mm, pipe_height_mm
+        FROM purchase_order_item
+        WHERE po_id = $1 AND item_type = 'socket' AND product_type IS NOT NULL
+        ORDER BY
+          -- ① 차수(sheet_name) 오름차순 (최우선)
+          COALESCE(sheet_name, '') ASC,
+          -- ② 구조체 종류 그룹
+          CASE product_type
+            WHEN 'VT-049'    THEN 1  WHEN 'VT-064'    THEN 2
+            WHEN 'VT-01'     THEN 3  WHEN 'VA-064'    THEN 4
+            WHEN 'VAG-1.69'  THEN 5  WHEN 'HTG-064'   THEN 6
+            WHEN 'HTG-064DC' THEN 7  WHEN 'HTG-1.69'  THEN 8
+            ELSE 9
+          END,
+          -- ③ 관통재 가로 오름차순
+          COALESCE(pipe_width_mm, 0) ASC,
+          -- ④ 관통재 세로 오름차순
+          COALESCE(pipe_height_mm, 0) ASC
+      `, [poId]);
+
+      // 구조체별 연속 순번 카운터 (차수가 달라도 같은 구조체는 번호 이어감)
+      const lotCounters: Record<string, number> = {};
+      for (const srow of socketLotRows.rows) {
+        const pt: string = srow.product_type || 'SOCKET';
+        if (!lotCounters[pt]) lotCounters[pt] = 1;
+        const seq = String(lotCounters[pt]++).padStart(3, '0');
+        const lotNum = `${lotDateStr}-${pt}-${seq}`;
         await client.query(
-          `INSERT INTO purchase_order_item (
-            po_id, sheet_name, seq_no, item_type, material, structure,
-            pipe_width_mm, pipe_height_mm, opening_width_mm, opening_height_mm,
-            qty, product_type, item_name, spec, remark
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-          [
-            poId,
-            item.sheet_name,
-            item.seq_no,
-            item.item_type,
-            item.material || null,
-            item.structure || null,
-            item.pipe_width_mm,
-            item.pipe_height_mm,
-            item.opening_width_mm,
-            item.opening_height_mm,
-            item.qty,
-            item.product_type || null,
-            item.item_name || null,
-            item.spec || null,
-            item.remark || null,
-          ]
+          'UPDATE purchase_order_item SET lot_number = $1 WHERE po_item_id = $2',
+          [lotNum, srow.po_item_id]
         );
       }
 
@@ -504,11 +617,26 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
 
   // ── GET /api/purchase-orders ── 발주서 목록 (발주서가 없는 프로젝트도 포함)
   app.get('/api/purchase-orders', { preHandler: requireAuth }, async (req) => {
-    const { search } = req.query as { search?: string };
+    const { search, project_id } = req.query as { search?: string; project_id?: string };
 
     const searchParam = search ? `%${search}%` : null;
+    const projectIdParam = project_id ? parseInt(project_id) : null;
+
+    // 파라미터 배열 구성
+    const params: any[] = [];
+    let p = 0; // 파라미터 인덱스
 
     // ① 발주서가 있는 항목
+    const poConditions: string[] = [`po.status = 'ACTIVE'`];
+    if (projectIdParam) {
+      p++; params.push(projectIdParam);
+      poConditions.push(`po.project_id = $${p}`);
+    }
+    if (searchParam) {
+      p++; params.push(searchParam);
+      poConditions.push(`(po.project_name ILIKE $${p} OR po.contractor ILIKE $${p} OR po.file_name ILIKE $${p} OR pm.project_name ILIKE $${p})`);
+    }
+
     const poQuery = `
       SELECT
         po.po_id,
@@ -531,51 +659,54 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
         pm.status AS project_status
       FROM purchase_order po
       LEFT JOIN project_master pm ON po.project_id = pm.project_id
-      WHERE po.status = 'ACTIVE'
-      ${search ? `AND (po.project_name ILIKE $1 OR po.contractor ILIKE $1 OR po.file_name ILIKE $1 OR pm.project_name ILIKE $1)` : ''}
+      WHERE ${poConditions.join(' AND ')}
     `;
 
-    // ② 발주서가 없는 프로젝트 (project_master에만 있는 경우)
-    const projOnlyQuery = `
-      SELECT
-        NULL::int AS po_id,
-        pm.project_id,
-        pm.project_code,
-        pm.project_name,
-        '(발주서 미첨부)' AS file_name,
-        pm.order_date::text AS order_date,
-        pm.delivery_date::text AS delivery_date,
-        NULL AS biz_name, NULL AS biz_no, NULL AS biz_ceo, NULL AS biz_address,
-        NULL AS biz_manager, NULL AS biz_contact,
-        NULL AS submitter, NULL AS submitter_address,
-        NULL AS construction_site,
-        pm.customer_name AS contractor, NULL AS contractor_address,
-        NULL AS supervisor, NULL AS supervisor_office, NULL AS supervisor_address,
-        NULL AS site_address, NULL AS consignee, NULL AS builder_name,
-        pm.remarks AS special_notes,
-        pm.status,
-        pm.created_at,
-        0 AS item_count,
-        'PROJECT_ONLY' AS source_type,
-        pm.customer_name,
-        pm.remarks AS project_remarks,
-        pm.status AS project_status
-      FROM project_master pm
-      WHERE pm.status = 'ACTIVE'
-        AND NOT EXISTS (
-          SELECT 1 FROM purchase_order po
-          WHERE po.project_id = pm.project_id AND po.status = 'ACTIVE'
-        )
-      ${search ? `AND (pm.project_name ILIKE $1 OR pm.customer_name ILIKE $1 OR pm.project_code ILIKE $1)` : ''}
-    `;
+    // ② 발주서가 없는 프로젝트 (project_id 필터 시에는 해당 프로젝트만, 전체 시에는 발주서 없는 전체)
+    // ★ project_id 필터가 있으면 PROJECT_ONLY는 표시 안 함 (발주서 선택 목적이므로)
+    let combined: string;
+    if (projectIdParam) {
+      // project_id 지정: 해당 프로젝트의 발주서만
+      combined = `(${poQuery}) ORDER BY created_at DESC`;
+    } else {
+      const projOnlyConditions: string[] = [`pm.status = 'ACTIVE'`];
+      if (searchParam) {
+        projOnlyConditions.push(`(pm.project_name ILIKE $${p} OR pm.customer_name ILIKE $${p} OR pm.project_code ILIKE $${p})`);
+      }
+      const projOnlyQuery = `
+        SELECT
+          NULL::int AS po_id,
+          pm.project_id,
+          pm.project_code,
+          pm.project_name,
+          '(발주서 미첨부)' AS file_name,
+          pm.order_date::text AS order_date,
+          pm.delivery_date::text AS delivery_date,
+          NULL AS biz_name, NULL AS biz_no, NULL AS biz_ceo, NULL AS biz_address,
+          NULL AS biz_manager, NULL AS biz_contact,
+          NULL AS submitter, NULL AS submitter_address,
+          NULL AS construction_site,
+          pm.customer_name AS contractor, NULL AS contractor_address,
+          NULL AS supervisor, NULL AS supervisor_office, NULL AS supervisor_address,
+          NULL AS site_address, NULL AS consignee, NULL AS builder_name,
+          pm.remarks AS special_notes,
+          pm.status,
+          pm.created_at,
+          0 AS item_count,
+          'PROJECT_ONLY' AS source_type,
+          pm.customer_name,
+          pm.remarks AS project_remarks,
+          pm.status AS project_status
+        FROM project_master pm
+        WHERE ${projOnlyConditions.join(' AND ')}
+          AND NOT EXISTS (
+            SELECT 1 FROM purchase_order po
+            WHERE po.project_id = pm.project_id AND po.status = 'ACTIVE'
+          )
+      `;
+      combined = `(${poQuery}) UNION ALL (${projOnlyQuery}) ORDER BY created_at DESC`;
+    }
 
-    const params = searchParam ? [searchParam] : [];
-    const combined = `
-      (${poQuery})
-      UNION ALL
-      (${projOnlyQuery})
-      ORDER BY created_at DESC
-    `;
     const { rows } = await pool.query(combined, params);
     return { data: rows };
   });
@@ -614,7 +745,48 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
     return { data: rows[0] };
   });
 
-  // ── GET /api/purchase-orders/:id/socket-order ── 소켓발주서 Excel 생성
+  // ── PATCH /api/purchase-orders/items/:po_item_id/construction-type ── 단면/양면 수동 변경
+  app.patch<{ Params: { po_item_id: string }; Body: { construction_type: string } }>(
+    '/api/purchase-orders/items/:po_item_id/construction-type',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const poItemId = parseInt(req.params.po_item_id, 10);
+      const { construction_type } = req.body;
+      if (!['SINGLE', 'DOUBLE'].includes(construction_type)) {
+        return reply.code(400).send({ error: 'construction_type must be SINGLE or DOUBLE' });
+      }
+      const { rows } = await pool.query(
+        `UPDATE purchase_order_item
+         SET construction_type = $1
+         WHERE po_item_id = $2
+         RETURNING po_item_id, product_type, construction_type, lot_number`,
+        [construction_type, poItemId]
+      );
+      if (!rows[0]) return reply.code(404).send({ error: 'not_found' });
+      return { data: rows[0] };
+    }
+  );
+
+  // ── PATCH /api/purchase-orders/:id/sheet-construction-type ── 차수별 일괄 단면/양면 변경
+  app.patch<{ Params: { id: string }; Body: { sheet_name: string; construction_type: string } }>(
+    '/api/purchase-orders/:id/sheet-construction-type',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const poId = parseInt(req.params.id, 10);
+      const { sheet_name, construction_type } = req.body;
+      if (!['SINGLE', 'DOUBLE'].includes(construction_type)) {
+        return reply.code(400).send({ error: 'construction_type must be SINGLE or DOUBLE' });
+      }
+      const { rowCount } = await pool.query(
+        `UPDATE purchase_order_item
+         SET construction_type = $1
+         WHERE po_id = $2 AND sheet_name = $3 AND item_type = 'socket'`,
+        [construction_type, poId, sheet_name]
+      );
+      return { updated: rowCount, sheet_name, construction_type };
+    }
+  );
+
   app.get<{ Params: { id: string } }>(
     '/api/purchase-orders/:id/socket-order',
     { preHandler: requireAuth },
@@ -631,11 +803,21 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
       if (!poRes.rows[0]) return reply.code(404).send({ error: 'not_found' });
       const po = poRes.rows[0];
 
-      // 소켓 명세 (product_type이 있는 것만)
+      // 소켓 명세 (product_type이 있는 것만) — 차수→구조체→W→H 순 정렬
       const itemsRes = await pool.query(
         `SELECT * FROM purchase_order_item
-         WHERE po_id = $1 AND item_type = 'socket'
-         ORDER BY seq_no`,
+         WHERE po_id = $1 AND item_type = 'socket' AND product_type IS NOT NULL
+         ORDER BY
+           COALESCE(sheet_name, '') ASC,
+           CASE product_type
+             WHEN 'VT-049'    THEN 1  WHEN 'VT-064'    THEN 2
+             WHEN 'VT-01'     THEN 3  WHEN 'VA-064'    THEN 4
+             WHEN 'VAG-1.69'  THEN 5  WHEN 'HTG-064'   THEN 6
+             WHEN 'HTG-064DC' THEN 7  WHEN 'HTG-1.69'  THEN 8
+             ELSE 9
+           END,
+           COALESCE(pipe_width_mm, 0) ASC,
+           COALESCE(pipe_height_mm, 0) ASC`,
         [id]
       );
       const items: any[] = itemsRes.rows;

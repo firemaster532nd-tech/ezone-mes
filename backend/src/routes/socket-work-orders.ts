@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
+import { expandAndSortSocketItems } from '../lib/socket-sort.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 소켓 작업지시서 라우트
@@ -61,6 +62,10 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
       created_at        TIMESTAMPTZ DEFAULT NOW()
     )
   `).catch(() => {});
+
+  // 신규 컬럼 추가 (이미 있으면 무시)
+  await pool.query(`ALTER TABLE socket_work_order_item ADD COLUMN IF NOT EXISTS construction_seq INT DEFAULT 1`).catch(() => {});
+  await pool.query(`ALTER TABLE socket_work_order_item ADD COLUMN IF NOT EXISTS insp_lot_no VARCHAR(50)`).catch(() => {});
 
   // ── GET /api/socket-work-orders ─ 목록 ────────────────────────────────────
   app.get('/api/socket-work-orders', { preHandler: requireAuth }, async (req, reply) => {
@@ -218,6 +223,9 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
       }
     }
 
+    // ── 핵심: qty만큼 1개씩 분리 + 정렬 (인수검사 LOT 부여 + 가로↑세로↑)
+    const expandedItems = expandAndSortSocketItems(items);
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -236,16 +244,16 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
       ]);
       const swoId = rows[0].swo_id;
 
-      for (const item of items) {
+      for (const item of expandedItems) {
         const isIncomplete =
-          !item.pipe_width_mm || !item.pipe_height_mm ||
-          !item.planned_qty || item.planned_qty < 1;
+          !item.pipe_width_mm || !item.pipe_height_mm || !item.planned_qty || item.planned_qty < 1;
         await client.query(`
           INSERT INTO socket_work_order_item
             (swo_id, po_item_id, seq_no, material, structure,
              pipe_width_mm, pipe_height_mm, opening_width_mm, opening_height_mm,
-             product_type, item_name, item_type, planned_qty, remark, is_incomplete)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+             product_type, item_name, item_type, planned_qty, remark, is_incomplete,
+             construction_seq)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
         `, [
           swoId,
           item.po_item_id || null, item.seq_no || null,
@@ -254,8 +262,9 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
           item.opening_width_mm || null, item.opening_height_mm || null,
           item.product_type || null, item.item_name || null,
           item.item_type || 'socket',
-          item.planned_qty || item.qty || 1,
+          1,  // 항상 1개
           item.remark || null, isIncomplete,
+          parseInt(String(item.construction_seq ?? 1)) || 1,
         ]);
       }
 

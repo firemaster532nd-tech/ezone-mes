@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { Plus, ClipboardCheck, MoreHorizontal, Trash2, FileText, Printer, Info, ChevronDown, ChevronUp, AlertTriangle, Pencil } from 'lucide-react';
+import { Plus, ClipboardCheck, MoreHorizontal, Trash2, FileText, Printer, Info, ChevronDown, ChevronUp, AlertTriangle, Pencil, X, Loader2 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AttachmentSection } from '@/components/shared/AttachmentSection';
 
@@ -68,18 +68,24 @@ interface CertStatus {
 interface FormDetail {
   form_code: string;
   form_name: string;
-  category: string;
-  material: string;
-  spec_ref: string;
+  category?: string;
+  item_category?: string;
+  material?: string;
+  spec_ref?: string;
+  file_path?: string | null;
   items: Array<{
-    item_no: number;
+    item_no?: number;
+    seq_no?: number;
     quality_item: string;
     check_item: string;
     check_method: string;
-    cert_standard?: number;
-    unit: string;
-    frequency: string;
+    cert_standard?: number | string;
+    prod_standard?: string;
+    unit?: string;
+    frequency?: string;
     direction?: string;
+    lower_limit?: number | null;
+    upper_limit?: number | null;
   }>;
 }
 
@@ -114,6 +120,7 @@ export function IncomingInspectionPage() {
   const [data, setData] = useState<Inspection[]>([]);
   const [filter, setFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [showSocketCreate, setShowSocketCreate] = useState(false); // ★ 소켓 인수검사
   const [showDetail, setShowDetail] = useState<number | null>(null);
   const [menuOpen, setMenuOpen] = useState<number | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
@@ -163,6 +170,13 @@ export function IncomingInspectionPage() {
   return (
     <div>
       <PageHeader title="인수검사" count={data.length} description="원재료(D101~D104) · 부자재(D121~D130) 입고검사 (n=3, c=0)">
+        {/* ★ 소켓 인수검사 버튼 (발주서 기반) */}
+        <button
+          onClick={() => setShowSocketCreate(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md text-shop-sm font-medium hover:bg-blue-700"
+        >
+          <Plus size={16} /> 소켓 인수검사 (발주서)
+        </button>
         <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-2 px-4 py-2 bg-process-cut text-white rounded-md text-shop-sm font-medium hover:opacity-90"
@@ -421,6 +435,14 @@ export function IncomingInspectionPage() {
       {/* 상세보기 모달 */}
       {showDetail !== null && (
         <InspectionDetailModal inspId={showDetail} onClose={() => setShowDetail(null)} onUpdated={fetchData} />
+      )}
+
+      {/* ★ 소켓 인수검사 모달 (발주서 기반) */}
+      {showSocketCreate && (
+        <SocketInspectionModal
+          onClose={() => setShowSocketCreate(false)}
+          onCreated={() => { setShowSocketCreate(false); fetchData(); }}
+        />
       )}
 
       {/* Toast notification */}
@@ -917,6 +939,16 @@ function CreateInspectionModal({
   const [selectedCertDocId, setSelectedCertDocId] = useState<number | null>(null);
   const [certLoading, setCertLoading] = useState(false);
 
+  //  탭: 'GENERAL'(입고검사) | 'CERT'(공인시험)
+  const [inspectionTab, setInspectionTab] = useState<'GENERAL' | 'CERT'>('GENERAL');
+
+  // 공인시험 항목 비고 (check_method='CERT' 항목의 측정값 저장)
+  const [certMeasurements, setCertMeasurements] = useState<Array<{
+    item_no: number; quality_item: string; check_item: string; check_method: string;
+    cert_standard: string; prod_standard: string; unit: string;
+    n1: string; is_applicable: boolean; direction?: string;
+  }>>([]);
+
   useEffect(() => {
     api.get<{ data: FormPreset[] }>('/inspections/incoming-presets').then((r) => setPresets(r.data));
     api.get<{ data: any[] }>('/items').then((r) => setItems(r.data));
@@ -956,7 +988,12 @@ function CreateInspectionModal({
     if (initialQty) setQty(initialQty);
   }, [items.length, initialFormCode, initialItemName, initialQty]);
 
-  const filteredPresets = presets.filter((p) => p.category === selectedCategory);
+  // DB 기반(신규): item_category 필드 / 하드코딩(기존): category 필드 지원
+  const filteredPresets = presets.filter((p: any) =>
+    (p.category ?? p.item_category) === selectedCategory ||
+    (selectedCategory === 'SM' && ['SK','BR','FL','CW','GW'].includes(p.item_category ?? ''))
+  );
+
   const filteredItems = items.filter((i) => i.item_category === selectedCategory);
   const isRM = selectedCategory === 'RM';
 
@@ -992,16 +1029,19 @@ function CreateInspectionModal({
     }, 500);
   }, [selectedItem, supplierLot, inspDate]);
 
-  // LOT 자동생성
+  // LOT 자동생성 (C302 Rev.8 형식: YYMMDD[약호]NNN)
   const handleAutoLot = async () => {
     try {
-      const res = await api.get<{ next_number: string }>(`/lots/next-number?date=${inspDate}`);
+      const itemParam = selectedItem ? `&item_id=${selectedItem}` : '';
+      const res = await api.get<{ next_number: string; format_guide?: any }>(
+        `/lots/next-number?date=${inspDate}${itemParam}`
+      );
       if (res.next_number) {
         setLotNumber(res.next_number);
         validateLot(res.next_number);
       }
     } catch {
-      alert('LOT 번호 자동생성 실패');
+      alert('LOT 번호 자동생성 실패\n(C302 형식: YYMMDD[약호]NNN, 예: 260203CW001)');
     }
   };
 
@@ -1063,16 +1103,45 @@ function CreateInspectionModal({
 
   const handleFormChange = async (formCode: string) => {
     setSelectedForm(formCode);
-    if (!formCode) { setFormDetail(null); setMeasurements([]); return; }
+    setInspectionTab('GENERAL');
+    if (!formCode) { setFormDetail(null); setMeasurements([]); setCertMeasurements([]); return; }
     const res = await api.get<{ data: FormDetail }>(`/inspections/incoming-presets/${formCode}`);
     setFormDetail(res.data);
+
+    // DB 기반 항목(어노테이션에 check_method='VISUAL'/'MEASURE'/'CERT')
+    // 기존 하드코딩(어노테이션에 check_method='육안'/'성적서'/'공인기관') 모두 지원
+    const isCertMethod = (m: string) =>
+      m === 'CERT' || m === '성적서' || m === '공인기관';
+
+    const allItems = res.data.items;
+    const generalItems = allItems.filter(item => !isCertMethod(item.check_method));
+    const certItems = allItems.filter(item => isCertMethod(item.check_method));
+
     setMeasurements(
-      res.data.items.map((item) => ({
-        item_no: item.item_no, quality_item: item.quality_item, check_item: item.check_item,
-        check_method: item.check_method, cert_standard: item.cert_standard?.toString() ?? '',
+      generalItems.map((item, idx) => ({
+        item_no: item.item_no ?? item.seq_no ?? idx + 1,
+        quality_item: item.quality_item,
+        check_item: item.check_item,
+        check_method: item.check_method,
+        cert_standard: item.cert_standard?.toString() ?? '',
         direction: item.direction || 'MIN',
-        unit: item.unit, frequency: item.frequency,
+        unit: item.unit ?? '',
+        frequency: item.frequency ?? '매로트',
         n1: '', n2: '', n3: '', is_applicable: true,
+      }))
+    );
+
+    setCertMeasurements(
+      certItems.map((item, idx) => ({
+        item_no: item.item_no ?? item.seq_no ?? idx + 1,
+        quality_item: item.quality_item,
+        check_item: item.check_item,
+        check_method: item.check_method,
+        cert_standard: item.cert_standard?.toString() ?? '',
+        prod_standard: item.prod_standard ?? '',
+        unit: item.unit ?? '',
+        direction: item.direction || 'MIN',
+        n1: '', is_applicable: true,
       }))
     );
     setIdenticalWarnings({});
@@ -1130,19 +1199,36 @@ function CreateInspectionModal({
         spec_width_mm: specWidth ? parseFloat(specWidth) : null,
         spec_length_mm: specLength ? parseFloat(specLength) : null,
         spec_density: specDensity || null,
-        details: measurements.map((m) => ({
-          item_no: m.item_no,
-          quality_item: m.quality_item,
-          check_item: m.check_item,
-          check_method: m.check_method,
-          cert_standard: m.cert_standard ? parseFloat(m.cert_standard) : null,
-          direction: m.direction || 'MIN',
-          is_applicable: m.is_applicable,
-          measured_n1: m.n1 ? parseFloat(m.n1) : null,
-          measured_n2: m.n2 ? parseFloat(m.n2) : null,
-          measured_n3: m.n3 ? parseFloat(m.n3) : null,
-        })),
+        details: [
+          // 일반 검사항목
+          ...measurements.map((m) => ({
+            item_no: m.item_no,
+            quality_item: m.quality_item,
+            check_item: m.check_item,
+            check_method: m.check_method,
+            cert_standard: m.cert_standard ? parseFloat(m.cert_standard) : null,
+            direction: m.direction || 'MIN',
+            is_applicable: m.is_applicable,
+            measured_n1: m.n1 ? parseFloat(m.n1) : null,
+            measured_n2: m.n2 ? parseFloat(m.n2) : null,
+            measured_n3: m.n3 ? parseFloat(m.n3) : null,
+          })),
+          // 공인시험 항목 (n1만 사용 — 성적서 기재값)
+          ...certMeasurements.map((m) => ({
+            item_no: m.item_no,
+            quality_item: m.quality_item,
+            check_item: m.check_item,
+            check_method: m.check_method,
+            cert_standard: m.cert_standard ? parseFloat(m.cert_standard) : null,
+            direction: m.direction || 'MIN',
+            is_applicable: m.is_applicable,
+            measured_n1: m.n1 ? parseFloat(m.n1) : null,
+            measured_n2: null,
+            measured_n3: null,
+          })),
+        ],
       });
+
 
       // Call auto-judge after saving
       let finalResult = res.data.result;
@@ -1567,7 +1653,7 @@ function CreateInspectionModal({
                     <input
                       type="text" value={lotNumber}
                       onChange={(e) => { setLotNumber(e.target.value); validateLot(e.target.value); }}
-                      placeholder="IN-YYMMDD-NNN (예: IN-260329-001)"
+                      placeholder="C302형식: YYMMDD[약호]NNN (예: 260203CW001)"
                       className={cn(
                         'w-full border rounded px-3 py-2 text-shop-sm bg-white font-mono',
                         hasLotError && 'border-red-400 focus:ring-red-300',
@@ -1661,9 +1747,59 @@ function CreateInspectionModal({
             </div>
           )}
 
-          {/* Step 4: 측정값 입력 */}
-          {measurements.length > 0 && (
+          {/* Step 4: 검사항목 탭 — 일반검사 | 공인시험 */}
+          {(measurements.length > 0 || certMeasurements.length > 0) && (
+            <div className="flex border-b mb-0">
+              <button
+                type="button"
+                onClick={() => setInspectionTab('GENERAL')}
+                className={cn(
+                  'px-4 py-2 text-shop-sm font-medium border-b-2 transition-colors',
+                  inspectionTab === 'GENERAL'
+                    ? 'border-blue-600 text-blue-700 bg-blue-50'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                )}
+              >
+                입고 검사항목
+                <span className="ml-1.5 text-xs bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5">
+                  {measurements.length}
+                </span>
+              </button>
+              {certMeasurements.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setInspectionTab('CERT')}
+                  className={cn(
+                    'px-4 py-2 text-shop-sm font-medium border-b-2 transition-colors',
+                    inspectionTab === 'CERT'
+                      ? 'border-orange-500 text-orange-700 bg-orange-50'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                  )}
+                >
+                  🔬 공인시험 항목
+                  <span className="ml-1.5 text-xs bg-orange-100 text-orange-700 rounded-full px-1.5 py-0.5">
+                    {certMeasurements.length}
+                  </span>
+                  <span className="ml-1 text-xs text-orange-500">(별도 입력)</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* 공인시험 탭 안내 */}
+          {inspectionTab === 'CERT' && certMeasurements.length > 0 && (
+            <div className="flex items-start gap-2 px-3 py-2 bg-orange-50 border border-orange-200 rounded-md">
+              <Info size={14} className="text-orange-600 flex-shrink-0 mt-0.5" />
+              <span className="text-xs text-orange-700">
+                공인시험 항목은 시험성적서 수령 후 입력합니다. 지금 바로 입력하거나, 입고검사 완료 후 수정 메뉴에서 추가 입력할 수 있습니다.
+              </span>
+            </div>
+          )}
+
+          {/* Step 4a: 일반 검사항목 */}
+          {inspectionTab === 'GENERAL' && measurements.length > 0 && (
             <div className="overflow-x-auto border rounded">
+
               <table className="w-full text-shop-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b">
@@ -1752,6 +1888,67 @@ function CreateInspectionModal({
             </div>
           )}
 
+          {/* Step 4b: 공인시험 항목 탭 */}
+          {inspectionTab === 'CERT' && certMeasurements.length > 0 && (
+            <div className="overflow-x-auto border rounded border-orange-200">
+              <table className="w-full text-shop-sm">
+                <thead>
+                  <tr className="bg-orange-50 border-b border-orange-200">
+                    <th className="px-2 py-2 text-center text-xs text-gray-500 w-8">#</th>
+                    <th className="px-2 py-2 text-left text-xs text-gray-500">품질특성</th>
+                    <th className="px-2 py-2 text-left text-xs text-gray-500">검사항목</th>
+                    <th className="px-2 py-2 text-left text-xs text-gray-500">인정기준</th>
+                    <th className="px-2 py-2 text-left text-xs text-gray-500">단위</th>
+                    <th className="px-2 py-2 text-right text-xs text-orange-600 w-28">측정값(성적서)</th>
+                    <th className="px-2 py-2 text-center text-xs text-gray-500 w-16">판정</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {certMeasurements.map((m, idx) => {
+                    const val = parseFloat(m.n1);
+                    const std = parseFloat(m.cert_standard);
+                    let judgment: 'PASS' | 'FAIL' | '-' = '-';
+                    if (!isNaN(val) && !isNaN(std)) {
+                      if (m.direction === 'MAX') judgment = val <= std ? 'PASS' : 'FAIL';
+                      else judgment = val >= std ? 'PASS' : 'FAIL';
+                    }
+                    return (
+                      <tr key={idx} className="border-b hover:bg-orange-50/30">
+                        <td className="px-2 py-2 text-center text-xs text-gray-400">{idx + 1}</td>
+                        <td className="px-2 py-2 text-xs">
+                          <span className="inline-flex items-center rounded bg-orange-100 text-orange-700 px-1.5 py-0.5 text-xs font-medium">
+                            {m.quality_item}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 text-xs font-medium">{m.check_item}</td>
+                        <td className="px-2 py-2 text-xs text-gray-600">{m.cert_standard} {m.unit}</td>
+                        <td className="px-2 py-2 text-xs text-gray-500">{m.unit}</td>
+                        <td className="px-2 py-2">
+                          <input
+                            type="number" step="0.001"
+                            value={m.n1}
+                            onChange={(e) => setCertMeasurements(prev => prev.map((c, i) => i === idx ? { ...c, n1: e.target.value } : c))}
+                            placeholder="성적서 값 입력"
+                            className="w-full border rounded px-2 py-1 text-right text-xs border-orange-200 focus:border-orange-400 focus:outline-none"
+                          />
+                        </td>
+                        <td className="px-2 py-2 text-center">
+                          {judgment === '-' ? (
+                            <span className="text-xs text-gray-400">미입력</span>
+                          ) : judgment === 'PASS' ? (
+                            <span className="inline-flex items-center rounded bg-green-100 text-green-700 px-2 py-0.5 text-xs font-bold">합격</span>
+                          ) : (
+                            <span className="inline-flex items-center rounded bg-red-100 text-red-700 px-2 py-0.5 text-xs font-bold">불합격</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 pt-2">
             <button onClick={onClose} className="px-4 py-2 border rounded-md text-shop-sm hover:bg-gray-50">취소</button>
             <button onClick={handleSubmit} disabled={submitting || !selectedForm}
@@ -1760,6 +1957,408 @@ function CreateInspectionModal({
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ★ 소켓 인수검사 모달 (발주서 기반)
+// 흐름: 프로젝트 선택 → 발주서 선택 → 소켓 항목 표시 → 항목별 LOT 입력 → 검사 등록
+// ─────────────────────────────────────────────────────────────────────────────
+interface SocketPoItem {
+  po_item_id: number;
+  seq_no: number;
+  sheet_name: string | null;
+  product_type: string | null;
+  structure: string | null;
+  width_mm: number | null;
+  height_mm: number | null;
+  construction_type: string | null;
+  qty: number;
+  global_seq: number;
+  explode_index: number;
+}
+
+interface SocketInspRow {
+  po_item_id: number;
+  global_seq: number;
+  sheet_name: string | null;
+  product_type: string | null;
+  width_mm: number | null;
+  height_mm: number | null;
+  construction_type: string | null;
+  lotNumber: string;
+  skip: boolean; // 이미 검사 완료 등 건너뛸 경우
+}
+
+function SocketInspectionModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [projects, setProjects] = useState<Array<{ project_id: number; project_name: string }>>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<number | ''>('');
+  const [pos, setPos] = useState<Array<{ po_id: number; file_name: string; biz_name: string | null }>>([]);
+  const [selectedPoId, setSelectedPoId] = useState<number | ''>('');
+  const [items, setItems] = useState<SocketInspRow[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [inspector, setInspector] = useState('');
+  const [inspDate, setInspDate] = useState(new Date().toISOString().slice(0, 10));
+  const [submitting, setSubmitting] = useState(false);
+  const [results, setResults] = useState<Array<{ seq: number; lot: string; status: 'ok' | 'err'; msg?: string }>>([]);
+  const [done, setDone] = useState(false);
+
+  // 프로젝트 로드
+  useEffect(() => {
+    api.get<{ data: any[] }>('/projects')
+      .then(r => setProjects(r.data ?? []))
+      .catch(() => {});
+  }, []);
+
+  // 프로젝트 선택 → 발주서 로드
+  useEffect(() => {
+    setSelectedPoId('');
+    setItems([]);
+    if (!selectedProjectId) { setPos([]); return; }
+    api.get<{ data: any[] }>(`/purchase-orders?project_id=${selectedProjectId}`)
+      .then(r => setPos((r.data ?? []).filter((p: any) => p.po_id)))
+      .catch(() => setPos([]));
+  }, [selectedProjectId]);
+
+  // 발주서 선택 → 소켓 항목 로드
+  useEffect(() => {
+    setItems([]);
+    if (!selectedPoId) return;
+    setLoadingItems(true);
+    api.get<{ data: SocketPoItem[] }>(`/po-items-for-wo?po_id=${selectedPoId}&wo_type=INSPECT`)
+      .then(r => {
+        const raw = r.data ?? [];
+        // 차수→구조체→W→H 정렬
+        const sorted = [...raw].sort((a, b) => {
+          const sa = a.sheet_name || ''; const sb = b.sheet_name || '';
+          if (sa !== sb) return sa.localeCompare(sb, 'ko');
+          const ptOrder: Record<string, number> = { 'VT-01': 1, 'VT-049': 2, 'VT-064': 3, 'VA-064': 4, 'VAG-1.69': 5, 'HTG-064': 6, 'HTG-1.69': 7 };
+          const pa = ptOrder[a.product_type || ''] ?? 99;
+          const pb = ptOrder[b.product_type || ''] ?? 99;
+          if (pa !== pb) return pa - pb;
+          if ((a.width_mm ?? 0) !== (b.width_mm ?? 0)) return (a.width_mm ?? 0) - (b.width_mm ?? 0);
+          return (a.height_mm ?? 0) - (b.height_mm ?? 0);
+        });
+        setItems(sorted.map(item => ({
+          po_item_id: item.po_item_id,
+          global_seq: item.global_seq,
+          sheet_name: item.sheet_name,
+          product_type: item.product_type,
+          width_mm: item.width_mm,
+          height_mm: item.height_mm,
+          construction_type: item.construction_type,
+          lotNumber: '',
+          skip: false,
+        })));
+      })
+      .catch(() => setItems([]))
+      .finally(() => setLoadingItems(false));
+  }, [selectedPoId]);
+
+  const updateRow = (idx: number, field: 'lotNumber' | 'skip', value: string | boolean) => {
+    setItems(prev => prev.map((row, i) => i === idx ? { ...row, [field]: value } : row));
+  };
+
+  // LOT 자동채우기: 같은 W×H 규격이면 같은 번호 채우기
+  const autoFillSameSpec = (idx: number, lotNum: string) => {
+    const target = items[idx];
+    setItems(prev => prev.map((row, i) => {
+      if (i === idx) return { ...row, lotNumber: lotNum };
+      if (!row.skip && row.lotNumber === '' &&
+          row.width_mm === target.width_mm && row.height_mm === target.height_mm &&
+          row.product_type === target.product_type && row.sheet_name === target.sheet_name) {
+        return { ...row, lotNumber: lotNum };
+      }
+      return row;
+    }));
+  };
+
+  const readyCount = items.filter(r => !r.skip && r.lotNumber.trim()).length;
+  const skipCount = items.filter(r => r.skip).length;
+
+  const handleSubmit = async () => {
+    const toRegister = items.filter(r => !r.skip && r.lotNumber.trim());
+    if (toRegister.length === 0) { alert('LOT 번호를 입력한 항목이 없습니다.'); return; }
+    if (!confirm(`${toRegister.length}건의 소켓 인수검사를 등록합니다.`)) return;
+
+    setSubmitting(true);
+    const res: typeof results = [];
+    for (const row of toRegister) {
+      try {
+        await api.post('/inspections/socket', {
+          po_item_id: row.po_item_id,
+          po_id: selectedPoId,
+          lot_number: row.lotNumber.trim(),
+          inspector: inspector || undefined,
+          inspected_at: inspDate,
+          product_type: row.product_type,
+          width_mm: row.width_mm,
+          height_mm: row.height_mm,
+          construction_type: row.construction_type,
+        });
+        res.push({ seq: row.global_seq, lot: row.lotNumber.trim(), status: 'ok' });
+      } catch (e: any) {
+        res.push({ seq: row.global_seq, lot: row.lotNumber.trim(), status: 'err', msg: e?.body?.error || '등록 실패' });
+      }
+    }
+    setResults(res);
+    setDone(true);
+    setSubmitting(false);
+  };
+
+  // 현재 차수별 그룹
+  const sheetGroups = items.reduce((acc, row, idx) => {
+    const key = row.sheet_name || '(차수 미지정)';
+    if (!acc[key]) acc[key] = [];
+    acc[key].push({ ...row, _idx: idx });
+    return acc;
+  }, {} as Record<string, Array<SocketInspRow & { _idx: number }>>);
+
+  const STRUCT_COLORS: Record<string, string> = {
+    'VT-049': 'bg-indigo-50 border-indigo-200',
+    'VT-01':  'bg-blue-50 border-blue-200',
+    'VT-064': 'bg-cyan-50 border-cyan-200',
+    'VA-064': 'bg-purple-50 border-purple-200',
+    'HTG-064':'bg-amber-50 border-amber-200',
+    'HTG-1.69':'bg-orange-50 border-orange-200',
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col">
+        {/* 헤더 */}
+        <div className="bg-gradient-to-r from-blue-700 to-blue-900 px-6 py-4 rounded-t-2xl flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-white">📦 소켓 인수검사 등록</h2>
+            <p className="text-blue-200 text-xs mt-0.5">발주서 기반으로 소켓 항목을 불러와 LOT를 등록합니다</p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white"><X size={20} /></button>
+        </div>
+
+        <div className="flex-1 overflow-auto p-6 space-y-5">
+          {done ? (
+            // ── 결과 화면 ──
+            <div className="space-y-4">
+              <div className="text-center py-4">
+                <div className="text-4xl mb-2">{results.every(r => r.status === 'ok') ? '✅' : '⚠️'}</div>
+                <p className="font-bold text-lg">
+                  {results.filter(r => r.status === 'ok').length}건 등록 완료
+                  {results.filter(r => r.status === 'err').length > 0 && ` / ${results.filter(r => r.status === 'err').length}건 실패`}
+                </p>
+              </div>
+              <div className="overflow-auto border rounded-lg">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-3 py-2 text-left">No</th>
+                      <th className="px-3 py-2 text-left">LOT 번호</th>
+                      <th className="px-3 py-2 text-center">결과</th>
+                      <th className="px-3 py-2 text-left">비고</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {results.map(r => (
+                      <tr key={r.seq} className={r.status === 'err' ? 'bg-red-50' : ''}>
+                        <td className="px-3 py-2 text-gray-400">{r.seq}</td>
+                        <td className="px-3 py-2 font-mono font-semibold">{r.lot}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            r.status === 'ok' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          }`}>{r.status === 'ok' ? '✅ 등록' : '❌ 실패'}</span>
+                        </td>
+                        <td className="px-3 py-2 text-gray-500">{r.msg || ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button onClick={onCreated} className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">확인</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* ① 프로젝트 · 발주서 선택 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">프로젝트 *</label>
+                  <select
+                    value={selectedProjectId}
+                    onChange={e => setSelectedProjectId(e.target.value === '' ? '' : Number(e.target.value))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                  >
+                    <option value="">-- 프로젝트 선택 --</option>
+                    {projects.map(p => (
+                      <option key={p.project_id} value={p.project_id}>{p.project_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">발주서 *</label>
+                  <select
+                    value={selectedPoId}
+                    onChange={e => setSelectedPoId(e.target.value === '' ? '' : Number(e.target.value))}
+                    disabled={!selectedProjectId || pos.length === 0}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    <option value="">-- 발주서 선택 --</option>
+                    {pos.map(p => (
+                      <option key={p.po_id} value={p.po_id}>
+                        {p.biz_name ? `[${p.biz_name}] ` : ''}{p.file_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* ② 검사자 · 검사일 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">검사자</label>
+                  <input
+                    type="text" value={inspector} onChange={e => setInspector(e.target.value)}
+                    placeholder="검사자 이름"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">검사일</label>
+                  <input
+                    type="date" value={inspDate} onChange={e => setInspDate(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* ③ 소켓 항목 목록 */}
+              {loadingItems ? (
+                <div className="flex items-center justify-center py-12 text-gray-400">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                  발주 항목 불러오는 중...
+                </div>
+              ) : items.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-gray-700">
+                      소켓 항목 <span className="text-blue-600">{items.length}건</span>
+                    </p>
+                    <div className="flex gap-3 text-xs text-gray-500">
+                      <span className="text-blue-600 font-medium">LOT 입력: {readyCount}건</span>
+                      {skipCount > 0 && <span className="text-gray-400">건너뜀: {skipCount}건</span>}
+                    </div>
+                  </div>
+
+                  {/* 차수별 그룹 */}
+                  {Object.entries(sheetGroups).map(([sheet, rows]) => (
+                    <div key={sheet} className="border rounded-xl overflow-hidden">
+                      <div className="bg-slate-700 text-white px-4 py-2 text-xs font-bold">
+                        📋 {sheet} — {rows.length}건
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 border-b">
+                            <tr>
+                              <th className="px-2 py-2 text-left w-10">No</th>
+                              <th className="px-2 py-2 text-left">구조체</th>
+                              <th className="px-2 py-2 text-center">규격 (W×H)</th>
+                              <th className="px-2 py-2 text-center w-12">단/양면</th>
+                              <th className="px-3 py-2 text-left">LOT 번호 입력 <span className="text-gray-400 font-normal">(입력 후 Enter → 같은 규격 자동 채움)</span></th>
+                              <th className="px-2 py-2 text-center w-16">건너뜀</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {rows.map(row => {
+                              const colClass = STRUCT_COLORS[row.product_type || ''] || 'bg-white border-transparent';
+                              return (
+                                <tr key={row._idx} className={cn('transition-colors', row.skip ? 'opacity-40' : colClass.split(' ')[0])}>
+                                  <td className="px-2 py-1.5 text-gray-400">{row.global_seq}</td>
+                                  <td className="px-2 py-1.5">
+                                    <span className={cn('px-2 py-0.5 rounded-full text-[10px] font-bold border', colClass)}>
+                                      {row.product_type || '-'}
+                                    </span>
+                                  </td>
+                                  <td className="px-2 py-1.5 text-center font-mono font-semibold">
+                                    {row.width_mm && row.height_mm ? `${row.width_mm}×${row.height_mm}` : '-'}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-center">
+                                    <span className={`text-[9px] px-1 py-0.5 rounded-full font-bold ${
+                                      row.construction_type === 'SINGLE' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
+                                    }`}>
+                                      {row.construction_type === 'SINGLE' ? '단' : '양'}
+                                    </span>
+                                  </td>
+                                  <td className="px-2 py-1">
+                                    <input
+                                      type="text"
+                                      disabled={row.skip}
+                                      value={row.lotNumber}
+                                      onChange={e => updateRow(row._idx, 'lotNumber', e.target.value)}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter' && row.lotNumber.trim()) {
+                                          autoFillSameSpec(row._idx, row.lotNumber.trim());
+                                        }
+                                      }}
+                                      placeholder="예: 260616GI001"
+                                      className={cn(
+                                        'w-full border rounded px-2 py-1 font-mono text-xs focus:ring-1 focus:ring-blue-400 focus:outline-none',
+                                        row.lotNumber ? 'border-blue-300 bg-blue-50' : 'border-gray-200'
+                                      )}
+                                    />
+                                  </td>
+                                  <td className="px-2 py-1.5 text-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={row.skip}
+                                      onChange={e => updateRow(row._idx, 'skip', e.target.checked)}
+                                      className="rounded border-gray-300 text-gray-500"
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* 안내 */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-xs text-blue-700">
+                    💡 LOT 번호 입력 후 <kbd className="bg-white border rounded px-1">Enter</kbd>를 누르면 같은 구조체·규격·차수의 미입력 항목에 동일 LOT가 자동 입력됩니다.
+                  </div>
+                </div>
+              ) : selectedPoId ? (
+                <div className="text-center py-12 text-gray-400">
+                  <ClipboardCheck size={36} className="mx-auto mb-2 text-gray-300" />
+                  <p>발주서에 소켓 항목이 없습니다.</p>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        {/* 하단 버튼 */}
+        {!done && (
+          <div className="border-t px-6 py-4 flex items-center justify-between bg-gray-50 rounded-b-2xl">
+            <div className="text-sm text-gray-500">
+              {items.length > 0 && (
+                <span>LOT 입력: <strong className="text-blue-700">{readyCount}</strong>건 / 전체 {items.length}건</span>
+              )}
+            </div>
+            <div className="flex gap-3">
+              <button onClick={onClose} className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-100">취소</button>
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || readyCount === 0}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> 등록 중...</> : `📦 인수검사 등록 (${readyCount}건)`}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 import {
   FileCheck, Clock, CheckCircle, XCircle, RotateCcw, ChevronRight, ChevronDown,
-  FileText, AlertCircle, Send, Trash2, Pencil, X, Save,
+  FileText, AlertCircle, Send, Trash2, Pencil, X, Save, Package, ArrowRight,
 } from 'lucide-react';
 
 interface Approval {
@@ -71,6 +72,7 @@ export function ApprovalInboxPage() {
   });
 
   const isAdmin = user?.role === 'admin' || user?.role === 'manager';
+  const navigate = useNavigate();
 
   const fetchData = async () => {
     if (!user) return;
@@ -99,7 +101,12 @@ export function ApprovalInboxPage() {
 
   useEffect(() => { fetchData(); }, [user]);
 
-  const handleAction = async (approvalId: number, stage: 'review' | 'approve', action: 'approve' | 'reject' | 'return') => {
+  const handleAction = async (
+    approvalId: number,
+    stage: 'review' | 'approve',
+    action: 'approve' | 'reject' | 'return',
+    docType?: string,
+  ) => {
     if (!user) return;
     try {
       await api.post(`/approvals/${approvalId}/${stage}`, {
@@ -111,6 +118,13 @@ export function ApprovalInboxPage() {
       setComment('');
       setSelectedId(null);
       fetchData();
+      // 소켓발주서 최종 승인 완료 → 자재발주대기로 이동 안내
+      if (action === 'approve' && stage === 'approve' && docType === 'SOCKET_ORDER') {
+        const go = window.confirm(
+          '✅ 소켓발주서 승인이 완료되었습니다!\n\n자재발주대기 페이지로 이동하시겠습니까?'
+        );
+        if (go) navigate('/orders/socket-order-wait');
+      }
     } catch (err: any) {
       alert(err?.body?.error || '처리 실패');
     }
@@ -281,7 +295,7 @@ export function ApprovalInboxPage() {
                   onToggle={() => setSelectedId(selectedId === ap.approval_id ? null : ap.approval_id)}
                   comment={comment}
                   onCommentChange={setComment}
-                  onAction={(action) => handleAction(ap.approval_id, 'review', action)}
+                  onAction={(action) => handleAction(ap.approval_id, 'review', action, ap.doc_type)}
                   isAdmin={isAdmin}
                   onEdit={() => startEdit(ap)}
                   onDelete={() => handleDelete(ap.approval_id)}
@@ -305,7 +319,7 @@ export function ApprovalInboxPage() {
                   onToggle={() => setSelectedId(selectedId === ap.approval_id ? null : ap.approval_id)}
                   comment={comment}
                   onCommentChange={setComment}
-                  onAction={(action) => handleAction(ap.approval_id, 'approve', action)}
+                  onAction={(action) => handleAction(ap.approval_id, 'approve', action, ap.doc_type)}
                   isAdmin={isAdmin}
                   onEdit={() => startEdit(ap)}
                   onDelete={() => handleDelete(ap.approval_id)}
@@ -332,6 +346,7 @@ export function ApprovalInboxPage() {
           comment={comment}
           onCommentChange={setComment}
           onAction={handleAction}
+          navigate={navigate}
         />
       ) : (
         <ApprovalList
@@ -344,6 +359,7 @@ export function ApprovalInboxPage() {
           comment={comment}
           onCommentChange={setComment}
           onAction={handleAction}
+          navigate={navigate}
         />
       )}
     </div>
@@ -475,7 +491,7 @@ function ApprovalCard({
 
 /* ─── 결재 목록 테이블 (내 요청 / 전체 탭) - 행 클릭으로 상세 & 액션 ─── */
 function ApprovalList({
-  approvals, isAdmin, onEdit, onDelete, selectedId, onToggle, comment, onCommentChange, onAction,
+  approvals, isAdmin, onEdit, onDelete, selectedId, onToggle, comment, onCommentChange, onAction, navigate,
 }: {
   approvals: Approval[];
   isAdmin?: boolean;
@@ -485,7 +501,8 @@ function ApprovalList({
   onToggle: (id: number) => void;
   comment: string;
   onCommentChange: (v: string) => void;
-  onAction: (approvalId: number, stage: 'review' | 'approve', action: 'approve' | 'reject' | 'return') => void;
+  onAction: (approvalId: number, stage: 'review' | 'approve', action: 'approve' | 'reject' | 'return', docType?: string) => void;
+  navigate?: (path: string) => void;
 }) {
   if (approvals.length === 0) {
     return <div className="py-12 text-center text-gray-400">결재 내역이 없습니다.</div>;
@@ -608,10 +625,22 @@ function ApprovalList({
                 {!canAct && (
                   <div className="rounded-lg border bg-white px-3 py-2 text-sm text-gray-500">
                     {ap.status === 'APPROVED' && (
-                      <span className="flex items-center gap-1.5 text-green-600">
-                        <CheckCircle className="h-4 w-4" /> 승인 완료
-                        {ap.approved_at && ` (${new Date(ap.approved_at).toLocaleDateString('ko-KR')})`}
-                      </span>
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <span className="flex items-center gap-1.5 text-green-600">
+                          <CheckCircle className="h-4 w-4" /> 승인 완료
+                          {ap.approved_at && ` (${new Date(ap.approved_at).toLocaleDateString('ko-KR')})`}
+                        </span>
+                        {ap.doc_type === 'SOCKET_ORDER' && navigate && (
+                          <button
+                            onClick={() => navigate('/orders/socket-order-wait')}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold rounded-lg transition-colors"
+                          >
+                            <Package className="h-3.5 w-3.5" />
+                            자재발주대기 바로가기
+                            <ArrowRight className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     )}
                     {ap.status === 'REJECTED' && (
                       <span className="flex items-center gap-1.5 text-red-600">

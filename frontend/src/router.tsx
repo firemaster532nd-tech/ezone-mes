@@ -62,10 +62,14 @@ import ShipmentOrdersPage from '@/pages/shipment/ShipmentOrdersPage';
 import { ShipmentInputPage } from '@/pages/shipment/ShipmentInputPage';
 import ExitPassPrintPage from '@/pages/shipment/ExitPassPrintPage';
 import ReturnReceiptPage from '@/pages/shipment/ReturnReceiptPage';
+import ReturnsPage from '@/pages/shipment/ReturnsPage';
 import ShipmentPendingPage from '@/pages/shipment/ShipmentPendingPage';
 import LocationManagementPage from '@/pages/inventory/LocationManagementPage';
 import ShipmentStagingPage from '@/pages/shipment/ShipmentStagingPage';
 import LabelReprintPage from '@/pages/inventory/LabelReprintPage';
+import { ShipmentReadyPage } from '@/pages/shipment/ShipmentReadyPage';
+import { SocketOrderWaitPage } from '@/pages/orders/SocketOrderWaitPage';
+import SocketIncomingDetailPage from '@/pages/quality/SocketIncomingDetailPage';
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -115,6 +119,8 @@ export const router = createBrowserRouter([
       { path: 'orders', element: <OrderBomPage /> },
       { path: 'orders/purchase-requests', element: <PurchaseRequestPage /> },
       { path: 'orders/material-orders', element: <MaterialOrdersPage /> },
+      { path: 'orders/socket-order-wait', element: <SocketOrderWaitPage /> },
+      { path: 'quality/socket-incoming/:soId', element: <SocketIncomingDetailPage /> },
       { path: 'orders/quotations', element: <QuotationPage /> },
       { path: 'orders/unordered', element: <UnorderedPage /> },
       { path: 'orders/quotations/print/:id', element: <QuotationPrintPage /> },
@@ -127,9 +133,10 @@ export const router = createBrowserRouter([
       { path: 'shipment/statements/new', element: <StatementEditPage /> },
       { path: 'shipment/orders', element: <ShipmentOrdersPage /> },
       { path: 'shipment/input', element: <ShipmentInputPage /> },
-      { path: 'shipment/returns', element: <ReturnReceiptPage /> },
+      { path: 'shipment/returns', element: <ReturnsPage /> },
       { path: 'shipment/pending', element: <ShipmentPendingPage /> },
       { path: 'shipment/staging', element: <ShipmentStagingPage /> },
+      { path: 'shipment/ready', element: <ShipmentReadyPage /> },
       // 재고관리 - 로케이션
       { path: 'inventory/location', element: <LocationManagementPage /> },
       { path: 'inventory/label-reprint', element: <LabelReprintPage /> },

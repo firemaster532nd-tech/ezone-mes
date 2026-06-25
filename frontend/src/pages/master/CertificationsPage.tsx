@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { Search } from 'lucide-react';
+import { Search, FileText } from 'lucide-react';
 
 interface Certification {
   cert_id: number;
@@ -18,6 +18,7 @@ interface Certification {
   gap_limit_mm: number | null;
   cert_version: string | null;
   is_active: boolean;
+  file_path: string | null;
 }
 
 const tabs = [
@@ -25,6 +26,7 @@ const tabs = [
   { key: 'MP', label: '덕트(MP)' },
   { key: 'BD', label: '버스덕트(BD)' },
   { key: 'NP', label: '비금속배관(NP)' },
+  { key: 'AD', label: '에어덕트(AD)' },
 ];
 
 export function CertificationsPage() {
@@ -72,6 +74,7 @@ export function CertificationsPage() {
               <th className="px-4 py-3 text-left font-medium text-gray-500">개구부(mm)</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">틈새(mm)</th>
               <th className="px-4 py-3 text-left font-medium text-gray-500">버전</th>
+              <th className="px-4 py-3 text-center font-medium text-gray-500">인정서</th>
             </tr>
           </thead>
           <tbody>
@@ -107,6 +110,16 @@ export function CertificationsPage() {
                   <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-mono">
                     {cert.cert_version}
                   </span>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  {cert.file_path ? (
+                    <span className="inline-flex items-center gap-1 text-blue-600 text-xs font-medium">
+                      <FileText className="h-3.5 w-3.5" />
+                      등록됨
+                    </span>
+                  ) : (
+                    <span className="text-xs text-gray-400">없음</span>
+                  )}
                 </td>
               </tr>
             ))}

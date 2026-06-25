@@ -228,8 +228,28 @@ function SocketOrderTabContent() {
     } catch (e: any) { toast.error(e?.message || '입고 처리 실패'); }
   };
 
+  // 정렬: 차수(sheet_name) → 구조체 → 가로(W) → 세로(H) 오름차순
+  const PTYPE_ORDER: Record<string, number> = {
+    'VT-049': 1, 'VT-064': 2, 'VT-01': 3, 'VA-064': 4,
+    'VAG-1.69': 5, 'HTG-064': 6, 'HTG-064DC': 7, 'HTG-1.69': 8,
+  };
+  const sortedEditedItems = [...editedItems].sort((a: any, b: any) => {
+    // ① 차수(sheet_name)
+    const sa = a.sheet_name || '', sb = b.sheet_name || '';
+    if (sa !== sb) return sa.localeCompare(sb);
+    // ② 구조체 종류
+    const pa = PTYPE_ORDER[(a.product_type||'').trim()] ?? 9;
+    const pb = PTYPE_ORDER[(b.product_type||'').trim()] ?? 9;
+    if (pa !== pb) return pa - pb;
+    // ③ 가로(W) 오름차순
+    const wa = a.pipe_width_mm ?? 0, wb = b.pipe_width_mm ?? 0;
+    if (wa !== wb) return wa - wb;
+    // ④ 세로(H) 오름차순
+    return (a.pipe_height_mm ?? 0) - (b.pipe_height_mm ?? 0);
+  });
+
   const grouped = new Map<string, any[]>();
-  for (const item of editedItems) {
+  for (const item of sortedEditedItems) {
     const code = (item.product_type || '').trim();
     if (!grouped.has(code)) grouped.set(code, []);
     grouped.get(code)!.push(item);

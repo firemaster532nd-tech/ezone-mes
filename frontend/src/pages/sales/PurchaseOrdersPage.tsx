@@ -1,13 +1,21 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { toast } from 'sonner';
 import {
   Upload, FileSpreadsheet, X, ChevronDown, ChevronRight,
   Building2, User, MapPin, Calendar, Package, Layers,
-  CheckCircle2, Eye, Trash2, ExternalLink, Download, Wrench
+  CheckCircle2, Eye, Trash2, ExternalLink, Download, Wrench,
+  FolderOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+interface Project {
+  project_id: number;
+  project_code: string;
+  project_name: string;
+  status: string;
+}
 
 interface PurchaseOrder {
   po_id: number | null;
@@ -63,6 +71,8 @@ interface PoItem {
   item_name: string | null;
   spec: string | null;
   remark: string | null;
+  lot_number: string | null;
+  construction_type: 'SINGLE' | 'DOUBLE' | null;
 }
 
 interface ParsedPreview {
@@ -122,12 +132,16 @@ function DropZone({ onFile }: { onFile: (file: File) => void }) {
 // 미리보기 모달
 function PreviewModal({
   preview, file, onConfirm, onClose, uploading,
+  projects, selectedProjectId, onProjectChange,
 }: {
   preview: ParsedPreview;
   file: File;
   onConfirm: () => void;
   onClose: () => void;
   uploading: boolean;
+  projects: Project[];
+  selectedProjectId: number | null;
+  onProjectChange: (id: number | null) => void;
 }) {
   const [expandedSheets, setExpandedSheets] = useState<Set<string>>(new Set(preview.raw_sheets));
   const { project, items, raw_sheets } = preview;
@@ -167,6 +181,34 @@ function PreviewModal({
         </div>
 
         <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
+          {/* ★ 프로젝트 선택 */}
+          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+            <h3 className="font-semibold text-indigo-800 flex items-center gap-2 text-sm mb-3">
+              <FolderOpen className="h-4 w-4" />
+              연결할 프로젝트 선택
+            </h3>
+            <select
+              value={selectedProjectId ?? ''}
+              onChange={e => onProjectChange(e.target.value === '' ? null : Number(e.target.value))}
+              className="w-full border border-indigo-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              <option value="">🔄 자동 (현장명으로 매칭 또는 신규 생성)</option>
+              {projects.map(p => (
+                <option key={p.project_id} value={p.project_id}>
+                  [{p.project_code}] {p.project_name}
+                </option>
+              ))}
+            </select>
+            {selectedProjectId ? (
+              <p className="text-xs text-indigo-600 mt-1.5 flex items-center gap-1">
+                ✅ 선택된 프로젝트에 이 발주서를 연결합니다.
+              </p>
+            ) : (
+              <p className="text-xs text-gray-500 mt-1.5">
+                선택하지 않으면 현장명 "{preview.project.project_name}"으로 자동 매칭합니다.
+              </p>
+            )}
+          </div>
           {/* 발주처 정보 */}
           <div className="bg-orange-50 rounded-xl p-4 space-y-3 border border-orange-100">
             <h3 className="font-semibold text-orange-800 flex items-center gap-2 text-sm">
@@ -316,7 +358,10 @@ function PreviewModal({
         {/* 푸터 */}
         <div className="flex items-center justify-between p-6 border-t bg-gray-50 rounded-b-2xl">
           <p className="text-sm text-gray-600">
-            위 내용으로 <strong>프로젝트 자동 생성</strong> 및 발주 명세가 등록됩니다.
+            {selectedProjectId
+              ? <><strong className="text-indigo-700">선택한 프로젝트</strong>에 발주 명세가 등록됩니다.</>
+              : <>위 내용으로 <strong>프로젝트 자동 생성</strong> 및 발주 명세가 등록됩니다.</>
+            }
           </p>
           <div className="flex gap-3">
             <button onClick={onClose} className="px-4 py-2 border rounded-lg text-sm hover:bg-white transition-colors">
@@ -354,8 +399,65 @@ function InfoRow({ icon, label, value, highlight }: { icon: React.ReactNode; lab
 // 상세 모달
 function DetailModal({ po, onClose }: { po: PurchaseOrder & { items?: PoItem[]; sheets?: string[] }; onClose: () => void }) {
   const [expandedSheets, setExpandedSheets] = useState<Set<string>>(new Set(po.sheets || []));
-  const bySheet = (po.sheets || []).reduce<Record<string, PoItem[]>>((acc, s) => {
-    acc[s] = (po.items || []).filter(i => i.sheet_name === s);
+  // 단면/양면 로컬 상태 (po_item_id → construction_type)
+  const [ctypes, setCtypes] = useState<Record<number, 'SINGLE' | 'DOUBLE'>>(
+    () => Object.fromEntries((po.items || []).map(i => [i.po_item_id, i.construction_type ?? 'DOUBLE']))
+  );
+  const [ctypeLoading, setCtypeLoading] = useState<Record<number, boolean>>({});
+
+  const toggleCtype = async (itemId: number) => {
+    const cur = ctypes[itemId] ?? 'DOUBLE';
+    const next: 'SINGLE' | 'DOUBLE' = cur === 'DOUBLE' ? 'SINGLE' : 'DOUBLE';
+    setCtypeLoading(p => ({ ...p, [itemId]: true }));
+    try {
+      await api.patch(`/purchase-orders/items/${itemId}/construction-type`, { construction_type: next });
+      setCtypes(p => ({ ...p, [itemId]: next }));
+    } catch { toast.error('변경 실패'); }
+    finally { setCtypeLoading(p => ({ ...p, [itemId]: false })); }
+  };
+
+  const batchToggleSheet = async (poId: number | null, sheetName: string, next: 'SINGLE' | 'DOUBLE') => {
+    if (!poId) return;
+    try {
+      await api.patch(`/purchase-orders/${poId}/sheet-construction-type`, { sheet_name: sheetName, construction_type: next });
+      // 해당 차수 소켓 전체 업데이트
+      setCtypes(prev => {
+        const upd = { ...prev };
+        (po.items || []).filter(i => i.sheet_name === sheetName && i.item_type === 'socket').forEach(i => { upd[i.po_item_id] = next; });
+        return upd;
+      });
+      toast.success(`${sheetName} 전체 ${next === 'SINGLE' ? '단면' : '양면'}으로 변경`);
+    } catch { toast.error('일괄 변경 실패'); }
+  };
+
+  // 정렬: ① 차수(sheet_name) → ② 구조체 종류 → ③ 가로(W) → ④ 세로(H)
+  const PTYPE_ORDER: Record<string, number> = {
+    'VT-049': 1, 'VT-064': 2, 'VT-01': 3, 'VA-064': 4,
+    'VAG-1.69': 5, 'HTG-064': 6, 'HTG-064DC': 7, 'HTG-1.69': 8,
+  };
+  const sortedItems = [...(po.items || [])].sort((a, b) => {
+    if (a.item_type === 'socket' && b.item_type === 'socket') {
+      // ① 차수(sheet_name) 오름차순 (최우선)
+      const sa = a.sheet_name || '';
+      const sb = b.sheet_name || '';
+      if (sa !== sb) return sa.localeCompare(sb);
+      // ② 구조체 종류 그룹
+      const pa = PTYPE_ORDER[a.product_type || ''] ?? 9;
+      const pb = PTYPE_ORDER[b.product_type || ''] ?? 9;
+      if (pa !== pb) return pa - pb;
+      // ③ 관통재 가로 오름차순
+      if ((a.pipe_width_mm ?? 0) !== (b.pipe_width_mm ?? 0))
+        return (a.pipe_width_mm ?? 0) - (b.pipe_width_mm ?? 0);
+      // ④ 관통재 세로 오름차순
+      return (a.pipe_height_mm ?? 0) - (b.pipe_height_mm ?? 0);
+    }
+    return 0;
+  });
+
+  // 차수(sheet_name) 목록 — 정렬된 items에서 순서대로 추출 (중복 제거)
+  const allSheets = [...new Set(sortedItems.map(i => i.sheet_name).filter(Boolean) as string[])];
+  const bySheet = allSheets.reduce<Record<string, PoItem[]>>((acc, s) => {
+    acc[s] = sortedItems.filter(i => i.sheet_name === s);
     return acc;
   }, {});
   const toggleSheet = (s: string) =>
@@ -415,13 +517,29 @@ function DetailModal({ po, onClose }: { po: PurchaseOrder & { items?: PoItem[]; 
             </div>
           )}
           <div className="space-y-2">
-            {(po.sheets || []).map(sheet => (
+            {allSheets.map(sheet => (
               <div key={sheet} className="border rounded-xl overflow-hidden">
                 <button onClick={() => toggleSheet(sheet)}
                   className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100">
                   <span className="font-medium text-sm">{sheet}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{bySheet[sheet]?.length || 0}건</span>
+                    {/* 차수별 단면/양면 일괄 변경 */}
+                    {(() => {
+                      const sockets = (bySheet[sheet] || []).filter(i => i.item_type === 'socket');
+                      const allSingle = sockets.length > 0 && sockets.every(i => (ctypes[i.po_item_id] ?? 'DOUBLE') === 'SINGLE');
+                      return sockets.length > 0 ? (
+                        <button
+                          onClick={e => { e.stopPropagation(); batchToggleSheet(po.po_id, sheet, allSingle ? 'DOUBLE' : 'SINGLE'); }}
+                          className={cn('text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-colors',
+                            allSingle
+                              ? 'bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200'
+                              : 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200')}
+                        >
+                          {allSingle ? '🟠 단면 전체' : '🔵 양면 전체'}
+                        </button>
+                      ) : null;
+                    })()}
                     {expandedSheets.has(sheet) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                   </div>
                 </button>
@@ -430,7 +548,7 @@ function DetailModal({ po, onClose }: { po: PurchaseOrder & { items?: PoItem[]; 
                     <table className="w-full text-xs">
                       <thead className="bg-gray-50 border-t">
                         <tr>
-                          {['NO','유형','재질','구조','규격(가로×세로)','수량','제품형식','비고'].map(h => (
+                          {['NO','유형','재질','규격(가로×세로)','수량','단면/양면','제품형식','LOT번호','비고'].map(h => (
                             <th key={h} className="px-3 py-2 text-left text-gray-500 font-medium">{h}</th>
                           ))}
                         </tr>
@@ -446,11 +564,35 @@ function DetailModal({ po, onClose }: { po: PurchaseOrder & { items?: PoItem[]; 
                               </span>
                             </td>
                             <td className="px-3 py-1.5 font-mono">{item.material || item.item_name || '-'}</td>
-                            <td className="px-3 py-1.5">{item.structure || item.spec || '-'}</td>
                             <td className="px-3 py-1.5 font-mono">{item.pipe_width_mm ? `${item.pipe_width_mm}×${item.pipe_height_mm}` : '-'}</td>
                             <td className="px-3 py-1.5 font-bold text-center">{item.qty}</td>
+                            {/* 단면/양면 토글 */}
+                            <td className="px-2 py-1.5">
+                              {item.item_type === 'socket' ? (
+                                <button
+                                  disabled={ctypeLoading[item.po_item_id]}
+                                  onClick={() => toggleCtype(item.po_item_id)}
+                                  className={cn(
+                                    'text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-colors whitespace-nowrap',
+                                    ctypeLoading[item.po_item_id] ? 'opacity-50 cursor-wait' :
+                                    (ctypes[item.po_item_id] ?? 'DOUBLE') === 'SINGLE'
+                                      ? 'bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200'
+                                      : 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200'
+                                  )}
+                                >
+                                  {(ctypes[item.po_item_id] ?? 'DOUBLE') === 'SINGLE' ? '🟠 단면' : '🔵 양면'}
+                                </button>
+                              ) : <span className="text-gray-300 text-[10px]">-</span>}
+                            </td>
                             <td className="px-3 py-1.5">{item.product_type || '-'}</td>
-                            <td className="px-3 py-1.5 text-gray-500">{item.remark || '-'}</td>
+                             <td className="px-3 py-1.5">
+                               {item.lot_number ? (
+                                 <span className="font-mono text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded whitespace-nowrap">
+                                   {item.lot_number}
+                                 </span>
+                               ) : '-'}
+                             </td>
+                             <td className="px-3 py-1.5 text-gray-500">{item.remark || '-'}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -728,6 +870,9 @@ export default function PurchaseOrdersPage() {
   const [uploading, setUploading] = useState(false);
   const [detailPo, setDetailPo] = useState<(PurchaseOrder & { items?: PoItem[]; sheets?: string[] }) | null>(null);
   const [initialized, setInitialized] = useState(false);
+  // ★ 프로젝트 선택
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [previewProjectId, setPreviewProjectId] = useState<number | null>(null);
 
   // 비동기 base64 인코딩 (큰 파일 스택 오버플로우 방지)
   const toBase64 = (buffer: ArrayBuffer): string => {
@@ -758,6 +903,13 @@ export default function PurchaseOrdersPage() {
     fetchList();
   }
 
+  // 프로젝트 목록 로드
+  useEffect(() => {
+    api.get<{ data: Project[] }>('/projects')
+      .then(r => setProjects(r.data ?? []))
+      .catch(() => {});
+  }, []);
+
   // 파일 선택 → 미리보기 파싱 (base64 JSON)
   const handleFile = async (file: File) => {
     setParsing(true);
@@ -768,8 +920,22 @@ export default function PurchaseOrdersPage() {
         file_base64: base64,
         file_name: file.name,
       });
-      setPreview(res.data);
+      const parsed = res.data;
+      setPreview(parsed);
       setPreviewFile(file);
+
+      // ★ 현장명으로 프로젝트 자동 매칭
+      const parsedName = parsed.project?.project_name || '';
+      if (parsedName) {
+        const matched = projects.find(p =>
+          p.project_name === parsedName ||
+          p.project_name.includes(parsedName) ||
+          parsedName.includes(p.project_name)
+        );
+        setPreviewProjectId(matched ? matched.project_id : null);
+      } else {
+        setPreviewProjectId(null);
+      }
     } catch (e: any) {
       toast.error(`파싱 실패: ${e?.body?.message || e.message}`);
     } finally {
@@ -784,14 +950,19 @@ export default function PurchaseOrdersPage() {
     try {
       const arrayBuffer = await previewFile.arrayBuffer();
       const base64 = toBase64(arrayBuffer);
-      const res = await api.post<{ data: any }>('/purchase-orders/upload', {
+      const body: Record<string, any> = {
         file_base64: base64,
         file_name: previewFile.name,
-      });
+      };
+      // ★ 명시적으로 선택된 프로젝트가 있으면 전달
+      if (previewProjectId) body.project_id = previewProjectId;
+
+      const res = await api.post<{ data: any }>('/purchase-orders/upload', body);
       const d = res.data;
       toast.success(`발주서 등록 완료 — 프로젝트: ${d.project_name} / 명세 ${d.item_count}건`);
       setPreview(null);
       setPreviewFile(null);
+      setPreviewProjectId(null);
       fetchList();
     } catch (e: any) {
       toast.error(`업로드 실패: ${e?.body?.message || e.message}`);
@@ -1040,8 +1211,11 @@ export default function PurchaseOrdersPage() {
           preview={preview}
           file={previewFile}
           onConfirm={handleConfirm}
-          onClose={() => { setPreview(null); setPreviewFile(null); }}
+          onClose={() => { setPreview(null); setPreviewFile(null); setPreviewProjectId(null); }}
           uploading={uploading}
+          projects={projects}
+          selectedProjectId={previewProjectId}
+          onProjectChange={setPreviewProjectId}
         />
       )}
 

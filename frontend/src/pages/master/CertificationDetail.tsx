@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, FileText, ExternalLink } from 'lucide-react';
 
 interface CertDetail {
   cert_id: number;
@@ -26,6 +26,7 @@ interface CertDetail {
   cw_density_min: number | null;
   cw_density_prod: number | null;
   cert_version: string | null;
+  file_path: string | null;
   bom: BomRow[];
   rules: RuleRow[];
 }
@@ -62,6 +63,9 @@ export function CertificationDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [cert, setCert] = useState<CertDetail | null>(null);
+  const [showPdf, setShowPdf] = useState(false);
+
+  const pdfUrl = id ? `${import.meta.env.VITE_API_BASE_URL ?? '/api'}/certifications/${id}/document` : null;
 
   useEffect(() => {
     if (id) {
@@ -78,8 +82,48 @@ export function CertificationDetail() {
         <button onClick={() => navigate('/master/certifications')} className="flex items-center gap-1 text-shop-sm text-gray-500 hover:text-gray-700 mb-2">
           <ArrowLeft className="h-4 w-4" /> 목록으로
         </button>
-        <PageHeader title={cert.structure_name} description={cert.cert_number} />
+        <div className="flex items-start justify-between">
+          <PageHeader title={cert.structure_name} description={cert.cert_number} />
+          {cert.file_path && (
+            <div className="flex gap-2 mt-1">
+              <button
+                onClick={() => setShowPdf(!showPdf)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-shop-sm font-medium hover:bg-blue-700 transition-colors"
+              >
+                <FileText className="h-4 w-4" />
+                {showPdf ? '인정서 닫기' : '인정서 보기'}
+              </button>
+              <a
+                href={pdfUrl!}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 text-shop-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                <ExternalLink className="h-4 w-4" />
+                새 탭으로 열기
+              </a>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* PDF 인라인 뷰어 */}
+      {showPdf && pdfUrl && (
+        <div className="mb-8 rounded-card border overflow-hidden shadow-sm">
+          <div className="bg-gray-50 px-4 py-2 border-b flex items-center justify-between">
+            <span className="text-shop-sm font-medium text-gray-700">
+              {cert.cert_number} — {cert.structure_name} 품질인정서
+            </span>
+            <button onClick={() => setShowPdf(false)} className="text-gray-400 hover:text-gray-600 text-xs">닫기 ✕</button>
+          </div>
+          <iframe
+            src={pdfUrl}
+            className="w-full"
+            style={{ height: '75vh', border: 'none' }}
+            title={`${cert.cert_number} 품질인정서`}
+          />
+        </div>
+      )}
 
       {/* Info Card */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

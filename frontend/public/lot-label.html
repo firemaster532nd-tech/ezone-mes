@@ -2,8 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<title>LOT 라벨 출력 | ㈜에프엔테크 MES</title>
+<title>LOT 라벨 출력 | (주)이지원 MES</title>
 <script src="/qrcode.min.js"></script>
+<script src="/jsbarcode.min.js"></script>
 <style>
 /* ──── 공통 ──── */
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -34,11 +35,12 @@ body{font-family:'맑은 고딕','Malgun Gothic',sans-serif;background:#e8ecf4;-
 .preview-wrap{padding:24px;display:flex;flex-wrap:wrap;gap:20px;}
 
 /* ══════════════════════════════════════
-   라벨 본체 — 80×60mm 비율 (화면: 320×240px)
+   라벨 본체 — 80×60mm 비율 (화면: 360×270px)
    품목명 / 규격 / 로트번호 명확 표시
+   좌측: QR + 1D 바코드 / 우측: 텍스트 필드
 ══════════════════════════════════════ */
 .label{
-  width:320px;height:240px;
+  width:360px;height:270px;
   background:#fff;
   border:2px dashed #94a3b8;
   border-radius:4px;
@@ -60,19 +62,21 @@ body{font-family:'맑은 고딕','Malgun Gothic',sans-serif;background:#e8ecf4;-
 .lbl-type-badge.asm{background:#8b5cf6;}
 .lbl-type-badge.struct{background:#0284c7;}
 
-/* 바디 — QR 왼쪽, 필드 오른쪽 */
+/* 바디 — 좌측 코드영역, 우측 필드 */
 .lbl-body{display:flex;flex:1;min-height:0;}
 
-/* QR 영역 */
-.lbl-qr{
-  width:110px;flex-shrink:0;
+/* 코드 영역 (QR + 바코드) */
+.lbl-codes{
+  width:128px;flex-shrink:0;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   background:#f8fafc;
   border-right:1px solid #e2e8f0;
-  padding:5px;gap:2px;
+  padding:4px 4px;gap:3px;
 }
-.lbl-qr canvas{width:96px!important;height:96px!important;}
-.lbl-qr-lot{font-size:7px;font-family:Consolas,monospace;color:#64748b;text-align:center;word-break:break-all;line-height:1.2;}
+.lbl-qr canvas{width:88px!important;height:88px!important;}
+.lbl-barcode-wrap{width:116px;overflow:hidden;}
+.lbl-barcode-wrap svg{width:116px!important;height:32px!important;}
+.lbl-qr-lot{font-size:6.5px;font-family:Consolas,monospace;color:#64748b;text-align:center;word-break:break-all;line-height:1.2;margin-top:1px;}
 
 /* 필드 영역 (오른쪽) */
 .lbl-fields{
@@ -110,7 +114,7 @@ body{font-family:'맑은 고딕','Malgun Gothic',sans-serif;background:#e8ecf4;-
 .lbl-field-val.spec-val{
   font-size:10px;color:#475569;
 }
-/* 두께 강조 (차열시트 C-801) */
+/* 두께 강조 (차열시트) */
 .lbl-field-val.thick-val{
   font-size:22px;font-weight:900;color:#dc2626;line-height:1;
   letter-spacing:-1px;
@@ -124,11 +128,12 @@ body{font-family:'맑은 고딕','Malgun Gothic',sans-serif;background:#e8ecf4;-
 .lbl-foot{
   display:flex;align-items:center;justify-content:space-between;
   background:#f1f5f9;border-top:1px solid #e2e8f0;
-  padding:3px 8px;flex-shrink:0;height:18px;
+  padding:3px 8px;flex-shrink:0;height:20px;
 }
 .lbl-date{font-size:8px;color:#64748b;}
 .lbl-location{font-size:9px;font-weight:800;color:#065f46;background:#d1fae5;padding:1px 6px;border-radius:3px;}
-.lbl-serial{font-size:8px;color:#94a3b8;}
+/* ★ 넘버링 — 항상 표시 */
+.lbl-serial{font-size:9px;font-weight:800;color:#1e40af;background:#dbeafe;padding:1px 7px;border-radius:3px;letter-spacing:.3px;}
 
 /* HOLD */
 .label.hold-style .lbl-head{background:#dc2626;}
@@ -146,8 +151,10 @@ body{font-family:'맑은 고딕','Malgun Gothic',sans-serif;background:#e8ecf4;-
     page-break-after:always;break-after:page;
   }
   .label:last-child{page-break-after:avoid;break-after:avoid;}
-  .lbl-qr{width:28mm;}
+  .lbl-codes{width:30mm;}
   .lbl-qr canvas{width:22mm!important;height:22mm!important;}
+  .lbl-barcode-wrap{width:28mm;}
+  .lbl-barcode-wrap svg{width:28mm!important;height:9mm!important;}
   .lbl-qr-lot{font-size:5pt;}
   .lbl-field-key{font-size:6pt;width:20px;}
   .lbl-field-val{font-size:9pt;}
@@ -191,7 +198,7 @@ body{font-family:'맑은 고딕','Malgun Gothic',sans-serif;background:#e8ecf4;-
     <div class="cfg-sep"></div>
     <div class="cfg-group">
       <label>회사명</label>
-      <input type="text" id="company-input" value="㈜에프엔테크" style="width:110px" oninput="render()">
+      <input type="text" id="company-input" value="(주)이지원" style="width:110px" oninput="render()">
     </div>
     <div class="cfg-sep"></div>
     <div class="cfg-group">
@@ -262,7 +269,7 @@ function getLotTypeBadgeClass(){
 function getItemName(){ return document.getElementById('itemname-input').value.trim() || LOT.itemName || '-'; }
 function getSpec(){     return document.getElementById('spec-input').value.trim()     || LOT.spec || ''; }
 function getLocation(){ return document.getElementById('location-input').value.trim()|| LOT.location || ''; }
-function getCompany(){  return document.getElementById('company-input').value.trim() || '㈜에프엔테크'; }
+function getCompany(){  return document.getElementById('company-input').value.trim() || '(주)이지원'; }
 
 // 차열시트 여부 (두께 파라미터가 있으면)
 function isHeatSheet(){ return !!LOT.thickness; }
@@ -271,9 +278,28 @@ function isHeatSheet(){ return !!LOT.thickness; }
 async function genQR(text, canvas){
   return new Promise((res,rej)=>{
     QRCode.toCanvas(canvas, text,
-      {width:96, margin:1, color:{dark:'#000000',light:'#ffffff'}},
+      {width:88, margin:1, color:{dark:'#000000',light:'#ffffff'}},
       e=>e?rej(e):res());
   });
+}
+
+// ── 바코드 생성 (Code128) ─────────────────────────────────────
+function genBarcode(text, svgEl){
+  try {
+    // 바코드 텍스트에서 특수문자 제거 (Code128 안전 범위)
+    const safeText = text.replace(/[^\x20-\x7E]/g, '').substring(0, 28) || 'NO-LOT';
+    JsBarcode(svgEl, safeText, {
+      format: 'CODE128',
+      width: 1.2,
+      height: 30,
+      displayValue: false,
+      margin: 2,
+      background: '#f8fafc',
+      lineColor: '#000000',
+    });
+  } catch(e) {
+    console.warn('Barcode error:', e);
+  }
 }
 
 // ── 라벨 렌더링 ──────────────────────────────────────────────
@@ -289,7 +315,7 @@ async function render(){
 
   for(let i=0; i<qty; i++){
     const sn      = serial0 + i;
-    // 수량이 1장이면 시리얼 없이, 여러 장이면 -001/-002... 붙임
+    // QR/바코드 데이터: 수량이 1장이면 시리얼 없이, 여러 장이면 -001/-002... 붙임
     const qrData  = qty===1 ? LOT.number : `${LOT.number}-${String(sn).padStart(3,'0')}`;
     const isHold  = loc.startsWith('H-');
 
@@ -319,8 +345,11 @@ async function render(){
         <span class="lbl-type-badge ${getLotTypeBadgeClass()}">${getLotTypeLabel()}</span>
       </div>
       <div class="lbl-body">
-        <div class="lbl-qr">
+        <div class="lbl-codes">
           <canvas id="qc-${i}"></canvas>
+          <div class="lbl-barcode-wrap">
+            <svg id="bc-${i}"></svg>
+          </div>
           <div class="lbl-qr-lot">${qrData}</div>
         </div>
         <div class="lbl-fields">
@@ -342,11 +371,12 @@ async function render(){
       <div class="lbl-foot">
         <span class="lbl-date">입고: ${LOT.lotDate}</span>
         ${loc ? `<span class="lbl-location">📍 ${loc}</span>` : '<span></span>'}
-        ${qty>1 ? `<span class="lbl-serial">${sn}/${qty}</span>` : '<span></span>'}
+        <span class="lbl-serial">${sn} / ${qty}</span>
       </div>`;
 
     area.appendChild(div);
     await genQR(qrData, div.querySelector(`#qc-${i}`));
+    genBarcode(qrData, div.querySelector(`#bc-${i}`));
   }
 }
 
@@ -368,10 +398,12 @@ function downloadEZPL(){
     prn += `D11\r\n`;
     prn += `ZT\r\n`;
 
-    // QR 코드 (좌측)
+    // QR 코드 (좌측 상단)
     prn += `b10,30,QR,5,M,${qrData}\r\n`;
-    // QR 하단 로트번호 (소자)
-    prn += `421070155012${qrData.substring(0,20)}\r\n`;
+    // 바코드 (QR 아래, Code128)
+    prn += `b10,145,128,2,1,35,${qrData.substring(0,28)}\r\n`;
+    // QR/바코드 하단 로트번호 (소자)
+    prn += `421070185012${qrData.substring(0,20)}\r\n`;
 
     // 우측 필드
     prn += `421005030015${company}    ${getLotTypeLabel()}\r\n`;
@@ -401,7 +433,8 @@ function downloadEZPL(){
     // 푸터
     prn += `421010175016입고:${LOT.lotDate}\r\n`;
     if(loc)  prn += `421320175015📍${loc}\r\n`;
-    if(qty>1)prn += `421570175014${sn}/${qty}\r\n`;
+    // ★ 항상 넘버링 표시
+    prn += `421570175014${sn}/${qty}\r\n`;
 
     prn += `E\r\n`;
   }

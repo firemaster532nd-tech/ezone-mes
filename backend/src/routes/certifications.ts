@@ -1,5 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
+import path from 'path';
+import fs from 'fs';
 
 export async function certificationRoutes(app: FastifyInstance) {
   // VS-01 누락 보정 (2차 인정 0310, VS200+VG200 2소켓)
@@ -123,7 +125,7 @@ export async function certificationRoutes(app: FastifyInstance) {
       'penetration_w_mm', 'penetration_h_mm', 'gap_limit_mm',
       'gap_direction', 'install_qty', 'sheet_thickness_min',
       'sheet_thickness_prod', 'cw_density_min', 'cw_density_prod',
-      'is_active',
+      'is_active', 'file_path',
     ];
 
     const updates: string[] = [];
@@ -149,5 +151,35 @@ export async function certificationRoutes(app: FastifyInstance) {
     }
 
     return { data: result.rows[0] };
+  });
+
+  // GET /api/certifications/:id/document - 인정서 PDF 파일 서빙
+  app.get('/api/certifications/:id/document', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const certId = parseInt(id, 10);
+
+    const result = await pool.query(
+      'SELECT cert_number, structure_name, file_path FROM certification_master WHERE cert_id = $1',
+      [certId]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].file_path) {
+      return reply.status(404).send({ error: 'Not Found', message: '인정서 파일이 등록되지 않았습니다.' });
+    }
+
+    const { cert_number, structure_name, file_path } = result.rows[0];
+    // UPLOAD_DIR은 backend 기준 상위 폴더의 upload
+    const uploadDir = path.resolve(process.cwd(), '..', 'upload');
+    const absPath = path.join(uploadDir, file_path);
+
+    if (!fs.existsSync(absPath)) {
+      return reply.status(404).send({ error: 'File Not Found', message: `파일을 찾을 수 없습니다: ${file_path}` });
+    }
+
+    const filename = encodeURIComponent(`${cert_number}_${structure_name}_품질인정서.pdf`);
+    reply
+      .header('Content-Type', 'application/pdf')
+      .header('Content-Disposition', `inline; filename*=UTF-8''${filename}`)
+      .send(fs.createReadStream(absPath));
   });
 }

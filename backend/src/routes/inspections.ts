@@ -315,18 +315,8 @@ export const INCOMING_FORM_PRESETS: IncomingFormPreset[] = [
       { item_no: 7, quality_item: '공인시험', check_item: '밀도/숏/수축율 공인시험', check_method: '공인기관', unit: '-', frequency: '1회/년' },
     ],
   },
-  {
-    form_code: 'D126-2', form_name: 'SUS304 강재 인수검사', category: 'SM', category_label: '부자재',
-    material: '강재류 SUS304', spec_ref: 'EZC-D126 Rev0',
-    ks_type: 'KS', ks_number: 'KS D 3698', cert_test_required: false,
-    items: [
-      { item_no: 1, quality_item: '겉모양', check_item: '휨/비틀림/깨짐', check_method: '육안', unit: 'OK/NG', frequency: '매로트' },
-      { item_no: 2, quality_item: '두께', check_item: '두께 ≥1.6mm', check_method: '마이크로미터', cert_standard: 1.6, unit: 'mm', frequency: '매로트' },
-      { item_no: 3, quality_item: '인장강도', check_item: '인장강도 ≥520 N/mm²', check_method: '성적서', cert_standard: 520, unit: 'N/mm²', frequency: '1회/입고' },
-      { item_no: 4, quality_item: '공인시험', check_item: '인장강도 공인시험', check_method: '공인기관', unit: '-', frequency: '1회/년' },
-    ],
-  },
   // ===== 부자재 - 에프엔테크/보호철판/기타 (D127~D130) =====
+
   {
     form_code: 'D128-1', form_name: '내화충전발포소켓 인수검사 (에프엔테크)', category: 'SM', category_label: '부자재',
     material: '발포소켓 몸체 (FN테크 슬리브)', spec_ref: 'EZC-D128 Rev0',
@@ -416,37 +406,105 @@ export async function inspectionRoutes(app: FastifyInstance) {
   `).catch((e: unknown) => console.error('[Migration] spec columns:', e));
 
 
+  // GET /api/inspections/incoming-presets - 인수검사 양식 목록
+  // category='RM': 기존 하드코딩 배열 사용 (원재료)
+  // category='SM'/'SK'/'BR'/'FL'/'CW'/'GW': DB 테이블 사용
   app.get('/api/inspections/incoming-presets', async (request) => {
     const { category } = request.query as { category?: string };
+
+    // SM(부자재) 계열은 DB에서
+    const smCategories = ['SK', 'BR', 'FL', 'CW', 'GW', 'SM'];
+    if (category && smCategories.includes(category)) {
+      const q = category === 'SM'
+        ? 'SELECT * FROM incoming_inspection_preset WHERE is_active=true ORDER BY sort_order'
+        : 'SELECT * FROM incoming_inspection_preset WHERE is_active=true AND item_category=$1 ORDER BY sort_order';
+      const params = category === 'SM' ? [] : [category];
+      const result = await pool.query(q, params);
+      return { data: result.rows };
+    }
+
+    // category 없으면 전체: RM(하드코딩) + DB(SM계열) 합산
+    if (!category) {
+      const dbResult = await pool.query(
+        'SELECT *, item_count_sub.cnt AS item_count FROM incoming_inspection_preset p LEFT JOIN LATERAL (SELECT COUNT(*) AS cnt FROM inspection_preset_item WHERE preset_id=p.preset_id) item_count_sub ON true WHERE p.is_active=true ORDER BY p.sort_order'
+      );
+      const rmPresets = INCOMING_FORM_PRESETS.filter(p => p.category === 'RM').map(p => ({
+        form_code: p.form_code, form_name: p.form_name,
+        item_category: 'RM', sub_type: null,
+        file_path: null, sampling_n: p.items.length,
+        accept_c: 0, is_active: true, sort_order: 0,
+        item_count: p.items.length,
+        cert_test_required: p.cert_test_required,
+      }));
+      return { data: [...rmPresets, ...dbResult.rows] };
+    }
+
+    // RM 카테고리: 기존 하드코딩
     let presets = INCOMING_FORM_PRESETS;
     if (category) {
       presets = presets.filter((p) => p.category === category);
     }
     return {
       data: presets.map((p) => ({
-        form_code: p.form_code,
-        form_name: p.form_name,
-        category: p.category,
-        category_label: p.category_label,
-        material: p.material,
-        spec_ref: p.spec_ref,
-        ks_type: p.ks_type,
-        ks_number: p.ks_number || null,
+        form_code: p.form_code, form_name: p.form_name,
+        item_category: p.category, sub_type: null,
         cert_test_required: p.cert_test_required,
         item_count: p.items.length,
       })),
     };
   });
 
-  // GET /api/inspections/incoming-presets/:formCode - 인수검사 양식 상세
+  // GET /api/inspections/incoming-presets/:formCode - 양식 상세 + 전체 검사항목
   app.get('/api/inspections/incoming-presets/:formCode', async (request, reply) => {
     const { formCode } = request.params as { formCode: string };
+
+    // DB에서 먼저 조회
+    const dbPreset = await pool.query(
+      'SELECT * FROM incoming_inspection_preset WHERE form_code=$1', [formCode]
+    );
+    if (dbPreset.rows.length > 0) {
+      const preset = dbPreset.rows[0];
+      const items = await pool.query(
+        'SELECT * FROM inspection_preset_item WHERE preset_id=$1 ORDER BY seq_no',
+        [preset.preset_id]
+      );
+      return { data: { ...preset, items: items.rows } };
+    }
+
+    // 하드코딩 배열에서 fallback
     const preset = INCOMING_FORM_PRESETS.find((p) => p.form_code === formCode);
     if (!preset) {
       return reply.status(404).send({ error: 'Not Found', message: `양식 ${formCode}을 찾을 수 없습니다.` });
     }
     return { data: preset };
   });
+
+  // GET /api/inspections/incoming-presets/:formCode/items?method=CERT
+  // 공인시험 항목만 또는 일반 항목만 조회
+  app.get('/api/inspections/incoming-presets/:formCode/items', async (request, reply) => {
+    const { formCode } = request.params as { formCode: string };
+    const { method } = request.query as { method?: string }; // 'CERT' | 'VISUAL' | 'MEASURE' | undefined(전체)
+
+    const dbPreset = await pool.query(
+      'SELECT preset_id FROM incoming_inspection_preset WHERE form_code=$1', [formCode]
+    );
+    if (dbPreset.rows.length === 0) {
+      return reply.status(404).send({ error: 'Not Found', message: `양식 ${formCode}을 찾을 수 없습니다.` });
+    }
+
+    const presetId = dbPreset.rows[0].preset_id;
+    let q = 'SELECT * FROM inspection_preset_item WHERE preset_id=$1';
+    const params: unknown[] = [presetId];
+    if (method) {
+      q += ' AND check_method=$2';
+      params.push(method);
+    }
+    q += ' ORDER BY seq_no';
+
+    const items = await pool.query(q, params);
+    return { data: items.rows, total: items.rows.length };
+  });
+
 
   // GET /api/inspections - 검사 목록
   app.get('/api/inspections', async (request) => {
@@ -536,7 +594,64 @@ export async function inspectionRoutes(app: FastifyInstance) {
    * - 합격(PASS) 시 자동으로 inventory_transaction(IN) 생성
    * - 불합격 시 재고 미반영
    */
+  // ── POST /api/inspections/socket ── 소켓 인수검사 등록 (발주서 기반)
+  // 발주서 소켓 항목에 LOT 번호를 기재하여 인수검사 등록
+  app.post('/api/inspections/socket', async (request, reply) => {
+    const {
+      po_item_id, po_id, lot_number, inspector, inspected_at,
+      product_type, width_mm, height_mm, construction_type,
+    } = request.body as any;
+
+    if (!lot_number) return reply.code(400).send({ error: 'lot_number는 필수입니다.' });
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. inspection 레코드 생성 (소켓 인수검사)
+      const itemName = product_type
+        ? `소켓(${product_type}) ${width_mm ?? '?'}×${height_mm ?? '?'}`
+        : `소켓 ${width_mm ?? '?'}×${height_mm ?? '?'}`;
+
+      const { rows: [ins] } = await client.query(
+        `INSERT INTO inspection
+           (insp_type, lot_number, item_name, item_code, item_category,
+            inspector, inspected_at, result, remarks,
+            sampling_n, accept_c, pr_number)
+         VALUES ('SOCKET_IN', $1, $2, 'SOCKET', 'SK',
+                 $3, $4, 'PASS', $5,
+                 1, 0, $6)
+         RETURNING insp_id`,
+        [
+          lot_number,
+          itemName,
+          inspector || null,
+          inspected_at || new Date().toISOString().slice(0, 10),
+          `${product_type || '소켓'} ${construction_type === 'SINGLE' ? '단면' : '양면'} W${width_mm}×H${height_mm}`,
+          po_id ? `PO-${po_id}` : null,
+        ],
+      );
+
+      // 2. po_item에 lot_number 업데이트 (있을 경우)
+      if (po_item_id) {
+        await client.query(
+          `UPDATE purchase_order_item SET lot_number = $1 WHERE po_item_id = $2`,
+          [lot_number, po_item_id],
+        );
+      }
+
+      await client.query('COMMIT');
+      return reply.code(201).send({ data: { insp_id: ins.insp_id, lot_number } });
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return reply.code(500).send({ error: e.message });
+    } finally {
+      client.release();
+    }
+  });
+
   app.post('/api/inspections', async (request, reply) => {
+
     const body = request.body as Record<string, unknown>;
     const { insp_type, details } = body as {
       insp_type: string;

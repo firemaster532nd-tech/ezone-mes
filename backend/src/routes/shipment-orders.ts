@@ -317,24 +317,29 @@ export async function shipmentOrderRoutes(app: FastifyInstance) {
   });
 
   // ─── GET /api/shipment-orders/pending — 미출하현황 ──────────────────
-  // 발주서 기준 미출하 집계
+  // 발주서 기준 미출하 집계 (purchase_order + purchase_order_item 실제 컬럼 기준)
   app.get('/api/shipment-orders/pending', async () => {
     const { rows } = await pool.query(`
       SELECT
-        po.po_id, po.po_number, po.po_date,
-        po.customer_name, po.project_name, po.site_name,
-        poi.poi_id, poi.item_name, poi.spec, poi.qty AS ordered_qty, poi.unit,
-        COALESCE((
-          SELECT SUM(soi.qty)
-          FROM shipment_order so
-          JOIN shipment_order_item soi ON soi.so_id = so.so_id
-          WHERE so.po_id = po.po_id AND so.status='SHIPPED'
-            AND soi.item_name = poi.item_name
-        ), 0) AS shipped_qty
+        po.po_id,
+        CONCAT('PO-', po.po_id)                          AS po_number,
+        po.created_at::date                               AS po_date,
+        COALESCE(po.biz_name, po.contractor)              AS customer_name,
+        po.project_name,
+        COALESCE(po.site_address, po.construction_site)   AS site_name,
+        poi.po_item_id                                    AS poi_id,
+        COALESCE(poi.product_type, poi.item_name, '미분류') AS item_name,
+        CASE
+          WHEN poi.pipe_width_mm IS NOT NULL
+          THEN poi.pipe_width_mm::text || '×' || poi.pipe_height_mm::text
+          ELSE poi.spec
+        END                                               AS spec,
+        poi.qty                                           AS ordered_qty,
+        'EA'                                              AS unit
       FROM purchase_order po
       JOIN purchase_order_item poi ON poi.po_id = po.po_id
-      WHERE po.status NOT IN ('CANCELLED')
-      ORDER BY po.po_date DESC, poi.sort_order
+      WHERE po.status NOT IN ('CANCELLED', 'DELETED')
+      ORDER BY po.created_at DESC, poi.po_item_id
     `);
     return { data: rows };
   });
