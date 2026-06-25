@@ -14,11 +14,22 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:3000',
   'https://ezone-mes-frontend-v2pa.vercel.app',
+  // 프로덕션 커스텀 도메인
+  'https://xn--sp5btl20d.com',
+  'https://www.xn--sp5btl20d.com',
+  'https://xn--sp5btl20d.kr',
+  'https://www.xn--sp5btl20d.kr',
 ];
 
 function setCorsHeaders(req: any, res: any) {
   const origin = req.headers?.origin || '';
-  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[2];
+  // 허용 도메인이면 그대로, vercel.app 서브도메인도 허용, 그 외엔 기본값
+  const allowed =
+    ALLOWED_ORIGINS.includes(origin)
+      ? origin
+      : origin.endsWith('.vercel.app')
+        ? origin
+        : ALLOWED_ORIGINS[2];
   res.setHeader('Access-Control-Allow-Origin', allowed);
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
@@ -68,9 +79,13 @@ export default async function handler(req: any, res: any) {
       payload: rawBody,
     });
 
+    // CORS 헤더 추가 (Fastify 응답에 없을 수 있으므로)
+    setCorsHeaders(req, res);
     res.statusCode = response.statusCode;
     for (const [key, value] of Object.entries(response.headers)) {
-      if (value !== undefined) res.setHeader(key, value as string);
+      if (value !== undefined && key.toLowerCase() !== 'access-control-allow-origin') {
+        res.setHeader(key, value as string);
+      }
     }
     res.end(response.rawPayload);
 
