@@ -58,6 +58,11 @@ export function ProjectPage() {
   const [data, setData] = useState<Project[]>([]);
   const [distributors, setDistributors] = useState<Distributor[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
+  // 거래처 검색 콤보박스
+  const [companySearch, setCompanySearch] = useState('');
+  const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
+  const companyInputRef = useRef<HTMLInputElement>(null);
+  const companyDropdownRef = useRef<HTMLDivElement>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(false);
@@ -197,8 +202,11 @@ export function ProjectPage() {
       });
     }
     setPoFile(null); // 파일 초기화
+    setCompanySearch('');  // 거래처 검색어 초기화
+    setCompanyDropdownOpen(false);
     setIsModalOpen(true);
   };
+
 
   // 유통업체 선택 시 자동 입력 매핑 (Auto-fill)
   const handleDistributorChange = (distIdStr: string) => {
@@ -624,20 +632,74 @@ export function ProjectPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="relative" ref={companyDropdownRef}>
                   <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide">거래처 (발주처명)</label>
-                  <select
-                    value={formData.customer_name}
-                    onChange={(e) => setFormData(prev => ({ ...prev, customer_name: e.target.value }))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:border-blue-500 outline-none bg-white font-semibold text-slate-700 shadow-sm"
-                  >
-                    <option value="">거래처 선택...</option>
-                    {companies.map(c => (
-                      <option key={c.company_id} value={c.company_name}>
-                        {c.company_name} ({c.company_code})
-                      </option>
-                    ))}
-                  </select>
+                  {/* 검색 가능한 거래처 콤보박스 */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                    <input
+                      ref={companyInputRef}
+                      type="text"
+                      value={companySearch || formData.customer_name}
+                      onChange={(e) => {
+                        setCompanySearch(e.target.value);
+                        setCompanyDropdownOpen(true);
+                        if (!e.target.value) setFormData(prev => ({ ...prev, customer_name: '' }));
+                      }}
+                      onFocus={() => {
+                        setCompanySearch('');
+                        setCompanyDropdownOpen(true);
+                      }}
+                      onBlur={() => setTimeout(() => setCompanyDropdownOpen(false), 150)}
+                      placeholder="거래처 검색 또는 선택..."
+                      className="w-full pl-9 pr-8 py-2 border border-slate-300 rounded-lg focus:border-blue-500 outline-none bg-white font-semibold text-slate-700 shadow-sm"
+                    />
+                    {formData.customer_name && (
+                      <button
+                        type="button"
+                        onClick={() => { setFormData(prev => ({ ...prev, customer_name: '' })); setCompanySearch(''); }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                  {/* 드롭다운 목록 */}
+                  {companyDropdownOpen && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-52 overflow-y-auto">
+                      {companies
+                        .filter(c =>
+                          !companySearch ||
+                          c.company_name.toLowerCase().includes(companySearch.toLowerCase()) ||
+                          c.company_code.toLowerCase().includes(companySearch.toLowerCase())
+                        )
+                        .map(c => (
+                          <button
+                            key={c.company_id}
+                            type="button"
+                            onMouseDown={() => {
+                              setFormData(prev => ({ ...prev, customer_name: c.company_name }));
+                              setCompanySearch('');
+                              setCompanyDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 hover:text-blue-700 transition-colors ${
+                              formData.customer_name === c.company_name ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700'
+                            }`}
+                          >
+                            <span className="font-semibold">{c.company_name}</span>
+                            <span className="ml-1.5 text-xs text-slate-400">({c.company_code})</span>
+                          </button>
+                        ))
+                      }
+                      {companies.filter(c =>
+                        !companySearch ||
+                        c.company_name.toLowerCase().includes(companySearch.toLowerCase()) ||
+                        c.company_code.toLowerCase().includes(companySearch.toLowerCase())
+                      ).length === 0 && (
+                        <div className="px-3 py-3 text-sm text-slate-400 text-center">검색 결과 없음</div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div>
