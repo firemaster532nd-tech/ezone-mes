@@ -687,133 +687,130 @@ function OrderTracker({ orders }: { orders: WorkflowData['orders'] }) {
         })}
       </div>
 
-      {/* ───── 납기 일정 달력 ───── */}
-      {(() => {
-        const daysInMonth = new Date(calYear, calMonth, 0).getDate();
-        const firstDay = new Date(calYear, calMonth - 1, 1).getDay(); // 0=일
-        const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
-        const typeColor: Record<string, string> = {
-          '야상': 'bg-blue-500',
-          '당착': 'bg-amber-400',
-          '택배': 'bg-emerald-500',
-        };
-        // 납짜별 그룹 (발주서 등록일 = event_date 기준)
-        const byDate: Record<string, CalendarEntry[]> = {};
-        calData.forEach(e => {
-          const k = (e.event_date || '').slice(0, 10);
-          if (k) { (byDate[k] = byDate[k] || []).push(e); }
-        });
-        const selectedEntries = calSelected ? (byDate[calSelected] || []) : [];
+      {/* ───── 발주서 등록 일정 달력 ───── */}
+      <DeliveryCalendar
+        calYear={calYear} calMonth={calMonth}
+        calData={calData} calSelected={calSelected}
+        setCalYear={setCalYear} setCalMonth={setCalMonth}
+        setCalSelected={setCalSelected}
+      />
+    </div>
+  );
+}
 
-        // 차수별 색상 (같은 프로젝트 그룹 색)
-        const projectColors = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-violet-500', 'bg-cyan-500'];
-        const projectColorMap: Record<number, string> = {};
-        let colorIdx = 0;
-        calData.forEach(e => {
-          if (!(e.project_id in projectColorMap)) {
-            projectColorMap[e.project_id] = projectColors[colorIdx % projectColors.length];
-            colorIdx++;
-          }
-        });
+// ─── DeliveryCalendar 컴포넌트 (IIFE 스코프 오류 방지용 분리) ───
+function DeliveryCalendar({
+  calYear, calMonth, calData, calSelected,
+  setCalYear, setCalMonth, setCalSelected,
+}: {
+  calYear: number; calMonth: number;
+  calData: CalendarEntry[]; calSelected: string | null;
+  setCalYear: (y: number) => void; setCalMonth: (m: number) => void;
+  setCalSelected: (d: string | null) => void;
+}) {
+  const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+  const firstDay = new Date(calYear, calMonth - 1, 1).getDay();
+  const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
-        return (
-          <div className="mt-6 bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
-            {/* 헤더 */}
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="flex items-center gap-2 text-sm font-black text-slate-700">
-                <Calendar className="h-4 w-4 text-indigo-500" />
-                발주서 등록 일정
-                <span className="text-xs font-normal text-slate-400 ml-1">(발주서 등록일 기준)</span>
-              </h3>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => { const d = new Date(calYear, calMonth - 2, 1); setCalYear(d.getFullYear()); setCalMonth(d.getMonth()+1); setCalSelected(null); }}
-                  className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"
-                ><ChevronLeft className="h-4 w-4" /></button>
-                <span className="text-sm font-bold text-slate-700 w-20 text-center">
-                  {calYear}년 {calMonth}월
-                </span>
-                <button
-                  onClick={() => { const d = new Date(calYear, calMonth, 1); setCalYear(d.getFullYear()); setCalMonth(d.getMonth()+1); setCalSelected(null); }}
-                  className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"
-                ><ChevronRight className="h-4 w-4" /></button>
-              </div>
-              {/* 범례 */}
-              <div className="flex items-center gap-3 text-xs text-slate-500">
-                <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full bg-indigo-500" />발주서</span>
-              </div>
-            </div>
+  const byDate: Record<string, CalendarEntry[]> = {};
+  calData.forEach(e => {
+    const k = (e.event_date || '').slice(0, 10);
+    if (k) { (byDate[k] = byDate[k] || []).push(e); }
+  });
+  const selectedEntries = calSelected ? (byDate[calSelected] || []) : [];
 
-            {/* 요일 헤더 */}
-            <div className="grid grid-cols-7 text-center text-[11px] font-bold text-slate-400 mb-1">
-              {DAYS.map(d => <div key={d} className={d==='일'?'text-red-400':d==='토'?'text-blue-400':''}>{d}</div>)}
-            </div>
+  const projectColors = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-violet-500', 'bg-cyan-500'];
+  const projectColorMap: Record<number, string> = {};
+  let colorIdx = 0;
+  calData.forEach(e => {
+    if (!(e.project_id in projectColorMap)) {
+      projectColorMap[e.project_id] = projectColors[colorIdx % projectColors.length];
+      colorIdx++;
+    }
+  });
 
-            {/* 날짜 그리드 */}
-            <div className="grid grid-cols-7 gap-0.5">
-              {Array.from({length: firstDay}).map((_,i) => <div key={`e${i}`} />)}
-              {Array.from({length: daysInMonth}).map((_, i) => {
-                const day = i + 1;
-                const dateKey = `${calYear}-${String(calMonth).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
-                const entries = byDate[dateKey] || [];
-                const isToday = dateKey === new Date().toISOString().slice(0,10);
-                const isSelected = calSelected === dateKey;
-                const dow = (firstDay + i) % 7;
-                return (
-                  <div
-                    key={day}
-                    onClick={() => setCalSelected(isSelected ? null : dateKey)}
-                    className={`min-h-[60px] rounded-lg p-1 cursor-pointer transition-all border ${
-                      isSelected ? 'border-indigo-400 bg-indigo-50' :
-                      entries.length > 0 ? 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50' :
-                      'border-transparent hover:bg-slate-50'
-                    }`}
-                  >
-                    <div className={`text-[11px] font-bold mb-0.5 ${
-                      isToday ? 'w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px]' :
-                      dow===0 ? 'text-red-400' : dow===6 ? 'text-blue-400' : 'text-slate-500'
-                    }`}>{day}</div>
-                    <div className="space-y-0.5">
-                      {entries.slice(0,3).map((e,ei) => (
-                        <div key={ei} className={`text-[9px] text-white px-1 py-0.5 rounded truncate font-semibold ${projectColorMap[e.project_id] || 'bg-indigo-500'}`}>
-                          {e.project_name.length > 6 ? e.project_name.slice(0,6)+'…' : e.project_name} {e.round_no}차
-                        </div>
-                      ))}
-                      {entries.length > 3 && (
-                        <div className="text-[9px] text-slate-400 pl-1">+{entries.length - 3}건</div>
-                      )}
-                    </div>
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  return (
+    <div className="mt-6 bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="flex items-center gap-2 text-sm font-black text-slate-700">
+          <Calendar className="h-4 w-4 text-indigo-500" />
+          발주서 등록 일정
+          <span className="text-xs font-normal text-slate-400 ml-1">(발주서 등록일 기준)</span>
+        </h3>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { const d = new Date(calYear, calMonth - 2, 1); setCalYear(d.getFullYear()); setCalMonth(d.getMonth() + 1); setCalSelected(null); }}
+            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"
+          ><ChevronLeft className="h-4 w-4" /></button>
+          <span className="text-sm font-bold text-slate-700 w-20 text-center">{calYear}년 {calMonth}월</span>
+          <button
+            onClick={() => { const d = new Date(calYear, calMonth, 1); setCalYear(d.getFullYear()); setCalMonth(d.getMonth() + 1); setCalSelected(null); }}
+            className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 transition-colors"
+          ><ChevronRight className="h-4 w-4" /></button>
+        </div>
+        <div className="flex items-center gap-1 text-xs text-slate-500">
+          <span className="inline-block w-2.5 h-2.5 rounded-full bg-indigo-500" />발주서
+        </div>
+      </div>
+
+      <div className="grid grid-cols-7 text-center text-[11px] font-bold text-slate-400 mb-1">
+        {DAYS.map(d => <div key={d} className={d === '일' ? 'text-red-400' : d === '토' ? 'text-blue-400' : ''}>{d}</div>)}
+      </div>
+
+      <div className="grid grid-cols-7 gap-0.5">
+        {Array.from({ length: firstDay }).map((_, i) => <div key={`e${i}`} />)}
+        {Array.from({ length: daysInMonth }).map((_, i) => {
+          const day = i + 1;
+          const dateKey = `${calYear}-${String(calMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const entries = byDate[dateKey] || [];
+          const isToday = dateKey === todayStr;
+          const isSelected = calSelected === dateKey;
+          const dow = (firstDay + i) % 7;
+          return (
+            <div
+              key={day}
+              onClick={() => setCalSelected(isSelected ? null : dateKey)}
+              className={`min-h-[60px] rounded-lg p-1 cursor-pointer transition-all border ${
+                isSelected ? 'border-indigo-400 bg-indigo-50' :
+                entries.length > 0 ? 'border-slate-200 hover:border-indigo-300 hover:bg-slate-50' :
+                'border-transparent hover:bg-slate-50'
+              }`}
+            >
+              <div className={`text-[11px] font-bold mb-0.5 ${
+                isToday ? 'w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px]' :
+                dow === 0 ? 'text-red-400' : dow === 6 ? 'text-blue-400' : 'text-slate-500'
+              }`}>{day}</div>
+              <div className="space-y-0.5">
+                {entries.slice(0, 3).map((e, ei) => (
+                  <div key={ei} className={`text-[9px] text-white px-1 py-0.5 rounded truncate font-semibold ${projectColorMap[e.project_id] || 'bg-indigo-500'}`}>
+                    {e.project_name.length > 6 ? e.project_name.slice(0, 6) + '…' : e.project_name} {e.round_no}차
                   </div>
-                );
-              })}
-            </div>
-
-            {/* 선택한 날짜 상세 */}
-            {calSelected && selectedEntries.length > 0 && (
-              <div className="mt-4 border-t border-slate-100 pt-4">
-                <p className="text-xs font-black text-slate-600 mb-2">
-                  📋 {calSelected} 발주 등록 ({selectedEntries.length}건)
-                </p>
-                <div className="space-y-1.5">
-                  {selectedEntries.map(e => (
-                    <div key={e.order_id} className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2 text-xs">
-                      <span className={`px-2 py-0.5 rounded-full text-white text-[10px] font-bold ${projectColorMap[e.project_id] || 'bg-indigo-500'}`}>
-                        {e.round_no}차
-                      </span>
-                      <span className="font-bold text-slate-700 flex-1">{e.project_name}</span>
-                      <span className="text-slate-400">{e.project_customer || e.customer_name}</span>
-                      <span className="text-xs font-mono text-slate-500">{e.order_number}</span>
-                      {e.delivery_date && (
-                        <span className="text-blue-600 font-mono">납기: {e.delivery_date}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                ))}
+                {entries.length > 3 && <div className="text-[9px] text-slate-400 pl-1">+{entries.length - 3}건</div>}
               </div>
-            )}
+            </div>
+          );
+        })}
+      </div>
+
+      {calSelected && selectedEntries.length > 0 && (
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <p className="text-xs font-black text-slate-600 mb-2">📋 {calSelected} 발주 등록 ({selectedEntries.length}건)</p>
+          <div className="space-y-1.5">
+            {selectedEntries.map(e => (
+              <div key={e.order_id} className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2 text-xs">
+                <span className={`px-2 py-0.5 rounded-full text-white text-[10px] font-bold ${projectColorMap[e.project_id] || 'bg-indigo-500'}`}>{e.round_no}차</span>
+                <span className="font-bold text-slate-700 flex-1">{e.project_name}</span>
+                <span className="text-slate-400">{e.project_customer || e.customer_name}</span>
+                <span className="text-xs font-mono text-slate-500">{e.order_number}</span>
+                {e.delivery_date && <span className="text-blue-600 font-mono">납기: {e.delivery_date}</span>}
+              </div>
+            ))}
           </div>
-        );
-      })()}
+        </div>
+      )}
     </div>
   );
 }
