@@ -462,7 +462,8 @@ export async function projectRoutes(app: FastifyInstance) {
   });
 
   // ─── [GET] /api/projects/calendar ───
-  // 월별 납기 일정 달력 데이터 (메인 대시보드용)
+  // 월별 발주서 등록 달력 (메인 대시보드용)
+  // 기준: sales_order.order_date (발주서 등록일), 차수(1차/2차...) per project
   app.get('/api/projects/calendar', { preHandler: requireAuth }, async (req) => {
     const { query } = req as { query: Record<string, string> };
     const now = new Date();
@@ -470,28 +471,73 @@ export async function projectRoutes(app: FastifyInstance) {
     const month = parseInt(query.month || String(now.getMonth() + 1), 10);
 
     const startDate = `${year}-${String(month).padStart(2,'0')}-01`;
-    const endDate   = new Date(year, month, 0).toISOString().slice(0, 10); // 월 마지막날
+    const endDate   = new Date(year, month, 0).toISOString().slice(0, 10);
 
+    // 발주서 기반 달력: order_date 기준, 프로젝트별 차수(ROW_NUMBER) 계산
     const { rows } = await pool.query(`
-      SELECT
-        ds.schedule_id,
-        ds.project_id,
-        ds.delivery_date,
-        ds.delivery_type,
-        ds.arrival_date,
-        ds.delivery_qty,
-        ds.seq,
-        ds.remarks,
-        pm.project_name,
-        pm.project_code,
-        pm.customer_name
-      FROM project_delivery_schedule ds
-      JOIN project_master pm ON ds.project_id = pm.project_id
-      WHERE ds.arrival_date BETWEEN $1 AND $2
-        AND pm.status = 'ACTIVE'
-      ORDER BY ds.arrival_date ASC, ds.seq ASC
+      WITH ranked AS (
+        SELECT
+          so.order_id,
+          so.order_number,
+          so.order_date::date       AS event_date,
+          so.delivery_date::date    AS delivery_date,
+          so.customer_name,
+          so.project_name           AS order_project_name,
+          so.total_qty,
+          pm.project_id,
+          pm.project_name,
+          pm.project_code,
+          pm.customer_name          AS project_customer,
+          ROW_NUMBER() OVER (
+            PARTITION BY so.project_id
+            ORDER BY so.order_date ASC, so.order_id ASC
+          ) AS round_no
+        FROM sales_order so
+        JOIN project_master pm ON so.project_id = pm.project_id
+        WHERE pm.status = 'ACTIVE'
+          AND so.project_id IS NOT NULL
+      )
+      SELECT *
+      FROM ranked
+      WHERE event_date BETWEEN $1 AND $2
+      ORDER BY event_date ASC, project_id ASC, round_no ASC
     `, [startDate, endDate]);
 
     return { data: rows, year, month };
   });
+
+  // ─── [GET] /api/projects/:id/orders-schedule ───
+  // 특정 프로젝트에 연결된 발주서 목록 (차수 포함) — 납기 스케줄 섹션용
+  app.get<{ Params: { id: string } }>('/api/projects/:id/orders-schedule', { preHandler: requireAuth }, async (req, reply) => {
+    const projectId = parseInt(req.params.id, 10);
+
+    const { rows } = await pool.query(`
+      SELECT
+        so.order_id,
+        so.order_number,
+        so.order_date::date     AS order_date,
+        so.delivery_date::date  AS delivery_date,
+        so.customer_name,
+        so.project_name         AS order_project_name,
+        so.total_qty,
+        so.status,
+        COALESCE(
+          (SELECT SUM(oi.qty) FROM sales_order_item oi WHERE oi.order_id = so.order_id),
+          so.total_qty, 0
+        )                       AS total_item_qty,
+        ROW_NUMBER() OVER (
+          ORDER BY so.order_date ASC, so.order_id ASC
+        )                       AS round_no,
+        -- 배송유형 (project_delivery_schedule에서 order_id 매핑)
+        pds.delivery_type,
+        pds.arrival_date
+      FROM sales_order so
+      LEFT JOIN project_delivery_schedule pds ON pds.order_id = so.order_id
+      WHERE so.project_id = $1
+      ORDER BY so.order_date ASC, so.order_id ASC
+    `, [projectId]);
+
+    return { data: rows };
+  });
 }
+

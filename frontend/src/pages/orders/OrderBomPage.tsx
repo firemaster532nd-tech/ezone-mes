@@ -37,6 +37,12 @@ interface Company {
   company_code: string;
   company_name: string;
 }
+interface Project {
+  project_id: number;
+  project_code: string;
+  project_name: string;
+  customer_name: string | null;
+}
 
 /* ─── 구조별 BOM 트리 타입 ─── */
 interface BomTreeComponent {
@@ -114,10 +120,14 @@ export default function OrderBomPage() {
   const [treeLoading, setTreeLoading] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectSearch, setProjectSearch] = useState('');
+  const [projectDropOpen, setProjectDropOpen] = useState(false);
 
   const [form, setForm] = useState({
     order_date: new Date().toISOString().slice(0, 10),
-    customer_name: '', project_name: '', delivery_date: '', remarks: '',
+    customer_name: '', project_name: '', project_id: null as number | null,
+    delivery_date: '', remarks: '',
   });
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
 
@@ -142,11 +152,19 @@ export default function OrderBomPage() {
     } catch {}
   }, []);
 
+  const fetchProjects = useCallback(async () => {
+    try {
+      const r = await api.get<{ data: Project[] }>('/projects?status=ACTIVE');
+      setProjects(r.data || []);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     fetchOrders();
     fetchStructures();
     fetchCompanies();
-  }, [fetchOrders, fetchStructures, fetchCompanies]);
+    fetchProjects();
+  }, [fetchOrders, fetchStructures, fetchCompanies, fetchProjects]);
 
   const selectOrder = async (order: Order) => {
     setShowNewForm(false); setShowExcelUpload(false); setExcelPreview(null);
@@ -358,7 +376,8 @@ export default function OrderBomPage() {
         })),
       });
       setShowNewForm(false);
-      setForm({ order_date: new Date().toISOString().slice(0, 10), customer_name: '', project_name: '', delivery_date: '', remarks: '' });
+      setForm({ order_date: new Date().toISOString().slice(0, 10), customer_name: '', project_name: '', project_id: null, delivery_date: '', remarks: '' });
+      setProjectSearch('');
       setOrderItems([]);
       await fetchOrders();
       if (r.data) selectOrder(r.data);
@@ -526,10 +545,54 @@ export default function OrderBomPage() {
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="text-xs text-gray-500">프로젝트명</label>
-                  <input value={form.project_name} onChange={e => setForm(f => ({ ...f, project_name: e.target.value }))}
-                    placeholder="프로젝트명" className="w-full px-3 py-2 border rounded-lg text-sm" />
+                <div className="relative">
+                  <label className="text-xs text-gray-500">프로젝트 선택 *</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={projectSearch || form.project_name}
+                      onChange={e => { setProjectSearch(e.target.value); setProjectDropOpen(true); }}
+                      onFocus={() => { setProjectSearch(''); setProjectDropOpen(true); }}
+                      onBlur={() => setTimeout(() => setProjectDropOpen(false), 150)}
+                      placeholder="프로젝트명 검색..."
+                      className="w-full px-3 py-2 border rounded-lg text-sm outline-none focus:border-blue-500"
+                    />
+                    {form.project_id && (
+                      <button type="button" onClick={() => { setForm(f => ({ ...f, project_name: '', project_id: null, customer_name: '' })); setProjectSearch(''); }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  {projectDropOpen && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                      {projects.filter(p =>
+                        !projectSearch ||
+                        p.project_name.toLowerCase().includes(projectSearch.toLowerCase()) ||
+                        p.project_code.toLowerCase().includes(projectSearch.toLowerCase())
+                      ).map(p => (
+                        <button key={p.project_id} type="button"
+                          onMouseDown={() => {
+                            setForm(f => ({
+                              ...f,
+                              project_id: p.project_id,
+                              project_name: p.project_name,
+                              customer_name: f.customer_name || p.customer_name || '',
+                            }));
+                            setProjectSearch('');
+                            setProjectDropOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 hover:text-blue-700 transition-colors ${form.project_id === p.project_id ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700'}`}
+                        >
+                          <span className="font-semibold">{p.project_name}</span>
+                          <span className="ml-1.5 text-xs text-slate-400">({p.project_code})</span>
+                        </button>
+                      ))}
+                      {projects.filter(p => !projectSearch || p.project_name.toLowerCase().includes(projectSearch.toLowerCase())).length === 0 && (
+                        <div className="px-3 py-3 text-sm text-slate-400 text-center">검색 결과 없음</div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">납기일</label>

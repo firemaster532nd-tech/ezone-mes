@@ -79,7 +79,8 @@ export function ProjectPage() {
 
   // 하단 디테일 스케줄 확장 상태
   const [expandedProjectId, setExpandedProjectId] = useState<number | null>(null);
-  const [expandedSchedules, setExpandedSchedules] = useState<DeliverySchedule[]>([]);
+  const [expandedSchedules, setExpandedSchedules] = useState<DeliverySchedule[]>([]); // 레거시
+  const [ordersSchedule, setOrdersSchedule] = useState<any[]>([]); // 발주서 기반 스케줄
 
   // 모달 상태
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -149,19 +150,18 @@ export function ProjectPage() {
     fetchData();
   };
 
-  // 특정 프로젝트의 1:N 순차적 스케줄 상세 확장
+  // 특정 프로젝트의 발주서 기반 스케줄 확장
   const handleToggleExpand = async (projId: number) => {
     if (expandedProjectId === projId) {
       setExpandedProjectId(null);
-      setExpandedSchedules([]);
+      setOrdersSchedule([]);
       return;
     }
-    
     try {
-      const res = await api.get<{ data: any }>(`/projects/${projId}`);
+      const res = await api.get<{ data: any[] }>(`/projects/${projId}/orders-schedule`);
       setExpandedProjectId(projId);
-      setExpandedSchedules(res.data.deliveries || []);
-    } catch (err) {
+      setOrdersSchedule(res.data || []);
+    } catch {
       toast.error('납기 스케줄 정보를 불러오지 못했습니다.');
     }
   };
@@ -527,54 +527,62 @@ export function ProjectPage() {
                     </td>
                   </tr>
 
-                  {/* 확장된 순차적 납기 스케줄 타임라인 판 */}
+                  {/* 확장: 발주서 기반 차수별 납기 스케줄 */}
                   {expandedProjectId === p.project_id && (
                     <tr onClick={(e) => e.stopPropagation()} className="bg-slate-50/50">
-                      <td colSpan={11} className="px-8 py-5 border-l-4 border-blue-500">
-                        <div className="space-y-3.5">
-                          <div className="flex items-center justify-between">
-                            <h4 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
-                              <Clock className="h-4.5 w-4.5 text-blue-600" />
-                              순차적 납기 기한 스케줄 (최초 납기일로부터 순차 정렬)
-                            </h4>
-                            <span className="text-xs font-bold text-slate-400">
-                              * 프로젝트 내 설정된 회차 순서대로 자동 배치됩니다.
-                            </span>
-                          </div>
+                      <td colSpan={11} className="px-8 py-5 border-l-4 border-indigo-500">
+                        <div className="space-y-3">
+                          <h4 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-indigo-600" />
+                            발주서 차수별 납기 일정
+                            <span className="text-xs font-normal text-slate-400">발주서 등록일 기준 순차 정렬</span>
+                          </h4>
 
-                          {expandedSchedules.length === 0 ? (
+                          {ordersSchedule.length === 0 ? (
                             <div className="text-center py-6 text-slate-400 bg-white rounded-lg border border-slate-100 font-medium">
-                              등록된 순차적 납기 일정이 존재하지 않습니다. 프로젝트 수정을 통해 등록하세요.
+                              연결된 발주서가 없습니다. 수주관리에서 이 프로젝트로 발주서를 등록하세요.
                             </div>
                           ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-                              {expandedSchedules.map((sch, sIdx) => (
-                                <div key={sIdx} className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
-                                  <div className="absolute right-0 top-0 bg-blue-600 text-white font-mono text-xs font-black px-2.5 py-0.5 rounded-bl">
-                                    {sch.seq}회차
-                                  </div>
-                                  <div className="space-y-1.5">
-                                    <div className="text-xs font-bold text-slate-400 flex items-center gap-1.5">
-                                      <Calendar className="h-3.5 w-3.5 text-slate-400" />
-                                      납기지정일자
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                              {ordersSchedule.map((ord) => {
+                                const typeColor: Record<string, string> = { '야상': 'bg-blue-500', '당착': 'bg-amber-400', '택배': 'bg-emerald-500' };
+                                const statusLabel: Record<string, string> = {
+                                  PENDING: '대기', BOM_EXPLODED: 'BOM완료', PO_CREATED: '발주완료',
+                                  IN_PRODUCTION: '생산중', SHIPPED: '출하완료',
+                                };
+                                return (
+                                  <div key={ord.order_id} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden">
+                                    {/* 차수 뱃지 */}
+                                    <div className="absolute right-0 top-0 bg-indigo-600 text-white font-mono text-xs font-black px-2.5 py-0.5 rounded-bl">
+                                      {ord.round_no}차
                                     </div>
-                                    <div className="text-sm font-extrabold text-slate-800 font-mono">
-                                      {sch.delivery_date}
-                                    </div>
-                                    <div className="text-xs font-bold text-slate-400 mt-2.5">
-                                      납품 예정 수량
-                                    </div>
-                                    <div className="text-sm font-extrabold text-blue-600">
-                                      {Number(sch.delivery_qty).toLocaleString()} 매
-                                    </div>
-                                    {sch.remarks && (
-                                      <div className="text-xs text-slate-500 bg-slate-50 p-1.5 rounded mt-2 border border-slate-100 font-medium">
-                                        비고: {sch.remarks}
+                                    <div className="space-y-2">
+                                      <div className="text-xs font-bold text-slate-500 font-mono pr-8">{ord.order_number}</div>
+                                      <div className="flex items-center gap-1.5">
+                                        <Calendar className="h-3.5 w-3.5 text-slate-400" />
+                                        <span className="text-xs text-slate-500">발주일</span>
+                                        <span className="text-sm font-extrabold text-slate-800 font-mono ml-auto">{ord.order_date}</span>
                                       </div>
-                                    )}
+                                      {ord.delivery_date && (
+                                        <div className="flex items-center gap-1.5">
+                                          <Calendar className="h-3.5 w-3.5 text-blue-400" />
+                                          <span className="text-xs text-slate-500">납기일</span>
+                                          <span className="text-sm font-bold text-blue-600 font-mono ml-auto">{ord.delivery_date}</span>
+                                        </div>
+                                      )}
+                                      {/* 배송유형 */}
+                                      {ord.delivery_type && (
+                                        <span className={`inline-block text-[10px] text-white px-2 py-0.5 rounded-full font-bold ${typeColor[ord.delivery_type] || 'bg-slate-400'}`}>
+                                          {ord.delivery_type}
+                                        </span>
+                                      )}
+                                      <div className="text-xs text-slate-400 border-t border-slate-100 pt-1.5 mt-1">
+                                        {statusLabel[ord.status] || ord.status}
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>

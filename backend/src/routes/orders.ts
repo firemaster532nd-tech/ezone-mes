@@ -836,7 +836,7 @@ export async function orderRoutes(app: FastifyInstance) {
 
   app.post('/api/orders', async (req) => {
     const body = req.body as any;
-    const { order_date, customer_name, project_name, delivery_date, remarks, items } = body;
+    const { order_date, customer_name, project_name, delivery_date, remarks, items, project_id } = body;
 
     const dateStr = (order_date || new Date().toISOString().slice(0, 10)).replace(/-/g, '').slice(2);
     const seqRes = await pool.query(
@@ -848,9 +848,9 @@ export async function orderRoutes(app: FastifyInstance) {
     const totalSets = items?.reduce((s: number, i: any) => s + (i.qty || 1), 0) || 0;
 
     const result = await pool.query(`
-      INSERT INTO sales_order (order_number, order_date, customer_name, project_name, delivery_date, remarks, total_sets)
-      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *
-    `, [orderNumber, order_date, customer_name, project_name || null, delivery_date || null, remarks || null, totalSets]);
+      INSERT INTO sales_order (order_number, order_date, customer_name, project_name, delivery_date, remarks, total_sets, project_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *
+    `, [orderNumber, order_date, customer_name, project_name || null, delivery_date || null, remarks || null, totalSets, project_id || null]);
 
     const orderId = result.rows[0].order_id;
 
