@@ -140,9 +140,9 @@ export function DashboardPage() {
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
   const [workflow, setWorkflow] = useState<WorkflowData | null>(null);
   // 납기 달력 상태
-  const today = new Date();
-  const [calYear, setCalYear] = useState(today.getFullYear());
-  const [calMonth, setCalMonth] = useState(today.getMonth() + 1);
+  const nowDate = new Date();
+  const [calYear, setCalYear] = useState(nowDate.getFullYear());
+  const [calMonth, setCalMonth] = useState(nowDate.getMonth() + 1);
   const [calData, setCalData] = useState<CalendarEntry[]>([]);
   const [calSelected, setCalSelected] = useState<string | null>(null);
 
