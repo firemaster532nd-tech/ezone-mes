@@ -63,6 +63,10 @@ export function ProjectPage() {
   const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
   const companyInputRef = useRef<HTMLInputElement>(null);
   const companyDropdownRef = useRef<HTMLDivElement>(null);
+  // 유통업체 검색 콤보박스
+  const [distSearch, setDistSearch] = useState('');
+  const [distDropdownOpen, setDistDropdownOpen] = useState(false);
+  const distInputRef = useRef<HTMLInputElement>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(false);
@@ -204,6 +208,8 @@ export function ProjectPage() {
     setPoFile(null); // 파일 초기화
     setCompanySearch('');  // 거래처 검색어 초기화
     setCompanyDropdownOpen(false);
+    setDistSearch('');     // 유통업체 검색어 초기화
+    setDistDropdownOpen(false);
     setIsModalOpen(true);
   };
 
@@ -678,9 +684,23 @@ export function ProjectPage() {
                             key={c.company_id}
                             type="button"
                             onMouseDown={() => {
-                              setFormData(prev => ({ ...prev, customer_name: c.company_name }));
+                              const matched = distributors.find(
+                                d => d.company_name === c.company_name
+                              );
+                              setFormData(prev => ({
+                                ...prev,
+                                customer_name: c.company_name,
+                                // 거래처와 같은 이름의 유통업체가 있으면 자동 세팅
+                                ...(matched ? {
+                                  distributor_id: matched.company_id,
+                                  ceo_name: matched.ceo_name || '',
+                                  phone: matched.phone || '',
+                                  corporate_no: matched.corporate_no || '',
+                                } : {}),
+                              }));
                               setCompanySearch('');
                               setCompanyDropdownOpen(false);
+                              if (matched) toast.info(`유통업체가 "${matched.company_name}"으로 자동 설정됐습니다.`);
                             }}
                             className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 hover:text-blue-700 transition-colors ${
                               formData.customer_name === c.company_name ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700'
@@ -724,19 +744,93 @@ export function ProjectPage() {
                 </h4>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1.5">유통업체 선택</label>
-                    <select
-                      value={formData.distributor_id}
-                      onChange={(e) => handleDistributorChange(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:border-blue-500 outline-none bg-white font-bold text-slate-700 shadow-sm"
-                    >
-                      <option value="">유통업체 없음</option>
-                      {distributors.map(d => (
-                        <option key={d.company_id} value={d.company_id}>{d.company_name}</option>
-                      ))}
-                    </select>
+                <div className="relative">
+                  <label className="block text-xs font-bold text-slate-500 mb-1.5">유통업체 선택
+                    <span className="ml-1.5 font-normal text-slate-400 normal-case">(거래처와 다를 경우 변경 가능)</span>
+                  </label>
+                  {/* 유통업체 검색 콤보박스 */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                    <input
+                      ref={distInputRef}
+                      type="text"
+                      value={distSearch || (formData.distributor_id
+                        ? (distributors.find(d => d.company_id === Number(formData.distributor_id))?.company_name ?? '')
+                        : '')}
+                      onChange={(e) => {
+                        setDistSearch(e.target.value);
+                        setDistDropdownOpen(true);
+                        if (!e.target.value) handleDistributorChange('');
+                      }}
+                      onFocus={() => { setDistSearch(''); setDistDropdownOpen(true); }}
+                      onBlur={() => setTimeout(() => setDistDropdownOpen(false), 150)}
+                      placeholder="유통업체 검색 또는 선택..."
+                      className="w-full pl-9 pr-8 py-2 border border-slate-300 rounded-lg focus:border-blue-500 outline-none bg-white font-bold text-slate-700 shadow-sm"
+                    />
+                    {formData.distributor_id && (
+                      <button
+                        type="button"
+                        onClick={() => { handleDistributorChange(''); setDistSearch(''); }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
+                  {/* 유통업체 드롭다운 목록 */}
+                  {distDropdownOpen && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                      {/* 거래처와 동일 업체 우선 표시 */}
+                      {distributors
+                        .filter(d =>
+                          !distSearch ||
+                          d.company_name.toLowerCase().includes(distSearch.toLowerCase())
+                        )
+                        .sort((a, b) => {
+                          // 거래처명과 같은 업체 상단 고정
+                          if (a.company_name === formData.customer_name) return -1;
+                          if (b.company_name === formData.customer_name) return 1;
+                          return 0;
+                        })
+                        .map(d => (
+                          <button
+                            key={d.company_id}
+                            type="button"
+                            onMouseDown={() => {
+                              handleDistributorChange(String(d.company_id));
+                              setDistSearch('');
+                              setDistDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                              Number(formData.distributor_id) === d.company_id
+                                ? 'bg-blue-50 text-blue-700 font-bold'
+                                : 'text-slate-700 hover:bg-blue-50 hover:text-blue-700'
+                            }`}
+                          >
+                            <span className="font-semibold">{d.company_name}</span>
+                            {d.company_name === formData.customer_name && (
+                              <span className="ml-1.5 text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded font-bold">거래처 일치</span>
+                            )}
+                            {d.ceo_name && <span className="ml-1.5 text-xs text-slate-400">{d.ceo_name}</span>}
+                          </button>
+                        ))
+                      }
+                      {/* 유통업체 없음 옵션 */}
+                      <button
+                        type="button"
+                        onMouseDown={() => { handleDistributorChange(''); setDistSearch(''); setDistDropdownOpen(false); }}
+                        className="w-full text-left px-3 py-2 text-sm text-slate-400 hover:bg-slate-50 border-t border-slate-100"
+                      >
+                        — 유통업체 없음
+                      </button>
+                      {distributors.filter(d =>
+                        !distSearch || d.company_name.toLowerCase().includes(distSearch.toLowerCase())
+                      ).length === 0 && distSearch && (
+                        <div className="px-3 py-3 text-sm text-slate-400 text-center">검색 결과 없음</div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-500 mb-1.5">대표자명</label>
