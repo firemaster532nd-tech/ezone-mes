@@ -7,8 +7,16 @@ const deliveryScheduleSchema = z.object({
   delivery_date: z.string(),
   delivery_qty: z.number().int().nonnegative(),
   remarks: z.string().max(500).nullable().optional(),
-  seq: z.number().int().default(1)
+  seq: z.number().int().default(1),
+  delivery_type: z.enum(['야상', '당착', '택배']).default('야상'),
 });
+
+// 납기 유형별 도착일자 계산: 야상/택배 = +1일, 당착 = 당일
+function calcArrivalDate(deliveryDate: string, deliveryType: string): string {
+  const d = new Date(deliveryDate);
+  if (deliveryType !== '당착') d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
 
 const projectSchema = z.object({
   project_code: z.string().min(1),
@@ -132,10 +140,11 @@ export async function projectRoutes(app: FastifyInstance) {
       // 납기 일정 등록
       if (deliveries && deliveries.length > 0) {
         for (const del of deliveries) {
+          const arrivalDate = calcArrivalDate(del.delivery_date, del.delivery_type ?? '야상');
           await client.query(
-            `INSERT INTO project_delivery_schedule (project_id, delivery_date, delivery_qty, remarks, seq)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [project.project_id, del.delivery_date, del.delivery_qty, del.remarks || null, del.seq]
+            `INSERT INTO project_delivery_schedule (project_id, delivery_date, delivery_qty, remarks, seq, delivery_type, arrival_date)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [project.project_id, del.delivery_date, del.delivery_qty, del.remarks || null, del.seq, del.delivery_type ?? '야상', arrivalDate]
           );
         }
       }
@@ -202,10 +211,11 @@ export async function projectRoutes(app: FastifyInstance) {
 
       if (deliveries && deliveries.length > 0) {
         for (const del of deliveries) {
+          const arrivalDate = calcArrivalDate(del.delivery_date, del.delivery_type ?? '야상');
           await client.query(
-            `INSERT INTO project_delivery_schedule (project_id, delivery_date, delivery_qty, remarks, seq)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [id, del.delivery_date, del.delivery_qty, del.remarks || null, del.seq]
+            `INSERT INTO project_delivery_schedule (project_id, delivery_date, delivery_qty, remarks, seq, delivery_type, arrival_date)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [id, del.delivery_date, del.delivery_qty, del.remarks || null, del.seq, del.delivery_type ?? '야상', arrivalDate]
           );
         }
       }
@@ -449,5 +459,39 @@ export async function projectRoutes(app: FastifyInstance) {
     }));
 
     return { data: matrix, total: matrix.length };
+  });
+
+  // ─── [GET] /api/projects/calendar ───
+  // 월별 납기 일정 달력 데이터 (메인 대시보드용)
+  app.get('/api/projects/calendar', { preHandler: requireAuth }, async (req) => {
+    const { query } = req as { query: Record<string, string> };
+    const now = new Date();
+    const year  = parseInt(query.year  || String(now.getFullYear()), 10);
+    const month = parseInt(query.month || String(now.getMonth() + 1), 10);
+
+    const startDate = `${year}-${String(month).padStart(2,'0')}-01`;
+    const endDate   = new Date(year, month, 0).toISOString().slice(0, 10); // 월 마지막날
+
+    const { rows } = await pool.query(`
+      SELECT
+        ds.schedule_id,
+        ds.project_id,
+        ds.delivery_date,
+        ds.delivery_type,
+        ds.arrival_date,
+        ds.delivery_qty,
+        ds.seq,
+        ds.remarks,
+        pm.project_name,
+        pm.project_code,
+        pm.customer_name
+      FROM project_delivery_schedule ds
+      JOIN project_master pm ON ds.project_id = pm.project_id
+      WHERE ds.arrival_date BETWEEN $1 AND $2
+        AND pm.status = 'ACTIVE'
+      ORDER BY ds.arrival_date ASC, ds.seq ASC
+    `, [startDate, endDate]);
+
+    return { data: rows, year, month };
   });
 }
