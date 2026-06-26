@@ -139,12 +139,6 @@ export function DashboardPage() {
   const [alerts, setAlerts] = useState<AlertsData | null>(null);
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
   const [workflow, setWorkflow] = useState<WorkflowData | null>(null);
-  // 납기 달력 상태
-  const nowDate = new Date();
-  const [calYear, setCalYear] = useState(nowDate.getFullYear());
-  const [calMonth, setCalMonth] = useState(nowDate.getMonth() + 1);
-  const [calData, setCalData] = useState<CalendarEntry[]>([]);
-  const [calSelected, setCalSelected] = useState<string | null>(null);
 
   useEffect(() => {
     api.get<{ data: DashboardData }>('/dashboard').then((res) => setData(res.data));
@@ -152,13 +146,6 @@ export function DashboardPage() {
     api.get<{ data: ActivityLogEntry[] }>('/dashboard/activity-log').then((res) => setActivityLog(res.data)).catch(() => {});
     api.get<{ data: WorkflowData }>('/dashboard/workflow').then((res) => setWorkflow(res.data)).catch(() => {});
   }, []);
-
-  // 납기 달력 데이터 받아오기
-  useEffect(() => {
-    api.get<{ data: CalendarEntry[] }>(`/projects/calendar?year=${calYear}&month=${calMonth}`)
-      .then((res) => setCalData(res.data))
-      .catch(() => {});
-  }, [calYear, calMonth]);
 
   if (!data) {
     return <div className="flex items-center justify-center h-96 text-gray-400">로딩 중...</div>;
@@ -688,26 +675,25 @@ function OrderTracker({ orders }: { orders: WorkflowData['orders'] }) {
       </div>
 
       {/* ───── 발주서 등록 일정 달력 ───── */}
-      <DeliveryCalendar
-        calYear={calYear} calMonth={calMonth}
-        calData={calData} calSelected={calSelected}
-        setCalYear={setCalYear} setCalMonth={setCalMonth}
-        setCalSelected={setCalSelected}
-      />
+      <DeliveryCalendar />
     </div>
   );
 }
 
-// ─── DeliveryCalendar 컴포넌트 (IIFE 스코프 오류 방지용 분리) ───
-function DeliveryCalendar({
-  calYear, calMonth, calData, calSelected,
-  setCalYear, setCalMonth, setCalSelected,
-}: {
-  calYear: number; calMonth: number;
-  calData: CalendarEntry[]; calSelected: string | null;
-  setCalYear: (y: number) => void; setCalMonth: (m: number) => void;
-  setCalSelected: (d: string | null) => void;
-}) {
+// ─── DeliveryCalendar: 자체 상태를 가진 독립 컴포넌트 ───
+function DeliveryCalendar() {
+  const d0 = new Date();
+  const [calYear, setCalYear] = useState(d0.getFullYear());
+  const [calMonth, setCalMonth] = useState(d0.getMonth() + 1);
+  const [calData, setCalData] = useState<CalendarEntry[]>([]);
+  const [calSelected, setCalSelected] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.get<{ data: CalendarEntry[] }>(`/projects/calendar?year=${calYear}&month=${calMonth}`)
+      .then((res) => setCalData(res.data))
+      .catch(() => {});
+  }, [calYear, calMonth]);
+
   const daysInMonth = new Date(calYear, calMonth, 0).getDate();
   const firstDay = new Date(calYear, calMonth - 1, 1).getDay();
   const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
