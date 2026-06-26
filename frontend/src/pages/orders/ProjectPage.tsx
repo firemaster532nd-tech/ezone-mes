@@ -17,6 +17,8 @@ interface DeliverySchedule {
   delivery_qty: number;
   remarks: string;
   seq: number;
+  delivery_type: '야상' | '당착' | '택배';
+  arrival_date?: string; // 백엔드에서 계산
 }
 
 interface Project {
@@ -52,6 +54,10 @@ interface Company {
   company_id: number;
   company_code: string;
   company_name: string;
+  ceo_name: string | null;
+  phone: string | null;
+  mobile: string | null;
+  corporate_no: string | null;
 }
 
 export function ProjectPage() {
@@ -117,18 +123,16 @@ export function ProjectPage() {
   };
 
   const fetchDistributors = async () => {
-    try {
-      const res = await api.get<{ data: any[] }>('/companies?type=DISTRIBUTOR');
-      setDistributors(res.data);
-    } catch (err) {
-      console.error(err);
-    }
+    // companies 목록을 유통업체로도 사용 (type=DISTRIBUTOR 별도 구분 없음)
+    // fetchCompanies 이후 companies state를 distributors에도 동기화
   };
 
   const fetchCompanies = async () => {
     try {
       const res = await api.get<{ data: Company[] }>('/companies?active=true');
       setCompanies(res.data);
+      // companies를 distributors로도 사용 (같은 데이터)
+      setDistributors(res.data as any);
     } catch (err) {
       console.error(err);
     }
@@ -249,7 +253,7 @@ export function ProjectPage() {
         ...prev,
         deliveries: [
           ...prev.deliveries,
-          { seq: nextSeq, delivery_date: new Date().toISOString().slice(0, 10), delivery_qty: 0, remarks: '' }
+          { seq: nextSeq, delivery_date: new Date().toISOString().slice(0, 10), delivery_qty: 0, remarks: '', delivery_type: '야상' as const }
         ]
       };
     });
@@ -923,26 +927,16 @@ export function ProjectPage() {
                     <table className="w-full text-xs text-left border-collapse bg-slate-50/50">
                       <thead>
                         <tr className="border-b border-slate-200 bg-slate-100 font-bold text-slate-500">
-                          <th className="px-3 py-2.5 text-center w-12">회차</th>
-                          <th className="px-3 py-2.5">납기지정일자 *</th>
+                          <th className="px-3 py-2.5 text-center w-10">회차</th>
+                          <th className="px-3 py-2.5">발송일지 *</th>
+                          <th className="px-3 py-2.5 w-32">납기유형</th>
+                          <th className="px-3 py-2.5 text-blue-600">도착일자</th>
                           <th className="px-3 py-2.5">수량 (매) *</th>
-                          <th className="px-3 py-2.5">비고 참고</th>
-                          <th className="px-3 py-2.5 text-center w-12">삭제</th>
+                          <th className="px-3 py-2.5">비고</th>
+                          <th className="px-3 py-2.5 text-center w-10">삭제</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
-                        {formData.deliveries.map((del, dIdx) => (
-                          <tr key={dIdx} className="hover:bg-slate-50/30">
-                            <td className="px-3 py-2 text-center font-bold text-slate-400 font-mono">
-                              {del.seq}
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <input
-                                type="date"
-                                required
-                                value={del.delivery_date}
-                                onChange={(e) => handleDeliveryFieldChange(dIdx, 'delivery_date', e.target.value)}
-                                className="w-full border border-slate-200 rounded px-2 py-1 font-mono outline-none focus:border-blue-500 shadow-sm"
                               />
                             </td>
                             <td className="px-2 py-1.5">
