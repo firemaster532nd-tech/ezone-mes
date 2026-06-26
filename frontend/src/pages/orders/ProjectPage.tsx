@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+﻿import { useEffect, useState, useRef } from 'react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -944,40 +944,61 @@ export function ProjectPage() {
                           <th className="px-3 py-2.5 text-center w-10">삭제</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
-                              />
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <input
-                                type="number"
-                                required
-                                min={0}
-                                value={del.delivery_qty}
-                                onChange={(e) => handleDeliveryFieldChange(dIdx, 'delivery_qty', parseInt(e.target.value, 10) || 0)}
-                                className="w-full border border-slate-200 rounded px-2 py-1 font-bold font-mono outline-none focus:border-blue-500 shadow-sm"
-                              />
-                            </td>
-                            <td className="px-2 py-1.5">
-                              <input
-                                type="text"
-                                value={del.remarks}
-                                onChange={(e) => handleDeliveryFieldChange(dIdx, 'remarks', e.target.value)}
-                                placeholder="특이사항"
-                                className="w-full border border-slate-200 rounded px-2 py-1 outline-none focus:border-blue-500 shadow-sm"
-                              />
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveDelivery(dIdx)}
-                                className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
+                       <tbody className="divide-y divide-slate-100 bg-white">
+                        {formData.deliveries.map((del, dIdx) => {
+                          const arrDate = (() => {
+                            if (!del.delivery_date) return '';
+                            const d = new Date(del.delivery_date);
+                            if ((del.delivery_type || '야상') !== '당착') d.setDate(d.getDate() + 1);
+                            return d.toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' });
+                          })();
+                          const typeColors: Record<string, string> = {
+                            '야상': 'bg-blue-500 text-white',
+                            '당착': 'bg-amber-400 text-white',
+                            '택배': 'bg-emerald-500 text-white',
+                          };
+                          return (
+                            <tr key={dIdx} className="hover:bg-slate-50/30">
+                              <td className="px-3 py-2 text-center font-bold text-slate-400 font-mono">{del.seq}</td>
+                              <td className="px-2 py-1.5">
+                                <input type="date" required value={del.delivery_date}
+                                  onChange={(e) => handleDeliveryFieldChange(dIdx, 'delivery_date', e.target.value)}
+                                  className="w-full border border-slate-200 rounded px-2 py-1 font-mono outline-none focus:border-blue-500 shadow-sm" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <div className="flex gap-0.5">
+                                  {(['야상', '당착', '택배'] as const).map(t => (
+                                    <button key={t} type="button"
+                                      onClick={() => handleDeliveryFieldChange(dIdx, 'delivery_type', t)}
+                                      className={`px-2 py-1 rounded text-xs font-bold transition-all ${(del.delivery_type || '야상') === t ? typeColors[t] : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                                    >{t}</button>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="px-2 py-1.5 text-center">
+                                {arrDate ? <span className="text-blue-600 font-bold font-mono text-xs">→ {arrDate}</span> : <span className="text-slate-300">—</span>}
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="number" required min={0} value={del.delivery_qty}
+                                  onChange={(e) => handleDeliveryFieldChange(dIdx, 'delivery_qty', parseInt(e.target.value, 10) || 0)}
+                                  className="w-full border border-slate-200 rounded px-2 py-1 font-bold font-mono outline-none focus:border-blue-500 shadow-sm" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="text" value={del.remarks}
+                                  onChange={(e) => handleDeliveryFieldChange(dIdx, 'remarks', e.target.value)}
+                                  placeholder="특이사항"
+                                  className="w-full border border-slate-200 rounded px-2 py-1 outline-none focus:border-blue-500 shadow-sm" />
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <button type="button" onClick={() => handleRemoveDelivery(dIdx)}
+                                  className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                       </tbody>
                     </table>
                   </div>
                 )}
