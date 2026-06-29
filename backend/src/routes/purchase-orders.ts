@@ -3,14 +3,37 @@ import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 import XLSX from 'xlsx';
 
-// ──────────────────────────────────────────────────────────// 셀 값 정리 헬퍼
+// ────────────────────────────────────────────// 셀 값 정리 헬퍼
 const cv = (v: any) => String(v ?? '').replace(/\n/g, ' ').trim();
+
+// 엑셀 날짜 파싱 헬퍼: 시리얼 넘버, Date 객체, 문자열 모두 대응
+function parseExcelDate(v: any): string {
+  if (!v) return '';
+  // Date 객체 (cellDates 옵션)
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    return v.toISOString().slice(0, 10);
+  }
+  const s = String(v).trim();
+  // 엑셀 시리얼 넘버 (예: 45833)
+  if (/^\d{4,5}(\.\d+)?$/.test(s)) {
+    const serial = parseFloat(s);
+    const d = new Date(Date.UTC(1899, 11, 30 + Math.floor(serial)));
+    return d.toISOString().slice(0, 10);
+  }
+  // "2026-06-29", "2026/06/29", "2026.06.29" 등
+  const m = s.match(/(\d{4})[^\d]+(\d{1,2})[^\d]+(\d{1,2})/);
+  if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  // "26.6.29" 같은 2자리 년도
+  const m2 = s.match(/(\d{2})[^\d]+(\d{1,2})[^\d]+(\d{1,2})/);
+  if (m2) return `20${m2[1]}-${m2[2].padStart(2, '0')}-${m2[3].padStart(2, '0')}`;
+  return s;
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // 이지원 발주서 엑셀 파서
 // ────────────────────────────────────────────────────────────────────────────
 function parsePurchaseOrderExcel(buffer: Buffer) {
-  const wb = XLSX.read(buffer, { type: 'buffer' });
+  const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true });
 
   const result: {
     project: Record<string, string>;
@@ -49,10 +72,10 @@ function parsePurchaseOrderExcel(buffer: Buffer) {
     const c18 = cv(r[18]);
 
     if (c0.includes('발') && (c0.includes('주 일자') || c0.includes('주일자'))) {
-      orderDate = c4 || c3;
+      orderDate = parseExcelDate(r[4]) || parseExcelDate(r[3]) || c4 || c3;
     }
     if (c0.includes('납기') || c0.startsWith('납기요청')) {
-      deliveryDate = c4 || c3;
+      deliveryDate = parseExcelDate(r[4]) || parseExcelDate(r[3]) || c4 || c3;
       if (c12.includes('담당')) bizManager = c14;
       if (c12.includes('연락') || c18.includes('연락') || c12.includes('담당')) {
         bizContact = cv(r[19]) || cv(r[18]);
@@ -415,11 +438,11 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
           const cnt = parseInt(countRes.rows[0].cnt) + 1;
           const projectCode = `PO-${dateStr}-${String(cnt).padStart(3, '0')}`;
 
-          // 납기일 파싱
+          // 납기일 파싱 (엑셀 시리얼 넘버 + 다양한 날짜 포맷 대응)
           let deliveryDate: string | null = null;
           if (project.delivery_date) {
-            const dm = project.delivery_date.match(/(\d{4})[^\d]+(\d{1,2})[^\d]+(\d{1,2})/);
-            if (dm) deliveryDate = `${dm[1]}-${dm[2].padStart(2, '0')}-${dm[3].padStart(2, '0')}`;
+            const parsed = parseExcelDate(project.delivery_date);
+            if (parsed && parsed.match(/^\d{4}-\d{2}-\d{2}$/)) deliveryDate = parsed;
           }
 
           const newProj = await client.query(
