@@ -890,8 +890,9 @@ export default function PurchaseOrdersPage() {
     try {
       const res = await api.get<{ data: PurchaseOrder[] }>(`/purchase-orders${search ? `?search=${encodeURIComponent(search)}` : ''}`);
       setList(res.data ?? []);
-    } catch {
-      toast.error('발주서 목록 로드 실패');
+    } catch (e: any) {
+      toast.error(`발주서 목록 로드 실패${e?.status ? ` (${e.status})` : ''}`);
+      console.error('fetchList error:', e);
     } finally {
       setLoading(false);
     }

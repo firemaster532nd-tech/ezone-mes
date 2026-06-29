@@ -730,8 +730,13 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
       combined = `(${poQuery}) UNION ALL (${projOnlyQuery}) ORDER BY created_at DESC`;
     }
 
-    const { rows } = await pool.query(combined, params);
-    return { data: rows };
+    try {
+      const { rows } = await pool.query(combined, params);
+      return { data: rows };
+    } catch (err: any) {
+      req.log.error({ err, sql: combined.substring(0, 200) }, 'purchase-orders list query failed');
+      throw err;
+    }
   });
 
 
