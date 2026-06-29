@@ -115,14 +115,13 @@ function buildSocketOrderExcel(soRow: any) {
     // 수신처 및 날짜 채우기
     setCell('F3', soRow.biz_name || '선우산업');
     
-    let dateVal = today;
-    if (soRow.order_date) {
-      const d = new Date(soRow.order_date);
-      if (!isNaN(d.getTime())) {
-        dateVal = `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}`;
-      }
-    }
+    // 발주일자는 작성일(오늘 날짜)로 자동 입력
+    const dToday = new Date();
+    const dateVal = `${dToday.getFullYear()}. ${dToday.getMonth() + 1}. ${dToday.getDate()}`;
     setCell('F5', dateVal);
+
+    // 발주처 상호를 '㈜ 이지원'으로 명시적으로 기입
+    setCell('L4', '㈜ 이지원');
 
     // 소켓 아이템 채우기 (index 10 ~ 36, 즉 Row 11 ~ Row 37)
     const startRow = 10;
