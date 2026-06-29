@@ -91,9 +91,10 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
   // ── Excel 다운로드
   const handleDownload = async () => {
     try {
-      const token = localStorage.getItem('auth_token') || '';
+      const token = localStorage.getItem('ezone_mes_token') || '';
+      const apiBase = (import.meta as any).env?.VITE_API_BASE ?? '/api';
       const resp = await fetch(
-        `/api/socket-orders/${order.so_id}/download`,
+        `${apiBase}/socket-orders/${order.so_id}/download`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!resp.ok) {

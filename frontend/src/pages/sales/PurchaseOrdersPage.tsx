@@ -659,7 +659,8 @@ function SocketOrderTab({ list }: { list: PurchaseOrder[] }) {
     try {
       // Blob 방식으로 파일 다운로드
       const token = localStorage.getItem('ezone_mes_token');
-      const res = await fetch(`/api/purchase-orders/${selectedPoId}/socket-order`, {
+      const apiBase = (import.meta as any).env?.VITE_API_BASE ?? '/api';
+      const res = await fetch(`${apiBase}/purchase-orders/${selectedPoId}/socket-order`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('다운로드 실패');
@@ -668,7 +669,29 @@ function SocketOrderTab({ list }: { list: PurchaseOrder[] }) {
       const a = document.createElement('a');
       const cd = res.headers.get('content-disposition') || '';
       const match = cd.match(/filename\*=UTF-8''(.+)/);
-      a.download = match ? decodeURIComponent(match[1]) : '소켓발주서.xlsx';
+
+      const bizName = (selectedPo?.contractor || selectedPo?.biz_name || '').trim();
+      let dateStr = '';
+      if (selectedPo?.order_date) {
+        const d = new Date(selectedPo.order_date);
+        if (!isNaN(d.getTime())) {
+          dateStr = d.toISOString().slice(0, 10);
+        }
+      }
+      if (!dateStr && selectedPo?.created_at) {
+        const d = new Date(selectedPo.created_at);
+        if (!isNaN(d.getTime())) {
+          dateStr = d.toISOString().slice(0, 10);
+        }
+      }
+      if (!dateStr) {
+        dateStr = new Date().toISOString().slice(0, 10);
+      }
+      const displayName = bizName ? `${bizName}_${dateStr}` : `소켓발주서_${selectedPo?.project_name || '미지정'}_${dateStr}`;
+
+      a.download = match 
+        ? decodeURIComponent(match[1]) 
+        : `${displayName}.xlsx`;
       a.href = url;
       a.click();
       URL.revokeObjectURL(url);
