@@ -109,7 +109,7 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
       a.href = url;
       a.download = nameMatch
         ? decodeURIComponent(nameMatch[1].trim())
-        : `소켓발주서_${order.project_name}.xlsx`;
+        : `${order.biz_name || '소켓발주서'}_${order.order_date ? new Date(order.order_date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch {

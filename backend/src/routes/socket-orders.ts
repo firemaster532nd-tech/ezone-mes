@@ -355,7 +355,7 @@ export async function socketOrderRoutes(app: FastifyInstance) {
   app.get('/api/socket-orders/:id/download', { preHandler: requireAuth }, async (req, reply) => {
     const id = parseInt((req.params as any).id);
     const res = await pool.query(
-      `SELECT so.*, po.biz_name, ap.status as approval_status
+      `SELECT so.*, po.biz_name, po.order_date, ap.status as approval_status
        FROM socket_order so
        LEFT JOIN purchase_order po ON po.po_id = so.po_id
        LEFT JOIN approval ap ON ap.doc_type='SOCKET_ORDER' AND ap.doc_id=so.so_id
@@ -366,13 +366,35 @@ export async function socketOrderRoutes(app: FastifyInstance) {
     const row = res.rows[0];
 
     if (!['APPROVED', 'ORDERED', 'RECEIVED'].includes(row.status)) {
-      return reply.code(403).send({ error: '\uACB0\uC7AC \uC644\uB8CC \uD6C4 \uB2E4\uC6B4\uB85C\uB4DC \uAC00\uB2A5\uD569\uB2C8\uB2E4.' });
+      return reply.code(403).send({ error: '결재 완료 후 다운로드 가능합니다.' });
     }
 
     const buf = buildSocketOrderExcel(row);
-    const safeName = (row.project_name || '\uC18C\uCF13\uBC1C\uC8FC\uC11C').replace(/[<>:"/\\|?*]/g, '_').substring(0, 40);
-    const dateStr = new Date().toISOString().slice(0, 10);
-    const fileName = `\uC18C\uCF13\uBC1C\uC8FC\uC11C_${safeName}_${dateStr}.xlsx`;
+
+    // 발주처명 + 발주일자 추출
+    const bizName = (row.biz_name || '').trim();
+    let dateStr = '';
+    if (row.order_date) {
+      const d = new Date(row.order_date);
+      if (!isNaN(d.getTime())) {
+        dateStr = d.toISOString().slice(0, 10);
+      }
+    }
+    
+    if (!dateStr && row.created_at) {
+      const d = new Date(row.created_at);
+      if (!isNaN(d.getTime())) {
+        dateStr = d.toISOString().slice(0, 10);
+      }
+    }
+
+    if (!dateStr) {
+      dateStr = new Date().toISOString().slice(0, 10);
+    }
+
+    const displayName = bizName ? `${bizName}_${dateStr}` : `소켓발주서_${row.project_name || '미지정'}_${dateStr}`;
+    const safeName = displayName.replace(/[<>:"/\\|?*]/g, '_').substring(0, 80);
+    const fileName = `${safeName}.xlsx`;
 
     return reply
       .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
