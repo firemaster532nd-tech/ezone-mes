@@ -14,9 +14,12 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:3000',
   'https://ezone-mes-frontend-v2pa.vercel.app',
-  // 프로덕션 커스텀 도메인 (.kr)
+  // 프로덕션 커스텀 도메인
   'https://xn--sp5btl20d.kr',
   'https://www.xn--sp5btl20d.kr',
+  'https://xn--sp5btl20d.com',
+  'https://www.xn--sp5btl20d.com',
+  'https://frontend-eight-rho-33.vercel.app',
 ];
 
 function setCorsHeaders(req: any, res: any) {
