@@ -63,7 +63,7 @@ function calcBrackets(code: string, w: number, h: number, q: number) {
 // Excel generation
 function buildSocketOrderExcel(soRow: any) {
   const items: any[] = soRow.items_json || [];
-  const projectName = soRow.project_name || '\uD604\uC7A5\uBA85';
+  const projectName = soRow.project_name || '현장명';
   const today = new Date().toLocaleDateString('ko-KR');
 
   const STRUCT_DEPTH: Record<string, number> = {
@@ -78,18 +78,186 @@ function buildSocketOrderExcel(soRow: any) {
     'HTG-1.69': w => Math.round(w / 2 - 30),
   };
 
-  const aoa: any[][] = [];
+  const templatePath = 'c:\\Users\\edwar\\OneDrive\\ezone-mes\\upload\\소켓발주서양식.xlsx';
+  let wb: any;
+  try {
+    wb = XLSX.readFile(templatePath);
+  } catch (err) {
+    console.warn('소켓발주서양식.xlsx 템플릿 로드 실패, 기본 동적 생성 진행', err);
+  }
 
-  // header
-  aoa.push(['\uBC1C \uC8FC \uC11C']);
-  aoa.push(['', '', '\uC218 \uC2E0:', '', '', soRow.biz_name || '', '', '', '', '']);
-  aoa.push(['', '', '\uC218 \uC2E0 \uC790:', '', '', '\uAD6C\uB9E4\uB2F4\uB2F9\uC790', '', '', '', '']);
-  aoa.push(['', '', '\uBC1C\uC8FC\uC77C\uC790:', '', '', today, '', '', '', '']);
-  aoa.push(['', '', '\uACF5\uAE09\uC790:', '', '', '\u338E \uC774\uC9C0\uC6D0', '', '', '', '']);
-  aoa.push(['', '', '\uC8FC\uC18C:', '', '', '\uACBD\uAE30\uB3C4 \uD654\uC131\uC2DC \uC7A5\uC548\uBA74 \uC218\uCD08\uB9AC 1028-21', '', '', '', '']);
-  aoa.push(['', '', '\uC5F0\uB77D\uCC98:', '', '', '070-8870-0300', '', '', '', '']);
-  aoa.push(['\uC544\uB798\uC640 \uAC19\uC774 \uBC1C\uC8FC\uD569\uB2C8\uB2E4.']);
-  aoa.push(['\uC21C\uBC88', '\uC7AC\uC9C8', '\uD488\uBA85', '\uC704\uCE58', '\uAD6C\uC870\uBA85', '\uAC00\uB85C', '\uC138\uB85C', '\uD3ED', '\uBC1C\uC8FC', '\uBE44\uACE0(\uD604\uC7A5\uBA85)']);
+  // 헬퍼 함수들 정의
+  const getCellAddress = (colIndex: number, rowIndex: number): string => {
+    let col = '';
+    let temp = colIndex;
+    while (temp >= 0) {
+      col = String.fromCharCode((temp % 26) + 65) + col;
+      temp = Math.floor(temp / 26) - 1;
+    }
+    return `${col}${rowIndex + 1}`;
+  };
+
+  if (wb) {
+    // 템플릿 기반 생성 로직
+    const sheetName = wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+
+    const setCell = (addr: string, val: any) => {
+      if (!ws[addr]) {
+        ws[addr] = {};
+      }
+      ws[addr].v = val;
+      if (typeof val === 'number') ws[addr].t = 'n';
+      else if (typeof val === 'boolean') ws[addr].t = 'b';
+      else ws[addr].t = 's';
+    };
+
+    // 수신처 및 날짜 채우기
+    setCell('F3', soRow.biz_name || '선우산업');
+    
+    let dateVal = today;
+    if (soRow.order_date) {
+      const d = new Date(soRow.order_date);
+      if (!isNaN(d.getTime())) {
+        dateVal = `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}`;
+      }
+    }
+    setCell('F5', dateVal);
+
+    // 소켓 아이템 채우기 (index 10 ~ 36, 즉 Row 11 ~ Row 37)
+    const startRow = 10;
+    const maxRows = 27;
+    const bracketMap = new Map<string, { t: number; bw: number; l: number; qty: number }>();
+
+    for (let i = 0; i < maxRows; i++) {
+      const item = items[i];
+      const rIdx = startRow + i;
+      if (item) {
+        const code = (item.product_type || '').trim();
+        const w = item.pipe_width_mm || 0;
+        const h = item.pipe_height_mm || 0;
+        const q = item.qty || 1;
+
+        const swCalc = STRUCT_WIDTH_CALC[code];
+        const sw = swCalc ? swCalc(w) : w;
+        const mult = STRUCT_MULT[code] || 1;
+        const depth = STRUCT_DEPTH[code] || 200;
+        const finalQty = q * mult;
+
+        setCell(getCellAddress(0, rIdx), i + 1); // 순번
+        setCell(getCellAddress(1, rIdx), item.material || 'GI'); // 재질
+        setCell(getCellAddress(2, rIdx), '일반형'); // 품명
+        setCell(getCellAddress(3, rIdx), item.structure || ''); // 위치
+        setCell(getCellAddress(4, rIdx), code); // 구조명
+        setCell(getCellAddress(5, rIdx), sw); // 가로
+        setCell(getCellAddress(6, rIdx), h); // 세로
+        setCell(getCellAddress(7, rIdx), depth); // 폭
+        setCell(getCellAddress(8, rIdx), finalQty); // 발주(수량)
+        setCell(getCellAddress(9, rIdx), projectName); // 비고(현장명)
+
+        if (w && h && code) {
+          const bRows = calcBrackets(code, w, h, q);
+          for (const b of bRows) {
+            const key = `${b.t}_${b.bw}_${b.l}`;
+            const existing = bracketMap.get(key);
+            if (existing) existing.qty += b.qty;
+            else bracketMap.set(key, { t: b.t, bw: b.bw, l: b.l, qty: b.qty });
+          }
+        }
+      } else {
+        // 남은 행 공백 처리
+        for (let c = 0; c < 10; c++) {
+          setCell(getCellAddress(c, rIdx), '');
+        }
+      }
+    }
+
+    // 소계 및 총합계 매핑
+    let vt01Sum = 0;
+    let vt049Sum = 0;
+    let vt064Sum = 0;
+    let va064Sum = 0;
+    let grandTotal = 0;
+
+    for (const item of items) {
+      const code = (item.product_type || '').trim();
+      const q = item.qty || 1;
+      const mult = STRUCT_MULT[code] || 1;
+      const finalQty = q * mult;
+      grandTotal += finalQty;
+
+      if (code === 'VT-01') vt01Sum += finalQty;
+      else if (code === 'VT-049') vt049Sum += finalQty;
+      else if (code === 'VT-064') vt064Sum += finalQty;
+      else if (code === 'VA-064') va064Sum += finalQty;
+    }
+
+    setCell('H38', vt01Sum);
+    setCell('H50', vt049Sum);
+    setCell('H52', vt064Sum);
+    setCell('H54', va064Sum);
+    setCell('I55', grandTotal);
+
+    // 평철 브라켓 매핑 (Row 58 ~ Row 87)
+    const bracketRows = [...bracketMap.values()].sort((a, b) => a.bw - b.bw || a.l - b.l);
+    const halfLimit = 30;
+
+    for (let i = 0; i < halfLimit; i++) {
+      const rIdx = 57 + i;
+      const L = bracketRows[i];
+      const R = bracketRows[i + halfLimit];
+
+      if (L) {
+        setCell(getCellAddress(0, rIdx), 'GI');
+        setCell(getCellAddress(1, rIdx), L.t);
+        setCell(getCellAddress(2, rIdx), L.bw);
+        setCell(getCellAddress(3, rIdx), L.l);
+        setCell(getCellAddress(4, rIdx), L.qty);
+      } else {
+        for (let c = 0; c < 5; c++) setCell(getCellAddress(c, rIdx), '');
+      }
+
+      if (R) {
+        setCell(getCellAddress(5, rIdx), 'GI');
+        setCell(getCellAddress(6, rIdx), R.t);
+        setCell(getCellAddress(7, rIdx), R.bw);
+        setCell(getCellAddress(8, rIdx), R.l);
+        setCell(getCellAddress(9, rIdx), R.qty);
+      } else {
+        for (let c = 5; c < 10; c++) setCell(getCellAddress(c, rIdx), '');
+      }
+    }
+
+    const leftBracketTotal = bracketRows.slice(0, halfLimit).reduce((s, r) => s + r.qty, 0);
+    const rightBracketTotal = bracketRows.slice(halfLimit).reduce((s, r) => s + r.qty, 0);
+
+    setCell('E88', leftBracketTotal);
+    setCell('K88', rightBracketTotal);
+
+    // 납품일자
+    if (soRow.delivery_date) {
+      const d = new Date(soRow.delivery_date);
+      if (!isNaN(d.getTime())) {
+        setCell('M92', `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}`);
+      }
+    }
+
+    return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  }
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Fallback: 템플릿이 없을 경우 동적으로 AOA 생성 (기존 방식)
+  // ────────────────────────────────────────────────────────────────────────
+  const aoa: any[][] = [];
+  aoa.push(['발 주 서']);
+  aoa.push(['', '', '수 신:', '', '', soRow.biz_name || '', '', '', '', '']);
+  aoa.push(['', '', '수 신 자:', '', '', '구매담당자', '', '', '', '']);
+  aoa.push(['', '', '발주일자:', '', '', today, '', '', '', '']);
+  aoa.push(['', '', '공급자:', '', '', '㈜ 이지원', '', '', '', '']);
+  aoa.push(['', '', '주소:', '', '', '경기도 화성시 장안면 수촌리 1028-21', '', '', '', '']);
+  aoa.push(['', '', '연락처:', '', '', '070-8870-0300', '', '', '', '']);
+  aoa.push(['아래와 같이 발주합니다.']);
+  aoa.push(['순번', '재질', '품명', '위치', '구조명', '가로', '세로', '폭', '발주', '비고(현장명)']);
   aoa.push(['', '', '', '', '', '(mm)', '(mm)', '(mm)', '(EA)', '']);
 
   let seq = 1;
@@ -107,7 +275,7 @@ function buildSocketOrderExcel(soRow: any) {
     const mult = STRUCT_MULT[code] || 1;
     const depth = STRUCT_DEPTH[code] || 200;
 
-    aoa.push([seq++, item.material || 'GI', '\uC77C\uBC18\uD615', item.structure || '', code, sw, h, depth, q * mult, projectName]);
+    aoa.push([seq++, item.material || 'GI', '일반형', item.structure || '', code, sw, h, depth, q * mult, projectName]);
 
     const bRows = calcBrackets(code, w, h, q);
     for (const b of bRows) {
@@ -119,11 +287,11 @@ function buildSocketOrderExcel(soRow: any) {
   }
 
   const socketTotal = aoa.slice(10).filter(r => typeof r[0] === 'number').reduce((s, r) => s + (r[8] || 0), 0);
-  aoa.push(['\uCD1D\uD569\uACC4', '', '', '', '', '', '', '', socketTotal, '']);
+  aoa.push(['총합계', '', '', '', '', '', '', '', socketTotal, '']);
 
   aoa.push(['']);
-  aoa.push(['\uD3C9\uCCA0\uC0AC\uC774\uC988(\uC77C\uBC18\uD615)']);
-  aoa.push(['\uB450\uAED8(T)', '\uD3ED(mm)', '\uAE38\uC774(mm)', '\uC218\uB7C9(\uAC1C)', '', '\uB450\uAED8(T)', '\uD3ED(mm)', '\uAE38\uC774(mm)', '\uC218\uB7C9(\uAC1C)', '', '', '\uBE44\uACE0']);
+  aoa.push(['평철사이즈(일반형)']);
+  aoa.push(['두께(T)', '폭(mm)', '길이(mm)', '수량(개)', '', '두께(T)', '폭(mm)', '길이(mm)', '수량(개)', '', '', '', '비고']);
 
   const bracketRows = [...bracketMap.values()].sort((a, b) => a.bw - b.bw || a.l - b.l);
   const half = Math.ceil(bracketRows.length / 2);
@@ -138,20 +306,21 @@ function buildSocketOrderExcel(soRow: any) {
     ]);
   }
   const bracketTotal = bracketRows.reduce((s, r) => s + r.qty, 0);
-  aoa.push(['\uCD1D\uD569\uACC4', '', '', bracketTotal, '', '\uCD1D\uD569\uACC4', '', '', '', '']);
+  aoa.push(['총합계', '', '', bracketTotal, '', '총합계', '', '', '', '']);
 
   aoa.push(['']);
-  aoa.push(['\uB0A9\uD488\uC7A5\uC18C', '', '', '', '', '', projectName, '', '', '']);
+  aoa.push(['납품장소', '', '', '', '', '', projectName, '', '', '']);
 
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [
+  const fallbackWb = XLSX.utils.book_new();
+  const fallbackWs = XLSX.utils.aoa_to_sheet(aoa);
+  fallbackWs['!cols'] = [
     { wch: 6 }, { wch: 6 }, { wch: 10 }, { wch: 8 }, { wch: 10 },
     { wch: 8 }, { wch: 8 }, { wch: 7 }, { wch: 7 }, { wch: 30 },
   ];
-  XLSX.utils.book_append_sheet(wb, ws, '\uC18C\uCF13\uBC1C\uC8FC\uC11C');
-  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  XLSX.utils.book_append_sheet(fallbackWb, fallbackWs, '소켓발주서');
+  return XLSX.write(fallbackWb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
 }
+
 
 // Routes
 export async function socketOrderRoutes(app: FastifyInstance) {
@@ -355,7 +524,7 @@ export async function socketOrderRoutes(app: FastifyInstance) {
   app.get('/api/socket-orders/:id/download', { preHandler: requireAuth }, async (req, reply) => {
     const id = parseInt((req.params as any).id);
     const res = await pool.query(
-      `SELECT so.*, po.biz_name, po.order_date, ap.status as approval_status
+      `SELECT so.*, po.biz_name, po.order_date, po.delivery_date, ap.status as approval_status
        FROM socket_order so
        LEFT JOIN purchase_order po ON po.po_id = so.po_id
        LEFT JOIN approval ap ON ap.doc_type='SOCKET_ORDER' AND ap.doc_id=so.so_id
