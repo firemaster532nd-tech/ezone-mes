@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -81,6 +81,10 @@ export function ProjectPage() {
   const [expandedProjectId, setExpandedProjectId] = useState<number | null>(null);
   const [expandedSchedules, setExpandedSchedules] = useState<DeliverySchedule[]>([]); // 레거시
   const [ordersSchedule, setOrdersSchedule] = useState<any[]>([]); // 발주서 기반 스케줄
+  // ★ 일정추가 - 발주서 선택 피커
+  const [ordersWithBom, setOrdersWithBom] = useState<any[]>([]);
+  const [orderPickerOpen, setOrderPickerOpen] = useState(false);
+  const [selectedOrderForSchedule, setSelectedOrderForSchedule] = useState<any | null>(null);
 
   // 모달 상태
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -245,19 +249,52 @@ export function ProjectPage() {
     }
   };
 
-  // 순차적 납기 일정 추가/삭제/수정
-  const handleAddDelivery = () => {
+  // 일정 추가 - 발주서 선택 피커 열기
+  const handleAddDelivery = async () => {
+    // 현재 편집 중인 프로젝트의 발주서 BOM 데이터 로드
+    if (editingProject?.project_id) {
+      try {
+        const res = await api.get<{ data: any[] }>(`/projects/${editingProject.project_id}/orders-with-bom`);
+        setOrdersWithBom(res.data || []);
+      } catch {
+        setOrdersWithBom([]);
+      }
+    } else {
+      setOrdersWithBom([]);
+    }
+    setSelectedOrderForSchedule(null);
+    setOrderPickerOpen(true);
+  };
+
+  // 발주서 선택 후 일정 행 추가
+  const handleSelectOrderForSchedule = (order: any) => {
+    setSelectedOrderForSchedule(order);
+  };
+
+  // 선택된 발주서로 일정 행 확정 추가
+  const handleConfirmOrderSchedule = (deliveryDate: string, deliveryType: '야상' | '당착' | '택배') => {
+    if (!selectedOrderForSchedule) return;
     setFormData(prev => {
       const nextSeq = prev.deliveries.length + 1;
       return {
         ...prev,
         deliveries: [
           ...prev.deliveries,
-          { seq: nextSeq, delivery_date: new Date().toISOString().slice(0, 10), delivery_qty: 0, remarks: '', delivery_type: '야상' as const }
+          {
+            seq: nextSeq,
+            delivery_date: deliveryDate,
+            delivery_qty: selectedOrderForSchedule.total_sets || 0,
+            remarks: `${selectedOrderForSchedule.round_no}차 발주 (${selectedOrderForSchedule.order_number})`,
+            delivery_type: deliveryType,
+            order_id: selectedOrderForSchedule.order_id,
+          }
         ]
       };
     });
+    setOrderPickerOpen(false);
+    setSelectedOrderForSchedule(null);
   };
+
 
   const handleRemoveDelivery = (idx: number) => {
     setFormData(prev => {
@@ -926,11 +963,22 @@ export function ProjectPage() {
                   </button>
                 </div>
 
-                {formData.deliveries.length === 0 ? (
+                {/* ★ 발주서 선택 피커 패널 */}
+                {orderPickerOpen && (
+                  <OrderPickerPanel
+                    orders={ordersWithBom}
+                    selectedOrder={selectedOrderForSchedule}
+                    onSelectOrder={handleSelectOrderForSchedule}
+                    onConfirm={handleConfirmOrderSchedule}
+                    onClose={() => { setOrderPickerOpen(false); setSelectedOrderForSchedule(null); }}
+                  />
+                )}
+
+                {formData.deliveries.length === 0 && !orderPickerOpen ? (
                   <div className="text-center py-5 text-slate-400 border border-dashed border-slate-200 rounded-lg font-medium">
                     등록된 납기 회차가 없습니다. 상단 '일정 추가'로 최초/순차 납기를 지정해 주세요.
                   </div>
-                ) : (
+                ) : formData.deliveries.length > 0 ? (
                   <div className="border border-slate-200 rounded-xl overflow-hidden shadow-inner">
                     <table className="w-full text-xs text-left border-collapse bg-slate-50/50">
                       <thead>
@@ -989,7 +1037,7 @@ export function ProjectPage() {
                                   placeholder="특이사항"
                                   className="w-full border border-slate-200 rounded px-2 py-1 outline-none focus:border-blue-500 shadow-sm" />
                               </td>
-                              <td className="px-3 py-2 text-center">
+                               <td className="px-3 py-2 text-center">
                                 <button type="button" onClick={() => handleRemoveDelivery(dIdx)}
                                   className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors">
                                   <Trash2 className="h-3.5 w-3.5" />
@@ -1001,7 +1049,7 @@ export function ProjectPage() {
                        </tbody>
                     </table>
                   </div>
-                )}
+                ) : null}
               </div>
 
               {/* ★ 발주서 엑셀 첨부 */}
@@ -1100,6 +1148,150 @@ export function ProjectPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── 발주서 선택 피커 컴포넌트 ───
+function OrderPickerPanel({
+  orders, selectedOrder, onSelectOrder, onConfirm, onClose
+}: {
+  orders: any[];
+  selectedOrder: any | null;
+  onSelectOrder: (order: any) => void;
+  onConfirm: (deliveryDate: string, deliveryType: '야상' | '당착' | '택배') => void;
+  onClose: () => void;
+}) {
+  const [deliveryDate, setDeliveryDate] = useState(new Date().toISOString().slice(0, 10));
+  const [deliveryType, setDeliveryType] = useState<'야상' | '당착' | '택배'>('야상');
+
+  const arrDate = (() => {
+    if (!deliveryDate) return '';
+    const d = new Date(deliveryDate);
+    if (deliveryType !== '당착') d.setDate(d.getDate() + 1);
+    return d.toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' });
+  })();
+
+  const typeColors: Record<string, string> = {
+    '야상': 'bg-blue-500 text-white',
+    '당착': 'bg-amber-400 text-white',
+    '택배': 'bg-emerald-500 text-white',
+  };
+
+  return (
+    <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <h5 className="text-xs font-black text-indigo-700 flex items-center gap-1.5">
+          <FileText className="h-3.5 w-3.5" />
+          발주서 선택 (현장명 · 구조체 수량 자동 입력)
+        </h5>
+        <button type="button" onClick={onClose} className="p-1 rounded hover:bg-indigo-100 text-indigo-400">
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {orders.length === 0 ? (
+        <div className="text-center py-4 text-slate-400 text-xs">이 프로젝트에 연결된 발주서가 없습니다.</div>
+      ) : (
+        <div className="space-y-2 max-h-64 overflow-y-auto">
+          {orders.map((ord) => (
+            <button
+              key={ord.order_id}
+              type="button"
+              onClick={() => onSelectOrder(ord)}
+              className={`w-full text-left rounded-lg border px-3 py-2.5 transition-all ${
+                selectedOrder?.order_id === ord.order_id
+                  ? 'border-indigo-500 bg-white shadow-md'
+                  : 'border-slate-200 bg-white hover:border-indigo-300'
+              }`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="px-2 py-0.5 rounded-full bg-indigo-600 text-white text-[10px] font-bold">{ord.round_no}차</span>
+                <span className="text-xs font-black text-slate-700">{ord.order_number}</span>
+                <span className="text-xs text-slate-500">{ord.order_date}</span>
+                {ord.total_sets && (
+                  <span className="ml-auto text-xs font-bold text-indigo-600">{ord.total_sets} 세트</span>
+                )}
+              </div>
+
+              {/* 구조체 목록 (VT-049 등) */}
+              {ord.items && ord.items.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-1.5">
+                  {ord.items.map((item: any, i: number) => (
+                    <span key={i} className="inline-flex items-center gap-0.5 text-[10px] bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 font-mono font-bold">
+                      {item.structure_code || item.structure_name} × {item.set_qty}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* BOM 자재 (세라믹울 등) */}
+              {ord.bom_materials && ord.bom_materials.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {ord.bom_materials.slice(0, 6).map((mat: any, i: number) => {
+                    const qty = parseFloat(mat.total_qty);
+                    const rollLen = parseFloat(mat.roll_length_m || '0');
+                    const rolls = rollLen > 0 ? Math.ceil(qty / rollLen) : null;
+                    return (
+                      <span key={i} className="inline-flex items-center gap-0.5 text-[10px] bg-emerald-50 text-emerald-700 rounded px-1.5 py-0.5">
+                        {mat.item_name || mat.item_code}
+                        {mat.spec_detail ? ` (${mat.spec_detail})` : ''}
+                        &nbsp;{qty.toFixed(qty % 1 === 0 ? 0 : 1)}{mat.unit || ''}
+                        {rolls ? <span className="text-emerald-500 ml-0.5">≈{rolls}롤</span> : null}
+                      </span>
+                    );
+                  })}
+                  {ord.bom_materials.length > 6 && (
+                    <span className="text-[10px] text-slate-400">+{ord.bom_materials.length - 6}종</span>
+                  )}
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 발송일자 + 납기유형 입력 */}
+      {selectedOrder && (
+        <div className="bg-white border border-indigo-200 rounded-lg p-3 space-y-2">
+          <p className="text-[10px] font-black text-indigo-600 uppercase tracking-wider">발송 정보 입력</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-1">발송일자 *</label>
+              <input
+                type="date"
+                value={deliveryDate}
+                onChange={e => setDeliveryDate(e.target.value)}
+                className="w-full border border-slate-200 rounded px-2 py-1.5 text-xs font-mono outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-slate-500 mb-1">납기유형</label>
+              <div className="flex gap-1">
+                {(['야상', '당착', '택배'] as const).map(t => (
+                  <button key={t} type="button"
+                    onClick={() => setDeliveryType(t)}
+                    className={`flex-1 py-1.5 rounded text-[10px] font-bold transition-all ${
+                      deliveryType === t ? typeColors[t] : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                    }`}>{t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          {deliveryDate && (
+            <p className="text-[10px] text-blue-600 font-mono">→ 도착 예정: {arrDate}</p>
+          )}
+          <button
+            type="button"
+            onClick={() => onConfirm(deliveryDate, deliveryType)}
+            disabled={!deliveryDate}
+            className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black transition-all disabled:opacity-40"
+          >
+            일정 추가 확정
+          </button>
         </div>
       )}
     </div>

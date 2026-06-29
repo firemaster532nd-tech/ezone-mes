@@ -539,5 +539,75 @@ export async function projectRoutes(app: FastifyInstance) {
 
     return { data: rows };
   });
-}
 
+  // ─── [GET] /api/projects/:id/orders-with-bom ───
+  // 일정추가 폼용: 프로젝트에 연결된 발주서 목록 + 구조체별 BOM 수량
+  app.get<{ Params: { id: string } }>('/api/projects/:id/orders-with-bom', { preHandler: requireAuth }, async (req, reply) => {
+    const projectId = parseInt(req.params.id, 10);
+
+    // 발주서 목록 (차수 포함)
+    const ordersRes = await pool.query(`
+      SELECT
+        so.order_id,
+        so.order_number,
+        so.order_date::date     AS order_date,
+        so.delivery_date::date  AS delivery_date,
+        so.customer_name,
+        so.project_name,
+        so.total_sets,
+        so.status,
+        ROW_NUMBER() OVER (ORDER BY so.order_date ASC, so.order_id ASC) AS round_no
+      FROM sales_order so
+      WHERE so.project_id = $1
+      ORDER BY so.order_date ASC, so.order_id ASC
+    `, [projectId]);
+
+    // 각 발주서의 BOM 구조체별 수량 (구조체 단위 취합)
+    const orders = await Promise.all(ordersRes.rows.map(async (order) => {
+      // 1) 구조체 아이템 (sales_order_item + certification_master)
+      const itemsRes = await pool.query(`
+        SELECT
+          soi.order_item_id,
+          soi.qty                     AS set_qty,
+          cm.structure_name,
+          cm.structure_code,
+          cm.socket_name,
+          cm.product_group,
+          cm.install_qty
+        FROM sales_order_item soi
+        JOIN certification_master cm ON cm.cert_id = soi.cert_id
+        WHERE soi.order_id = $1
+        ORDER BY soi.sort_order
+      `, [order.order_id]);
+
+      // 2) BOM 자재별 수량 (롤 길이 포함)
+      const bomRes = await pool.query(`
+        SELECT
+          obr.item_code,
+          obr.item_name,
+          obr.item_category,
+          obr.component_name,
+          obr.spec_detail,
+          SUM(obr.required_qty)       AS total_qty,
+          obr.unit,
+          im.roll_length_m,
+          im.roll_spec
+        FROM order_bom_result obr
+        LEFT JOIN item_master im ON im.item_id = obr.item_id
+        WHERE obr.order_id = $1
+        GROUP BY obr.item_code, obr.item_name, obr.item_category,
+                 obr.component_name, obr.spec_detail, obr.unit,
+                 im.roll_length_m, im.roll_spec
+        ORDER BY obr.item_category, obr.item_code
+      `, [order.order_id]);
+
+      return {
+        ...order,
+        items: itemsRes.rows,         // 구조체 목록 (VT-049 몇 세트 등)
+        bom_materials: bomRes.rows,   // 자재 목록 (세라믹울 몇 m 등)
+      };
+    }));
+
+    return { data: orders };
+  });
+}
