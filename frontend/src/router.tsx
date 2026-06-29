@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useRouteError, isRouteErrorResponse, Link } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { CertificationsPage } from '@/pages/master/CertificationsPage';
@@ -71,6 +71,20 @@ import { ShipmentReadyPage } from '@/pages/shipment/ShipmentReadyPage';
 import { SocketOrderWaitPage } from '@/pages/orders/SocketOrderWaitPage';
 import SocketIncomingDetailPage from '@/pages/quality/SocketIncomingDetailPage';
 
+// ─── 라우트 에러 바운더리 ───
+function RouteErrorBoundary() {
+  const error = useRouteError();
+  const is404 = isRouteErrorResponse(error) && error.status === 404;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 16, fontFamily: 'sans-serif', background: '#f8fafc' }}>
+      <div style={{ fontSize: 60, opacity: 0.3 }}>{is404 ? '💭' : '⚠️'}</div>
+      <h1 style={{ fontSize: 20, fontWeight: 800, color: '#334155' }}>{is404 ? '페이지를 찾을 수 없습니다' : '에러가 발생했습니다'}</h1>
+      <p style={{ fontSize: 14, color: '#94a3b8' }}>{is404 ? '요청하신 페이지가 존재하지 않거나 이동되었습니다.' : String((error as any)?.message || error)}</p>
+      <Link to="/dashboard" style={{ padding: '8px 24px', background: '#4f46e5', color: '#fff', borderRadius: 8, textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>대시보드로 이동</Link>
+    </div>
+  );
+}
+
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
 
@@ -82,6 +96,7 @@ export const router = createBrowserRouter([
   {
     path: '/',
     element: <AuthGuard><AppLayout /></AuthGuard>,
+    errorElement: <RouteErrorBoundary />,
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
       // 대시보드
@@ -158,6 +173,8 @@ export const router = createBrowserRouter([
       { path: 'settings/departments',  element: <DepartmentsPage /> },
       { path: 'settings/permissions',  element: <PermissionsPage /> },
       { path: 'settings/ecount',       element: <EcountSyncPage /> },
+      // catch-all: unknown paths redirect to dashboard
+      { path: '*', element: <Navigate to="/dashboard" replace /> },
     ],
   },
 ]);
