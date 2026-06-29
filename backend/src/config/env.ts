@@ -12,8 +12,7 @@ export const env = {
   PORT: parseInt(process.env.PORT || '3000', 10),
   NODE_ENV: process.env.NODE_ENV || 'development',
   CORS_ORIGIN: parseCorsOrigin(
-    process.env.CORS_ORIGIN ||
-    'http://localhost:5173,http://localhost:3000,https://ezone-mes-frontend-v2pa.vercel.app'
+    process.env.CORS_ORIGIN || '*'
   ),
   JWT_SECRET: process.env.JWT_SECRET || 'change-me-in-production-ezone-mes-dev-secret',
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
