@@ -1,5 +1,5 @@
-import { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
+import { sendAlimtalk } from '../lib/notification.js';
 
 /** DB 마이그레이션 */
 async function migrateApprovalTables() {
@@ -140,7 +140,32 @@ export async function approvalRoutes(app: FastifyInstance) {
        VALUES ($1, $2, $3, $4, 'REVIEW', $5, $6, $7) RETURNING *`,
       [doc_type, doc_id, doc_title || '', doc_summary || '', writer_id, reviewerId, approverId]
     );
-    return { data: result.rows[0] };
+    const newApproval = result.rows[0];
+
+    // 알림톡 발송 (검토 대기 상태 → 검토자에게 발송)
+    if (reviewerId) {
+      try {
+        const [writerRes, reviewerRes] = await Promise.all([
+          pool.query('SELECT worker_name FROM worker WHERE worker_id = $1', [writer_id]),
+          pool.query('SELECT worker_name, phone FROM worker WHERE worker_id = $1', [reviewerId])
+        ]);
+
+        const writerName = writerRes.rows[0]?.worker_name || '담당자';
+        const reviewer = reviewerRes.rows[0];
+
+        if (reviewer && reviewer.phone) {
+          const docTitle = doc_title || `${doc_type} 문서`;
+          const msg = `[EZONE MES] 새로운 결재(검토) 요청이 있습니다.\n문서명: ${docTitle}\n기안자: ${writerName}`;
+          sendAlimtalk(reviewer.worker_name, reviewer.phone, msg).catch(err => {
+            console.error('Alimtalk failed to send to reviewer:', err);
+          });
+        }
+      } catch (err) {
+        console.error('Failed to prepare alimtalk for reviewer:', err);
+      }
+    }
+
+    return { data: newApproval };
   });
 
   /** GET /api/approvals - 결재 목록 (필터: status, writer_id, reviewer_id, approver_id) */
@@ -274,6 +299,47 @@ export async function approvalRoutes(app: FastifyInstance) {
        WHERE approval_id = $3 RETURNING *`,
       [newStatus, comment || null, parseInt(id)]
     );
+    const updatedApproval = result.rows[0];
+
+    // 알림톡 발송
+    if (newStatus === 'PENDING_APPROVE' && ap.approver_id) {
+      try {
+        const [reviewerRes, approverRes] = await Promise.all([
+          pool.query('SELECT worker_name FROM worker WHERE worker_id = $1', [worker_id]),
+          pool.query('SELECT worker_name, phone FROM worker WHERE worker_id = $1', [ap.approver_id])
+        ]);
+        const reviewerName = reviewerRes.rows[0]?.worker_name || '검토자';
+        const approver = approverRes.rows[0];
+        if (approver && approver.phone) {
+          const docTitle = ap.doc_title || `${ap.doc_type} 문서`;
+          const msg = `[EZONE MES] 새로운 결재(승인) 요청이 있습니다.\n문서명: ${docTitle}\n검토자: ${reviewerName}`;
+          sendAlimtalk(approver.worker_name, approver.phone, msg).catch(err => {
+            console.error('Alimtalk failed to send to approver:', err);
+          });
+        }
+      } catch (err) {
+        console.error('Failed to prepare alimtalk for approver:', err);
+      }
+    } else if ((newStatus === 'REJECTED' || newStatus === 'RETURNED') && ap.writer_id) {
+      try {
+        const [reviewerRes, writerRes] = await Promise.all([
+          pool.query('SELECT worker_name FROM worker WHERE worker_id = $1', [worker_id]),
+          pool.query('SELECT worker_name, phone FROM worker WHERE worker_id = $1', [ap.writer_id])
+        ]);
+        const reviewerName = reviewerRes.rows[0]?.worker_name || '검토자';
+        const writer = writerRes.rows[0];
+        if (writer && writer.phone) {
+          const docTitle = ap.doc_title || `${ap.doc_type} 문서`;
+          const actionWord = newStatus === 'REJECTED' ? '반려' : '반송';
+          const msg = `[EZONE MES] 기안하신 결재가 검토 단계에서 ${actionWord}되었습니다.\n문서명: ${docTitle}\n검토자: ${reviewerName}\n사유: ${comment || '없음'}`;
+          sendAlimtalk(writer.worker_name, writer.phone, msg).catch(err => {
+            console.error('Alimtalk failed to send to writer on review reject/return:', err);
+          });
+        }
+      } catch (err) {
+        console.error('Failed to prepare alimtalk for writer on review reject/return:', err);
+      }
+    }
 
     // ── 자재발주서 결재 연동: 검토 반려/반송 시 PR 상태 되돌리기 ──
     if (ap.doc_type === 'PURCHASE_REQUEST' && ap.doc_id) {
@@ -333,6 +399,34 @@ export async function approvalRoutes(app: FastifyInstance) {
        WHERE approval_id = $3 RETURNING *`,
       [newStatus, comment || null, parseInt(id)]
     );
+    const updatedApproval = result.rows[0];
+
+    // 알림톡 발송 (최종 승인 / 반려 / 반송에 따른 기안자 대상 발송)
+    if (ap.writer_id) {
+      try {
+        const [approverRes, writerRes] = await Promise.all([
+          pool.query('SELECT worker_name FROM worker WHERE worker_id = $1', [worker_id]),
+          pool.query('SELECT worker_name, phone FROM worker WHERE worker_id = $1', [ap.writer_id])
+        ]);
+        const approverName = approverRes.rows[0]?.worker_name || '승인자';
+        const writer = writerRes.rows[0];
+        if (writer && writer.phone) {
+          const docTitle = ap.doc_title || `${ap.doc_type} 문서`;
+          let msg = '';
+          if (newStatus === 'APPROVED') {
+            msg = `[EZONE MES] 기안하신 결재가 최종 승인되었습니다.\n문서명: ${docTitle}\n승인자: ${approverName}`;
+          } else {
+            const actionWord = newStatus === 'REJECTED' ? '반려' : '반송';
+            msg = `[EZONE MES] 기안하신 결재가 최종 단계에서 ${actionWord}되었습니다.\n문서명: ${docTitle}\n승인자: ${approverName}\n사유: ${comment || '없음'}`;
+          }
+          sendAlimtalk(writer.worker_name, writer.phone, msg).catch(err => {
+            console.error('Alimtalk failed to send to writer on final decision:', err);
+          });
+        }
+      } catch (err) {
+        console.error('Failed to prepare alimtalk for writer on final decision:', err);
+      }
+    }
 
     // ── 자재발주서 결재 연동: 승인/반려 시 purchase_request 상태 자동 변경 ──
     if (ap.doc_type === 'PURCHASE_REQUEST' && ap.doc_id) {
