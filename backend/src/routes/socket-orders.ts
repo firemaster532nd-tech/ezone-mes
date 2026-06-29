@@ -3,6 +3,8 @@ import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 import XLSX from 'xlsx';
 import { expandAndSortSocketItems } from '../lib/socket-sort.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // DB migration
 async function migrateSocketOrderTable() {
@@ -78,7 +80,9 @@ function buildSocketOrderExcel(soRow: any) {
     'HTG-1.69': w => Math.round(w / 2 - 30),
   };
 
-  const templatePath = 'c:\\Users\\edwar\\OneDrive\\ezone-mes\\upload\\소켓발주서양식.xlsx';
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  const templatePath = path.join(__dirname, '..', 'templates', '소켓발주서양식.xlsx');
   let wb: any;
   try {
     wb = XLSX.readFile(templatePath);
