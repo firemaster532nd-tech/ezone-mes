@@ -105,7 +105,7 @@ async function buildSocketOrderExcel(soRow: any, ourCompany: any = null): Promis
   };
 
   // 1. 수신처 및 날짜 채우기
-  worksheet.getCell('F3').value = soRow.biz_name || '선우산업';
+  worksheet.getCell('F3').value = soRow.vendor_name || '선우산업';
   
   const dToday = new Date();
   const dateVal = `${dToday.getFullYear()}. ${dToday.getMonth() + 1}. ${dToday.getDate()}`;
@@ -274,6 +274,7 @@ async function buildSocketOrderExcel(soRow: any, ourCompany: any = null): Promis
 // Routes
 export async function socketOrderRoutes(app: FastifyInstance) {
   await migrateSocketOrderTable();
+  await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS vendor_company_id INTEGER REFERENCES company_master(company_id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS vendor_email VARCHAR(200)`);
   await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS order_note TEXT`);
@@ -346,7 +347,8 @@ export async function socketOrderRoutes(app: FastifyInstance) {
 
     const res = await pool.query(`
       SELECT so.*, w.worker_name as writer_name,
-        po.biz_name, po.order_date, pm.project_code,
+        po.biz_name as customer_name, po.order_date, pm.project_code,
+        v.company_name as vendor_name,
         ap.approval_id, ap.status as approval_status, ap.approved_at, ap.approve_comment,
         av.worker_name as approver_name,
         jsonb_array_length(so.items_json) as item_count
@@ -354,6 +356,7 @@ export async function socketOrderRoutes(app: FastifyInstance) {
       LEFT JOIN worker w ON w.worker_id = so.writer_id
       LEFT JOIN purchase_order po ON po.po_id = so.po_id
       LEFT JOIN project_master pm ON pm.project_id = po.project_id
+      LEFT JOIN company_master v ON v.company_id = so.vendor_company_id
       LEFT JOIN LATERAL (
         SELECT * FROM approval WHERE doc_type='SOCKET_ORDER' AND doc_id=so.so_id
         ORDER BY created_at DESC LIMIT 1
@@ -407,10 +410,13 @@ export async function socketOrderRoutes(app: FastifyInstance) {
   // PATCH /api/socket-orders/:id/vendor-email
   app.patch('/api/socket-orders/:id/vendor-email', { preHandler: requireAuth }, async (req, reply) => {
     const id = parseInt((req.params as any).id);
-    const { vendor_email, order_note } = req.body as any;
+    const { vendor_email, order_note, vendor_company_id } = req.body as any;
     const row = await pool.query(
-      `UPDATE socket_order SET vendor_email=$1, order_note=$2, updated_at=NOW() WHERE so_id=$3 RETURNING so_id, vendor_email, order_note`,
-      [vendor_email || null, order_note || null, id]
+      `UPDATE socket_order 
+       SET vendor_email=$1, order_note=$2, vendor_company_id=$3, updated_at=NOW() 
+       WHERE so_id=$4 
+       RETURNING so_id, vendor_email, order_note, vendor_company_id`,
+      [vendor_email || null, order_note || null, vendor_company_id || null, id]
     );
     if (!row.rows[0]) return reply.code(404).send({ error: 'not_found' });
     return { data: row.rows[0] };
@@ -473,9 +479,11 @@ export async function socketOrderRoutes(app: FastifyInstance) {
   app.get('/api/socket-orders/:id/download', { preHandler: requireAuth }, async (req, reply) => {
     const id = parseInt((req.params as any).id);
     const res = await pool.query(
-      `SELECT so.*, po.biz_name, po.order_date, po.delivery_date, ap.status as approval_status
+      `SELECT so.*, po.biz_name as customer_name, po.order_date, po.delivery_date, 
+              v.company_name as vendor_name, ap.status as approval_status
        FROM socket_order so
        LEFT JOIN purchase_order po ON po.po_id = so.po_id
+       LEFT JOIN company_master v ON v.company_id = so.vendor_company_id
        LEFT JOIN approval ap ON ap.doc_type='SOCKET_ORDER' AND ap.doc_id=so.so_id
        WHERE so.so_id=$1 ORDER BY ap.created_at DESC LIMIT 1`,
       [id]
@@ -495,8 +503,8 @@ export async function socketOrderRoutes(app: FastifyInstance) {
 
     const buf = await buildSocketOrderExcel(row, ourCompany);
 
-    // 발주처명 + 발주일자 추출
-    const bizName = (row.biz_name || '').trim();
+    // 소켓 외주 생산업체(수신처)명 + 발주일자 추출
+    const vendorName = (row.vendor_name || '').trim();
     let dateStr = '';
     if (row.order_date) {
       const d = new Date(row.order_date);
@@ -516,7 +524,7 @@ export async function socketOrderRoutes(app: FastifyInstance) {
       dateStr = new Date().toISOString().slice(0, 10);
     }
 
-    const displayName = bizName ? `${bizName}_${dateStr}` : `소켓발주서_${row.project_name || '미지정'}_${dateStr}`;
+    const displayName = vendorName ? `${vendorName}_${dateStr}` : `소켓발주서_${row.project_name || '미지정'}_${dateStr}`;
     const safeName = displayName.replace(/[<>:"/\\|?*]/g, '_').substring(0, 80);
     const fileName = `${safeName}.xlsx`;
 

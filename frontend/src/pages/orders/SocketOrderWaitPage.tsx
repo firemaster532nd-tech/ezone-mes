@@ -75,7 +75,7 @@ const STATUS_CFG = {
 };
 
 // ─── 발주서 행 ─────────────────────────────────────────────────────────────
-function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => void }) {
+function OrderCard({ order, onRefresh, vendors = [] }: { order: SocketOrder; onRefresh: () => void; vendors: any[] }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
@@ -83,6 +83,7 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
   const [emailEdit, setEmailEdit] = useState(false);
   const [emailVal, setEmailVal] = useState(order.vendor_email || '');
   const [noteVal, setNoteVal] = useState(order.order_note || '');
+  const [vendorId, setVendorId] = useState<number | string>(order.vendor_company_id || '');
   const [loading, setLoading] = useState(false);
 
   const cfg = STATUS_CFG[order.status] ?? STATUS_CFG.APPROVED;
@@ -433,7 +434,7 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
                 <table class="buyer-table">
                   <tr>
                     <td class="lbl">수 신 :</td>
-                    <td style="font-weight: bold; color: #1e293b;">${order.biz_name || '선우산업'}</td>
+                    <td style="font-weight: bold; color: #1e293b;">${order.vendor_name || order.biz_name || '선우산업'}</td>
                   </tr>
                   <tr>
                     <td class="lbl">수 신 자 :</td>
@@ -646,6 +647,7 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
       await api.patch(`/socket-orders/${order.so_id}/vendor-email`, {
         vendor_email: emailVal || null,
         order_note: noteVal || null,
+        vendor_company_id: vendorId ? Number(vendorId) : null,
       });
       toast.success('저장했습니다');
       setEmailEdit(false);
@@ -852,8 +854,42 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
           </div>
         </div>
 
-        {/* 이메일 / 메모 (항상 표시, 접기 가능) */}
-        <div className="mt-3 pt-3 border-t border-gray-100">
+        {/* 수신처 및 이메일 / 메모 */}
+        <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
+          {/* 1. 수신처 (생산업체) */}
+          <div className="flex items-center gap-2">
+            <Truck className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+            <span className="text-xs text-gray-500 w-16 flex-shrink-0">수신처</span>
+            {emailEdit ? (
+              <select
+                value={vendorId}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setVendorId(val);
+                  if (val) {
+                    const sel = vendors.find(v => v.company_id === Number(val));
+                    if (sel && sel.email) {
+                      setEmailVal(sel.email);
+                    }
+                  }
+                }}
+                className="flex-1 text-xs border rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white"
+              >
+                <option value="">--- 선택 ---</option>
+                {vendors.map(v => (
+                  <option key={v.company_id} value={v.company_id}>
+                    {v.company_name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className={cn('text-xs font-semibold', order.vendor_name ? 'text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200' : 'text-gray-400 italic')}>
+                {order.vendor_name || '미선택 (Excel 출력 시 선우산업으로 표기)'}
+              </span>
+            )}
+          </div>
+
+          {/* 2. 업체 이메일 */}
           <div className="flex items-center gap-2">
             <Mail className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
             <span className="text-xs text-gray-500 w-16 flex-shrink-0">업체 이메일</span>
@@ -870,12 +906,18 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
                   onClick={handleSaveEmail}
                   disabled={loading}
                   className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-50"
+                  title="저장"
                 >
                   <Save className="h-3 w-3" />
                 </button>
                 <button
-                  onClick={() => { setEmailEdit(false); setEmailVal(order.vendor_email || ''); }}
+                  onClick={() => { 
+                    setEmailEdit(false); 
+                    setEmailVal(order.vendor_email || ''); 
+                    setVendorId(order.vendor_company_id || '');
+                  }}
                   className="px-2 py-1 text-gray-500 text-xs rounded hover:bg-gray-100"
+                  title="취소"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -894,6 +936,8 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
               </div>
             )}
           </div>
+
+          {/* 3. 메모 */}
           {order.order_note && !emailEdit && (
             <div className="flex items-start gap-2 mt-1.5">
               <FileText className="h-3.5 w-3.5 text-gray-400 flex-shrink-0 mt-0.5" />
@@ -981,8 +1025,18 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
 // ─── 메인 페이지 ───────────────────────────────────────────────────────────
 export function SocketOrderWaitPage() {
   const [list, setList] = useState<SocketOrder[]>([]);
+  const [vendors, setVendors] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<'ALL' | 'APPROVED' | 'ORDERED' | 'RECEIVED'>('ALL');
+
+  const fetchVendors = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: any[] }>('/companies?type=VENDOR&active=true');
+      setVendors(res.data?.data || []);
+    } catch (e) {
+      console.error('생산업체 목록 조회 실패', e);
+    }
+  }, []);
 
   const fetchList = useCallback(async () => {
     setLoading(true);
@@ -1000,7 +1054,10 @@ export function SocketOrderWaitPage() {
     }
   }, [tab]);
 
-  useEffect(() => { fetchList(); }, [fetchList]);
+  useEffect(() => { 
+    fetchList(); 
+    fetchVendors();
+  }, [fetchList, fetchVendors]);
 
   const approvedCount = list.filter(o => o.status === 'APPROVED').length;
   const orderedCount  = list.filter(o => o.status === 'ORDERED').length;
@@ -1100,7 +1157,7 @@ export function SocketOrderWaitPage() {
         ) : (
           <div className="space-y-4 max-w-4xl mx-auto">
             {list.map(order => (
-              <OrderCard key={order.so_id} order={order} onRefresh={fetchList} />
+              <OrderCard key={order.so_id} order={order} onRefresh={fetchList} vendors={vendors} />
             ))}
           </div>
         )}
