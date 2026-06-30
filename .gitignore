@@ -19,3 +19,6 @@ upload/(주)이지원 품질인정서 원본(G4B)/
 
 # 기타 업로드 대용량 파일
 upload/출하대기현황샘플.xlsx
+
+.vercel
+.env*

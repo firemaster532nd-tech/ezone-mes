@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 import XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { expandAndSortSocketItems } from '../lib/socket-sort.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -63,10 +64,10 @@ function calcBrackets(code: string, w: number, h: number, q: number) {
 }
 
 // Excel generation
-function buildSocketOrderExcel(soRow: any, ourCompany: any = null) {
+// Excel generation using ExcelJS to preserve styles and format
+async function buildSocketOrderExcel(soRow: any, ourCompany: any = null): Promise<Buffer> {
   const items: any[] = soRow.items_json || [];
   const projectName = soRow.project_name || '현장명';
-  const today = new Date().toLocaleDateString('ko-KR');
 
   const STRUCT_DEPTH: Record<string, number> = {
     'VT-01': 200, 'VT-049': 200, 'VT-064': 200, 'VA-064': 200,
@@ -83,275 +84,175 @@ function buildSocketOrderExcel(soRow: any, ourCompany: any = null) {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = path.dirname(__filename);
   const templatePath = path.join(__dirname, '..', 'templates', '소켓발주서양식.xlsx');
-  let wb: any;
-  try {
-    wb = XLSX.readFile(templatePath);
-  } catch (err) {
-    console.warn('소켓발주서양식.xlsx 템플릿 로드 실패, 기본 동적 생성 진행', err);
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(templatePath);
+  const worksheet = workbook.worksheets[0];
+
+  // 1. 수신처 및 날짜 채우기
+  worksheet.getCell('F3').value = soRow.biz_name || '선우산업';
+  
+  const dToday = new Date();
+  const dateVal = `${dToday.getFullYear()}. ${dToday.getMonth() + 1}. ${dToday.getDate()}`;
+  worksheet.getCell('F5').value = dateVal;
+
+  // 2. 발주처(공급자) 정보 매핑 (기초정보 DB 연동)
+  if (ourCompany) {
+    if (ourCompany.corporate_no || ourCompany.company_code) {
+      worksheet.getCell('L3').value = ourCompany.corporate_no || ourCompany.company_code;
+    }
+    if (ourCompany.company_name) {
+      worksheet.getCell('L4').value = ourCompany.company_name;
+    }
+    if (ourCompany.ceo_name) {
+      worksheet.getCell('O4').value = ourCompany.ceo_name;
+    }
+    if (ourCompany.address) {
+      worksheet.getCell('L5').value = ourCompany.address;
+    }
+    if (ourCompany.business_type) {
+      worksheet.getCell('L6').value = ourCompany.business_type;
+    }
+    if (ourCompany.business_item) {
+      worksheet.getCell('O6').value = ourCompany.business_item;
+    }
+    if (ourCompany.phone) {
+      worksheet.getCell('L7').value = ourCompany.phone;
+    }
+    if (ourCompany.fax) {
+      worksheet.getCell('O7').value = ourCompany.fax;
+    }
+    if (ourCompany.email) {
+      worksheet.getCell('L8').value = ourCompany.email;
+    }
+  } else {
+    worksheet.getCell('L4').value = '㈜ 이지원';
   }
 
-  // 헬퍼 함수들 정의
-  const getCellAddress = (colIndex: number, rowIndex: number): string => {
-    let col = '';
-    let temp = colIndex;
-    while (temp >= 0) {
-      col = String.fromCharCode((temp % 26) + 65) + col;
-      temp = Math.floor(temp / 26) - 1;
-    }
-    return `${col}${rowIndex + 1}`;
-  };
+  // 3. 소켓 아이템 채우기 (Row 11 ~ Row 37)
+  const startRow = 11;
+  const maxRows = 27;
+  const bracketMap = new Map<string, { t: number; bw: number; l: number; qty: number }>();
 
-  if (wb) {
-    // 템플릿 기반 생성 로직
-    const sheetName = wb.SheetNames[0];
-    const ws = wb.Sheets[sheetName];
+  for (let i = 0; i < maxRows; i++) {
+    const item = items[i];
+    const rNum = startRow + i;
+    const row = worksheet.getRow(rNum);
 
-    const setCell = (addr: string, val: any) => {
-      if (!ws[addr]) {
-        ws[addr] = {};
-      }
-      ws[addr].v = val;
-      if (typeof val === 'number') ws[addr].t = 'n';
-      else if (typeof val === 'boolean') ws[addr].t = 'b';
-      else ws[addr].t = 's';
-    };
+    if (item) {
+      const code = (item.product_type || '').trim();
+      const w = item.pipe_width_mm || 0;
+      const h = item.pipe_height_mm || 0;
+      const q = item.qty || 1;
 
-    // 수신처 및 날짜 채우기
-    setCell('F3', soRow.biz_name || '선우산업');
-    
-    // 발주일자는 작성일(오늘 날짜)로 자동 입력
-    const dToday = new Date();
-    const dateVal = `${dToday.getFullYear()}. ${dToday.getMonth() + 1}. ${dToday.getDate()}`;
-    setCell('F5', dateVal);
+      const swCalc = STRUCT_WIDTH_CALC[code];
+      const sw = swCalc ? swCalc(w) : w;
+      const mult = STRUCT_MULT[code] || 1;
+      const depth = STRUCT_DEPTH[code] || 200;
+      const finalQty = q * mult;
 
-    // 발주처(공급자) 정보 매핑 (기초정보 DB 연동)
-    if (ourCompany) {
-      if (ourCompany.corporate_no || ourCompany.company_code) {
-        setCell('L3', ourCompany.corporate_no || ourCompany.company_code);
-      }
-      if (ourCompany.company_name) {
-        setCell('L4', ourCompany.company_name);
-      }
-      if (ourCompany.ceo_name) {
-        setCell('O4', ourCompany.ceo_name);
-      }
-      if (ourCompany.address) {
-        setCell('L5', ourCompany.address);
-      }
-      if (ourCompany.business_type) {
-        setCell('L6', ourCompany.business_type);
-      }
-      if (ourCompany.business_item) {
-        setCell('O6', ourCompany.business_item);
-      }
-      if (ourCompany.phone) {
-        setCell('L7', ourCompany.phone);
-      }
-      if (ourCompany.fax) {
-        setCell('O7', ourCompany.fax);
-      }
-      if (ourCompany.email) {
-        setCell('L8', ourCompany.email);
+      row.getCell(1).value = i + 1; // 순번
+      row.getCell(2).value = item.material || 'GI'; // 재질
+      row.getCell(3).value = '일반형'; // 품명
+      row.getCell(4).value = item.structure || ''; // 위치
+      row.getCell(5).value = code; // 구조명
+      row.getCell(6).value = sw; // 가로
+      row.getCell(7).value = h; // 세로
+      row.getCell(8).value = depth; // 폭
+      row.getCell(9).value = finalQty; // 발주(수량)
+      row.getCell(10).value = projectName; // 비고(현장명)
+
+      if (w && h && code) {
+        const bRows = calcBrackets(code, w, h, q);
+        for (const b of bRows) {
+          const key = `${b.t}_${b.bw}_${b.l}`;
+          const existing = bracketMap.get(key);
+          if (existing) existing.qty += b.qty;
+          else bracketMap.set(key, { t: b.t, bw: b.bw, l: b.l, qty: b.qty });
+        }
       }
     } else {
-      setCell('L4', '㈜ 이지원');
-    }
-
-    // 소켓 아이템 채우기 (index 10 ~ 36, 즉 Row 11 ~ Row 37)
-    const startRow = 10;
-    const maxRows = 27;
-    const bracketMap = new Map<string, { t: number; bw: number; l: number; qty: number }>();
-
-    for (let i = 0; i < maxRows; i++) {
-      const item = items[i];
-      const rIdx = startRow + i;
-      if (item) {
-        const code = (item.product_type || '').trim();
-        const w = item.pipe_width_mm || 0;
-        const h = item.pipe_height_mm || 0;
-        const q = item.qty || 1;
-
-        const swCalc = STRUCT_WIDTH_CALC[code];
-        const sw = swCalc ? swCalc(w) : w;
-        const mult = STRUCT_MULT[code] || 1;
-        const depth = STRUCT_DEPTH[code] || 200;
-        const finalQty = q * mult;
-
-        setCell(getCellAddress(0, rIdx), i + 1); // 순번
-        setCell(getCellAddress(1, rIdx), item.material || 'GI'); // 재질
-        setCell(getCellAddress(2, rIdx), '일반형'); // 품명
-        setCell(getCellAddress(3, rIdx), item.structure || ''); // 위치
-        setCell(getCellAddress(4, rIdx), code); // 구조명
-        setCell(getCellAddress(5, rIdx), sw); // 가로
-        setCell(getCellAddress(6, rIdx), h); // 세로
-        setCell(getCellAddress(7, rIdx), depth); // 폭
-        setCell(getCellAddress(8, rIdx), finalQty); // 발주(수량)
-        setCell(getCellAddress(9, rIdx), projectName); // 비고(현장명)
-
-        if (w && h && code) {
-          const bRows = calcBrackets(code, w, h, q);
-          for (const b of bRows) {
-            const key = `${b.t}_${b.bw}_${b.l}`;
-            const existing = bracketMap.get(key);
-            if (existing) existing.qty += b.qty;
-            else bracketMap.set(key, { t: b.t, bw: b.bw, l: b.l, qty: b.qty });
-          }
-        }
-      } else {
-        // 남은 행 공백 처리
-        for (let c = 0; c < 10; c++) {
-          setCell(getCellAddress(c, rIdx), '');
-        }
+      // 빈 행들은 지움
+      for (let c = 1; c <= 10; c++) {
+        row.getCell(c).value = null;
       }
     }
-
-    // 소계 및 총합계 매핑
-    let vt01Sum = 0;
-    let vt049Sum = 0;
-    let vt064Sum = 0;
-    let va064Sum = 0;
-    let grandTotal = 0;
-
-    for (const item of items) {
-      const code = (item.product_type || '').trim();
-      const q = item.qty || 1;
-      const mult = STRUCT_MULT[code] || 1;
-      const finalQty = q * mult;
-      grandTotal += finalQty;
-
-      if (code === 'VT-01') vt01Sum += finalQty;
-      else if (code === 'VT-049') vt049Sum += finalQty;
-      else if (code === 'VT-064') vt064Sum += finalQty;
-      else if (code === 'VA-064') va064Sum += finalQty;
-    }
-
-    setCell('H38', vt01Sum);
-    setCell('H50', vt049Sum);
-    setCell('H52', vt064Sum);
-    setCell('H54', va064Sum);
-    setCell('I55', grandTotal);
-
-    // 평철 브라켓 매핑 (Row 58 ~ Row 87)
-    const bracketRows = [...bracketMap.values()].sort((a, b) => a.bw - b.bw || a.l - b.l);
-    const halfLimit = 30;
-
-    for (let i = 0; i < halfLimit; i++) {
-      const rIdx = 57 + i;
-      const L = bracketRows[i];
-      const R = bracketRows[i + halfLimit];
-
-      if (L) {
-        setCell(getCellAddress(0, rIdx), 'GI');
-        setCell(getCellAddress(1, rIdx), L.t);
-        setCell(getCellAddress(2, rIdx), L.bw);
-        setCell(getCellAddress(3, rIdx), L.l);
-        setCell(getCellAddress(4, rIdx), L.qty);
-      } else {
-        for (let c = 0; c < 5; c++) setCell(getCellAddress(c, rIdx), '');
-      }
-
-      if (R) {
-        setCell(getCellAddress(5, rIdx), 'GI');
-        setCell(getCellAddress(6, rIdx), R.t);
-        setCell(getCellAddress(7, rIdx), R.bw);
-        setCell(getCellAddress(8, rIdx), R.l);
-        setCell(getCellAddress(9, rIdx), R.qty);
-      } else {
-        for (let c = 5; c < 10; c++) setCell(getCellAddress(c, rIdx), '');
-      }
-    }
-
-    const leftBracketTotal = bracketRows.slice(0, halfLimit).reduce((s, r) => s + r.qty, 0);
-    const rightBracketTotal = bracketRows.slice(halfLimit).reduce((s, r) => s + r.qty, 0);
-
-    setCell('E88', leftBracketTotal);
-    setCell('K88', rightBracketTotal);
-
-    // 납품일자
-    if (soRow.delivery_date) {
-      const d = new Date(soRow.delivery_date);
-      if (!isNaN(d.getTime())) {
-        setCell('M92', `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}`);
-      }
-    }
-
-    return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
   }
 
-  // ────────────────────────────────────────────────────────────────────────
-  // Fallback: 템플릿이 없을 경우 동적으로 AOA 생성 (기존 방식)
-  // ────────────────────────────────────────────────────────────────────────
-  const aoa: any[][] = [];
-  aoa.push(['발 주 서']);
-  aoa.push(['', '', '수 신:', '', '', soRow.biz_name || '', '', '', '', '']);
-  aoa.push(['', '', '수 신 자:', '', '', '구매담당자', '', '', '', '']);
-  aoa.push(['', '', '발주일자:', '', '', today, '', '', '', '']);
-  aoa.push(['', '', '공급자:', '', '', '㈜ 이지원', '', '', '', '']);
-  aoa.push(['', '', '주소:', '', '', '경기도 화성시 장안면 수촌리 1028-21', '', '', '', '']);
-  aoa.push(['', '', '연락처:', '', '', '070-8870-0300', '', '', '', '']);
-  aoa.push(['아래와 같이 발주합니다.']);
-  aoa.push(['순번', '재질', '품명', '위치', '구조명', '가로', '세로', '폭', '발주', '비고(현장명)']);
-  aoa.push(['', '', '', '', '', '(mm)', '(mm)', '(mm)', '(EA)', '']);
-
-  let seq = 1;
-  const bracketMap = new Map<string, { t: number; bw: number; l: number; qty: number }>();
+  // 4. 소계 및 총합계 매핑
+  let vt01Sum = 0;
+  let vt049Sum = 0;
+  let vt064Sum = 0;
+  let va064Sum = 0;
+  let grandTotal = 0;
 
   for (const item of items) {
     const code = (item.product_type || '').trim();
-    const w = item.pipe_width_mm || 0;
-    const h = item.pipe_height_mm || 0;
     const q = item.qty || 1;
-    if (!w || !h || !code) continue;
-
-    const swCalc = STRUCT_WIDTH_CALC[code];
-    const sw = swCalc ? swCalc(w) : w;
     const mult = STRUCT_MULT[code] || 1;
-    const depth = STRUCT_DEPTH[code] || 200;
+    const finalQty = q * mult;
+    grandTotal += finalQty;
 
-    aoa.push([seq++, item.material || 'GI', '일반형', item.structure || '', code, sw, h, depth, q * mult, projectName]);
+    if (code === 'VT-01') vt01Sum += finalQty;
+    else if (code === 'VT-049') vt049Sum += finalQty;
+    else if (code === 'VT-064') vt064Sum += finalQty;
+    else if (code === 'VA-064') va064Sum += finalQty;
+  }
 
-    const bRows = calcBrackets(code, w, h, q);
-    for (const b of bRows) {
-      const key = `${b.t}_${b.bw}_${b.l}`;
-      const existing = bracketMap.get(key);
-      if (existing) existing.qty += b.qty;
-      else bracketMap.set(key, { t: b.t, bw: b.bw, l: b.l, qty: b.qty });
+  worksheet.getCell('H38').value = vt01Sum;
+  worksheet.getCell('H50').value = vt049Sum;
+  worksheet.getCell('H52').value = vt064Sum;
+  worksheet.getCell('H54').value = va064Sum;
+  worksheet.getCell('I55').value = grandTotal;
+
+  // 5. 평철 브라켓 매핑 (Row 58 ~ Row 87)
+  const bracketRows = [...bracketMap.values()].sort((a, b) => a.bw - b.bw || a.l - b.l);
+  const startBracketRow = 58;
+  const halfLimit = 30;
+
+  for (let i = 0; i < halfLimit; i++) {
+    const rNum = startBracketRow + i;
+    const row = worksheet.getRow(rNum);
+    const L = bracketRows[i];
+    const R = bracketRows[i + halfLimit];
+
+    if (L) {
+      row.getCell(1).value = 'GI';
+      row.getCell(2).value = L.t;
+      row.getCell(3).value = L.bw;
+      row.getCell(4).value = L.l;
+      row.getCell(5).value = L.qty;
+    } else {
+      for (let c = 1; c <= 5; c++) row.getCell(c).value = null;
+    }
+
+    if (R) {
+      row.getCell(6).value = 'GI';
+      row.getCell(7).value = R.t;
+      row.getCell(8).value = R.bw;
+      row.getCell(9).value = R.l;
+      row.getCell(10).value = R.qty;
+    } else {
+      for (let c = 6; c <= 10; c++) row.getCell(c).value = null;
     }
   }
 
-  const socketTotal = aoa.slice(10).filter(r => typeof r[0] === 'number').reduce((s, r) => s + (r[8] || 0), 0);
-  aoa.push(['총합계', '', '', '', '', '', '', '', socketTotal, '']);
+  const leftBracketTotal = bracketRows.slice(0, halfLimit).reduce((s, r) => s + r.qty, 0);
+  const rightBracketTotal = bracketRows.slice(halfLimit).reduce((s, r) => s + r.qty, 0);
 
-  aoa.push(['']);
-  aoa.push(['평철사이즈(일반형)']);
-  aoa.push(['두께(T)', '폭(mm)', '길이(mm)', '수량(개)', '', '두께(T)', '폭(mm)', '길이(mm)', '수량(개)', '', '', '', '비고']);
+  worksheet.getCell('E88').value = leftBracketTotal;
+  worksheet.getCell('K88').value = rightBracketTotal;
 
-  const bracketRows = [...bracketMap.values()].sort((a, b) => a.bw - b.bw || a.l - b.l);
-  const half = Math.ceil(bracketRows.length / 2);
-  for (let i = 0; i < half; i++) {
-    const L = bracketRows[i];
-    const R = bracketRows[i + half];
-    aoa.push([
-      L?.t || '', L?.bw || '', L?.l || '', L?.qty || '',
-      '',
-      R?.t || '', R?.bw || '', R?.l || '', R?.qty || '',
-      '', '', '',
-    ]);
+  // 6. 납품일자
+  if (soRow.delivery_date) {
+    const d = new Date(soRow.delivery_date);
+    if (!isNaN(d.getTime())) {
+      worksheet.getCell('M92').value = `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}`;
+    }
   }
-  const bracketTotal = bracketRows.reduce((s, r) => s + r.qty, 0);
-  aoa.push(['총합계', '', '', bracketTotal, '', '총합계', '', '', '', '']);
 
-  aoa.push(['']);
-  aoa.push(['납품장소', '', '', '', '', '', projectName, '', '', '']);
-
-  const fallbackWb = XLSX.utils.book_new();
-  const fallbackWs = XLSX.utils.aoa_to_sheet(aoa);
-  fallbackWs['!cols'] = [
-    { wch: 6 }, { wch: 6 }, { wch: 10 }, { wch: 8 }, { wch: 10 },
-    { wch: 8 }, { wch: 8 }, { wch: 7 }, { wch: 7 }, { wch: 30 },
-  ];
-  XLSX.utils.book_append_sheet(fallbackWb, fallbackWs, '소켓발주서');
-  return XLSX.write(fallbackWb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  const buffer = await workbook.xlsx.writeBuffer() as Buffer;
+  return buffer;
 }
 
 
@@ -577,7 +478,7 @@ export async function socketOrderRoutes(app: FastifyInstance) {
     );
     const ourCompany = ourCompanyRes.rows[0] || null;
 
-    const buf = buildSocketOrderExcel(row, ourCompany);
+    const buf = await buildSocketOrderExcel(row, ourCompany);
 
     // 발주처명 + 발주일자 추출
     const bizName = (row.biz_name || '').trim();
