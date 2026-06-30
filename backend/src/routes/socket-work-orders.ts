@@ -318,6 +318,8 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
           1,  // 항상 1개
           item.remark || null, isIncomplete,
           parseInt(String(item.construction_seq ?? 1)) || 1,
+          item.insp_lot_no || null,
+          item.sii_id || null,
         ]);
       }
 
