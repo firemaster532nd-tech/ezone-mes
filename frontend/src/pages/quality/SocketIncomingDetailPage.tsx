@@ -128,15 +128,21 @@ function LabelPrint({ items, projectName }: { items: InspItem[]; projectName: st
 
 // ─── 개별 소켓 행 ──────────────────────────────────────────────────────────
 function ItemRow({
-  item, onUpdate, isReadOnly,
+  item, onUpdate, isReadOnly, projectName,
 }: {
   item: InspItem;
   onUpdate: (siiId: number, patch: Partial<InspItem>) => void;
   isReadOnly?: boolean;
+  projectName: string;
 }) {
   const [note, setNote] = useState(item.insp_note || '');
   const [note2, setNote2] = useState(item.insp_note_2 || '');
+  const [lotNo, setLotNo] = useState(item.insp_lot_no || '');
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setLotNo(item.insp_lot_no || '');
+  }, [item.insp_lot_no]);
 
   const handleResult = async (result: 'PASS' | 'FAIL') => {
     if (isReadOnly) return;
@@ -164,6 +170,52 @@ function ItemRow({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handlePrintSingle = () => {
+    const win = window.open('', '_blank');
+    if (!win) return;
+
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>소켓 인수검사 라벨 (단건)</title>
+        <style>
+          @page { margin: 5mm; }
+          body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 0; }
+          .label {
+            width: 55mm; height: 40mm; border: 1px solid #333;
+            padding: 3mm; box-sizing: border-box;
+            display: flex; flex-direction: column; gap: 1mm;
+          }
+          .lot { font-size: 10pt; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 1mm; }
+          .type { font-size: 9pt; font-weight: bold; color: #1a56db; }
+          .spec { font-size: 9pt; }
+          .project { font-size: 7pt; color: #555; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .date { font-size: 7pt; color: #555; }
+          .result { font-size: 7pt; font-weight: bold; color: #15803d; }
+          .seq { font-size: 7pt; color: #888; text-align: right; }
+        </style>
+      </head>
+      <body>
+        <div class="label">
+          <div class="lot">${item.insp_lot_no || 'LOT 미부여'}</div>
+          <div class="type">${item.product_type}</div>
+          <div class="spec">${item.pipe_width_mm} × ${item.pipe_height_mm} mm</div>
+          <div class="project">${projectName}</div>
+          <div class="date">입고일: ${item.inspected_at
+            ? new Date(item.inspected_at).toLocaleDateString('ko-KR')
+            : new Date().toLocaleDateString('ko-KR')}</div>
+          <div class="result">인수검사 합격 ✓</div>
+          <div class="seq">No.${String(item.seq_no).padStart(3, '0')}</div>
+        </div>
+        <script>window.onload = () => { window.print(); window.close(); }</script>
+      </body>
+      </html>
+    `);
+    win.document.close();
   };
 
   // 최종 판정 색상 (1차 합격 또는 2차 합격 시 초록색)
@@ -197,13 +249,24 @@ function ItemRow({
             </div>
             <div className="mt-1.5 flex items-center gap-2">
               <Tag className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
-              {item.insp_lot_no ? (
-                <span className="text-xs font-mono font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md">
-                  {item.insp_lot_no}
-                </span>
-              ) : (
-                <span className="text-xs text-slate-400 italic">LOT 미부여</span>
-              )}
+              <input
+                type="text"
+                value={lotNo}
+                disabled={isReadOnly}
+                onChange={e => setLotNo(e.target.value)}
+                onBlur={() => {
+                  if (isReadOnly) return;
+                  if (lotNo !== (item.insp_lot_no || '')) {
+                    api.patch(`/socket-incoming/${item.sii_id}`, { insp_lot_no: lotNo || null })
+                      .then(() => onUpdate(item.sii_id, { insp_lot_no: lotNo || null }))
+                      .catch(() => {
+                        toast.error('LOT 번호 저장 실패');
+                      });
+                  }
+                }}
+                placeholder="LOT/시리얼번호 입력..."
+                className="text-xs px-2 py-1 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-400 bg-white font-mono w-[180px]"
+              />
             </div>
           </div>
         </div>
@@ -328,11 +391,23 @@ function ItemRow({
               className="text-[11px] px-2 py-1 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-400 bg-slate-50/50"
             />
           </div>
+
+          {/* 단건 라벨 출력 */}
+          {isFinalPass && (
+            <button
+              onClick={handlePrintSingle}
+              className="flex items-center justify-center p-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 transition-colors shadow-sm self-center sm:self-auto"
+              title="라벨 1장 출력"
+            >
+              <Printer className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
 
 // ─── 메인 페이지 ───────────────────────────────────────────────────────────
 export default function SocketIncomingDetailPage() {
@@ -348,12 +423,14 @@ export default function SocketIncomingDetailPage() {
 
   const fetchWorkers = useCallback(async () => {
     try {
-      const res = await api.get<{ data: any[] }>('/workers');
-      setWorkers(res.data?.data || []);
+      const res = await api.get<any>('/workers');
+      // res.data 가 작업자 리스트 배열입니다.
+      setWorkers(res.data || []);
     } catch (e) {
       console.error('작업자 목록 조회 실패', e);
     }
   }, []);
+
 
   const fetchData = useCallback(async () => {
     if (!soId) return;
@@ -529,7 +606,7 @@ export default function SocketIncomingDetailPage() {
               >
                 <option value="">담당자 선택...</option>
                 {workers.map(w => (
-                  <option key={w.worker_id} value={w.worker_id}>{w.name} ({w.dept_name || '부서없음'})</option>
+                  <option key={w.worker_id} value={w.worker_id}>{w.worker_name} ({w.department || '부서없음'})</option>
                 ))}
               </select>
             </div>
@@ -545,7 +622,7 @@ export default function SocketIncomingDetailPage() {
               >
                 <option value="">검토자 선택...</option>
                 {workers.map(w => (
-                  <option key={w.worker_id} value={w.worker_id}>{w.name} ({w.dept_name || '부서없음'})</option>
+                  <option key={w.worker_id} value={w.worker_id}>{w.worker_name} ({w.department || '부서없음'})</option>
                 ))}
               </select>
             </div>
@@ -561,10 +638,11 @@ export default function SocketIncomingDetailPage() {
               >
                 <option value="">승인자 선택...</option>
                 {workers.map(w => (
-                  <option key={w.worker_id} value={w.worker_id}>{w.name} ({w.dept_name || '부서없음'})</option>
+                  <option key={w.worker_id} value={w.worker_id}>{w.worker_name} ({w.department || '부서없음'})</option>
                 ))}
               </select>
             </div>
+
           </div>
         </div>
 
@@ -667,8 +745,9 @@ export default function SocketIncomingDetailPage() {
           ) : (
             <div className="space-y-2">
               {items.map(item => (
-                <ItemRow key={item.sii_id} item={item} onUpdate={handleUpdate} isReadOnly={isReadOnly} />
+                <ItemRow key={item.sii_id} item={item} onUpdate={handleUpdate} isReadOnly={isReadOnly} projectName={so.project_name} />
               ))}
+
             </div>
           )}
         </div>

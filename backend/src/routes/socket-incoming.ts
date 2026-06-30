@@ -3,23 +3,15 @@ import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 import { expandAndSortSocketItems } from '../lib/socket-sort.js';
 
-// ── C302 5.1 기준: 소켓 인수검사 LOT 번호 생성 ──────────────────────────
-// 형식: YYMMDD + GI + 순번(3자리)   예) 260615GI001
-async function generateInspLotNo(): Promise<string> {
+// ── C302 5.1 기준: 소켓 인수검사 LOT 번호 접두사 생성 (YYMMDDGI) ────────────────
+function getInspLotPrefix(): string {
   const today = new Date();
   const yy = String(today.getFullYear()).slice(2);
   const mm = String(today.getMonth() + 1).padStart(2, '0');
   const dd = String(today.getDate()).padStart(2, '0');
-  const prefix = `${yy}${mm}${dd}GI`;
-
-  const { rows } = await pool.query(
-    `SELECT COUNT(*) AS cnt FROM socket_incoming_inspection
-     WHERE insp_lot_no LIKE $1`,
-    [`${prefix}%`]
-  );
-  const seq = parseInt(rows[0].cnt, 10) + 1;
-  return `${prefix}${String(seq).padStart(3, '0')}`;
+  return `${yy}${mm}${dd}GI`;
 }
+
 
 
 export async function socketIncomingRoutes(app: FastifyInstance) {
@@ -158,42 +150,18 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
   // ─────────────────────────────────────────────────────────────────
   app.post('/api/socket-orders/:id/assign-lots-bulk', { preHandler: requireAuth }, async (req, reply) => {
     const soId = parseInt((req.params as any).id);
-    const { worker_id } = req.body as any;
 
-    const items = await pool.query(
-      `SELECT sii_id FROM socket_incoming_inspection
-       WHERE so_id = $1 AND (insp_lot_no IS NULL OR insp_lot_no = '')
-       ORDER BY seq_no`,
-      [soId]
+    const lotPrefix = getInspLotPrefix();
+    const result = await pool.query(
+      `UPDATE socket_incoming_inspection
+       SET insp_lot_no = $1
+       WHERE so_id = $2 AND (insp_lot_no IS NULL OR insp_lot_no = '')`,
+      [lotPrefix, soId]
     );
 
-    if (items.rows.length === 0) {
-      return { data: { success: true, count: 0, message: '부여할 LOT가 없습니다.' } };
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      let count = 0;
-      for (const row of items.rows) {
-        const lotNo = await generateInspLotNo();
-        await client.query(
-          `UPDATE socket_incoming_inspection
-           SET insp_lot_no = $1
-           WHERE sii_id = $2`,
-          [lotNo, row.sii_id]
-        );
-        count++;
-      }
-      await client.query('COMMIT');
-      return { data: { success: true, count } };
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
+    return { data: { success: true, count: result.rowCount } };
   });
+
 
   // ─────────────────────────────────────────────────────────────────
   // PATCH /api/socket-incoming/:sii_id
