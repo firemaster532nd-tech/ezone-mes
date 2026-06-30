@@ -1089,7 +1089,332 @@ function DetailSwoModal({ swo, onClose, onRefresh }: { swo: SWO; onClose: () => 
             </table>
           </div>
         )}
+
+        {/* 5. 차열재 재단(VM,VT) */}
+        <div className="page-break p-8">
+          <div className="print-header-title">재단작업지시서(차열재)</div>
+          <div className="print-header-meta">현장명: {projectTitle}</div>
+          <table className="print-table">
+            <thead>
+              <tr>
+                <th rowSpan={3}>No.</th>
+                <th rowSpan={3}>구조</th>
+                <th colSpan={2} rowSpan={2}>규격</th>
+                <th rowSpan={3}>소켓 Lot</th>
+                <th rowSpan={3}>수량</th>
+                <th colSpan={4}>소켓외부용(차열재)</th>
+                <th rowSpan={3}>비고</th>
+              </tr>
+              <tr>
+                <th colSpan={2}>상하</th>
+                <th colSpan={2}>좌우</th>
+              </tr>
+              <tr>
+                <th>가로</th>
+                <th>세로</th>
+                <th>규격</th>
+                <th>수량</th>
+                <th>규격</th>
+                <th>수량</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d?.items?.map((item: any, idx: number) => {
+                const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                const pType = (item.product_type || item.structure || '').toUpperCase();
+                const isVm = pType.includes('VM') || pType.includes('VA');
+                return (
+                  <tr key={item.swi_id}>
+                    <td>{String(idx + 1).padStart(2, '0')}</td>
+                    <td>{item.product_type || item.structure || '-'}</td>
+                    <td>{wVal}</td>
+                    <td>{hVal}</td>
+                    <td>{item.insp_lot_no || '-'}</td>
+                    <td>1</td>
+                    <td>{wVal > 0 ? wVal + 60 : ''}</td>
+                    <td>{wVal > 0 ? (isVm ? 2 : 4) : ''}</td>
+                    <td>{hVal > 0 ? hVal : ''}</td>
+                    <td>{hVal > 0 ? (isVm ? 2 : 4) : ''}</td>
+                    <td>{item.remark || '-'}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* 6. 3. 1절곡(VM) */}
+        {vmItems.length > 0 && (
+          <div className="page-break p-8">
+            <div className="print-header-title">절곡생산일지(VM)</div>
+            <div className="print-header-meta">현장명: {projectTitle}</div>
+            <table className="print-table">
+              <thead>
+                <tr>
+                  <th rowSpan={3}>No.</th>
+                  <th colSpan={2} rowSpan={2}>규격</th>
+                  <th rowSpan={3}>수량(EA)</th>
+                  <th rowSpan={3}>소켓 Lot</th>
+                  <th rowSpan={3}>두께</th>
+                  <th rowSpan={3}>평철 폭</th>
+                  <th colSpan={3}>평철 가로</th>
+                  <th colSpan={3}>평철 세로</th>
+                </tr>
+                <tr>
+                  <th colSpan={2}>가로 규격 및 수량</th>
+                  <th rowSpan={2}>수량확인</th>
+                  <th colSpan={2}>세로 규격 및 수량</th>
+                  <th rowSpan={2}>수량확인</th>
+                </tr>
+                <tr>
+                  <th>가로</th>
+                  <th>세로</th>
+                  <th>규격</th>
+                  <th>수량</th>
+                  <th>규격</th>
+                  <th>수량</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vmItems.map((item: any, idx: number) => {
+                  const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                  const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                  return (
+                    <tr key={item.swi_id}>
+                      <td>{String(idx + 1).padStart(2, '0')}</td>
+                      <td>{wVal}</td>
+                      <td>{hVal}</td>
+                      <td>1</td>
+                      <td>{item.insp_lot_no || '-'}</td>
+                      <td>1.6</td>
+                      <td>-</td>
+                      <td>{wVal > 0 ? wVal - 1 : ''}</td>
+                      <td>{wVal > 0 ? 4 : ''}</td>
+                      <td>4</td>
+                      <td>{hVal > 0 ? hVal - 30 : ''}</td>
+                      <td>{hVal > 0 ? 4 : ''}</td>
+                      <td>4</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 7. 3.3 절곡(VT-보강대) */}
+        {vtItems.length > 0 && (
+          <div className="page-break p-8">
+            <div className="print-header-title">절곡생산일지(VT_보강대)</div>
+            <div className="print-header-meta">현장명: {projectTitle}</div>
+            <table className="print-table">
+              <thead>
+                <tr>
+                  <th rowSpan={3}>No.</th>
+                  <th colSpan={2} rowSpan={2}>규격</th>
+                  <th rowSpan={3}>수량(EA)</th>
+                  <th rowSpan={3}>소켓 Lot</th>
+                  <th rowSpan={3}>두께</th>
+                  <th colSpan={3}>평철 가로(받침대)</th>
+                  <th colSpan={3}>평철 세로(보강대)</th>
+                </tr>
+                <tr>
+                  <th rowSpan={2}>폭</th>
+                  <th colSpan={2}>가로 규격 및 수량</th>
+                  <th rowSpan={2}>폭</th>
+                  <th colSpan={2}>세로 규격 및 수량</th>
+                </tr>
+                <tr>
+                  <th>가로</th>
+                  <th>세로</th>
+                  <th>규격</th>
+                  <th>수량</th>
+                  <th>규격</th>
+                  <th>수량</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vtItems.map((item: any, idx: number) => {
+                  const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                  const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                  return (
+                    <tr key={item.swi_id}>
+                      <td>{String(idx + 1).padStart(2, '0')}</td>
+                      <td>{wVal}</td>
+                      <td>{hVal}</td>
+                      <td>1</td>
+                      <td>{item.insp_lot_no || '-'}</td>
+                      <td>1.6이상</td>
+                      <td>225</td>
+                      <td>{wVal > 0 ? (wVal - 40) / 2 + 4 : ''}</td>
+                      <td>{wVal > 0 ? 8 : ''}</td>
+                      <td>237</td>
+                      <td>{hVal > 0 ? hVal : ''}</td>
+                      <td>{hVal > 0 ? 4 : ''}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 8. 5. 차열재 출하용(VM,VT,VAG) */}
+        <div className="page-break p-8">
+          <div className="print-header-title">차열재생산일지(출하용)</div>
+          <div className="print-header-meta">현장명: {projectTitle}</div>
+          <table className="print-table">
+            <thead>
+              <tr>
+                <th rowSpan={2}>No.</th>
+                <th rowSpan={2}>가로</th>
+                <th rowSpan={2}>세로</th>
+                <th rowSpan={2}>구조</th>
+                <th rowSpan={2}>면적</th>
+                <th rowSpan={2}>둘레</th>
+                <th colSpan={3}>글라스울 (25*1400)</th>
+                <th colSpan={3}>차열재 (50*400)</th>
+                <th colSpan={3}>차열재 (25*200)</th>
+              </tr>
+              <tr>
+                <th>규격</th>
+                <th>수량</th>
+                <th>소요량</th>
+                <th>규격</th>
+                <th>수량</th>
+                <th>소요량</th>
+                <th>규격</th>
+                <th>수량</th>
+                <th>소요량</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d?.items?.map((item: any, idx: number) => {
+                const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                const area = wVal > 0 && hVal > 0 ? ((wVal * hVal) / 1000000).toFixed(4) : '0';
+                const perimeter = wVal > 0 && hVal > 0 ? (((wVal + hVal) * 2) / 1000).toFixed(1) : '0';
+                const perimVal = Number(perimeter);
+                const pType = (item.product_type || item.structure || '').toUpperCase();
+                const isVm = pType.includes('VM') || pType.includes('VA');
+                
+                return (
+                  <tr key={item.swi_id}>
+                    <td>{String(idx + 1).padStart(2, '0')}</td>
+                    <td>{wVal}</td>
+                    <td>{hVal}</td>
+                    <td>{item.product_type || item.structure || '-'}</td>
+                    <td>{area}</td>
+                    <td>{perimeter}</td>
+                    {/* VT용 글라스울 및 차열재 50*400 */}
+                    {!isVm ? (
+                      <>
+                        <td>25*1400</td>
+                        <td>1</td>
+                        <td>{perimVal > 0 ? (perimVal + 0.5).toFixed(1) : ''}</td>
+                        <td>50*400</td>
+                        <td>4</td>
+                        <td>{perimVal > 0 ? (perimVal + 0.5).toFixed(1) : ''}</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                      </>
+                    ) : (
+                      <>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>25*200</td>
+                        <td>4</td>
+                        <td>{perimVal > 0 ? ((perimVal + 0.5) * 4).toFixed(1) : ''}</td>
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* 9. 6. 라벨소요량 */}
+        <div className="page-break p-8">
+          <div className="print-header-title">라벨소요량</div>
+          <div className="print-header-meta">현장명: {projectTitle}</div>
+          <table className="print-table">
+            <thead>
+              <tr>
+                <th rowSpan={2}>No.</th>
+                <th rowSpan={2}>제품번호</th>
+                <th rowSpan={2}>가로</th>
+                <th rowSpan={2}>세로</th>
+                <th rowSpan={2}>소켓 Lot</th>
+                <th rowSpan={2}>면적</th>
+                <th rowSpan={2}>둘레</th>
+                <th rowSpan={2}>방화소켓</th>
+                <th colSpan={2}>글라스울 (25*1400)</th>
+                <th colSpan={2}>차열재 (25*200)</th>
+                <th colSpan={2}>차열재 (50*400)</th>
+              </tr>
+              <tr>
+                <th>규격</th>
+                <th>수량</th>
+                <th>규격</th>
+                <th>수량</th>
+                <th>규격</th>
+                <th>수량</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d?.items?.map((item: any, idx: number) => {
+                const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                const area = wVal > 0 && hVal > 0 ? ((wVal * hVal) / 1000000).toFixed(4) : '0';
+                const perimeter = wVal > 0 && hVal > 0 ? (((wVal + hVal) * 2) / 1000).toFixed(1) : '0';
+                const perimVal = Number(perimeter);
+                const pType = (item.product_type || item.structure || '').toUpperCase();
+                const isVm = pType.includes('VM') || pType.includes('VA');
+                
+                return (
+                  <tr key={item.swi_id}>
+                    <td>{String(idx + 1).padStart(2, '0')}</td>
+                    <td>{item.seq_no || ''}</td>
+                    <td>{wVal}</td>
+                    <td>{hVal}</td>
+                    <td>{item.insp_lot_no || '-'}</td>
+                    <td>{area}</td>
+                    <td>{perimeter}</td>
+                    <td>2</td>
+                    {!isVm ? (
+                      <>
+                        <td>{perimVal > 0 ? (perimVal + 0.5).toFixed(1) : ''}</td>
+                        <td>1</td>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>{perimVal > 0 ? (perimVal + 0.5).toFixed(1) : ''}</td>
+                        <td>4</td>
+                      </>
+                    ) : (
+                      <>
+                        <td>-</td>
+                        <td>-</td>
+                        <td>{perimVal > 0 ? (perimVal + 0.5).toFixed(1) : ''}</td>
+                        <td>4</td>
+                        <td>-</td>
+                        <td>-</td>
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
+
 
       <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-6 pb-6 px-4 overflow-y-auto no-print">
 
