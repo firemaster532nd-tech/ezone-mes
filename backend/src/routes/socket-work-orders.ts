@@ -388,6 +388,41 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // 구조 코드명에 따른 소켓 종류 (VM vs VT) 정밀 분류 테이블 (품질인정서 및 BOM 총괄현황 기준)
+  const SOCKET_TYPE_MAP: Record<string, 'VM' | 'VT'> = {
+    'V-03':         'VM', // VM계열
+    'VS-01':        'VM', // VS200+VG200 -> VM
+    'VT-049':       'VM', // 소켓명: VM200 -> VM
+    'VA-064':       'VM', // 소켓명: VM200 -> VM
+    'VT-064':       'VM', // 소켓명: VM200 -> VM
+    'HTG-064':      'VM', // 소켓명: HMG300C -> VM
+    'HTG-064DC':    'VM', // 소켓명: HMG300 -> VM
+    'HTG(DC)-064':  'VM', // 소켓명: HMG300 -> VM
+    'BDCV-1S':      'VM', // 댐퍼계열 -> VM
+    'BDRV-3S':      'VM', // 댐퍼계열 -> VM
+
+    'VT-01':        'VT', // 소켓명: VT200 -> VT
+    'VAG-1.69':     'VT', // 소켓명: VTG200 -> VT
+    'VAG-169':      'VT', // 소켓명: VTG200 -> VT
+    'VTI-064':      'VT', // 소켓명: VIG200 -> VT
+    'HAG-1.69':     'VT', // 소켓명: HTG300C -> VT
+    'HAG-169':      'VT', // 소켓명: HTG300C -> VT
+    'HTG-1.69':     'VT', // 소켓명: HTG300C -> VT
+    'HTG-169':      'VT', // 소켓명: HTG300C -> VT
+  };
+
+  const getSocketType = (productType: string): 'VM' | 'VT' => {
+    const pt = (productType || '').trim();
+    if (SOCKET_TYPE_MAP[pt]) {
+      return SOCKET_TYPE_MAP[pt];
+    }
+    const upper = pt.toUpperCase();
+    if (upper.includes('VT') || upper.includes('HT') || upper.includes('VTI') || upper.includes('VAG')) {
+      return 'VT';
+    }
+    return 'VM';
+  };
+
   // ── GET /api/socket-work-orders/:id/excel ─ 엑셀 지시서 템플릿 다운로드 ───────
   app.get('/api/socket-work-orders/:id/excel', { preHandler: requireAuth }, async (req, reply) => {
     const id = (req.params as any).id;
@@ -449,15 +484,9 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
       sheet1['!ref'] = `A1:O${maxRow + 5}`;
     }
 
-    // VM/VT 분류
-    const vmItems = items.filter(it => {
-      const pType = (it.product_type || it.structure || '').toUpperCase();
-      return pType.includes('VM') || pType.includes('VA');
-    });
-    const vtItems = items.filter(it => {
-      const pType = (it.product_type || it.structure || '').toUpperCase();
-      return pType.includes('VT');
-    });
+    // 정밀 매핑을 반영한 VM/VT 분류
+    const vmItems = items.filter(it => getSocketType(it.product_type) === 'VM');
+    const vtItems = items.filter(it => getSocketType(it.product_type) === 'VT');
 
     // ── 시트 2: 2.재단(VM)작업
     const sheet2 = workbook.Sheets['2.재단(VM)작업'];
@@ -564,8 +593,7 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
       items.forEach((item, idx) => {
         const r = startRow + idx;
         const noStr = String(idx + 1).padStart(2, '0');
-        const pType = (item.product_type || item.structure || '').toUpperCase();
-        const isVm = pType.includes('VM') || pType.includes('VA');
+        const isVm = getSocketType(item.product_type) === 'VM';
         
         writeCell(sheet5, r, 0, noStr);
         writeCell(sheet5, r, 1, item.product_type || item.structure || '');
@@ -657,8 +685,7 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
       items.forEach((item, idx) => {
         const r = startRow + idx;
         const noStr = String(idx + 1).padStart(2, '0');
-        const pType = (item.product_type || item.structure || '').toUpperCase();
-        const isVm = pType.includes('VM') || pType.includes('VA');
+        const isVm = getSocketType(item.product_type) === 'VM';
         
         writeCell(sheet8, r, 0, noStr);
         
@@ -702,8 +729,7 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
       items.forEach((item, idx) => {
         const r = startRow + idx;
         const noStr = String(idx + 1).padStart(2, '0');
-        const pType = (item.product_type || item.structure || '').toUpperCase();
-        const isVm = pType.includes('VM') || pType.includes('VA');
+        const isVm = getSocketType(item.product_type) === 'VM';
         
         writeCell(sheet9, r, 0, noStr);
         writeCell(sheet9, r, 1, item.seq_no || '');
