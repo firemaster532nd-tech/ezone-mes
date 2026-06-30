@@ -96,6 +96,7 @@ async function buildSocketOrderExcel(soRow: any, ourCompany: any = null): Promis
     fitToHeight: 1,
     orientation: 'portrait',
     paperSize: 9, // A4
+    printArea: 'A1:P95', // 불필요한 공백 셀 인쇄 방지 및 영역 한정
     margins: {
       left: 0.3, right: 0.3,
       top: 0.3, bottom: 0.3,
