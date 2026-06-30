@@ -1,3 +1,4 @@
+import type { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { sendAlimtalk } from '../lib/notification.js';
 
