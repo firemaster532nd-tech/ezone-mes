@@ -212,6 +212,7 @@ export const initApp = async () => {
       await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS insp_note_2 TEXT`).catch(() => {});
       await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS inspected_by_2 INTEGER`).catch(() => {});
       await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS inspected_at_2 TIMESTAMP`).catch(() => {});
+      await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS print_qty INTEGER DEFAULT 1`).catch(() => {});
 
       // ── socket_order 인수검사 결재선 컬럼 추가 ──
       await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS insp_worker_id INTEGER REFERENCES worker(worker_id)`).catch(() => {});
@@ -220,12 +221,15 @@ export const initApp = async () => {
       await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ`).catch(() => {});
       await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS received_by INTEGER`).catch(() => {});
 
+      // ── 기존 인수검사에 소켓 발주 ID 외래키 추가 ──
+      await pool.query(`ALTER TABLE inspection ADD COLUMN IF NOT EXISTS so_id INTEGER REFERENCES socket_order(so_id) ON DELETE SET NULL`).catch(() => {});
+
       // socket_order 테이블에 INSPECTING/INSPECTED/RECEIVED 상태 지원 확인 (CHECK 콘스트레인트 삭제)
       try {
         await pool.query(`ALTER TABLE socket_order DROP CONSTRAINT IF EXISTS socket_order_status_check`);
       } catch (_) {}
 
-      console.log('✅ socket_incoming_inspection 테이블 및 2차 점검/결재선 컬럼 준비 완료');
+      console.log('✅ socket_incoming_inspection 테이블 및 2차 점검/결재선/통합외래키 컬럼 준비 완료');
 
 
       console.log('✅ Menu migration done: inventory + shipment + statement menus granted to all departments');

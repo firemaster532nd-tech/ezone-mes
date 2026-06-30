@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 import { expandAndSortSocketItems } from '../lib/socket-sort.js';
+import { INCOMING_FORM_PRESETS } from './inspections.js';
+
 
 // ── C302 5.1 기준: 소켓 인수검사 LOT 번호 접두사 생성 (YYMMDDGI) ────────────────
 function getInspLotPrefix(): string {
@@ -56,6 +58,51 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
     try {
       await client.query('BEGIN');
 
+      // 1. 소켓 종류 판별 (벽체용 D121-2 / 입상용 D121-7)
+      let hasWall = false;
+      let hasStand = false;
+      for (const item of expanded) {
+        if (item.depth_mm === 300 || (item.product_type || '').includes('입상')) {
+          hasStand = true;
+        } else {
+          hasWall = true;
+        }
+      }
+
+      const formCodesToCreate: string[] = [];
+      if (hasWall) formCodesToCreate.push('D121-2');
+      if (hasStand) formCodesToCreate.push('D121-7');
+
+      // 2. 각 필요한 양식지별로 inspection 생성 (원재료 인수검사 호환성)
+      for (const formCode of formCodesToCreate) {
+        const preset = INCOMING_FORM_PRESETS.find(p => p.form_code === formCode);
+        if (!preset) continue;
+
+        // 검사 헤더 삽입
+        const inspRes = await client.query(
+          `INSERT INTO inspection (insp_type, form_code, sampling_n, accept_c, result, inspected_at, so_id)
+           VALUES ('INCOMING', $1, 3, 0, 'PENDING', NOW(), $2)
+           RETURNING insp_id`,
+          [formCode, soId]
+        );
+        const inspId = inspRes.rows[0].insp_id;
+
+        // 검사 상세 항목들(n=3 양식지) 자동 생성
+        for (const item of preset.items) {
+          await client.query(
+            `INSERT INTO inspection_detail
+               (insp_id, item_no, quality_item, check_item, check_method,
+                cert_standard, direction, is_applicable, item_result)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, 'NA')`,
+            [
+              inspId, item.item_no, item.quality_item, item.check_item, item.check_method,
+              item.cert_standard ?? null, item.direction || 'MIN'
+            ]
+          );
+        }
+      }
+
+      // 3. 개별 시리얼/일련번호 단위 추적용 socket_incoming_inspection 레코드 삽입
       for (let i = 0; i < expanded.length; i++) {
         const item = expanded[i];
         const seqNo = i + 1;
@@ -94,6 +141,7 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
       client.release();
     }
   });
+
 
   // ─────────────────────────────────────────────────────────────────
   // GET /api/socket-orders/:id/inspections
@@ -150,17 +198,52 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
   // ─────────────────────────────────────────────────────────────────
   app.post('/api/socket-orders/:id/assign-lots-bulk', { preHandler: requireAuth }, async (req, reply) => {
     const soId = parseInt((req.params as any).id);
+    const { date } = req.body as any;
 
-    const lotPrefix = getInspLotPrefix();
-    const result = await pool.query(
-      `UPDATE socket_incoming_inspection
-       SET insp_lot_no = $1
-       WHERE so_id = $2 AND (insp_lot_no IS NULL OR insp_lot_no = '')`,
-      [lotPrefix, soId]
+    let lotPrefix = getInspLotPrefix();
+    if (date) {
+      const targetDate = new Date(date);
+      if (!isNaN(targetDate.getTime())) {
+        const yy = String(targetDate.getFullYear()).slice(2);
+        const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(targetDate.getDate()).padStart(2, '0');
+        lotPrefix = `${yy}${mm}${dd}GI`;
+      }
+    }
+
+    const items = await pool.query(
+      `SELECT sii_id, seq_no FROM socket_incoming_inspection
+       WHERE so_id = $1 AND (insp_lot_no IS NULL OR insp_lot_no = '')
+       ORDER BY seq_no`,
+      [soId]
     );
 
-    return { data: { success: true, count: result.rowCount } };
+    if (items.rows.length === 0) {
+      return { data: { success: true, count: 0 } };
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      for (const row of items.rows) {
+        const lotNoWithSeq = `${lotPrefix}${String(row.seq_no).padStart(3, '0')}`;
+        await client.query(
+          `UPDATE socket_incoming_inspection
+           SET insp_lot_no = $1
+           WHERE sii_id = $2`,
+          [lotNoWithSeq, row.sii_id]
+        );
+      }
+      await client.query('COMMIT');
+      return { data: { success: true, count: items.rows.length } };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   });
+
 
 
   // ─────────────────────────────────────────────────────────────────
@@ -171,7 +254,7 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
     const siiId = parseInt((req.params as any).sii_id);
     const { 
       insp_result, insp_note, insp_lot_no, worker_id,
-      insp_result_2, insp_note_2
+      insp_result_2, insp_note_2, print_qty
     } = req.body as any;
 
     const existing = await pool.query(
@@ -187,6 +270,7 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
     if (insp_result !== undefined) { updates.push(`insp_result = $${idx++}`); vals.push(insp_result); }
     if (insp_note !== undefined)   { updates.push(`insp_note = $${idx++}`);   vals.push(insp_note); }
     if (insp_lot_no !== undefined) { updates.push(`insp_lot_no = $${idx++}`); vals.push(insp_lot_no); }
+    if (print_qty !== undefined)   { updates.push(`print_qty = $${idx++}`);   vals.push(print_qty ? Number(print_qty) : 1); }
 
     if (insp_result === 'PASS' || insp_result === 'FAIL') {
       updates.push(`inspected_by = $${idx++}`);   vals.push(worker_id || null);
@@ -200,6 +284,7 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
       updates.push(`inspected_by_2 = $${idx++}`); vals.push(worker_id || null);
       updates.push(`inspected_at_2 = NOW()`);
     }
+
 
     if (updates.length === 0) return reply.code(400).send({ error: '변경할 내용이 없습니다.' });
 

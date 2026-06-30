@@ -3,9 +3,10 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { Plus, ClipboardCheck, MoreHorizontal, Trash2, FileText, Printer, Info, ChevronDown, ChevronUp, AlertTriangle, Pencil, X, Loader2 } from 'lucide-react';
+import { Plus, ClipboardCheck, MoreHorizontal, Trash2, FileText, Printer, Info, ChevronDown, ChevronUp, AlertTriangle, Pencil, X, Loader2, Tag } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AttachmentSection } from '@/components/shared/AttachmentSection';
+
 
 interface Inspection {
   insp_id: number;
@@ -830,7 +831,13 @@ function InspectionDetailModal({ inspId, onClose, onUpdated }: { inspId: number;
 
           {/* Attachment section */}
           <AttachmentSection refType="INSPECTION" refId={inspId} />
+
+          {/* 소켓 전용 일련번호 및 라벨 인쇄 연동 패널 */}
+          {data.so_id && (
+            <SocketDetailPanel soId={data.so_id} projectName={data.project_name || data.item_name} />
+          )}
         </div>
+
 
         {/* 하단 버튼 */}
         <div className="px-6 py-4 border-t flex items-center">
@@ -2418,3 +2425,203 @@ function SocketInspectionModal({ onClose, onCreated }: { onClose: () => void; on
     </div>
   );
 }
+
+function SocketDetailPanel({ soId, projectName }: { soId: number; projectName: string }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [assignDate, setAssignDate] = useState(new Date().toISOString().slice(0, 10));
+  const [assigning, setAssigning] = useState(false);
+
+  const fetchSocketItems = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await api.get<{ data: any }>(`/socket-orders/${soId}/inspections`);
+      setItems(res.data?.items || []);
+    } catch {
+      alert('소켓 품목 로드 실패');
+    } finally {
+      setLoading(false);
+    }
+  }, [soId]);
+
+  useEffect(() => {
+    fetchSocketItems();
+  }, [fetchSocketItems]);
+
+  const handleAssignLots = async () => {
+    if (!confirm(`선택한 날짜(${assignDate}) 기준 접두사에 3자리 순번을 더해 LOT를 일괄 부여합니다. 계속합니까?`)) return;
+    setAssigning(true);
+    try {
+      await api.post(`/socket-orders/${soId}/assign-lots-bulk`, { date: assignDate });
+      fetchSocketItems();
+    } catch {
+      alert('LOT 부여 실패');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
+  const handlePrintAll = () => {
+    const printItems = items.filter(i => i.insp_lot_no && (i.insp_result !== 'FAIL' || i.insp_result_2 === 'PASS'));
+    if (printItems.length === 0) {
+      alert('출력할 합격품 라벨이 없습니다.');
+      return;
+    }
+
+    const win = window.open('', '_blank');
+    if (!win) return;
+
+    const labels: string[] = [];
+    for (const item of printItems) {
+      const qty = Number(item.print_qty) || 1;
+      for (let k = 0; k < qty; k++) {
+        labels.push(`
+          <div class="label">
+            <div class="lot">${item.insp_lot_no}</div>
+            <div class="type">${item.product_type}</div>
+            <div class="spec">${item.pipe_width_mm} × ${item.pipe_height_mm} mm</div>
+            <div class="project">${projectName}</div>
+            <div class="date">입고일: ${item.inspected_at
+              ? new Date(item.inspected_at).toLocaleDateString('ko-KR')
+              : new Date().toLocaleDateString('ko-KR')}</div>
+            <div class="result pass">
+              인수검사 합격 ✓
+            </div>
+            <div class="seq">No.${String(item.seq_no).padStart(3, '0')}</div>
+          </div>
+        `);
+      }
+    }
+    const labelsHtml = labels.join('');
+
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>소켓 인수검사 라벨</title>
+        <style>
+          @page { size: 80mm 60mm; margin: 0; }
+          body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 0; }
+          .labels { display: flex; flex-direction: column; }
+          .label {
+            width: 80mm; height: 60mm; border: none;
+            padding: 5mm; box-sizing: border-box;
+            display: flex; flex-direction: column; gap: 1.5mm;
+            page-break-after: always;
+            page-break-inside: avoid;
+          }
+          .lot { font-size: 14pt; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 1.5mm; }
+          .type { font-size: 12pt; font-weight: bold; color: #1a56db; }
+          .spec { font-size: 12pt; font-weight: bold; }
+          .project { font-size: 9pt; color: #555; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .date { font-size: 9pt; color: #555; }
+          .result { font-size: 9.5pt; font-weight: bold; color: #15803d; }
+          .seq { font-size: 9pt; color: #888; text-align: right; }
+        </style>
+      </head>
+      <body>
+        <div class="labels">${labelsHtml}</div>
+        <script>window.onload = () => { window.print(); }</script>
+      </body>
+      </html>
+    `);
+    win.document.close();
+  };
+
+  if (loading) return <div className="text-xs text-gray-500 py-4">소켓 상세 데이터 로딩 중...</div>;
+
+  return (
+    <div className="mt-6 border-t pt-4">
+      <div className="flex items-center justify-between mb-3 bg-teal-50/50 p-2.5 rounded-lg border border-teal-100">
+        <div className="flex items-center gap-2">
+          <Tag className="h-4 w-4 text-teal-600" />
+          <span className="text-sm font-bold text-teal-800">소켓 일련번호(시리얼/LOT) & 라벨 발행 연동</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-white px-2 py-1 rounded border shadow-sm">
+            <span className="text-[10px] text-gray-500 font-bold">LOT 기준 날짜:</span>
+            <input
+              type="date"
+              value={assignDate}
+              onChange={e => setAssignDate(e.target.value)}
+              className="text-[11px] focus:outline-none border-none font-mono"
+            />
+          </div>
+          <button
+            onClick={handleAssignLots}
+            disabled={assigning}
+            className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-bold rounded shadow-sm transition"
+          >
+            {assigning ? '부여 중...' : 'LOT 일괄 부여'}
+          </button>
+          <button
+            onClick={handlePrintAll}
+            className="flex items-center gap-1 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded shadow-sm transition"
+          >
+            <Printer size={12} /> 라벨 전체 출력
+          </button>
+        </div>
+      </div>
+
+      <div className="max-h-[30vh] overflow-y-auto space-y-1.5 border rounded-lg p-2.5 bg-slate-50/50">
+        {items.map((item: any) => {
+          const isFinalPass = item.insp_result === 'PASS' || item.insp_result_2 === 'PASS';
+          return (
+            <div key={item.sii_id} className="flex items-center justify-between bg-white rounded p-2 border border-slate-200 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="font-mono font-bold text-[10px] text-gray-400">No.{String(item.seq_no).padStart(3, '0')}</span>
+                <span className="font-semibold text-slate-800">{item.product_type}</span>
+                <span className="text-gray-400 font-mono">({item.pipe_width_mm}x{item.pipe_height_mm}mm)</span>
+                <span className={cn(
+                  'px-1 py-0.5 rounded text-[9px] font-bold',
+                  isFinalPass ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'
+                )}>
+                  {isFinalPass ? '합격' : '미검사'}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-gray-400">LOT:</span>
+                  <input
+                    type="text"
+                    defaultValue={item.insp_lot_no || ''}
+                    onBlur={(e) => {
+                      const val = e.target.value;
+                      if (val !== (item.insp_lot_no || '')) {
+                        api.patch(`/socket-incoming/${item.sii_id}`, { insp_lot_no: val || null })
+                          .then(() => { item.insp_lot_no = val || null; })
+                          .catch(() => {});
+                      }
+                    }}
+                    placeholder="LOT/시리얼 입력..."
+                    className="border border-slate-200 rounded px-1.5 py-0.5 bg-white font-mono w-[150px] text-center"
+                  />
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-gray-400">매수:</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="99"
+                    defaultValue={item.print_qty || 1}
+                    onBlur={(e) => {
+                      const val = Number(e.target.value);
+                      if (val !== (item.print_qty || 1)) {
+                        api.patch(`/socket-incoming/${item.sii_id}`, { print_qty: val })
+                          .then(() => { item.print_qty = val; })
+                          .catch(() => {});
+                      }
+                    }}
+                    className="border border-slate-200 rounded px-1.5 py-0.5 bg-white font-mono w-[45px] text-center"
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+

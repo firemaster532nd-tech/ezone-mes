@@ -64,21 +64,28 @@ function LabelPrint({ items, projectName }: { items: InspItem[]; projectName: st
     const win = window.open('', '_blank');
     if (!win) return;
 
-    const labels = printItems.map(item => `
-      <div class="label">
-        <div class="lot">${item.insp_lot_no}</div>
-        <div class="type">${item.product_type}</div>
-        <div class="spec">${item.pipe_width_mm} × ${item.pipe_height_mm} mm</div>
-        <div class="project">${projectName}</div>
-        <div class="date">입고일: ${item.inspected_at
-          ? new Date(item.inspected_at).toLocaleDateString('ko-KR')
-          : new Date().toLocaleDateString('ko-KR')}</div>
-        <div class="result pass">
-          인수검사 합격 ✓
-        </div>
-        <div class="seq">No.${String(item.seq_no).padStart(3, '0')}</div>
-      </div>
-    `).join('');
+    const labels: string[] = [];
+    for (const item of printItems) {
+      const qty = Number(item.print_qty) || 1;
+      for (let k = 0; k < qty; k++) {
+        labels.push(`
+          <div class="label">
+            <div class="lot">${item.insp_lot_no}</div>
+            <div class="type">${item.product_type}</div>
+            <div class="spec">${item.pipe_width_mm} × ${item.pipe_height_mm} mm</div>
+            <div class="project">${projectName}</div>
+            <div class="date">입고일: ${item.inspected_at
+              ? new Date(item.inspected_at).toLocaleDateString('ko-KR')
+              : new Date().toLocaleDateString('ko-KR')}</div>
+            <div class="result pass">
+              인수검사 합격 ✓
+            </div>
+            <div class="seq">No.${String(item.seq_no).padStart(3, '0')}</div>
+          </div>
+        `);
+      }
+    }
+    const labelsHtml = labels.join('');
 
     win.document.write(`
       <!DOCTYPE html>
@@ -87,26 +94,27 @@ function LabelPrint({ items, projectName }: { items: InspItem[]; projectName: st
         <meta charset="utf-8">
         <title>소켓 인수검사 라벨</title>
         <style>
-          @page { margin: 5mm; }
-          body { font-family: 'Malgun Gothic', sans-serif; margin: 0; }
-          .labels { display: flex; flex-wrap: wrap; gap: 4mm; }
+          @page { size: 80mm 60mm; margin: 0; }
+          body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 0; }
+          .labels { display: flex; flex-direction: column; }
           .label {
-            width: 55mm; height: 40mm; border: 1px solid #333;
-            padding: 3mm; box-sizing: border-box;
-            display: flex; flex-direction: column; gap: 1mm;
+            width: 80mm; height: 60mm; border: none;
+            padding: 5mm; box-sizing: border-box;
+            display: flex; flex-direction: column; gap: 1.5mm;
+            page-break-after: always;
             page-break-inside: avoid;
           }
-          .lot { font-size: 10pt; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 1mm; }
-          .type { font-size: 9pt; font-weight: bold; color: #1a56db; }
-          .spec { font-size: 9pt; }
-          .project { font-size: 7pt; color: #555; flex: 1; }
-          .date { font-size: 7pt; color: #555; }
-          .result { font-size: 7pt; font-weight: bold; color: #15803d; }
-          .seq { font-size: 7pt; color: #888; text-align: right; }
+          .lot { font-size: 14pt; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 1.5mm; }
+          .type { font-size: 12pt; font-weight: bold; color: #1a56db; }
+          .spec { font-size: 12pt; font-weight: bold; }
+          .project { font-size: 9pt; color: #555; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .date { font-size: 9pt; color: #555; }
+          .result { font-size: 9.5pt; font-weight: bold; color: #15803d; }
+          .seq { font-size: 9pt; color: #888; text-align: right; }
         </style>
       </head>
       <body>
-        <div class="labels">${labels}</div>
+        <div class="labels">${labelsHtml}</div>
         <script>window.onload = () => { window.print(); }</script>
       </body>
       </html>
@@ -138,11 +146,16 @@ function ItemRow({
   const [note, setNote] = useState(item.insp_note || '');
   const [note2, setNote2] = useState(item.insp_note_2 || '');
   const [lotNo, setLotNo] = useState(item.insp_lot_no || '');
+  const [printQty, setPrintQty] = useState(item.print_qty || 1);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     setLotNo(item.insp_lot_no || '');
   }, [item.insp_lot_no]);
+
+  useEffect(() => {
+    setPrintQty(item.print_qty || 1);
+  }, [item.print_qty]);
 
   const handleResult = async (result: 'PASS' | 'FAIL') => {
     if (isReadOnly) return;
@@ -176,30 +189,10 @@ function ItemRow({
     const win = window.open('', '_blank');
     if (!win) return;
 
-    win.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <title>소켓 인수검사 라벨 (단건)</title>
-        <style>
-          @page { margin: 5mm; }
-          body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 0; }
-          .label {
-            width: 55mm; height: 40mm; border: 1px solid #333;
-            padding: 3mm; box-sizing: border-box;
-            display: flex; flex-direction: column; gap: 1mm;
-          }
-          .lot { font-size: 10pt; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 1mm; }
-          .type { font-size: 9pt; font-weight: bold; color: #1a56db; }
-          .spec { font-size: 9pt; }
-          .project { font-size: 7pt; color: #555; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-          .date { font-size: 7pt; color: #555; }
-          .result { font-size: 7pt; font-weight: bold; color: #15803d; }
-          .seq { font-size: 7pt; color: #888; text-align: right; }
-        </style>
-      </head>
-      <body>
+    const labels: string[] = [];
+    const qty = Number(item.print_qty) || 1;
+    for (let k = 0; k < qty; k++) {
+      labels.push(`
         <div class="label">
           <div class="lot">${item.insp_lot_no || 'LOT 미부여'}</div>
           <div class="type">${item.product_type}</div>
@@ -211,12 +204,45 @@ function ItemRow({
           <div class="result">인수검사 합격 ✓</div>
           <div class="seq">No.${String(item.seq_no).padStart(3, '0')}</div>
         </div>
+      `);
+    }
+    const labelsHtml = labels.join('');
+
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>소켓 인수검사 라벨 (단건/사본)</title>
+        <style>
+          @page { size: 80mm 60mm; margin: 0; }
+          body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 0; }
+          .labels { display: flex; flex-direction: column; }
+          .label {
+            width: 80mm; height: 60mm; border: none;
+            padding: 5mm; box-sizing: border-box;
+            display: flex; flex-direction: column; gap: 1.5mm;
+            page-break-after: always;
+            page-break-inside: avoid;
+          }
+          .lot { font-size: 14pt; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 1.5mm; }
+          .type { font-size: 12pt; font-weight: bold; color: #1a56db; }
+          .spec { font-size: 12pt; font-weight: bold; }
+          .project { font-size: 9pt; color: #555; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .date { font-size: 9pt; color: #555; }
+          .result { font-size: 9.5pt; font-weight: bold; color: #15803d; }
+          .seq { font-size: 9pt; color: #888; text-align: right; }
+        </style>
+      </head>
+      <body>
+        <div class="labels">${labelsHtml}</div>
         <script>window.onload = () => { window.print(); window.close(); }</script>
       </body>
       </html>
     `);
     win.document.close();
   };
+
 
   // 최종 판정 색상 (1차 합격 또는 2차 합격 시 초록색)
   const isFinalPass = item.insp_result === 'PASS' || item.insp_result_2 === 'PASS';
@@ -247,27 +273,53 @@ function ItemRow({
                 </span>
               )}
             </div>
-            <div className="mt-1.5 flex items-center gap-2">
-              <Tag className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
-              <input
-                type="text"
-                value={lotNo}
-                disabled={isReadOnly}
-                onChange={e => setLotNo(e.target.value)}
-                onBlur={() => {
-                  if (isReadOnly) return;
-                  if (lotNo !== (item.insp_lot_no || '')) {
-                    api.patch(`/socket-incoming/${item.sii_id}`, { insp_lot_no: lotNo || null })
-                      .then(() => onUpdate(item.sii_id, { insp_lot_no: lotNo || null }))
-                      .catch(() => {
-                        toast.error('LOT 번호 저장 실패');
-                      });
-                  }
-                }}
-                placeholder="LOT/시리얼번호 입력..."
-                className="text-xs px-2 py-1 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-400 bg-white font-mono w-[180px]"
-              />
+            <div className="mt-1.5 flex flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <Tag className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  value={lotNo}
+                  disabled={isReadOnly}
+                  onChange={e => setLotNo(e.target.value)}
+                  onBlur={() => {
+                    if (isReadOnly) return;
+                    if (lotNo !== (item.insp_lot_no || '')) {
+                      api.patch(`/socket-incoming/${item.sii_id}`, { insp_lot_no: lotNo || null })
+                        .then(() => onUpdate(item.sii_id, { insp_lot_no: lotNo || null }))
+                        .catch(() => {
+                          toast.error('LOT 번호 저장 실패');
+                        });
+                    }
+                  }}
+                  placeholder="LOT/시리얼번호 입력..."
+                  className="text-xs px-2 py-1 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-400 bg-white font-mono w-[180px]"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Printer className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                <span className="text-[10px] text-slate-500 font-bold">인쇄 매수:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  value={printQty}
+                  disabled={isReadOnly}
+                  onChange={e => setPrintQty(Number(e.target.value))}
+                  onBlur={() => {
+                    if (isReadOnly) return;
+                    if (printQty !== (item.print_qty || 1)) {
+                      api.patch(`/socket-incoming/${item.sii_id}`, { print_qty: printQty })
+                        .then(() => onUpdate(item.sii_id, { print_qty: printQty }))
+                        .catch(() => {
+                          toast.error('인쇄 수량 저장 실패');
+                        });
+                    }
+                  }}
+                  className="text-xs px-2 py-0.5 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-400 bg-white font-mono w-[60px]"
+                />
+              </div>
             </div>
+
           </div>
         </div>
 
@@ -420,6 +472,7 @@ export default function SocketIncomingDetailPage() {
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState(false);
   const [assigningLots, setAssigningLots] = useState(false);
+  const [assignDate, setAssignDate] = useState(new Date().toISOString().slice(0, 10));
 
   const fetchWorkers = useCallback(async () => {
     try {
@@ -430,6 +483,7 @@ export default function SocketIncomingDetailPage() {
       console.error('작업자 목록 조회 실패', e);
     }
   }, []);
+
 
 
   const fetchData = useCallback(async () => {
@@ -495,10 +549,13 @@ export default function SocketIncomingDetailPage() {
   // LOT 일괄 부여
   const handleAssignLots = async () => {
     if (!soId) return;
-    if (!confirm('LOT를 일괄 부여합니다. (C302 5.1 기준: YYMMDDGI+순번)\n계속합니까?')) return;
+    if (!confirm(`선택한 날짜(${assignDate}) 기준 접두사에 3자리 순번을 더해 LOT를 일괄 부여합니다.\n계속합니까?`)) return;
     setAssigningLots(true);
     try {
-      const res = await api.post(`/socket-orders/${soId}/assign-lots-bulk`, { worker_id: user?.worker_id }) as any;
+      const res = await api.post(`/socket-orders/${soId}/assign-lots-bulk`, { 
+        worker_id: user?.worker_id,
+        date: assignDate
+      }) as any;
       toast.success(`LOT ${res.data.count}개를 부여했습니다`);
       await fetchData();
     } catch (e: any) {
@@ -507,6 +564,7 @@ export default function SocketIncomingDetailPage() {
       setAssigningLots(false);
     }
   };
+
 
   // 입고완료 처리
   const handleCompleteReceive = async () => {
@@ -693,7 +751,17 @@ export default function SocketIncomingDetailPage() {
 
         {/* ── 액션 버튼 ── */}
         {!isReceived && (
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap bg-slate-50 p-3 rounded-xl border border-slate-100">
+            <div className="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+              <span className="text-xs text-slate-500 font-bold">LOT 기준 날짜:</span>
+              <input
+                type="date"
+                value={assignDate}
+                onChange={e => setAssignDate(e.target.value)}
+                className="text-xs focus:outline-none border-none font-mono"
+              />
+            </div>
+
             <button
               onClick={handleAssignLots}
               disabled={assigningLots || summary.lotAssigned === summary.total}
@@ -705,6 +773,7 @@ export default function SocketIncomingDetailPage() {
               }
               {summary.lotAssigned === summary.total ? 'LOT 부여 완료' : `LOT 일괄 부여 (미부여 ${summary.total - summary.lotAssigned}개)`}
             </button>
+
 
             <button
               onClick={handleCompleteReceive}
