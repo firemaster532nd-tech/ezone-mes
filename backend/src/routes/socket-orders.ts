@@ -291,19 +291,8 @@ export async function socketOrderRoutes(app: FastifyInstance) {
   await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS inspected_by_2 INTEGER REFERENCES worker(worker_id) ON DELETE SET NULL`);
   await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS inspected_at_2 TIMESTAMPTZ`);
 
-  await pool.query(`ALTER TABLE socket_order DROP CONSTRAINT IF EXISTS socket_order_status_check`);
-  await pool.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM information_schema.constraint_table_usage
-        WHERE table_name='socket_order' AND constraint_name='socket_order_status_check'
-      ) THEN
-        ALTER TABLE socket_order ADD CONSTRAINT socket_order_status_check
-          CHECK (status IN ('DRAFT','SUBMITTED','APPROVED','REJECTED','RETURNED','ORDERED','RECEIVED','INSPECTING','INSPECTED'));
-      END IF;
-    END $$
-  `);
+  await pool.query(`ALTER TABLE socket_order DROP CONSTRAINT IF EXISTS socket_order_status_check`).catch(() => {});
+
 
 
   // POST /api/socket-orders
