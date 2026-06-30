@@ -120,13 +120,15 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
     if (!soRes.rows[0]) return reply.code(404).send({ error: 'not_found' });
 
     const items = await pool.query(
-      `SELECT sii.*, w.name AS inspected_by_name
+      `SELECT sii.*, w.worker_name AS inspected_by_name, w2.worker_name AS inspected_by_2_name
        FROM socket_incoming_inspection sii
        LEFT JOIN worker w ON w.worker_id = sii.inspected_by
+       LEFT JOIN worker w2 ON w2.worker_id = sii.inspected_by_2
        WHERE sii.so_id = $1
        ORDER BY sii.seq_no`,
       [soId]
     );
+
 
     return {
       data: {
@@ -247,7 +249,7 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
 
     const res = await pool.query(
       `SELECT sii.*, so.project_name, pm.project_name AS pm_project_name,
-              w.name AS inspected_by_name
+              w.worker_name AS inspected_by_name
        FROM socket_incoming_inspection sii
        JOIN socket_order so ON so.so_id = sii.so_id
        LEFT JOIN project_master pm ON pm.project_id = so.project_id
@@ -255,6 +257,7 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
        WHERE sii.sii_id = $1`,
       [siiId]
     );
+
     if (!res.rows[0]) return reply.code(404).send({ error: 'not_found' });
 
     const row = res.rows[0];
@@ -295,7 +298,7 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
     );
 
     const items = await pool.query(
-      `SELECT sii.*, w.name AS inspected_by_name
+      `SELECT sii.*, w.worker_name AS inspected_by_name
        FROM socket_incoming_inspection sii
        LEFT JOIN worker w ON w.worker_id = sii.inspected_by
        WHERE sii.so_id = $1 ${whereResult}
@@ -303,6 +306,7 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
        ORDER BY sii.seq_no`,
       vals
     );
+
 
     const so = soRes.rows[0];
     return {
