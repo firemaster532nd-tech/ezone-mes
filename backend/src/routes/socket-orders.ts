@@ -279,6 +279,18 @@ export async function socketOrderRoutes(app: FastifyInstance) {
   await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS order_note TEXT`);
   await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS ordered_by INTEGER`);
+  
+  // 인수검사 결재선 3단계 컬럼 추가
+  await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS insp_worker_id INTEGER REFERENCES worker(worker_id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS insp_reviewer_id INTEGER REFERENCES worker(worker_id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS insp_approver_id INTEGER REFERENCES worker(worker_id) ON DELETE SET NULL`);
+
+  // 인수검사 2차 점검 결과 컬럼 추가
+  await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS insp_result_2 VARCHAR(10) DEFAULT 'PENDING'`);
+  await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS insp_note_2 TEXT`);
+  await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS inspected_by_2 INTEGER REFERENCES worker(worker_id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS inspected_at_2 TIMESTAMPTZ`);
+
   await pool.query(`ALTER TABLE socket_order DROP CONSTRAINT IF EXISTS socket_order_status_check`);
   await pool.query(`
     DO $$
@@ -288,7 +300,7 @@ export async function socketOrderRoutes(app: FastifyInstance) {
         WHERE table_name='socket_order' AND constraint_name='socket_order_status_check'
       ) THEN
         ALTER TABLE socket_order ADD CONSTRAINT socket_order_status_check
-          CHECK (status IN ('DRAFT','SUBMITTED','APPROVED','REJECTED','RETURNED','ORDERED','RECEIVED'));
+          CHECK (status IN ('DRAFT','SUBMITTED','APPROVED','REJECTED','RETURNED','ORDERED','RECEIVED','INSPECTING','INSPECTED'));
       END IF;
     END $$
   `);
@@ -337,13 +349,15 @@ export async function socketOrderRoutes(app: FastifyInstance) {
     return { data: res.rows };
   });
 
-  // GET /api/socket-orders/wait — list for APPROVED/ORDERED/RECEIVED
+  // GET /api/socket-orders/wait — list for APPROVED/ORDERED/RECEIVED/INSPECTING/INSPECTED
   app.get('/api/socket-orders/wait', { preHandler: requireAuth }, async (req) => {
     const { status } = req.query as any;
-    let statusFilter = `so.status IN ('APPROVED','ORDERED','RECEIVED')`;
+    let statusFilter = `so.status IN ('APPROVED','ORDERED','RECEIVED','INSPECTING','INSPECTED')`;
     if (status === 'APPROVED') statusFilter = `so.status = 'APPROVED'`;
     else if (status === 'ORDERED') statusFilter = `so.status = 'ORDERED'`;
     else if (status === 'RECEIVED') statusFilter = `so.status = 'RECEIVED'`;
+    else if (status === 'INSPECTING') statusFilter = `so.status = 'INSPECTING'`;
+    else if (status === 'INSPECTED') statusFilter = `so.status = 'INSPECTED'`;
 
     const res = await pool.query(`
       SELECT so.*, w.worker_name as writer_name,
@@ -351,12 +365,16 @@ export async function socketOrderRoutes(app: FastifyInstance) {
         v.company_name as vendor_name,
         ap.approval_id, ap.status as approval_status, ap.approved_at, ap.approve_comment,
         av.worker_name as approver_name,
+        iw.worker_name as insp_worker_name, ir.worker_name as insp_reviewer_name, ia.worker_name as insp_approver_name,
         jsonb_array_length(so.items_json) as item_count
       FROM socket_order so
       LEFT JOIN worker w ON w.worker_id = so.writer_id
       LEFT JOIN purchase_order po ON po.po_id = so.po_id
       LEFT JOIN project_master pm ON pm.project_id = po.project_id
       LEFT JOIN company_master v ON v.company_id = so.vendor_company_id
+      LEFT JOIN worker iw ON iw.worker_id = so.insp_worker_id
+      LEFT JOIN worker ir ON ir.worker_id = so.insp_reviewer_id
+      LEFT JOIN worker ia ON ia.worker_id = so.insp_approver_id
       LEFT JOIN LATERAL (
         SELECT * FROM approval WHERE doc_type='SOCKET_ORDER' AND doc_id=so.so_id
         ORDER BY created_at DESC LIMIT 1
@@ -377,13 +395,17 @@ export async function socketOrderRoutes(app: FastifyInstance) {
               ap.reviewer_id, rv.worker_name as reviewer_name,
               ap.approver_id, av.worker_name as approver_name,
               ap.reviewed_at, ap.approved_at, ap.review_comment, ap.approve_comment,
-              po.biz_name
+              po.biz_name,
+              iw.worker_name as insp_worker_name, ir.worker_name as insp_reviewer_name, ia.worker_name as insp_approver_name
        FROM socket_order so
-       LEFT JOIN worker w ON w.worker_id = so.writer_id
+       LEFT JOIN worker w ON w.writer_id = so.writer_id OR w.worker_id = so.writer_id
        LEFT JOIN approval ap ON ap.doc_type = 'SOCKET_ORDER' AND ap.doc_id = so.so_id
        LEFT JOIN worker rv ON rv.worker_id = ap.reviewer_id
        LEFT JOIN worker av ON av.worker_id = ap.approver_id
        LEFT JOIN purchase_order po ON po.po_id = so.po_id
+       LEFT JOIN worker iw ON iw.worker_id = so.insp_worker_id
+       LEFT JOIN worker ir ON ir.worker_id = so.insp_reviewer_id
+       LEFT JOIN worker ia ON ia.worker_id = so.insp_approver_id
        WHERE so.so_id = $1 ORDER BY ap.created_at DESC LIMIT 1`,
       [id]
     );

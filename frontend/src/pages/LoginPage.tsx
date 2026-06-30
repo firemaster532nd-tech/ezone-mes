@@ -24,11 +24,18 @@ export function LoginPage() {
     setLoading(true);
     const res = await login(employeeNo.trim(), password);
     if (!res.ok) {
-      setError(res.error === 'invalid_credentials' || res.error?.includes('401')
-        ? '사번 또는 비밀번호가 올바르지 않습니다.'
-        : res.error === 'account_disabled'
-          ? '비활성화된 계정입니다. 관리자에게 문의하세요.'
-          : '로그인 중 오류가 발생했습니다.');
+      const errCode = res.error || '';
+      if (errCode === 'invalid_credentials' || errCode.includes('401')) {
+        setError('사번 또는 비밀번호가 올바르지 않습니다.');
+      } else if (errCode === 'account_disabled') {
+        setError('비활성화된 계정입니다. 관리자에게 문의하세요.');
+      } else if (errCode === 'password_not_set') {
+        setError('비밀번호가 설정되지 않았습니다. 관리자에게 문의하세요.');
+      } else if (errCode.includes('Failed to fetch') || errCode.includes('NetworkError')) {
+        setError('서버에 연결할 수 없습니다. 네트워크 상태를 확인해 주세요.');
+      } else {
+        setError(`로그인 중 오류가 발생했습니다. (${errCode})`);
+      }
       setLoading(false);
       return;
     }

@@ -68,9 +68,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // refresh fetches permissions
       return { ok: true };
     } catch (e: any) {
-      return { ok: false, error: e?.message ?? 'login_failed' };
+      // ApiError carries the server response body; extract the error code from it
+      const serverError = e?.body?.error ?? e?.message ?? 'login_failed';
+      console.error('[Auth] Login failed:', serverError, e);
+      return { ok: false, error: String(serverError) };
     }
   }, []);
+
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);

@@ -207,12 +207,26 @@ export const initApp = async () => {
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_sii_so_id ON socket_incoming_inspection(so_id)`);
       await pool.query(`CREATE INDEX IF NOT EXISTS idx_sii_seq  ON socket_incoming_inspection(so_id, seq_no)`);
 
-      // socket_order 테이블에 INSPECTING 상태 지원 확인 (CHECK 콘스트레인트 없는 경우 무시)
+      // ── socket_incoming_inspection 2차 점검 컬럼 추가 ──
+      await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS insp_result_2 VARCHAR(10)`).catch(() => {});
+      await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS insp_note_2 TEXT`).catch(() => {});
+      await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS inspected_by_2 INTEGER`).catch(() => {});
+      await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS inspected_at_2 TIMESTAMP`).catch(() => {});
+
+      // ── socket_order 인수검사 결재선 컬럼 추가 ──
+      await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS insp_worker_id INTEGER REFERENCES worker(worker_id)`).catch(() => {});
+      await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS insp_reviewer_id INTEGER REFERENCES worker(worker_id)`).catch(() => {});
+      await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS insp_approver_id INTEGER REFERENCES worker(worker_id)`).catch(() => {});
+      await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS received_at TIMESTAMPTZ`).catch(() => {});
+      await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS received_by INTEGER`).catch(() => {});
+
+      // socket_order 테이블에 INSPECTING/INSPECTED/RECEIVED 상태 지원 확인 (CHECK 콘스트레인트 삭제)
       try {
         await pool.query(`ALTER TABLE socket_order DROP CONSTRAINT IF EXISTS socket_order_status_check`);
       } catch (_) {}
 
-      console.log('✅ socket_incoming_inspection 테이블 준비 완료');
+      console.log('✅ socket_incoming_inspection 테이블 및 2차 점검/결재선 컬럼 준비 완료');
+
 
       console.log('✅ Menu migration done: inventory + shipment + statement menus granted to all departments');
     } catch (e) {
