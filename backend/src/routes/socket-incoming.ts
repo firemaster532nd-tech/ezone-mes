@@ -114,11 +114,13 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
       const soRes = await pool.query(
         `SELECT so.*, pm.project_name
          FROM socket_order so
-         LEFT JOIN project_master pm ON pm.project_id = so.project_id
+         LEFT JOIN purchase_order po ON po.po_id = so.po_id
+         LEFT JOIN project_master pm ON pm.project_id = po.project_id
          WHERE so.so_id = $1`,
         [soId]
       );
       if (!soRes.rows[0]) return reply.code(404).send({ error: 'not_found' });
+
 
       const items = await pool.query(
         `SELECT sii.*, w.worker_name AS inspected_by_name, w2.worker_name AS inspected_by_2_name
@@ -257,11 +259,13 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
               w.worker_name AS inspected_by_name
        FROM socket_incoming_inspection sii
        JOIN socket_order so ON so.so_id = sii.so_id
-       LEFT JOIN project_master pm ON pm.project_id = so.project_id
+       LEFT JOIN purchase_order po ON po.po_id = so.po_id
+       LEFT JOIN project_master pm ON pm.project_id = po.project_id
        LEFT JOIN worker w ON w.worker_id = sii.inspected_by
        WHERE sii.sii_id = $1`,
       [siiId]
     );
+
 
     if (!res.rows[0]) return reply.code(404).send({ error: 'not_found' });
 
@@ -298,7 +302,8 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
     const soRes = await pool.query(
       `SELECT so.*, pm.project_name AS pm_project_name
        FROM socket_order so
-       LEFT JOIN project_master pm ON pm.project_id = so.project_id
+       LEFT JOIN purchase_order po ON po.po_id = so.po_id
+       LEFT JOIN project_master pm ON pm.project_id = po.project_id
        WHERE so.so_id = $1`, [soId]
     );
 
@@ -342,10 +347,9 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
     const { worker_id } = req.body as any;
 
     const soRes = await pool.query(
-      `SELECT so.*, pm.project_id AS proj_id
+      `SELECT so.*, po.project_id AS proj_id
        FROM socket_order so
        LEFT JOIN purchase_order po ON po.po_id = so.po_id
-       LEFT JOIN project_master pm ON pm.project_id = so.project_id
        WHERE so.so_id = $1`, [soId]
     );
     if (!soRes.rows[0]) return reply.code(404).send({ error: 'not_found' });
@@ -364,7 +368,8 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: '합격 처리된 항목이 없습니다. 인수검사를 먼저 완료해 주세요.' });
     }
 
-    const projectId = so.project_id || so.proj_id;
+    const projectId = so.proj_id;
+
 
     // 규격별로 합산
     const stockMap = new Map<string, { product_type: string; width_mm: number; height_mm: number; depth_mm: number; qty: number }>();
