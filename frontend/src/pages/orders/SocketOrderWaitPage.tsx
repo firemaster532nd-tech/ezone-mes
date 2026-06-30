@@ -236,155 +236,176 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
         <style>
           @page {
             size: A4 portrait;
-            margin: 5mm;
+            margin: 6mm 8mm 6mm 8mm; /* 최적화된 마진 */
           }
           body {
             font-family: "Malgun Gothic", "맑은 고딕", sans-serif;
             margin: 0;
             padding: 0;
-            font-size: 10px;
-            color: #000;
+            font-size: 9.5px;
+            color: #111;
+            line-height: 1.15;
           }
           .title {
             text-align: center;
-            font-size: 20px;
-            font-weight: bold;
-            text-decoration: underline;
-            text-underline-position: under;
-            margin-bottom: 8px;
-            letter-spacing: 5px;
+            font-size: 21px;
+            font-weight: 800;
+            text-decoration: none;
+            border-bottom: 2px double #000; /* 품격 있는 이중 밑줄 */
+            width: 250px;
+            margin: 0 auto 10px auto;
+            padding-bottom: 3px;
+            letter-spacing: 12px;
+            text-indent: 12px;
           }
           .info-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 5px;
+            margin-bottom: 4px;
           }
           .info-table td {
-            vertical-align: top;
+            vertical-align: middle;
             padding: 0;
           }
           .buyer-table {
-            width: 48%;
+            width: 95%;
             border-collapse: collapse;
           }
           .buyer-table td {
-            height: 18px;
-            padding: 2px;
+            height: 16px;
+            padding: 1px 0;
             font-size: 10px;
+            border-bottom: 1.2px solid #e2e8f0;
           }
           .buyer-table .lbl {
             font-weight: bold;
-            width: 60px;
+            color: #475569;
+            width: 55px;
           }
           .supplier-table {
-            width: 50%;
+            width: 100%;
             border-collapse: collapse;
-            float: right;
+            border: 2px solid #0f172a;
           }
           .supplier-table th, .supplier-table td {
-            border: 1px solid #000;
+            border: 1px solid #475569;
             text-align: center;
-            height: 18px;
+            height: 16px;
             font-size: 9px;
-            padding: 1px;
+            padding: 1px 2px;
           }
           .supplier-table .hdr {
-            background-color: #f2f2f2;
+            background-color: #f8fafc;
             font-weight: bold;
-            width: 75px;
+            color: #334155;
+            width: 65px;
           }
           .supplier-table .hdr-side {
-            background-color: #f2f2f2;
+            background-color: #f8fafc;
             font-weight: bold;
-            width: 25px;
+            color: #1e293b;
+            width: 22px;
+            font-size: 9.5px;
+            letter-spacing: 2px;
           }
           
           /* 소켓 리스트 */
           .list-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 5px;
+            margin-top: 3px;
+            border: 1.5px solid #0f172a;
           }
           .list-table th, .list-table td {
-            border: 1px solid #000;
+            border: 1px solid #475569;
             text-align: center;
-            font-size: 9.5px;
-            padding: 2px 1px;
-            height: 15px;
+            font-size: 9px;
+            padding: 1.5px 1px;
+            height: 13.5px;
           }
           .list-table th {
-            background-color: #f2f2f2;
+            background-color: #f1f5f9;
             font-weight: bold;
+            color: #1e293b;
           }
           
           /* 평철 브라켓 */
           .section-title {
             font-weight: bold;
-            font-size: 10px;
-            margin-top: 6px;
+            font-size: 9.5px;
+            margin-top: 5px;
             margin-bottom: 2px;
+            color: #0f172a;
+            border-left: 3px solid #2563eb;
+            padding-left: 5px;
           }
           .bracket-table {
             width: 100%;
             border-collapse: collapse;
+            border: 1.5px solid #0f172a;
           }
           .bracket-table th, .bracket-table td {
-            border: 1px solid #000;
+            border: 1px solid #475569;
             text-align: center;
-            font-size: 9px;
-            padding: 2px 1px;
-            height: 14px;
+            font-size: 8.5px;
+            padding: 1.2px 1px;
+            height: 12.5px;
           }
           .bracket-table th {
-            background-color: #f2f2f2;
+            background-color: #f1f5f9;
             font-weight: bold;
+            color: #1e293b;
           }
           
           /* 푸터 */
           .footer-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 5px;
+            margin-top: 4px;
+            border: 1.5px solid #0f172a;
           }
           .footer-table td {
-            border: 1px solid #000;
-            padding: 4px;
+            border: 1px solid #475569;
+            padding: 3px 6px;
             font-size: 9.5px;
           }
           .footer-table .lbl {
-            background-color: #f2f2f2;
+            background-color: #f1f5f9;
             font-weight: bold;
             text-align: center;
-            width: 90px;
+            width: 80px;
+            color: #1e293b;
           }
 
           .no-print-bar {
-            background-color: #f3f4f6;
-            padding: 8px;
+            background-color: #f1f5f9;
+            padding: 6px 12px;
             text-align: right;
-            border-bottom: 1px solid #e5e7eb;
+            border-bottom: 1px solid #cbd5e1;
           }
           .btn-blue {
             background-color: #2563eb;
             color: #fff;
-            padding: 5px 12px;
+            padding: 4px 10px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
             font-size: 11px;
             margin-left: 5px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
           }
           .btn-gray {
-            background-color: #4b5563;
+            background-color: #475569;
             color: #fff;
-            padding: 5px 12px;
+            padding: 4px 10px;
             border: none;
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
             font-size: 11px;
             margin-left: 5px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
           }
 
           @media print {
@@ -399,20 +420,20 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
       </head>
       <body>
         <div class="no-print-bar">
-          <span style="font-size:11px; color:#4b5563; margin-right:15px;">PDF 저장은 인쇄창의 대상을 <b>[PDF로 저장]</b>으로 선택하세요.</span>
+          <span style="font-size:10.5px; color:#475569; margin-right:15px;">PDF 저장은 인쇄창의 대상을 <b>[PDF로 저장]</b>으로 선택하세요.</span>
           <button class="btn-blue" onclick="window.print()">인쇄 / PDF 저장</button>
           <button class="btn-gray" onclick="window.close()">창 닫기</button>
         </div>
-        <div style="padding: 10px;">
+        <div style="padding: 5px;">
           <div class="title">발  주  서</div>
           
           <table class="info-table">
             <tr>
-              <td>
+              <td style="width: 48%;">
                 <table class="buyer-table">
                   <tr>
                     <td class="lbl">수 신 :</td>
-                    <td>${order.biz_name || '선우산업'}</td>
+                    <td style="font-weight: bold; color: #1e293b;">${order.biz_name || '선우산업'}</td>
                   </tr>
                   <tr>
                     <td class="lbl">수 신 자 :</td>
@@ -424,32 +445,32 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
                   </tr>
                   <tr>
                     <td class="lbl">현 장 명 :</td>
-                    <td>${order.project_name}</td>
+                    <td style="font-weight: bold; color: #0f172a;">${order.project_name}</td>
                   </tr>
                 </table>
               </td>
-              <td>
+              <td style="width: 52%;">
                 <table class="supplier-table">
                   <tr>
                     <td rowspan="6" class="hdr-side">공<br/>급<br/>자</td>
                     <td class="hdr">등록번호</td>
-                    <td colspan="3" style="font-weight:bold; font-size:10px;">${ourCompany.corporate_no || '232-88-00624'}</td>
+                    <td colspan="3" style="font-weight:bold; font-size:9.5px; letter-spacing: 0.5px;">${ourCompany.corporate_no || '232-88-00624'}</td>
                   </tr>
                   <tr>
                     <td class="hdr">상 호</td>
-                    <td style="font-weight:bold;">${ourCompany.company_name || '㈜ 이지원'}</td>
+                    <td style="font-weight:bold; color: #0f172a;">${ourCompany.company_name || '㈜ 이지원'}</td>
                     <td class="hdr">대 표 자</td>
-                    <td>${ourCompany.ceo_name || '박민선'}</td>
+                    <td style="font-weight:bold;">${ourCompany.ceo_name || '박민선'}</td>
                   </tr>
                   <tr>
                     <td class="hdr">주 소</td>
-                    <td colspan="3" style="text-align:left; font-size:8.5px;">${ourCompany.address || '경기도 화성시 장안면 장안로227번길 166-18'}</td>
+                    <td colspan="3" style="text-align:left; font-size:8px; color: #334155;">${ourCompany.address || '경기도 화성시 장안면 장안로227번길 166-18'}</td>
                   </tr>
                   <tr>
                     <td class="hdr">업 태</td>
                     <td>${ourCompany.business_type || '제조업, 도소매'}</td>
                     <td class="hdr">종 목</td>
-                    <td>${ourCompany.business_item || '방화재관련건설자재'}</td>
+                    <td style="font-size:8px;">${ourCompany.business_item || '방화재관련건설자재'}</td>
                   </tr>
                   <tr>
                     <td class="hdr">전화번호</td>
@@ -459,7 +480,7 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
                   </tr>
                   <tr>
                     <td class="hdr">이 메 일</td>
-                    <td colspan="3" style="font-size:8.5px;">${ourCompany.email || 'cyj48612@gmail.com'}</td>
+                    <td colspan="3" style="font-size:8.5px; font-family: monospace;">${ourCompany.email || 'cyj48612@gmail.com'}</td>
                   </tr>
                 </table>
               </td>
@@ -469,14 +490,14 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
           <table class="list-table">
             <thead>
               <tr>
-                <th style="width:30px;">순번</th>
-                <th style="width:40px;">재질</th>
-                <th style="width:50px;">품명</th>
-                <th style="width:80px;">위치</th>
-                <th style="width:70px;">구조명</th>
-                <th style="width:50px;">가로(mm)</th>
-                <th style="width:50px;">세로(mm)</th>
-                <th style="width:40px;">폭(mm)</th>
+                <th style="width:25px;">순번</th>
+                <th style="width:35px;">재질</th>
+                <th style="width:45px;">품명</th>
+                <th style="width:85px;">위치</th>
+                <th style="width:65px;">구조명</th>
+                <th style="width:45px;">가로(mm)</th>
+                <th style="width:45px;">세로(mm)</th>
+                <th style="width:35px;">폭(mm)</th>
                 <th style="width:45px;">발주(EA)</th>
                 <th>비고(현장명)</th>
               </tr>
@@ -484,7 +505,7 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
             <tbody>
       `;
 
-      // 27행
+      // 27행 컴팩트 렌더링
       for (let i = 0; i < 27; i++) {
         const item = items[i];
         if (item) {
@@ -498,22 +519,22 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
 
           html += `
             <tr>
-              <td>${i + 1}</td>
+              <td style="color:#64748b; font-family:monospace;">${i + 1}</td>
               <td>${item.material || 'GI'}</td>
               <td>일반형</td>
-              <td>${item.structure || ''}</td>
-              <td style="font-weight:bold;">${code}</td>
-              <td>${sw}</td>
-              <td>${h}</td>
-              <td>${depth}</td>
-              <td style="font-weight:bold;">${item.qty * mult}</td>
-              <td style="text-align:left; font-size:8.5px; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${order.project_name}</td>
+              <td style="text-align:left; padding-left:3px;">${item.structure || ''}</td>
+              <td style="font-weight:bold; color:#1e3a8a;">${code}</td>
+              <td style="font-family:monospace; text-align:right; padding-right:3px;">${sw}</td>
+              <td style="font-family:monospace; text-align:right; padding-right:3px;">${h}</td>
+              <td style="font-family:monospace; text-align:right; padding-right:3px;">${depth}</td>
+              <td style="font-weight:bold; color:#1e293b; font-family:monospace;">${item.qty * mult}</td>
+              <td style="text-align:left; font-size:8px; max-width:110px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#475569;">${order.project_name}</td>
             </tr>
           `;
         } else {
           html += `
             <tr>
-              <td>${i + 1}</td>
+              <td style="color:#cbd5e1; font-family:monospace;">${i + 1}</td>
               <td>&nbsp;</td>
               <td>&nbsp;</td>
               <td>&nbsp;</td>
@@ -530,13 +551,12 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
 
       // 소계 및 합계
       html += `
-              <tr style="font-weight:bold; background-color:#fafafa;">
-                <td colspan="5">소계 (VT-01 / VT-049 / VT-064 / VA-064)</td>
-                <td>VT-01: ${vt01Sum}</td>
-                <td>VT-049: ${vt049Sum}</td>
-                <td>VT-064: ${vt064Sum}</td>
-                <td>VA-064: ${va064Sum}</td>
-                <td style="background-color:#f2f2f2; text-align:right;">총합계: ${grandTotal} EA</td>
+              <tr style="font-weight:bold; background-color:#f8fafc;">
+                <td colspan="5" style="text-align:left; padding-left:5px; color:#334155;">소계 (VT-01 / VT-049 / VT-064 / VA-064)</td>
+                <td colspan="4" style="text-align:left; font-size:8.5px; padding-left:3px; color:#475569;">
+                  VT-01: ${vt01Sum} / VT-049: ${vt049Sum} / VT-064: ${vt064Sum} / VA-064: ${va064Sum}
+                </td>
+                <td style="background-color:#f1f5f9; text-align:right; padding-right:5px; color:#1e3a8a; font-size:10px;">총합계: ${grandTotal} EA</td>
               </tr>
             </tbody>
           </table>
@@ -545,16 +565,16 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
           <table class="bracket-table">
             <thead>
               <tr>
-                <th style="width:40px;">재질</th>
-                <th style="width:40px;">두께(T)</th>
-                <th style="width:50px;">폭(mm)</th>
-                <th style="width:65px;">길이(mm)</th>
-                <th style="width:50px;">수량(개)</th>
-                <th style="width:40px;">재질</th>
-                <th style="width:40px;">두께(T)</th>
-                <th style="width:50px;">폭(mm)</th>
-                <th style="width:65px;">길이(mm)</th>
-                <th style="width:50px;">수량(개)</th>
+                <th style="width:35px;">재질</th>
+                <th style="width:35px;">두께(T)</th>
+                <th style="width:45px;">폭(mm)</th>
+                <th style="width:55px;">길이(mm)</th>
+                <th style="width:45px;">수량(개)</th>
+                <th style="width:35px;">재질</th>
+                <th style="width:35px;">두께(T)</th>
+                <th style="width:45px;">폭(mm)</th>
+                <th style="width:55px;">길이(mm)</th>
+                <th style="width:45px;">수량(개)</th>
               </tr>
             </thead>
             <tbody>
@@ -567,27 +587,27 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
         html += `
           <tr>
             <td>${L ? 'GI' : '&nbsp;'}</td>
-            <td>${L ? L.t : '&nbsp;'}</td>
-            <td>${L ? L.bw : '&nbsp;'}</td>
-            <td>${L ? L.l : '&nbsp;'}</td>
-            <td style="font-weight:bold;">${L ? L.qty : '&nbsp;'}</td>
+            <td style="font-family:monospace;">${L ? L.t : '&nbsp;'}</td>
+            <td style="font-family:monospace;">${L ? L.bw : '&nbsp;'}</td>
+            <td style="font-family:monospace; text-align:right; padding-right:3px;">${L ? L.l : '&nbsp;'}</td>
+            <td style="font-weight:bold; font-family:monospace;">${L ? L.qty : '&nbsp;'}</td>
             
             <td>${R ? 'GI' : '&nbsp;'}</td>
-            <td>${R ? R.t : '&nbsp;'}</td>
-            <td>${R ? R.bw : '&nbsp;'}</td>
-            <td>${R ? R.l : '&nbsp;'}</td>
-            <td style="font-weight:bold;">${R ? R.qty : '&nbsp;'}</td>
+            <td style="font-family:monospace;">${R ? R.t : '&nbsp;'}</td>
+            <td style="font-family:monospace;">${R ? R.bw : '&nbsp;'}</td>
+            <td style="font-family:monospace; text-align:right; padding-right:3px;">${R ? R.l : '&nbsp;'}</td>
+            <td style="font-weight:bold; font-family:monospace;">${R ? R.qty : '&nbsp;'}</td>
           </tr>
         `;
       }
 
       // 평철 소계
       html += `
-              <tr style="font-weight:bold; background-color:#fafafa;">
-                <td colspan="4">좌측 평철 합계</td>
-                <td>${leftBracketTotal} 개</td>
-                <td colspan="4">우측 평철 합계</td>
-                <td>${rightBracketTotal} 개</td>
+              <tr style="font-weight:bold; background-color:#f8fafc;">
+                <td colspan="4" style="color:#475569;">좌측 평철 합계</td>
+                <td style="font-family:monospace; color:#1e293b;">${leftBracketTotal} 개</td>
+                <td colspan="4" style="color:#475569;">우측 평철 합계</td>
+                <td style="font-family:monospace; color:#1e293b;">${rightBracketTotal} 개</td>
               </tr>
             </tbody>
           </table>
@@ -595,9 +615,9 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
           <table class="footer-table">
             <tr>
               <td class="lbl">납품 장소</td>
-              <td>${order.project_name} 현장</td>
+              <td style="font-weight:semibold;">${order.project_name} 현장</td>
               <td class="lbl">납품 기한</td>
-              <td>${order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('ko-KR') : '협의'}</td>
+              <td style="font-weight:semibold;">${order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('ko-KR') : '협의'}</td>
             </tr>
           </table>
         </div>
