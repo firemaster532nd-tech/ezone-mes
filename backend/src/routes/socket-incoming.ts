@@ -110,40 +110,45 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
   app.get('/api/socket-orders/:id/inspections', { preHandler: requireAuth }, async (req, reply) => {
     const soId = parseInt((req.params as any).id);
 
-    const soRes = await pool.query(
-      `SELECT so.*, pm.project_name
-       FROM socket_order so
-       LEFT JOIN project_master pm ON pm.project_id = so.project_id
-       WHERE so.so_id = $1`,
-      [soId]
-    );
-    if (!soRes.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    try {
+      const soRes = await pool.query(
+        `SELECT so.*, pm.project_name
+         FROM socket_order so
+         LEFT JOIN project_master pm ON pm.project_id = so.project_id
+         WHERE so.so_id = $1`,
+        [soId]
+      );
+      if (!soRes.rows[0]) return reply.code(404).send({ error: 'not_found' });
 
-    const items = await pool.query(
-      `SELECT sii.*, w.worker_name AS inspected_by_name, w2.worker_name AS inspected_by_2_name
-       FROM socket_incoming_inspection sii
-       LEFT JOIN worker w ON w.worker_id = sii.inspected_by
-       LEFT JOIN worker w2 ON w2.worker_id = sii.inspected_by_2
-       WHERE sii.so_id = $1
-       ORDER BY sii.seq_no`,
-      [soId]
-    );
+      const items = await pool.query(
+        `SELECT sii.*, w.worker_name AS inspected_by_name, w2.worker_name AS inspected_by_2_name
+         FROM socket_incoming_inspection sii
+         LEFT JOIN worker w ON w.worker_id = sii.inspected_by
+         LEFT JOIN worker w2 ON w2.worker_id = sii.inspected_by_2
+         WHERE sii.so_id = $1
+         ORDER BY sii.seq_no`,
+        [soId]
+      );
 
-
-    return {
-      data: {
-        so: soRes.rows[0],
-        items: items.rows,
-        summary: {
-          total: items.rows.length,
-          passed: items.rows.filter(r => r.insp_result === 'PASS').length,
-          failed: items.rows.filter(r => r.insp_result === 'FAIL').length,
-          pending: items.rows.filter(r => r.insp_result === 'PENDING').length,
-          lotAssigned: items.rows.filter(r => r.insp_lot_no).length,
+      return {
+        data: {
+          so: soRes.rows[0],
+          items: items.rows,
+          summary: {
+            total: items.rows.length,
+            passed: items.rows.filter(r => r.insp_result === 'PASS').length,
+            failed: items.rows.filter(r => r.insp_result === 'FAIL').length,
+            pending: items.rows.filter(r => r.insp_result === 'PENDING').length,
+            lotAssigned: items.rows.filter(r => r.insp_lot_no).length,
+          }
         }
-      }
-    };
+      };
+    } catch (e: any) {
+      console.error('[inspections-get-error]', e);
+      return reply.code(500).send({ error: 'db_error', message: e.message });
+    }
   });
+
 
   // ─────────────────────────────────────────────────────────────────
   // POST /api/socket-orders/:id/assign-lots-bulk
