@@ -118,6 +118,507 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
     }
   };
 
+  // ── 인쇄 및 PDF 저장
+  const handlePrint = async () => {
+    try {
+      // 1. 우리 회사 이지원 정보 조회
+      const res = await api.get<{ data: any[] }>('/companies?search=이지원');
+      const ourCompany = res.data?.data?.[0] || {
+        company_name: '㈜ 이지원',
+        corporate_no: '232-88-00624',
+        ceo_name: '박민선',
+        address: '경기도 화성시 장안면 장안로227번길 166-18',
+        phone: '070-8870-0300',
+        fax: '02-6455-0300',
+        email: 'cyj48612@gmail.com',
+        business_type: '제조업, 도소매',
+        business_item: '방화재관련건설자재'
+      };
+
+      // 2. 평철 브라켓 계산 공식 (백엔드와 완전 동일)
+      const bracketMap = new Map<string, { t: number; bw: number; l: number; qty: number }>();
+      const calcBrackets = (code: string, w: number, h: number, q: number) => {
+        const sw = Math.round(w / 2 - 30);
+        const rows: any[] = [];
+        const add = (t: number, bw: number, l: number, qty: number) => {
+          if (qty > 0 && l > 0) rows.push({ t, bw, l: Math.round(l), qty });
+        };
+        const c = code.trim();
+        switch (c) {
+          case 'VT-049': case 'VT-064': case 'VA-064':
+            add(1.6, 60,  w - 1,  q * 4);
+            add(1.6, 60,  h - 30, q * 4);
+            break;
+          case 'VT-01':
+            add(1.6, 60,  Math.round(w / 2 - 16), q * 16);
+            add(1.6, 60,  Math.round(h / 2 - 20), q * 32);
+            add(1.6, 225, Math.round(w / 2 - 16), q * 8);
+            add(1.6, 237, h - 1,                  q * 4);
+            break;
+          case 'VAG-1.69':
+            add(1.6, 60,  sw - 1,  q * 4);
+            add(1.6, 60,  h - 30,  q * 4);
+            break;
+          case 'HTG-064': case 'HTG-064DC':
+            add(1.6, 60,  w - 5,  q * 2);
+            add(1.6, 274, w - 5,  q * 2);
+            add(1.6, 60,  h - 35, q * 4);
+            add(1.6, 50,  h,      q * 3);
+            break;
+          case 'HTG-1.69':
+            add(1.6, 60,  sw - 5,  q * 4);
+            add(1.6, 274, sw - 5,  q * 4);
+            add(1.6, 60,  h - 35,  q * 4);
+            add(1.6, 50,  h,       q * 6);
+            break;
+        }
+        return rows;
+      };
+
+      const STRUCT_DEPTH: Record<string, number> = {
+        'VT-01': 200, 'VT-049': 200, 'VT-064': 200, 'VA-064': 200,
+        'VAG-1.69': 200, 'HTG-064': 300, 'HTG-064DC': 300, 'HTG-1.69': 300,
+      };
+      const STRUCT_MULT: Record<string, number> = {
+        'VT-01': 2, 'VAG-1.69': 2, 'HTG-1.69': 2,
+      };
+      const STRUCT_WIDTH_CALC: Record<string, (w: number) => number> = {
+        'VAG-1.69': w => Math.round(w / 2 - 30),
+        'HTG-1.69': w => Math.round(w / 2 - 30),
+      };
+
+      // 3. 소계 및 총합계 집계
+      let vt01Sum = 0, vt049Sum = 0, vt064Sum = 0, va064Sum = 0, grandTotal = 0;
+      items.forEach(item => {
+        const code = (item.product_type || '').trim();
+        const w = item.pipe_width_mm || 0;
+        const h = item.pipe_height_mm || 0;
+        const q = item.qty || 1;
+        const mult = STRUCT_MULT[code] || 1;
+        const finalQty = q * mult;
+        grandTotal += finalQty;
+
+        if (code === 'VT-01') vt01Sum += finalQty;
+        else if (code === 'VT-049') vt049Sum += finalQty;
+        else if (code === 'VT-064') vt064Sum += finalQty;
+        else if (code === 'VA-064') va064Sum += finalQty;
+
+        if (w && h && code) {
+          const bRows = calcBrackets(code, w, h, q);
+          bRows.forEach(b => {
+            const key = `${b.t}_${b.bw}_${b.l}`;
+            const existing = bracketMap.get(key);
+            if (existing) existing.qty += b.qty;
+            else bracketMap.set(key, { t: b.t, bw: b.bw, l: b.l, qty: b.qty });
+          });
+        }
+      });
+
+      const bracketRows = [...bracketMap.values()].sort((a, b) => a.bw - b.bw || a.l - b.l);
+      const leftBracketTotal = bracketRows.slice(0, 30).reduce((s, r) => s + r.qty, 0);
+      const rightBracketTotal = bracketRows.slice(30).reduce((s, r) => s + r.qty, 0);
+
+      // 오늘 날짜 기입
+      const dToday = new Date();
+      const dateVal = `${dToday.getFullYear()}. ${dToday.getMonth() + 1}. ${dToday.getDate()}`;
+
+      // 4. 인쇄 팝업 창 생성
+      const wnd = window.open('', '_blank');
+      if (!wnd) {
+        toast.error('팝업 차단이 활성화되어 있어 출력 페이지를 열 수 없습니다.');
+        return;
+      }
+
+      let html = `
+      <html>
+      <head>
+        <title>소켓발주서_${order.project_name}</title>
+        <style>
+          @page {
+            size: A4 portrait;
+            margin: 5mm;
+          }
+          body {
+            font-family: "Malgun Gothic", "맑은 고딕", sans-serif;
+            margin: 0;
+            padding: 0;
+            font-size: 10px;
+            color: #000;
+          }
+          .title {
+            text-align: center;
+            font-size: 20px;
+            font-weight: bold;
+            text-decoration: underline;
+            text-underline-position: under;
+            margin-bottom: 8px;
+            letter-spacing: 5px;
+          }
+          .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 5px;
+          }
+          .info-table td {
+            vertical-align: top;
+            padding: 0;
+          }
+          .buyer-table {
+            width: 48%;
+            border-collapse: collapse;
+          }
+          .buyer-table td {
+            height: 18px;
+            padding: 2px;
+            font-size: 10px;
+          }
+          .buyer-table .lbl {
+            font-weight: bold;
+            width: 60px;
+          }
+          .supplier-table {
+            width: 50%;
+            border-collapse: collapse;
+            float: right;
+          }
+          .supplier-table th, .supplier-table td {
+            border: 1px solid #000;
+            text-align: center;
+            height: 18px;
+            font-size: 9px;
+            padding: 1px;
+          }
+          .supplier-table .hdr {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            width: 75px;
+          }
+          .supplier-table .hdr-side {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            width: 25px;
+          }
+          
+          /* 소켓 리스트 */
+          .list-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 5px;
+          }
+          .list-table th, .list-table td {
+            border: 1px solid #000;
+            text-align: center;
+            font-size: 9.5px;
+            padding: 2px 1px;
+            height: 15px;
+          }
+          .list-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+          }
+          
+          /* 평철 브라켓 */
+          .section-title {
+            font-weight: bold;
+            font-size: 10px;
+            margin-top: 6px;
+            margin-bottom: 2px;
+          }
+          .bracket-table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          .bracket-table th, .bracket-table td {
+            border: 1px solid #000;
+            text-align: center;
+            font-size: 9px;
+            padding: 2px 1px;
+            height: 14px;
+          }
+          .bracket-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+          }
+          
+          /* 푸터 */
+          .footer-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 5px;
+          }
+          .footer-table td {
+            border: 1px solid #000;
+            padding: 4px;
+            font-size: 9.5px;
+          }
+          .footer-table .lbl {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            text-align: center;
+            width: 90px;
+          }
+
+          .no-print-bar {
+            background-color: #f3f4f6;
+            padding: 8px;
+            text-align: right;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .btn-blue {
+            background-color: #2563eb;
+            color: #fff;
+            padding: 5px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 11px;
+            margin-left: 5px;
+          }
+          .btn-gray {
+            background-color: #4b5563;
+            color: #fff;
+            padding: 5px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 11px;
+            margin-left: 5px;
+          }
+
+          @media print {
+            .no-print-bar {
+              display: none;
+            }
+            body {
+              margin: 0;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="no-print-bar">
+          <span style="font-size:11px; color:#4b5563; margin-right:15px;">PDF 저장은 인쇄창의 대상을 <b>[PDF로 저장]</b>으로 선택하세요.</span>
+          <button class="btn-blue" onclick="window.print()">인쇄 / PDF 저장</button>
+          <button class="btn-gray" onclick="window.close()">창 닫기</button>
+        </div>
+        <div style="padding: 10px;">
+          <div class="title">발  주  서</div>
+          
+          <table class="info-table">
+            <tr>
+              <td>
+                <table class="buyer-table">
+                  <tr>
+                    <td class="lbl">수 신 :</td>
+                    <td>${order.biz_name || '선우산업'}</td>
+                  </tr>
+                  <tr>
+                    <td class="lbl">수 신 자 :</td>
+                    <td>구매담당자 귀하</td>
+                  </tr>
+                  <tr>
+                    <td class="lbl">발주일자 :</td>
+                    <td>${dateVal}</td>
+                  </tr>
+                  <tr>
+                    <td class="lbl">현 장 명 :</td>
+                    <td>${order.project_name}</td>
+                  </tr>
+                </table>
+              </td>
+              <td>
+                <table class="supplier-table">
+                  <tr>
+                    <td rowspan="6" class="hdr-side">공<br/>급<br/>자</td>
+                    <td class="hdr">등록번호</td>
+                    <td colspan="3" style="font-weight:bold; font-size:10px;">${ourCompany.corporate_no || '232-88-00624'}</td>
+                  </tr>
+                  <tr>
+                    <td class="hdr">상 호</td>
+                    <td style="font-weight:bold;">${ourCompany.company_name || '㈜ 이지원'}</td>
+                    <td class="hdr">대 표 자</td>
+                    <td>${ourCompany.ceo_name || '박민선'}</td>
+                  </tr>
+                  <tr>
+                    <td class="hdr">주 소</td>
+                    <td colspan="3" style="text-align:left; font-size:8.5px;">${ourCompany.address || '경기도 화성시 장안면 장안로227번길 166-18'}</td>
+                  </tr>
+                  <tr>
+                    <td class="hdr">업 태</td>
+                    <td>${ourCompany.business_type || '제조업, 도소매'}</td>
+                    <td class="hdr">종 목</td>
+                    <td>${ourCompany.business_item || '방화재관련건설자재'}</td>
+                  </tr>
+                  <tr>
+                    <td class="hdr">전화번호</td>
+                    <td>${ourCompany.phone || '070-8870-0300'}</td>
+                    <td class="hdr">팩스번호</td>
+                    <td>${ourCompany.fax || '02-6455-0300'}</td>
+                  </tr>
+                  <tr>
+                    <td class="hdr">이 메 일</td>
+                    <td colspan="3" style="font-size:8.5px;">${ourCompany.email || 'cyj48612@gmail.com'}</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+
+          <table class="list-table">
+            <thead>
+              <tr>
+                <th style="width:30px;">순번</th>
+                <th style="width:40px;">재질</th>
+                <th style="width:50px;">품명</th>
+                <th style="width:80px;">위치</th>
+                <th style="width:70px;">구조명</th>
+                <th style="width:50px;">가로(mm)</th>
+                <th style="width:50px;">세로(mm)</th>
+                <th style="width:40px;">폭(mm)</th>
+                <th style="width:45px;">발주(EA)</th>
+                <th>비고(현장명)</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      // 27행
+      for (let i = 0; i < 27; i++) {
+        const item = items[i];
+        if (item) {
+          const code = (item.product_type || '').trim();
+          const w = item.pipe_width_mm || 0;
+          const h = item.pipe_height_mm || 0;
+          const mult = STRUCT_MULT[code] || 1;
+          const depth = STRUCT_DEPTH[code] || 200;
+          const swCalc = STRUCT_WIDTH_CALC[code];
+          const sw = swCalc ? swCalc(w) : w;
+
+          html += `
+            <tr>
+              <td>${i + 1}</td>
+              <td>${item.material || 'GI'}</td>
+              <td>일반형</td>
+              <td>${item.structure || ''}</td>
+              <td style="font-weight:bold;">${code}</td>
+              <td>${sw}</td>
+              <td>${h}</td>
+              <td>${depth}</td>
+              <td style="font-weight:bold;">${item.qty * mult}</td>
+              <td style="text-align:left; font-size:8.5px; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${order.project_name}</td>
+            </tr>
+          `;
+        } else {
+          html += `
+            <tr>
+              <td>${i + 1}</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+          `;
+        }
+      }
+
+      // 소계 및 합계
+      html += `
+              <tr style="font-weight:bold; background-color:#fafafa;">
+                <td colspan="5">소계 (VT-01 / VT-049 / VT-064 / VA-064)</td>
+                <td>VT-01: ${vt01Sum}</td>
+                <td>VT-049: ${vt049Sum}</td>
+                <td>VT-064: ${vt064Sum}</td>
+                <td>VA-064: ${va064Sum}</td>
+                <td style="background-color:#f2f2f2; text-align:right;">총합계: ${grandTotal} EA</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="section-title">◎ 평철 사이즈 (일반형) 명세</div>
+          <table class="bracket-table">
+            <thead>
+              <tr>
+                <th style="width:40px;">재질</th>
+                <th style="width:40px;">두께(T)</th>
+                <th style="width:50px;">폭(mm)</th>
+                <th style="width:65px;">길이(mm)</th>
+                <th style="width:50px;">수량(개)</th>
+                <th style="width:40px;">재질</th>
+                <th style="width:40px;">두께(T)</th>
+                <th style="width:50px;">폭(mm)</th>
+                <th style="width:65px;">길이(mm)</th>
+                <th style="width:50px;">수량(개)</th>
+              </tr>
+            </thead>
+            <tbody>
+      `;
+
+      // 30행
+      for (let i = 0; i < 30; i++) {
+        const L = bracketRows[i];
+        const R = bracketRows[i + 30];
+        html += `
+          <tr>
+            <td>${L ? 'GI' : '&nbsp;'}</td>
+            <td>${L ? L.t : '&nbsp;'}</td>
+            <td>${L ? L.bw : '&nbsp;'}</td>
+            <td>${L ? L.l : '&nbsp;'}</td>
+            <td style="font-weight:bold;">${L ? L.qty : '&nbsp;'}</td>
+            
+            <td>${R ? 'GI' : '&nbsp;'}</td>
+            <td>${R ? R.t : '&nbsp;'}</td>
+            <td>${R ? R.bw : '&nbsp;'}</td>
+            <td>${R ? R.l : '&nbsp;'}</td>
+            <td style="font-weight:bold;">${R ? R.qty : '&nbsp;'}</td>
+          </tr>
+        `;
+      }
+
+      // 평철 소계
+      html += `
+              <tr style="font-weight:bold; background-color:#fafafa;">
+                <td colspan="4">좌측 평철 합계</td>
+                <td>${leftBracketTotal} 개</td>
+                <td colspan="4">우측 평철 합계</td>
+                <td>${rightBracketTotal} 개</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <table class="footer-table">
+            <tr>
+              <td class="lbl">납품 장소</td>
+              <td>${order.project_name} 현장</td>
+              <td class="lbl">납품 기한</td>
+              <td>${order.delivery_date ? new Date(order.delivery_date).toLocaleDateString('ko-KR') : '협의'}</td>
+            </tr>
+          </table>
+        </div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 300);
+          }
+        </script>
+      </body>
+      </html>
+      `;
+
+      wnd.document.write(html);
+      wnd.document.close();
+    } catch {
+      toast.error('인쇄 준비 중 오류가 발생했습니다');
+    }
+  };
+
   // ── 이메일/메모 저장
   const handleSaveEmail = async () => {
     setLoading(true);
@@ -260,6 +761,16 @@ function OrderCard({ order, onRefresh }: { order: SocketOrder; onRefresh: () => 
             >
               <Download className="h-3.5 w-3.5" />
               Excel
+            </button>
+
+            {/* 인쇄 및 PDF 저장 */}
+            <button
+              onClick={handlePrint}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors"
+              title="인쇄 및 PDF 저장"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              인쇄/PDF
             </button>
 
             {/* 발주완료 버튼 (APPROVED 상태) */}
