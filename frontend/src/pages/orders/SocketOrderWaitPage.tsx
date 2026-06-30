@@ -677,9 +677,26 @@ function OrderCard({ order, onRefresh, vendors = [] }: { order: SocketOrder; onR
     }
   };
 
-  // ── 입고확인 → 인수검사 시작 (C302 5.1 기준)
+  // ── 입고확인 처리 (상태를 RECEIVED로 전환)
+  const handleConfirmReceive = async () => {
+    if (!confirm(`"${order.project_name}" 입고확인 처리를 합니까?\n발주서가 '입고완료(RECEIVED)' 상태로 전환됩니다.`)) return;
+    setLoading(true);
+    try {
+      await api.patch(`/socket-orders/${order.so_id}/status`, {
+        status: 'RECEIVED',
+      });
+      toast.success('입고완료 처리되었습니다.');
+      onRefresh();
+    } catch (e: any) {
+      toast.error(e?.message || '처리 실패');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── 인수검사 시작 (C302 5.1 기준)
   const handleStartInspection = async () => {
-    if (!confirm(`"${order.project_name}" 입고확인을 시작합니까?\n소켓을 1개씩 분리하여 인수검사 목록을 생성합니다.`)) return;
+    if (!confirm(`"${order.project_name}" 인수검사를 시작합니까?\n소켓을 1개씩 분리하여 인수검사 목록을 생성합니다.`)) return;
     setLoading(true);
     try {
       await api.post(`/socket-orders/${order.so_id}/start-inspection`, {
@@ -808,16 +825,29 @@ function OrderCard({ order, onRefresh, vendors = [] }: { order: SocketOrder; onR
               </button>
             )}
 
-            {/* 입고확인 버튼 (ORDERED 상태) → 인수검사 시작 */}
+            {/* 입고확인 버튼 (ORDERED 상태) → 입고완료 처리 */}
             {order.status === 'ORDERED' && (
               <button
-                onClick={handleStartInspection}
+                onClick={handleConfirmReceive}
                 disabled={loading}
                 className="flex items-center gap-1 px-2.5 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
-                title="입고확인 → 인수검사 시작"
+                title="자재 입고확인"
               >
                 <Truck className="h-3.5 w-3.5" />
                 입고확인
+              </button>
+            )}
+
+            {/* 인수검사 시작 버튼 (RECEIVED 상태) → 인수검사 목록 생성 및 페이지 이동 */}
+            {order.status === 'RECEIVED' && (
+              <button
+                onClick={handleStartInspection}
+                disabled={loading}
+                className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg transition-colors disabled:opacity-50"
+                title="인수검사 시작"
+              >
+                <ClipboardCheck className="h-3.5 w-3.5" />
+                인수검사 시작
               </button>
             )}
 
@@ -832,8 +862,8 @@ function OrderCard({ order, onRefresh, vendors = [] }: { order: SocketOrder; onR
               </button>
             )}
 
-            {/* 입고완료 후 검사결과 보기 */}
-            {order.status === 'RECEIVED' && (
+            {/* 검사 완료 후 결과 보기 (INSPECTED 상태) */}
+            {order.status === 'INSPECTED' && (
               <button
                 onClick={handleGoToInspection}
                 className="flex items-center gap-1 px-2.5 py-1.5 border border-green-300 text-green-700 bg-green-50 hover:bg-green-100 text-xs font-semibold rounded-lg transition-colors"
@@ -1027,7 +1057,7 @@ export function SocketOrderWaitPage() {
   const [list, setList] = useState<SocketOrder[]>([]);
   const [vendors, setVendors] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<'ALL' | 'APPROVED' | 'ORDERED' | 'RECEIVED'>('ALL');
+  const [tab, setTab] = useState<'ALL' | 'APPROVED' | 'ORDERED' | 'RECEIVED' | 'INSPECTING' | 'INSPECTED'>('ALL');
 
   const fetchVendors = useCallback(async () => {
     try {
@@ -1062,12 +1092,16 @@ export function SocketOrderWaitPage() {
   const approvedCount = list.filter(o => o.status === 'APPROVED').length;
   const orderedCount  = list.filter(o => o.status === 'ORDERED').length;
   const receivedCount = list.filter(o => o.status === 'RECEIVED').length;
+  const inspectingCount = list.filter(o => o.status === 'INSPECTING').length;
+  const inspectedCount  = list.filter(o => o.status === 'INSPECTED').length;
 
   const TABS: Array<{ key: typeof tab; label: string; count?: number; color: string }> = [
-    { key: 'ALL',      label: '전체',     count: list.length, color: 'text-gray-700 bg-gray-100' },
-    { key: 'APPROVED', label: '발주대기', count: approvedCount, color: 'text-amber-700 bg-amber-100' },
-    { key: 'ORDERED',  label: '발주완료', count: orderedCount,  color: 'text-blue-700 bg-blue-100' },
-    { key: 'RECEIVED', label: '입고완료', count: receivedCount, color: 'text-green-700 bg-green-100' },
+    { key: 'ALL',        label: '전체',     count: list.length, color: 'text-gray-700 bg-gray-100' },
+    { key: 'APPROVED',   label: '발주대기', count: approvedCount, color: 'text-amber-700 bg-amber-100' },
+    { key: 'ORDERED',    label: '발주완료', count: orderedCount,  color: 'text-blue-700 bg-blue-100' },
+    { key: 'RECEIVED',   label: '입고완료', count: receivedCount, color: 'text-green-700 bg-green-100' },
+    { key: 'INSPECTING', label: '검사중',   count: inspectingCount, color: 'text-violet-700 bg-violet-100' },
+    { key: 'INSPECTED',  label: '검사완료', count: inspectedCount,  color: 'text-emerald-700 bg-emerald-100' },
   ];
 
   return (

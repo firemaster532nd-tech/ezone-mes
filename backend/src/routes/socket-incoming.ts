@@ -40,8 +40,8 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
     if (!soRes.rows[0]) return reply.code(404).send({ error: 'not_found' });
     const so = soRes.rows[0];
 
-    if (so.status !== 'ORDERED' && so.status !== 'APPROVED') {
-      return reply.code(400).send({ error: '발주(ORDERED) 상태여야 인수검사를 시작할 수 있습니다.' });
+    if (so.status !== 'ORDERED' && so.status !== 'APPROVED' && so.status !== 'RECEIVED') {
+      return reply.code(400).send({ error: '발주(ORDERED) 또는 입고완료(RECEIVED) 상태여야 인수검사를 시작할 수 있습니다.' });
     }
 
     // 이미 생성된 경우 확인
@@ -192,7 +192,10 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
   // ─────────────────────────────────────────────────────────────────
   app.patch('/api/socket-incoming/:sii_id', { preHandler: requireAuth }, async (req, reply) => {
     const siiId = parseInt((req.params as any).sii_id);
-    const { insp_result, insp_note, insp_lot_no, worker_id } = req.body as any;
+    const { 
+      insp_result, insp_note, insp_lot_no, worker_id,
+      insp_result_2, insp_note_2
+    } = req.body as any;
 
     const existing = await pool.query(
       `SELECT * FROM socket_incoming_inspection WHERE sii_id = $1`,
@@ -211,6 +214,14 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
     if (insp_result === 'PASS' || insp_result === 'FAIL') {
       updates.push(`inspected_by = $${idx++}`);   vals.push(worker_id || null);
       updates.push(`inspected_at = NOW()`);
+    }
+
+    // 2차 검사 결과 반영
+    if (insp_result_2 !== undefined) { updates.push(`insp_result_2 = $${idx++}`); vals.push(insp_result_2); }
+    if (insp_note_2 !== undefined)   { updates.push(`insp_note_2 = $${idx++}`);   vals.push(insp_note_2); }
+    if (insp_result_2 === 'PASS' || insp_result_2 === 'FAIL') {
+      updates.push(`inspected_by_2 = $${idx++}`); vals.push(worker_id || null);
+      updates.push(`inspected_at_2 = NOW()`);
     }
 
     if (updates.length === 0) return reply.code(400).send({ error: '변경할 내용이 없습니다.' });
@@ -333,10 +344,10 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
 
     if (so.status === 'RECEIVED') return reply.code(400).send({ error: '이미 입고 처리된 발주서입니다.' });
 
-    // 합격 항목 조회
+    // 합격 항목 조회 (1차 혹은 2차 합격 건 합산)
     const passedItems = await pool.query(
       `SELECT * FROM socket_incoming_inspection
-       WHERE so_id = $1 AND insp_result = 'PASS'`,
+       WHERE so_id = $1 AND (insp_result = 'PASS' OR insp_result_2 = 'PASS')`,
       [soId]
     );
 
@@ -388,10 +399,10 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
         );
       }
 
-      // 발주서 상태 업데이트
+      // 발주서 상태 업데이트 (검사완료 INSPECTED 상태로 변경)
       await client.query(
         `UPDATE socket_order
-         SET status='RECEIVED', received_at=NOW(), received_by=$1
+         SET status='INSPECTED', received_at=NOW(), received_by=$1
          WHERE so_id=$2`,
         [worker_id || null, soId]
       );
@@ -415,4 +426,29 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
       client.release();
     }
   });
+
+  // ─────────────────────────────────────────────────────────────────
+  // PATCH /api/socket-orders/:id/inspection-approvers
+  // 인수검사 결재라인 (담당자, 검토자, 승인자) 업데이트
+  // ─────────────────────────────────────────────────────────────────
+  app.patch('/api/socket-orders/:id/inspection-approvers', { preHandler: requireAuth }, async (req, reply) => {
+    const soId = parseInt((req.params as any).id);
+    const { insp_worker_id, insp_reviewer_id, insp_approver_id } = req.body as any;
+
+    const res = await pool.query(
+      `UPDATE socket_order 
+       SET insp_worker_id = $1, insp_reviewer_id = $2, insp_approver_id = $3, updated_at = NOW()
+       WHERE so_id = $4
+       RETURNING so_id, insp_worker_id, insp_reviewer_id, insp_approver_id`,
+      [
+        insp_worker_id ? Number(insp_worker_id) : null,
+        insp_reviewer_id ? Number(insp_reviewer_id) : null,
+        insp_approver_id ? Number(insp_approver_id) : null,
+        soId
+      ]
+    );
+    if (!res.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    return { data: res.rows[0] };
+  });
+
 }

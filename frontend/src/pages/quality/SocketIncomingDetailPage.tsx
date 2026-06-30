@@ -27,6 +27,11 @@ interface InspItem {
   insp_note: string | null;
   inspected_by_name: string | null;
   inspected_at: string | null;
+  // 2차 검사 필드
+  insp_result_2: 'PENDING' | 'PASS' | 'FAIL' | null;
+  insp_note_2: string | null;
+  inspected_by_2_name?: string | null;
+  inspected_at_2?: string | null;
 }
 
 interface InspSummary {
@@ -43,6 +48,9 @@ interface InspData {
     project_name: string;
     status: string;
     biz_name: string | null;
+    insp_worker_id: number | null;
+    insp_reviewer_id: number | null;
+    insp_approver_id: number | null;
   };
   items: InspItem[];
   summary: InspSummary;
@@ -50,7 +58,7 @@ interface InspData {
 
 // ─── 라벨 출력 컴포넌트 ─────────────────────────────────────────────────────
 function LabelPrint({ items, projectName }: { items: InspItem[]; projectName: string }) {
-  const printItems = items.filter(i => i.insp_lot_no && i.insp_result !== 'FAIL');
+  const printItems = items.filter(i => i.insp_lot_no && (i.insp_result !== 'FAIL' || i.insp_result_2 === 'PASS'));
 
   const handlePrint = () => {
     const win = window.open('', '_blank');
@@ -65,8 +73,8 @@ function LabelPrint({ items, projectName }: { items: InspItem[]; projectName: st
         <div class="date">입고일: ${item.inspected_at
           ? new Date(item.inspected_at).toLocaleDateString('ko-KR')
           : new Date().toLocaleDateString('ko-KR')}</div>
-        <div class="result ${item.insp_result === 'PASS' ? 'pass' : 'pending'}">
-          ${item.insp_result === 'PASS' ? '인수검사 합격 ✓' : '인수검사 대기'}
+        <div class="result pass">
+          인수검사 합격 ✓
         </div>
         <div class="seq">No.${String(item.seq_no).padStart(3, '0')}</div>
       </div>
@@ -93,9 +101,7 @@ function LabelPrint({ items, projectName }: { items: InspItem[]; projectName: st
           .spec { font-size: 9pt; }
           .project { font-size: 7pt; color: #555; flex: 1; }
           .date { font-size: 7pt; color: #555; }
-          .result { font-size: 7pt; font-weight: bold; }
-          .result.pass { color: #15803d; }
-          .result.pending { color: #b45309; }
+          .result { font-size: 7pt; font-weight: bold; color: #15803d; }
           .seq { font-size: 7pt; color: #888; text-align: right; }
         </style>
       </head>
@@ -122,20 +128,23 @@ function LabelPrint({ items, projectName }: { items: InspItem[]; projectName: st
 
 // ─── 개별 소켓 행 ──────────────────────────────────────────────────────────
 function ItemRow({
-  item, onUpdate,
+  item, onUpdate, isReadOnly,
 }: {
   item: InspItem;
   onUpdate: (siiId: number, patch: Partial<InspItem>) => void;
+  isReadOnly?: boolean;
 }) {
   const [note, setNote] = useState(item.insp_note || '');
+  const [note2, setNote2] = useState(item.insp_note_2 || '');
   const [saving, setSaving] = useState(false);
 
   const handleResult = async (result: 'PASS' | 'FAIL') => {
+    if (isReadOnly) return;
     setSaving(true);
     try {
       await api.patch(`/socket-incoming/${item.sii_id}`, { insp_result: result, insp_note: note || null });
       onUpdate(item.sii_id, { insp_result: result, insp_note: note || null });
-      toast.success(result === 'PASS' ? '합격 처리했습니다' : '불합격 처리했습니다');
+      toast.success(result === 'PASS' ? '1차 합격 처리했습니다' : '1차 불합격 처리했습니다');
     } catch {
       toast.error('처리 실패');
     } finally {
@@ -143,96 +152,184 @@ function ItemRow({
     }
   };
 
+  const handleResult2 = async (result: 'PASS' | 'FAIL') => {
+    if (isReadOnly) return;
+    setSaving(true);
+    try {
+      await api.patch(`/socket-incoming/${item.sii_id}`, { insp_result_2: result, insp_note_2: note2 || null });
+      onUpdate(item.sii_id, { insp_result_2: result, insp_note_2: note2 || null });
+      toast.success(result === 'PASS' ? '2차 합격 처리했습니다' : '2차 불합격 처리했습니다');
+    } catch {
+      toast.error('처리 실패');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 최종 판정 색상 (1차 합격 또는 2차 합격 시 초록색)
+  const isFinalPass = item.insp_result === 'PASS' || item.insp_result_2 === 'PASS';
+  const isFinalFail = item.insp_result === 'FAIL' && (item.insp_result_2 === 'FAIL' || !item.insp_result_2 || item.insp_result_2 === 'PENDING');
+  
   const resultColor =
-    item.insp_result === 'PASS'  ? 'bg-green-50 border-green-200'  :
-    item.insp_result === 'FAIL'  ? 'bg-red-50 border-red-200'      :
-    'bg-white border-gray-200';
+    isFinalPass   ? 'bg-green-50/50 border-green-200'  :
+    isFinalFail   ? 'bg-red-50/50 border-red-200'      :
+    'bg-white border-slate-200';
 
   return (
-    <div className={cn('border rounded-xl p-3 transition-colors', resultColor)}>
-      <div className="flex items-start gap-3">
-        {/* 순번 */}
-        <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600">
-          {String(item.seq_no).padStart(3, '0')}
-        </div>
-
-        {/* 스펙 */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-bold text-slate-800">{item.product_type}</span>
-            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-              {item.pipe_width_mm} × {item.pipe_height_mm} mm
-            </span>
-            {item.construction_seq > 1 && (
-              <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                {item.construction_seq}차
-              </span>
-            )}
+    <div className={cn('border rounded-xl p-4 transition-all duration-200 shadow-sm', resultColor)}>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* 스펙 및 LOT */}
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500">
+            {String(item.seq_no).padStart(3, '0')}
           </div>
-
-          {/* LOT 번호 */}
-          <div className="mt-1 flex items-center gap-2">
-            <Tag className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
-            {item.insp_lot_no ? (
-              <span className="text-xs font-mono font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded">
-                {item.insp_lot_no}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-bold text-slate-800">{item.product_type}</span>
+              <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
+                {item.pipe_width_mm} × {item.pipe_height_mm} mm
               </span>
-            ) : (
-              <span className="text-xs text-slate-400 italic">LOT 미부여</span>
-            )}
+              {item.construction_seq > 1 && (
+                <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
+                  {item.construction_seq}차
+                </span>
+              )}
+            </div>
+            <div className="mt-1.5 flex items-center gap-2">
+              <Tag className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+              {item.insp_lot_no ? (
+                <span className="text-xs font-mono font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md">
+                  {item.insp_lot_no}
+                </span>
+              ) : (
+                <span className="text-xs text-slate-400 italic">LOT 미부여</span>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* 결과 버튼 */}
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <button
-            onClick={() => handleResult('PASS')}
-            disabled={saving}
-            className={cn(
-              'flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-colors',
-              item.insp_result === 'PASS'
-                ? 'bg-green-600 text-white'
-                : 'bg-white border border-green-300 text-green-700 hover:bg-green-50'
+        {/* 1차 & 2차 인수검사 결재 패널 */}
+        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center flex-shrink-0">
+          {/* 1차 점검 */}
+          <div className="border border-slate-200 rounded-lg p-2.5 bg-white shadow-sm flex flex-col gap-1.5 min-w-[200px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-500">1차 점검</span>
+              <span className={cn(
+                'text-[10px] px-1.5 py-0.5 rounded font-bold',
+                item.insp_result === 'PASS' ? 'text-green-700 bg-green-50' :
+                item.insp_result === 'FAIL' ? 'text-red-700 bg-red-50' : 'text-slate-500 bg-slate-100'
+              )}>
+                {item.insp_result === 'PASS' ? '합격' : item.insp_result === 'FAIL' ? '불합격' : '대기'}
+              </span>
+            </div>
+            {!isReadOnly && (
+              <div className="flex gap-1">
+                <button
+                  onClick={() => handleResult('PASS')}
+                  disabled={saving}
+                  className={cn(
+                    'flex-1 text-center py-1 text-[11px] font-semibold rounded transition-colors',
+                    item.insp_result === 'PASS'
+                      ? 'bg-green-600 text-white shadow-sm'
+                      : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  )}
+                >
+                  합격
+                </button>
+                <button
+                  onClick={() => handleResult('FAIL')}
+                  disabled={saving}
+                  className={cn(
+                    'flex-1 text-center py-1 text-[11px] font-semibold rounded transition-colors',
+                    item.insp_result === 'FAIL'
+                      ? 'bg-red-600 text-white shadow-sm'
+                      : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  )}
+                >
+                  불합격
+                </button>
+              </div>
             )}
-          >
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            합격
-          </button>
-          <button
-            onClick={() => handleResult('FAIL')}
-            disabled={saving}
-            className={cn(
-              'flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg transition-colors',
-              item.insp_result === 'FAIL'
-                ? 'bg-red-600 text-white'
-                : 'bg-white border border-red-300 text-red-700 hover:bg-red-50'
+            <input
+              type="text"
+              value={note}
+              disabled={isReadOnly}
+              onChange={e => setNote(e.target.value)}
+              onBlur={() => {
+                if (isReadOnly) return;
+                if (note !== (item.insp_note || '')) {
+                  api.patch(`/socket-incoming/${item.sii_id}`, { insp_note: note })
+                    .then(() => onUpdate(item.sii_id, { insp_note: note }))
+                    .catch(() => {});
+                }
+              }}
+              placeholder="1차 점검 메모..."
+              className="text-[11px] px-2 py-1 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-400 bg-slate-50/50"
+            />
+          </div>
+
+          {/* 2차 점검 */}
+          <div className="border border-slate-200 rounded-lg p-2.5 bg-white shadow-sm flex flex-col gap-1.5 min-w-[200px]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1">
+                <span className="text-[11px] font-bold text-slate-500">2차 점검</span>
+                <span className="text-[9px] text-amber-600 bg-amber-50 px-1 rounded font-semibold">(재검사)</span>
+              </div>
+              <span className={cn(
+                'text-[10px] px-1.5 py-0.5 rounded font-bold',
+                item.insp_result_2 === 'PASS' ? 'text-green-700 bg-green-50' :
+                item.insp_result_2 === 'FAIL' ? 'text-red-700 bg-red-50' : 'text-slate-500 bg-slate-100'
+              )}>
+                {item.insp_result_2 === 'PASS' ? '합격' : item.insp_result_2 === 'FAIL' ? '불합격' : '대기'}
+              </span>
+            </div>
+            {!isReadOnly && (
+              <div className="flex gap-1">
+                <button
+                  onClick={() => handleResult2('PASS')}
+                  disabled={saving}
+                  className={cn(
+                    'flex-1 text-center py-1 text-[11px] font-semibold rounded transition-colors',
+                    item.insp_result_2 === 'PASS'
+                      ? 'bg-green-600 text-white shadow-sm'
+                      : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  )}
+                >
+                  합격
+                </button>
+                <button
+                  onClick={() => handleResult2('FAIL')}
+                  disabled={saving}
+                  className={cn(
+                    'flex-1 text-center py-1 text-[11px] font-semibold rounded transition-colors',
+                    item.insp_result_2 === 'FAIL'
+                      ? 'bg-red-600 text-white shadow-sm'
+                      : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  )}
+                >
+                  불합격
+                </button>
+              </div>
             )}
-          >
-            <XCircle className="h-3.5 w-3.5" />
-            불합격
-          </button>
+            <input
+              type="text"
+              value={note2}
+              disabled={isReadOnly}
+              onChange={e => setNote2(e.target.value)}
+              onBlur={() => {
+                if (isReadOnly) return;
+                if (note2 !== (item.insp_note_2 || '')) {
+                  api.patch(`/socket-incoming/${item.sii_id}`, { insp_result_2: item.insp_result_2, insp_note_2: note2 })
+                    .then(() => onUpdate(item.sii_id, { insp_note_2: note2 }))
+                    .catch(() => {});
+                }
+              }}
+              placeholder="2차 점검 메모..."
+              className="text-[11px] px-2 py-1 border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-slate-400 bg-slate-50/50"
+            />
+          </div>
         </div>
       </div>
-
-      {/* 비고 */}
-      {item.insp_result === 'FAIL' && (
-        <div className="mt-2 flex items-center gap-2">
-          <input
-            type="text"
-            value={note}
-            onChange={e => setNote(e.target.value)}
-            onBlur={() => {
-              if (note !== (item.insp_note || '')) {
-                api.patch(`/socket-incoming/${item.sii_id}`, { insp_note: note })
-                  .then(() => onUpdate(item.sii_id, { insp_note: note }))
-                  .catch(() => {});
-              }
-            }}
-            placeholder="불합격 사유 입력..."
-            className="flex-1 text-xs px-2.5 py-1.5 border border-red-200 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-red-400"
-          />
-        </div>
-      )}
     </div>
   );
 }
@@ -244,9 +341,19 @@ export default function SocketIncomingDetailPage() {
   const { user } = useAuth();
 
   const [data, setData] = useState<InspData | null>(null);
+  const [workers, setWorkers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState(false);
   const [assigningLots, setAssigningLots] = useState(false);
+
+  const fetchWorkers = useCallback(async () => {
+    try {
+      const res = await api.get<{ data: any[] }>('/workers');
+      setWorkers(res.data?.data || []);
+    } catch (e) {
+      console.error('작업자 목록 조회 실패', e);
+    }
+  }, []);
 
   const fetchData = useCallback(async () => {
     if (!soId) return;
@@ -261,7 +368,36 @@ export default function SocketIncomingDetailPage() {
     }
   }, [soId]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const handleUpdateApprovers = async (field: 'insp_worker_id' | 'insp_reviewer_id' | 'insp_approver_id', value: number | null) => {
+    if (!soId || !data) return;
+    try {
+      const nextApprovers = {
+        insp_worker_id: data.so.insp_worker_id,
+        insp_reviewer_id: data.so.insp_reviewer_id,
+        insp_approver_id: data.so.insp_approver_id,
+        [field]: value
+      };
+      await api.patch(`/socket-orders/${soId}/inspection-approvers`, nextApprovers);
+      setData(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          so: {
+            ...prev.so,
+            [field]: value
+          }
+        };
+      });
+      toast.success('결재선이 업데이트되었습니다.');
+    } catch {
+      toast.error('결재선 저장 실패');
+    }
+  };
+
+  useEffect(() => { 
+    fetchData(); 
+    fetchWorkers();
+  }, [fetchData, fetchWorkers]);
 
   const handleUpdate = useCallback((siiId: number, patch: Partial<InspItem>) => {
     setData(prev => {
@@ -343,7 +479,8 @@ export default function SocketIncomingDetailPage() {
 
   const { so, items, summary } = data;
   const allDone = summary.pending === 0;
-  const isReceived = so.status === 'RECEIVED';
+  const isReceived = so.status === 'RECEIVED' || so.status === 'INSPECTED';
+  const isReadOnly = so.status === 'RECEIVED' || so.status === 'INSPECTED';
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -374,6 +511,63 @@ export default function SocketIncomingDetailPage() {
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-4 space-y-4">
+        {/* ── 인수검사 결재선 ── */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+          <h2 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
+            <ClipboardCheck className="h-4.5 w-4.5 text-teal-600" />
+            인수검사 결재선 지정
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* 담당자 */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-bold text-slate-500">검사담당자</label>
+              <select
+                disabled={isReadOnly}
+                value={so.insp_worker_id || ''}
+                onChange={e => handleUpdateApprovers('insp_worker_id', e.target.value ? Number(e.target.value) : null)}
+                className="text-xs border border-slate-200 rounded-lg p-2 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-slate-400"
+              >
+                <option value="">담당자 선택...</option>
+                {workers.map(w => (
+                  <option key={w.worker_id} value={w.worker_id}>{w.name} ({w.dept_name || '부서없음'})</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 검토자 */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-bold text-slate-500">검사검토자</label>
+              <select
+                disabled={isReadOnly}
+                value={so.insp_reviewer_id || ''}
+                onChange={e => handleUpdateApprovers('insp_reviewer_id', e.target.value ? Number(e.target.value) : null)}
+                className="text-xs border border-slate-200 rounded-lg p-2 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-slate-400"
+              >
+                <option value="">검토자 선택...</option>
+                {workers.map(w => (
+                  <option key={w.worker_id} value={w.worker_id}>{w.name} ({w.dept_name || '부서없음'})</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 승인자 */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-bold text-slate-500">검사승인자</label>
+              <select
+                disabled={isReadOnly}
+                value={so.insp_approver_id || ''}
+                onChange={e => handleUpdateApprovers('insp_approver_id', e.target.value ? Number(e.target.value) : null)}
+                className="text-xs border border-slate-200 rounded-lg p-2 bg-slate-50 focus:outline-none focus:ring-1 focus:ring-slate-400"
+              >
+                <option value="">승인자 선택...</option>
+                {workers.map(w => (
+                  <option key={w.worker_id} value={w.worker_id}>{w.name} ({w.dept_name || '부서없음'})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
         {/* ── 진행 요약 ── */}
         <div className="bg-white rounded-2xl border border-slate-200 p-4">
           <div className="flex items-center justify-between mb-3">
@@ -473,7 +667,7 @@ export default function SocketIncomingDetailPage() {
           ) : (
             <div className="space-y-2">
               {items.map(item => (
-                <ItemRow key={item.sii_id} item={item} onUpdate={handleUpdate} />
+                <ItemRow key={item.sii_id} item={item} onUpdate={handleUpdate} isReadOnly={isReadOnly} />
               ))}
             </div>
           )}

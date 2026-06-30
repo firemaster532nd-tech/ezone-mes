@@ -871,6 +871,15 @@ export async function orderRoutes(app: FastifyInstance) {
       }
     }
 
+    // ── 수주 등록 즉시 백그라운드 BOM 전개 및 작업지시 자동 연계 가동 ──
+    try {
+      await runBomExplosionInternal(orderId);
+      await runGenerateWorkOrdersInternal(orderId);
+      console.log(`[AutoOrderLink] 수주 ID ${orderId} 에 대한 자동 BOM 및 작업지시 생성 완료.`);
+    } catch (err: any) {
+      console.error(`[AutoOrderLink] 자동 BOM/작업지시 생성 실패:`, err.message);
+    }
+
     return { data: result.rows[0] };
   });
 
@@ -3787,5 +3796,459 @@ export async function orderRoutes(app: FastifyInstance) {
     );
     return { data: result.rows };
   });
+
+  // ─── [Auto Helper] 수주 등록 즉시 자동 BOM 전개 연산 ───
+  async function runBomExplosionInternal(orderId: number) {
+    const orderItems = await pool.query(`
+      SELECT si.*, cm.structure_code AS cert_code, cm.structure_name,
+             cm.install_qty, cm.install_position, cm.cert_version,
+             cm.opening_w_mm AS cm_ow, cm.opening_h_mm AS cm_oh,
+             cm.penetration_w_mm AS cm_pw, cm.penetration_h_mm AS cm_ph,
+             cm.sheet_thickness_prod, cm.cw_density_prod, cm.cw_density_min
+      FROM sales_order_item si
+      JOIN certification_master cm ON cm.cert_id = si.cert_id
+      WHERE si.order_id = $1
+      ORDER BY si.sort_order
+    `, [orderId]);
+
+    if (orderItems.rows.length === 0) throw new Error('수주 품목이 없습니다');
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`DELETE FROM order_bom_result WHERE order_id = $1`, [orderId]);
+      const itemMap = await getItemMap();
+
+      interface MatAccum {
+        item_id: number; item_code: string; item_name: string; item_category: string;
+        required_qty: number; unit: string;
+        details: Array<{ component: string; spec: string; calc: string; qty: number; structureCode: string }>;
+      }
+      const matMap = new Map<string, MatAccum>();
+      const missingItems: string[] = [];
+
+      function addMaterial(itemCode: string, qty: number, component: string, spec: string, calc: string, structureCode: string) {
+        const itemInfo = itemMap.get(itemCode);
+        if (!itemInfo) {
+          if (!missingItems.includes(itemCode)) {
+            missingItems.push(itemCode);
+            console.warn(`[BOM] 품목코드 "${itemCode}" 가 item_master에 없습니다 (component: ${component})`);
+          }
+          return;
+        }
+        const existing = matMap.get(itemCode);
+        if (existing) {
+          existing.required_qty += qty;
+          existing.details.push({ component, spec, calc, qty, structureCode });
+        } else {
+          matMap.set(itemCode, {
+            item_id: itemInfo.item_id, item_code: itemCode,
+            item_name: itemInfo.item_name, item_category: itemInfo.item_category,
+            required_qty: qty, unit: itemInfo.unit,
+            details: [{ component, spec, calc, qty, structureCode }],
+          });
+        }
+      }
+
+      for (const oi of orderItems.rows) {
+        const orderQty = oi.qty;
+        const structCode = oi.structure_code;
+        const W = oi.penetration_w_mm || oi.cm_pw || 0;
+        const H = oi.penetration_h_mm || oi.cm_ph || 0;
+        const OW = oi.opening_w_mm || oi.cm_ow || 0;
+        const OH = oi.opening_h_mm || oi.cm_oh || 0;
+        const N = oi.install_qty || 1;
+        const sheetThickness = parseFloat(oi.sheet_thickness_prod || '5.0');
+        const cwDensity = parseFloat(oi.cw_density_prod || '120');
+        const cwDensityMin = parseFloat(oi.cw_density_min || '96');
+
+        if (W === 0 || H === 0) {
+          const bomItems = await client.query(`
+            SELECT bm.*, im.item_code, im.item_name, im.item_category, im.unit
+            FROM bom_master bm JOIN item_master im ON im.item_id = bm.item_id
+            WHERE bm.cert_id = $1 AND bm.is_applicable != false ORDER BY bm.sort_order
+          `, [oi.cert_id]);
+          for (const bi of bomItems.rows) {
+            addMaterial(bi.item_code, bi.qty_per_unit * orderQty, bi.component_name, bi.spec_detail, `고정BOM: ${bi.qty_per_unit} × ${orderQty}세트`, structCode);
+          }
+          continue;
+        }
+
+        const perimeter = calculatePerimeter(W, H);
+        const dimParams = {
+          W, H, OW, OH, N,
+          certVersion: oi.cert_version || '0310',
+          installPos: oi.install_position || '수직벽체',
+          sheetThickness, cwDensity, cwDensityMin,
+          structureCode: structCode,
+        };
+        const bomLines = calculateStructureBom(dimParams);
+
+        for (const line of bomLines) {
+          let itemCode = line.item_code;
+          if (itemCode === '__FP_SOCKET__') {
+            itemCode = structureToFPCode(structCode);
+          }
+          const totalQty = line.qty * orderQty;
+          const calcWithSets = `${line.calc} × ${orderQty}세트 = ${totalQty}`;
+          addMaterial(itemCode, totalQty, line.component, line.spec, calcWithSets, structCode);
+        }
+      }
+
+      for (const oi of orderItems.rows) {
+        const orderQty = oi.qty;
+        const lineW = oi.penetration_w_mm || oi.cm_pw || 0;
+        const lineH = oi.penetration_h_mm || oi.cm_ph || 0;
+        if (lineW === 0 || lineH === 0) continue;
+
+        const fpCode = structureToFPCode(oi.cert_code || oi.structure_code);
+        const fpInfo = itemMap.get(fpCode);
+        if (!fpInfo) continue;
+
+        const pbItems = await client.query(`
+          SELECT pb.component_name, pb.component_type, pb.qty_fixed, pb.unit AS pb_unit,
+                 pb.source_type, pb.spec_detail,
+                 im.item_id, im.item_code, im.item_name, im.item_category, im.unit,
+                 cm.structure_code, cm.socket_name,
+                 cm.install_qty, cm.install_position
+          FROM product_bom pb
+          JOIN item_master im ON im.item_id = pb.item_id
+          JOIN structure_bom sb ON sb.sbom_id = pb.sbom_id
+          LEFT JOIN certification_master cm ON cm.cert_id = sb.cert_id AND cm.is_active = true
+          WHERE sb.output_item_id = $1
+            AND pb.source_type = 'PURCHASE'
+            AND pb.component_type = 'SOCKET_BODY'
+            AND pb.is_active = true
+        `, [fpInfo.item_id]);
+
+        for (const pbi of pbItems.rows) {
+          const qtyPerSocket = parseFloat(pbi.qty_fixed || '1');
+          const subQty = Math.round(qtyPerSocket * orderQty * 100) / 100;
+          const instQty = oi.install_qty || pbi.install_qty || 1;
+          const socketW = instQty >= 2 ? Math.round(lineW / instQty) - 30 : lineW;
+          const socketH = lineH;
+          const installPos = oi.install_position || pbi.install_position || '수직벽체';
+          const socketHeight = (installPos === '수평바닥') ? 300 : 200;
+          const structInfo = oi.cert_code || pbi.structure_code || '';
+          let specStr = `SGCC t1.6, W${socketW}×H${socketH}×높이${socketHeight}mm (${structInfo} ${pbi.socket_name || ''})`;
+          if (instQty >= 2) {
+            specStr += ` ×${instQty}개조립`;
+          }
+          const calcNote = `관통구${lineW}×${lineH} → 소켓W${socketW}×H${socketH} × ${orderQty}세트 = ${subQty}`;
+          addMaterial(pbi.item_code, subQty, pbi.component_name, specStr, calcNote, structInfo);
+        }
+      }
+
+      const processedItems = new Set<string>();
+      async function reverseExplode(sourceItem: { item_id: number; item_code: string; item_name: string; required_qty: number; unit: string }, depth: number) {
+        if (depth > 4) return;
+        if (processedItems.has(sourceItem.item_code)) return;
+        processedItems.add(sourceItem.item_code);
+
+        const upBoms = await client.query(`
+          SELECT pb.bom_id, pb.output_qty, pb.loss_rate, pb.output_unit,
+                 pbi.item_id, pbi.component_name, pbi.qty, pbi.unit,
+                 im.item_code, im.item_name, im.item_category
+          FROM process_bom pb
+          JOIN process_bom_item pbi ON pbi.bom_id = pb.bom_id
+          JOIN item_master im ON im.item_id = pbi.item_id
+          WHERE pb.output_item_id = $1 AND pb.is_active = true
+        `, [sourceItem.item_id]);
+
+        if (upBoms.rows.length === 0) return;
+
+        const outputQty = parseFloat(upBoms.rows[0].output_qty || '1');
+        const lossRate = parseFloat(upBoms.rows[0].loss_rate || '0');
+        const lossMult = 1 + lossRate / 100;
+        let inputQty = sourceItem.required_qty;
+        const outputUnit = upBoms.rows[0].output_unit;
+
+        if (sourceItem.unit === 'M' || sourceItem.unit === 'm') {
+          let kgPerM = 1.14;
+          if (sourceItem.item_code.includes('4125') || sourceItem.item_code.includes('4T')) {
+            kgPerM = 0.60;
+          } else if (sourceItem.item_code.includes('5125') || sourceItem.item_code.includes('125')) {
+            kgPerM = 0.75;
+          } else if (sourceItem.item_code.includes('65415') || sourceItem.item_code.includes('6.5')) {
+            kgPerM = 3.24;
+          }
+          if (outputUnit === 'kg') {
+            inputQty = sourceItem.required_qty * kgPerM;
+          }
+        }
+
+        const batches = inputQty / outputQty;
+        for (const ub of upBoms.rows) {
+          const qty = Math.round(ub.qty * batches * lossMult * 100) / 100;
+          const calcNote = sourceItem.unit === 'M' || sourceItem.unit === 'm'
+            ? `${sourceItem.required_qty}${sourceItem.unit} × ${inputQty !== sourceItem.required_qty ? (inputQty/sourceItem.required_qty).toFixed(2) + 'kg/M = ' + inputQty.toFixed(1) + 'kg' : ''} ÷ ${outputQty}kg/배치 = ${batches.toFixed(2)}배치 × ${ub.qty}${ub.unit} × 로스${lossRate}% = ${qty}`
+            : `${sourceItem.required_qty}${sourceItem.unit} ÷ ${outputQty}/배치 = ${batches.toFixed(2)}배치 × ${ub.qty}${ub.unit} × 로스${lossRate}% = ${qty}`;
+
+          addMaterial(ub.item_code, qty, ub.component_name, `${sourceItem.item_name} → ${ub.component_name}`, calcNote, '역전개');
+
+          if (ub.item_category === 'SA') {
+            const newMat = matMap.get(ub.item_code);
+            if (newMat) {
+              await reverseExplode({
+                item_id: ub.item_id,
+                item_code: ub.item_code,
+                item_name: ub.item_name,
+                required_qty: newMat.required_qty,
+                unit: newMat.unit,
+              }, depth + 1);
+            }
+          }
+        }
+      }
+
+      const saEntries = [...matMap.values()].filter(m => m.item_category === 'SA');
+      for (const sa of saEntries) {
+        await reverseExplode({
+          item_id: sa.item_id,
+          item_code: sa.item_code,
+          item_name: sa.item_name,
+          required_qty: sa.required_qty,
+          unit: sa.unit,
+        }, 0);
+      }
+
+      const certIds = [...new Set(orderItems.rows.map((oi: any) => oi.cert_id))];
+      interface SbomGroupInfo {
+        group_code: string; group_type: string; sort_order: number;
+        source_type: string; output_item_code: string;
+      }
+      const sbomGroupMap: SbomGroupInfo[] = [];
+      for (const certId of certIds) {
+        const sbomRes = await client.query(`
+          SELECT sb.group_code, sb.group_type, sb.sort_order, sb.source_type,
+                 im.item_code AS output_item_code
+          FROM structure_bom sb
+          LEFT JOIN item_master im ON im.item_id = sb.output_item_id
+          WHERE sb.cert_id = $1 AND sb.is_active = true
+          ORDER BY sb.sort_order
+        `, [certId]);
+        sbomGroupMap.push(...sbomRes.rows);
+      }
+
+      function resolveHierarchy(mat: any): { bom_level: number; parent_group: string; source_type: string; group_sort: number } {
+        const code = mat.item_code;
+        const cat = mat.item_category;
+        const directMatch = sbomGroupMap.find(g => g.output_item_code === code);
+        if (directMatch) {
+          return {
+            bom_level: 1,
+            parent_group: directMatch.group_type,
+            source_type: directMatch.source_type,
+            group_sort: directMatch.sort_order,
+          };
+        }
+        if (cat === 'FP') {
+          if (code.startsWith('FP-FL-') || code.startsWith('FP-BD-FL')) {
+            const flGroup = sbomGroupMap.find(g => g.group_type === 'FLASHING');
+            return { bom_level: 1, parent_group: 'FLASHING', source_type: 'MANUFACTURE', group_sort: flGroup?.sort_order ?? 20 };
+          }
+          if (code.startsWith('FP-GAP') || code === 'FP-TS') {
+            const gsGroup = sbomGroupMap.find(g => g.group_type === 'GAP_SHEET');
+            return { bom_level: 1, parent_group: 'GAP_SHEET', source_type: 'MANUFACTURE', group_sort: gsGroup?.sort_order ?? 30 };
+          }
+          const skGroup = sbomGroupMap.find(g => g.group_type === 'SOCKET');
+          return { bom_level: 1, parent_group: 'SOCKET', source_type: 'MANUFACTURE', group_sort: skGroup?.sort_order ?? 10 };
+        }
+        if (cat === 'SM') {
+          if (code.startsWith('SM-CW') || code.startsWith('SM-GW')) {
+            const spGroup = sbomGroupMap.find(g => g.group_type === 'SUPPORT');
+            return { bom_level: 1, parent_group: 'SUPPORT', source_type: 'PURCHASE', group_sort: spGroup?.sort_order ?? 40 };
+          }
+          if (code.startsWith('SM-SIL')) {
+            const slGroup = sbomGroupMap.find(g => g.group_type === 'SEALANT');
+            return { bom_level: 1, parent_group: 'SEALANT', source_type: 'PURCHASE', group_sort: slGroup?.sort_order ?? 50 };
+          }
+          if (code.startsWith('SM-GP')) {
+            const fxGroup = sbomGroupMap.find(g => g.group_type === 'FIXING');
+            return { bom_level: 1, parent_group: 'FIXING', source_type: 'PURCHASE', group_sort: fxGroup?.sort_order ?? 60 };
+          }
+          return { bom_level: 1, parent_group: 'SUPPORT', source_type: 'PURCHASE', group_sort: 40 };
+        }
+        if (cat === 'SA') {
+          const compNames = mat.details.map((d: any) => d.component).join(' ');
+          const isFlashingComponent = compNames.includes('플래싱') || compNames.includes('FL');
+          if (isFlashingComponent) {
+            return { bom_level: 2, parent_group: 'FLASHING', source_type: 'MANUFACTURE', group_sort: 20 };
+          }
+          return { bom_level: 2, parent_group: 'SOCKET', source_type: 'MANUFACTURE', group_sort: 10 };
+        }
+        if (cat === 'RM') {
+          return { bom_level: 3, parent_group: 'PROCESS_REVERSE', source_type: 'PURCHASE', group_sort: 99 };
+        }
+        return { bom_level: 1, parent_group: 'OTHER', source_type: 'PURCHASE', group_sort: 90 };
+      }
+
+      for (const [, mat] of matMap) {
+        const stockRes = await client.query(`
+          SELECT COALESCE(SUM(CASE WHEN txn_type='IN' THEN qty ELSE 0 END),0) -
+                 COALESCE(SUM(CASE WHEN txn_type='OUT' THEN qty ELSE 0 END),0) AS balance
+          FROM inventory_transaction WHERE item_id = $1
+        `, [mat.item_id]);
+        const stock = parseFloat(stockRes.rows[0]?.balance || '0');
+        mat.required_qty = Math.round(mat.required_qty * 100) / 100;
+        const shortage = Math.max(0, mat.required_qty - stock);
+        const hierarchy = resolveHierarchy(mat);
+
+        const isAggregateItem = mat.item_code.startsWith('SM-GW') || mat.item_code.startsWith('SM-CW');
+        let componentName: string;
+        let specDetail: string;
+        let calcNote: string;
+
+        if (isAggregateItem) {
+          const uniqueComponents = [...new Set(mat.details.map(d => d.component))];
+          componentName = uniqueComponents.join(', ');
+          const baseSpec = mat.details[0]?.spec || '';
+          specDetail = baseSpec;
+          const structureCodes = [...new Set(mat.details.map(d => d.structureCode).filter(Boolean))];
+          calcNote = `${structureCodes.join(', ')} 총 ${mat.details.length}건 합산 = ${mat.required_qty}${mat.unit}`;
+        } else {
+          componentName = mat.details.map(d => `${d.component}(${d.structureCode})`).join(', ');
+          specDetail = mat.details.map(d => d.spec).filter(Boolean).join(' | ');
+          calcNote = mat.details.map(d => d.calc).join('\n');
+        }
+
+        await client.query(`
+          INSERT INTO order_bom_result (order_id, item_id, item_code, item_name, item_category,
+            required_qty, unit, current_stock, shortage_qty, component_name, spec_detail, calc_note,
+            bom_level, parent_group, source_type, group_sort)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+        `, [
+          orderId, mat.item_id, mat.item_code, mat.item_name, mat.item_category,
+          mat.required_qty, mat.unit, stock, shortage,
+          componentName, specDetail, calcNote,
+          hierarchy.bom_level, hierarchy.parent_group, hierarchy.source_type, hierarchy.group_sort,
+        ]);
+      }
+
+      await client.query(`UPDATE sales_order SET status = 'BOM_EXPLODED' WHERE order_id = $1`, [orderId]);
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
+  // ─── [Auto Helper] BOM 결과를 토대로 작업지시서 일괄 자동 생성 ───
+  async function runGenerateWorkOrdersInternal(orderId: number) {
+    const orderRes = await pool.query(`SELECT * FROM sales_order WHERE order_id = $1`, [orderId]);
+    if (orderRes.rows.length === 0) throw new Error('수주를 찾을 수 없습니다.');
+    const order = orderRes.rows[0];
+
+    const existingWO = await pool.query(
+      `SELECT wo_id FROM work_order WHERE order_id = $1 LIMIT 1`,
+      [orderId]
+    );
+    if (existingWO.rows.length > 0) return; // 이미 존재하면 중복 생성 무시
+
+    const bomRes = await pool.query(`
+      SELECT obr.*, im.roll_length_m, im.roll_spec 
+      FROM order_bom_result obr 
+      LEFT JOIN item_master im ON im.item_id = obr.item_id 
+      WHERE obr.order_id = $1 
+      ORDER BY obr.item_category, obr.item_code
+    `, [orderId]);
+
+    if (bomRes.rows.length === 0) throw new Error('BOM 전개 결과가 없습니다.');
+
+    const plannedDate = order.delivery_date
+      ? new Date(new Date(order.delivery_date).getTime() - 7 * 86400000).toISOString().slice(0, 10)
+      : new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+
+    const remarkBase = `BOM자동생성 - ${order.order_number}`;
+    const createdWOs: any[] = [];
+
+    async function genWoNum(processCode: string, woDate: string): Promise<string> {
+      const dateStr = woDate.replace(/-/g, '');
+      const result = await pool.query(
+        `SELECT COUNT(*) as cnt FROM work_order WHERE process_code = $1 AND wo_date = $2`,
+        [processCode, woDate]
+      );
+      const seq = parseInt(result.rows[0].cnt, 10) + 1;
+      return `WO-${processCode}-${dateStr}-${String(seq).padStart(3, '0')}`;
+    }
+
+    const rmItems = bomRes.rows.filter((r: any) => r.item_category === 'RM');
+    const saItems = bomRes.rows.filter((r: any) => r.item_category === 'SA');
+    const fpItems = bomRes.rows.filter((r: any) => r.item_category === 'FP');
+
+    const saExtItems = saItems.filter((r: any) => r.item_code?.startsWith('SA-EXT'));
+    const saCutItems = saItems.filter((r: any) => r.item_code?.startsWith('SA-CUT'));
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. MIX
+      if (rmItems.length > 0) {
+        const totalRmQty = rmItems.reduce((s: number, r: any) => s + parseFloat(r.required_qty || 0), 0);
+        const woNumber = await genWoNum('MIX', plannedDate);
+        const rmNames = rmItems.map((r: any) => r.item_name).join(', ').slice(0, 500);
+        const res = await client.query(`
+          INSERT INTO work_order (wo_number, wo_date, process_code, order_id, planned_qty, status,
+            customer_name, remarks, product_type, spec_detail)
+          VALUES ($1, $2, 'MIX', $3, $4, 'PLANNED', $5, $6, 'MIX', $7) RETURNING *
+        `, [woNumber, plannedDate, orderId, Math.round(totalRmQty * 100) / 100,
+            order.customer_name, remarkBase, rmNames]);
+        createdWOs.push(res.rows[0]);
+      }
+
+      // 2. EXT
+      if (saExtItems.length > 0) {
+        for (const sa of saExtItems) {
+          const woNumber = await genWoNum('EXT', plannedDate);
+          const res = await client.query(`
+            INSERT INTO work_order (wo_number, wo_date, process_code, order_id, item_id, planned_qty,
+              status, customer_name, remarks, product_type, spec_detail, structure_name)
+            VALUES ($1, $2, 'EXT', $3, $4, $5, 'PLANNED', $6, $7, 'EXT', $8, $9) RETURNING *
+          `, [woNumber, plannedDate, orderId, sa.item_id, Math.round(parseFloat(sa.required_qty) * 100) / 100,
+              order.customer_name, remarkBase, sa.item_name, (sa.spec_detail || '').slice(0, 50)]);
+          createdWOs.push(res.rows[0]);
+        }
+      }
+
+      // 3. CUT
+      if (saCutItems.length > 0) {
+        for (const sa of saCutItems) {
+          const woNumber = await genWoNum('CUT', plannedDate);
+          const res = await client.query(`
+            INSERT INTO work_order (wo_number, wo_date, process_code, order_id, item_id, planned_qty,
+              status, customer_name, remarks, product_type, spec_detail, structure_name)
+            VALUES ($1, $2, 'CUT', $3, $4, $5, 'PLANNED', $6, $7, 'CUT', $8, $9) RETURNING *
+          `, [woNumber, plannedDate, orderId, sa.item_id, Math.round(parseFloat(sa.required_qty) * 100) / 100,
+              order.customer_name, remarkBase, sa.item_name, (sa.spec_detail || '').slice(0, 50)]);
+          createdWOs.push(res.rows[0]);
+        }
+      }
+
+      // 4. ASM
+      if (fpItems.length > 0) {
+        for (const fp of fpItems) {
+          const woNumber = await genWoNum('ASM', plannedDate);
+          const res = await client.query(`
+            INSERT INTO work_order (wo_number, wo_date, process_code, order_id, item_id, planned_qty,
+              status, customer_name, remarks, product_type, spec_detail, structure_name)
+            VALUES ($1, $2, 'ASM', $3, $4, $5, 'PLANNED', $6, $7, 'ASM', $8, $9) RETURNING *
+          `, [woNumber, plannedDate, orderId, fp.item_id, Math.round(parseFloat(fp.required_qty) * 100) / 100,
+              order.customer_name, remarkBase, fp.item_name, (fp.component_name || '').slice(0, 50)]);
+          createdWOs.push(res.rows[0]);
+        }
+      }
+
+      await client.query(`UPDATE sales_order SET status = 'IN_PRODUCTION' WHERE order_id = $1`, [orderId]);
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
 
 }
