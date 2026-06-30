@@ -324,14 +324,13 @@ function CreateSwoModal({ onClose, onCreated }: { onClose: () => void; onCreated
   const [sheets, setSheets] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>('');
   const [checkResult, setCheckResult] = useState<{
-    items: POItem[];
+    items: any[];
     sheets: string[];
-    sheet_items: Record<string, POItem[]>;
+    sheet_items: Record<string, any[]>;
     incomplete_count: number;
     duplicate_count: number;
   } | null>(null);
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
-  const [itemQtys, setItemQtys] = useState<Record<number, number>>({});
   const [form, setForm] = useState({
     wo_date: new Date().toISOString().slice(0, 10),
     delivery_date: '',
@@ -341,9 +340,9 @@ function CreateSwoModal({ onClose, onCreated }: { onClose: () => void; onCreated
   const [submitting, setSubmitting] = useState(false);
   const [checking, setChecking] = useState(false);
 
-  // 발주서 목록 로드
+  // 발주서 목록 로드 (소켓 인수검사가 완료된 발주서만 필터링)
   useEffect(() => {
-    api.get<{ data: PO[] }>('/purchase-orders').then(r => setPos(r.data)).catch(() => {});
+    api.get<{ data: PO[] }>('/purchase-orders?has_socket_inspected=true').then(r => setPos(r.data)).catch(() => {});
   }, []);
 
   // 발주서 선택 시 체크
@@ -371,10 +370,10 @@ function CreateSwoModal({ onClose, onCreated }: { onClose: () => void; onCreated
     return checkResult.sheet_items?.[selectedSheet] || [];
   }, [checkResult, selectedSheet]);
 
-  const toggleItem = (id: number) => {
+  const toggleItem = (siiId: number) => {
     setSelectedItems(prev => {
       const n = new Set(prev);
-      if (n.has(id)) n.delete(id); else n.add(id);
+      if (n.has(siiId)) n.delete(siiId); else n.add(siiId);
       return n;
     });
   };
@@ -383,12 +382,12 @@ function CreateSwoModal({ onClose, onCreated }: { onClose: () => void; onCreated
     if (selectedItems.size === currentItems.length) {
       setSelectedItems(new Set());
     } else {
-      setSelectedItems(new Set(currentItems.map(i => i.po_item_id)));
+      setSelectedItems(new Set(currentItems.map(i => i.sii_id)));
     }
   };
 
   const selectedItemData = useMemo(
-    () => currentItems.filter(i => selectedItems.has(i.po_item_id)),
+    () => currentItems.filter(i => selectedItems.has(i.sii_id)),
     [currentItems, selectedItems],
   );
 
@@ -408,9 +407,12 @@ function CreateSwoModal({ onClose, onCreated }: { onClose: () => void; onCreated
         product_type: it.product_type,
         item_name: it.item_name,
         item_type: it.item_type,
-        qty: it.qty,
-        planned_qty: itemQtys[it.po_item_id] ?? it.qty ?? 1,
+        qty: 1,
+        planned_qty: 1,
         remark: it.remark,
+        construction_seq: it.construction_seq,
+        insp_lot_no: it.insp_lot_no,
+        sii_id: it.sii_id
       }));
 
       const res = await api.post<{ data: any }>('/socket-work-orders', {
@@ -436,6 +438,7 @@ function CreateSwoModal({ onClose, onCreated }: { onClose: () => void; onCreated
   };
 
   const stepLabel = ['발주서 선택', '시트(동) 선택', '품목 선택 및 작업 정보'];
+
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-6 pb-6 px-4 overflow-y-auto">
@@ -584,20 +587,20 @@ function CreateSwoModal({ onClose, onCreated }: { onClose: () => void; onCreated
                       </th>
                       <th className="px-2 py-2 text-left text-gray-500">NO</th>
                       <th className="px-2 py-2 text-left text-gray-500">재질</th>
-                      <th className="px-2 py-2 text-left text-gray-500">구조</th>
+                      <th className="px-2 py-2 text-left text-gray-500">구조체</th>
                       <th className="px-2 py-2 text-left text-gray-500">규격(가로×세로)</th>
-                      <th className="px-2 py-2 text-center text-gray-500">발주수량</th>
-                      <th className="px-2 py-2 text-center text-gray-500">지시수량</th>
+                      <th className="px-2 py-2 text-center text-gray-500">차수</th>
+                      <th className="px-2 py-2 text-center text-gray-500">인수검사 LOT 번호</th>
                       <th className="px-2 py-2 text-left text-gray-500">경고</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {currentItems.map(item => {
-                      const isSelected = selectedItems.has(item.po_item_id);
+                      const isSelected = selectedItems.has(item.sii_id);
                       return (
                         <tr
-                          key={item.po_item_id}
-                          onClick={() => toggleItem(item.po_item_id)}
+                          key={item.sii_id}
+                          onClick={() => toggleItem(item.sii_id)}
                           className={cn(
                             'cursor-pointer transition-colors',
                             isSelected ? 'bg-indigo-50' : 'hover:bg-gray-50',
@@ -608,7 +611,7 @@ function CreateSwoModal({ onClose, onCreated }: { onClose: () => void; onCreated
                             <input
                               type="checkbox"
                               checked={isSelected}
-                              onChange={() => toggleItem(item.po_item_id)}
+                              onChange={() => toggleItem(item.sii_id)}
                               onClick={e => e.stopPropagation()}
                               className="w-3.5 h-3.5"
                             />
@@ -621,19 +624,11 @@ function CreateSwoModal({ onClose, onCreated }: { onClose: () => void; onCreated
                               ? `${item.pipe_width_mm}×${item.pipe_height_mm}`
                               : <span className="text-gray-300">미입력</span>}
                           </td>
-                          <td className="px-2 py-2 text-center font-mono">{item.qty ?? 1}</td>
+                          <td className="px-2 py-2 text-center font-mono">{item.construction_seq ?? 1}차</td>
                           <td className="px-2 py-2 text-center">
-                            <input
-                              type="number"
-                              min={1}
-                              value={itemQtys[item.po_item_id] ?? (item.qty ?? 1)}
-                              onChange={e => {
-                                e.stopPropagation();
-                                setItemQtys(prev => ({ ...prev, [item.po_item_id]: parseInt(e.target.value) || 1 }));
-                              }}
-                              onClick={e => e.stopPropagation()}
-                              className="w-14 text-center border rounded px-1 py-0.5 text-xs"
-                            />
+                            <span className="font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold border border-blue-100">
+                              {item.insp_lot_no || '미부여'}
+                            </span>
                           </td>
                           <td className="px-2 py-2">
                             <div className="flex gap-1">
@@ -657,6 +652,7 @@ function CreateSwoModal({ onClose, onCreated }: { onClose: () => void; onCreated
               </div>
             </div>
           )}
+
 
           {/* 작업 기본정보 */}
           {selectedPo && selectedItems.size > 0 && (
@@ -921,6 +917,7 @@ function DetailSwoModal({ swo, onClose, onRefresh }: { swo: SWO; onClose: () => 
                             <tr className="bg-white/60">
                               <th className="px-3 py-1.5 text-left text-gray-500 w-10">No</th>
                               <th className="px-3 py-1.5 text-center text-gray-500">규격 W×H (mm)</th>
+                              <th className="px-3 py-1.5 text-center text-gray-500">인수검사 LOT 번호</th>
                               <th className="px-3 py-1.5 text-center text-gray-500 w-16">지시수량</th>
                               <th className="px-3 py-1.5 text-center text-gray-500 w-20">실적수량</th>
                               <th className="px-3 py-1.5 text-center text-gray-500 w-14">상태</th>
@@ -948,6 +945,9 @@ function DetailSwoModal({ swo, onClose, onRefresh }: { swo: SWO; onClose: () => 
                                       <AlertTriangle className="h-3 w-3 text-yellow-500 inline ml-1" />
                                     )}
                                   </td>
+                                  <td className="px-3 py-1.5 text-center font-mono text-xs text-blue-700 font-bold">
+                                    {item.insp_lot_no || '미부여'}
+                                  </td>
                                   <td className="px-3 py-1.5 text-center font-bold text-gray-700">
                                     {item.planned_qty ?? 1}
                                   </td>
@@ -973,6 +973,7 @@ function DetailSwoModal({ swo, onClose, onRefresh }: { swo: SWO; onClose: () => 
                             })}
                           </tbody>
                         </table>
+
                       </div>
                     );
                   })}

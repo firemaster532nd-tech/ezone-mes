@@ -66,6 +66,8 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
   // 신규 컬럼 추가 (이미 있으면 무시)
   await pool.query(`ALTER TABLE socket_work_order_item ADD COLUMN IF NOT EXISTS construction_seq INT DEFAULT 1`).catch(() => {});
   await pool.query(`ALTER TABLE socket_work_order_item ADD COLUMN IF NOT EXISTS insp_lot_no VARCHAR(50)`).catch(() => {});
+  await pool.query(`ALTER TABLE socket_work_order_item ADD COLUMN IF NOT EXISTS sii_id INT`).catch(() => {});
+
 
   // ── GET /api/socket-work-orders ─ 목록 ────────────────────────────────────
   app.get('/api/socket-work-orders', { preHandler: requireAuth }, async (req, reply) => {
@@ -113,32 +115,70 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
   app.get('/api/socket-work-orders/po/:po_id/check', { preHandler: requireAuth }, async (req, reply) => {
     const poId = (req.params as any).po_id;
 
-    // 발주 명세 전체 조회
+    // 1. 소켓 발주 건 하위의 인수검사 완료(합격 및 LOT 부여 완료)된 품목들만 조회
     const { rows: items } = await pool.query(
-      `SELECT * FROM purchase_order_item WHERE po_id = $1 ORDER BY sheet_name, seq_no`,
+      `SELECT 
+         sii.sii_id,
+         sii.so_id,
+         sii.seq_no,
+         sii.construction_seq,
+         sii.product_type,
+         sii.pipe_width_mm,
+         sii.pipe_height_mm,
+         sii.width_mm,
+         sii.height_mm,
+         sii.depth_mm,
+         sii.insp_lot_no,
+         sii.insp_result,
+         sii.insp_result_2,
+         poi.po_item_id,
+         poi.po_id,
+         poi.material,
+         poi.structure,
+         poi.opening_width_mm,
+         poi.opening_height_mm,
+         poi.sheet_name,
+         poi.item_name,
+         poi.item_type,
+         poi.remark
+       FROM socket_incoming_inspection sii
+       JOIN socket_order so ON so.so_id = sii.so_id
+       LEFT JOIN purchase_order_item poi ON poi.po_id = so.po_id AND poi.seq_no = sii.item_seq
+       WHERE so.po_id = $1
+         AND (sii.insp_result = 'PASS' OR sii.insp_result_2 = 'PASS')
+         AND sii.insp_lot_no IS NOT NULL 
+         AND sii.insp_lot_no <> ''
+       ORDER BY poi.sheet_name, sii.seq_no`,
       [poId],
     );
 
-    // 중복 체크: 이미 PLANNED/IN_PROGRESS 상태 SWO 에 포함된 po_item_id
+    // 2. 중복 체크: 이미 PLANNED/IN_PROGRESS 상태 SWO 에 포함된 sii_id
     const { rows: dupRows } = await pool.query(`
-      SELECT swi.po_item_id
+      SELECT swi.sii_id
       FROM socket_work_order_item swi
       JOIN socket_work_order swo ON swo.swo_id = swi.swo_id
-      WHERE swi.po_item_id IN (
-        SELECT po_item_id FROM purchase_order_item WHERE po_id = $1
+      WHERE swi.sii_id IN (
+        SELECT sii.sii_id 
+        FROM socket_incoming_inspection sii
+        JOIN socket_order so ON so.so_id = sii.so_id
+        WHERE so.po_id = $1
       )
       AND swo.status IN ('PLANNED','IN_PROGRESS')
     `, [poId]);
-    const dupIds = new Set(dupRows.map(r => r.po_item_id));
+    const dupIds = new Set(dupRows.map(r => r.sii_id));
 
-    // 결과 조합
+    // 3. 결과 조합
     const result = items.map(item => {
       const isIncomplete =
         !item.pipe_width_mm || !item.pipe_height_mm ||
-        !item.qty || item.qty < 1 ||
         (!item.structure && !item.product_type);
-      const isDuplicate = dupIds.has(item.po_item_id);
-      return { ...item, is_incomplete: isIncomplete, is_duplicate: isDuplicate };
+      const isDuplicate = dupIds.has(item.sii_id);
+      return { 
+        ...item, 
+        qty: 1, // 낱개 단위이므로 개별 수량은 항상 1
+        is_incomplete: isIncomplete, 
+        is_duplicate: isDuplicate 
+      };
     });
 
     // 시트별 그룹
@@ -160,6 +200,7 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
       },
     };
   });
+
 
   // ── GET /api/socket-work-orders/:id ─ 상세 ────────────────────────────────
   app.get('/api/socket-work-orders/:id', { preHandler: requireAuth }, async (req, reply) => {
@@ -224,7 +265,8 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
     }
 
     // ── 핵심: qty만큼 1개씩 분리 + 정렬 (인수검사 LOT 부여 + 가로↑세로↑)
-    const expandedItems = expandAndSortSocketItems(items);
+    const hasSii = items.some((it: any) => it.sii_id);
+    const expandedItems = hasSii ? items : expandAndSortSocketItems(items);
 
     const client = await pool.connect();
     try {
@@ -252,8 +294,8 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
             (swo_id, po_item_id, seq_no, material, structure,
              pipe_width_mm, pipe_height_mm, opening_width_mm, opening_height_mm,
              product_type, item_name, item_type, planned_qty, remark, is_incomplete,
-             construction_seq)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+             construction_seq, insp_lot_no, sii_id)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
         `, [
           swoId,
           item.po_item_id || null, item.seq_no || null,

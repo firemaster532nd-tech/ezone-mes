@@ -640,7 +640,7 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
 
   // ── GET /api/purchase-orders ── 발주서 목록 (발주서가 없는 프로젝트도 포함)
   app.get('/api/purchase-orders', { preHandler: requireAuth }, async (req) => {
-    const { search, project_id } = req.query as { search?: string; project_id?: string };
+    const { search, project_id, has_socket_inspected } = req.query as { search?: string; project_id?: string; has_socket_inspected?: string };
 
     const searchParam = search ? `%${search}%` : null;
     const projectIdParam = project_id ? parseInt(project_id) : null;
@@ -659,6 +659,20 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
       p++; params.push(searchParam);
       poConditions.push(`(po.project_name ILIKE $${p} OR po.contractor ILIKE $${p} OR po.file_name ILIKE $${p} OR pm.project_name ILIKE $${p})`);
     }
+    if (has_socket_inspected === 'true') {
+      poConditions.push(`
+        EXISTS (
+          SELECT 1 
+          FROM socket_order so
+          JOIN socket_incoming_inspection sii ON sii.so_id = so.so_id
+          WHERE so.po_id = po.po_id
+            AND (sii.insp_result = 'PASS' OR sii.insp_result_2 = 'PASS')
+            AND sii.insp_lot_no IS NOT NULL 
+            AND sii.insp_lot_no <> ''
+        )
+      `);
+    }
+
 
     const poQuery = `
       SELECT
