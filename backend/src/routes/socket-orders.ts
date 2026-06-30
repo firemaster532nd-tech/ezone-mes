@@ -251,7 +251,7 @@ async function buildSocketOrderExcel(soRow: any, ourCompany: any = null): Promis
     }
   }
 
-  const buffer = await workbook.xlsx.writeBuffer() as Buffer;
+  const buffer = (await workbook.xlsx.writeBuffer()) as any;
   return buffer;
 }
 
