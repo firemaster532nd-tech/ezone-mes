@@ -126,6 +126,7 @@ export function IncomingInspectionPage() {
   const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const [toast, setToast] = useState<{ message: string; type: 'PASS' | 'FAIL' } | null>(null);
   const [pendingList, setPendingList] = useState<PendingReceiving[]>([]);
+  const [socketPendingList, setSocketPendingList] = useState<any[]>([]);
   // URL 파라미터로 전달받은 주문내역 정보
   const urlPriId = searchParams.get('pri_id');
   const urlFormCode = searchParams.get('form_code');
@@ -145,6 +146,17 @@ export function IncomingInspectionPage() {
       .catch(() => setPendingList([]));
   };
 
+  const fetchSocketPending = () => {
+    api.get<{ data: any[] }>('/socket-orders/wait')
+      .then((r) => {
+        const filtered = (r.data || []).filter(
+          (item: any) => item.status === 'RECEIVED' || item.status === 'INSPECTING'
+        );
+        setSocketPendingList(filtered);
+      })
+      .catch(() => setSocketPendingList([]));
+  };
+
   // URL 파라미터 있을 경우 검사 모달 자동 오픈
   useEffect(() => {
     if (urlPriId || urlFormCode) {
@@ -152,7 +164,12 @@ export function IncomingInspectionPage() {
     }
   }, [urlPriId, urlFormCode]);
 
-  useEffect(() => { fetchData(); fetchPending(); }, [filter]);
+  useEffect(() => { 
+    fetchData(); 
+    fetchPending(); 
+    fetchSocketPending();
+  }, [filter]);
+
 
   const handleDelete = async (ins: Inspection) => {
     if (!confirm(`검사 INS-${String(ins.insp_id).padStart(4, '0')}을(를) 삭제하시겠습니까?`)) return;
@@ -220,6 +237,44 @@ export function IncomingInspectionPage() {
           </div>
         </div>
       )}
+
+      {/* 소켓 → 검사대기 배너 */}
+      {socketPendingList.length > 0 && (
+        <div className="mb-4 bg-teal-50 border border-teal-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <ClipboardCheck size={16} className="text-teal-600" />
+            <span className="font-semibold text-sm text-teal-800">
+              소켓 인수검사 대기/진행 {socketPendingList.length}건
+            </span>
+            <span className="text-xs text-teal-600">입고완료된 소켓 자재 인수검사 대상</span>
+          </div>
+          <div className="space-y-1.5">
+            {socketPendingList.map((p) => (
+              <div key={p.so_id}
+                onClick={() => navigate(`/quality/socket-incoming/${p.so_id}`)}
+                className="flex items-center justify-between bg-white rounded px-3 py-2 border border-teal-100 cursor-pointer hover:bg-teal-50/50 transition"
+              >
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="font-mono text-xs text-gray-400">SO-{String(p.so_id).padStart(4, '0')}</span>
+                  <span className={cn(
+                    'px-1.5 py-0.5 rounded text-[10px] font-medium',
+                    p.status === 'INSPECTING' ? 'bg-amber-100 text-amber-700' : 'bg-teal-100 text-teal-700'
+                  )}>
+                    {p.status === 'INSPECTING' ? '검사중' : '검사대기'}
+                  </span>
+                  <span className="font-medium">{p.project_name || '프로젝트명 없음'}</span>
+                  <span className="text-gray-400 text-xs">({p.vendor_name || '공급사 없음'})</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span>품목 {p.item_count}종</span>
+                  <span className="px-2 py-0.5 bg-teal-100 text-teal-700 rounded font-medium">검사 페이지로 이동 →</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
 
       {/* 카테고리 요약 카드 */}
       <div className="grid grid-cols-2 gap-3 mb-4">
