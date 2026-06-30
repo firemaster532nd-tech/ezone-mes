@@ -63,7 +63,7 @@ function calcBrackets(code: string, w: number, h: number, q: number) {
 }
 
 // Excel generation
-function buildSocketOrderExcel(soRow: any) {
+function buildSocketOrderExcel(soRow: any, ourCompany: any = null) {
   const items: any[] = soRow.items_json || [];
   const projectName = soRow.project_name || '현장명';
   const today = new Date().toLocaleDateString('ko-KR');
@@ -124,8 +124,38 @@ function buildSocketOrderExcel(soRow: any) {
     const dateVal = `${dToday.getFullYear()}. ${dToday.getMonth() + 1}. ${dToday.getDate()}`;
     setCell('F5', dateVal);
 
-    // 발주처 상호를 '㈜ 이지원'으로 명시적으로 기입
-    setCell('L4', '㈜ 이지원');
+    // 발주처(공급자) 정보 매핑 (기초정보 DB 연동)
+    if (ourCompany) {
+      if (ourCompany.corporate_no || ourCompany.company_code) {
+        setCell('L3', ourCompany.corporate_no || ourCompany.company_code);
+      }
+      if (ourCompany.company_name) {
+        setCell('L4', ourCompany.company_name);
+      }
+      if (ourCompany.ceo_name) {
+        setCell('O4', ourCompany.ceo_name);
+      }
+      if (ourCompany.address) {
+        setCell('L5', ourCompany.address);
+      }
+      if (ourCompany.business_type) {
+        setCell('L6', ourCompany.business_type);
+      }
+      if (ourCompany.business_item) {
+        setCell('O6', ourCompany.business_item);
+      }
+      if (ourCompany.phone) {
+        setCell('L7', ourCompany.phone);
+      }
+      if (ourCompany.fax) {
+        setCell('O7', ourCompany.fax);
+      }
+      if (ourCompany.email) {
+        setCell('L8', ourCompany.email);
+      }
+    } else {
+      setCell('L4', '㈜ 이지원');
+    }
 
     // 소켓 아이템 채우기 (index 10 ~ 36, 즉 Row 11 ~ Row 37)
     const startRow = 10;
@@ -541,7 +571,13 @@ export async function socketOrderRoutes(app: FastifyInstance) {
       return reply.code(403).send({ error: '결재 완료 후 다운로드 가능합니다.' });
     }
 
-    const buf = buildSocketOrderExcel(row);
+    // 우리 회사 (이지원) 기초정보 조회
+    const ourCompanyRes = await pool.query(
+      `SELECT * FROM company_master WHERE company_name LIKE '%이지원%' LIMIT 1`
+    );
+    const ourCompany = ourCompanyRes.rows[0] || null;
+
+    const buf = buildSocketOrderExcel(row, ourCompany);
 
     // 발주처명 + 발주일자 추출
     const bizName = (row.biz_name || '').trim();
