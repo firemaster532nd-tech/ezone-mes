@@ -89,6 +89,20 @@ async function buildSocketOrderExcel(soRow: any, ourCompany: any = null): Promis
   await workbook.xlsx.readFile(templatePath);
   const worksheet = workbook.worksheets[0];
 
+  // 1페이지에 맞춤 인쇄 (A4용지 세로 방향, 1page 가로/세로 꽉 차게)
+  worksheet.pageSetup = {
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 1,
+    orientation: 'portrait',
+    paperSize: 9, // A4
+    margins: {
+      left: 0.3, right: 0.3,
+      top: 0.3, bottom: 0.3,
+      header: 0.1, footer: 0.1
+    }
+  };
+
   // 1. 수신처 및 날짜 채우기
   worksheet.getCell('F3').value = soRow.biz_name || '선우산업';
   
