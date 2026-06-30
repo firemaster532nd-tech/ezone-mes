@@ -771,10 +771,328 @@ function DetailSwoModal({ swo, onClose, onRefresh }: { swo: SWO; onClose: () => 
     }
   };
 
+  const handleDownloadExcel = async () => {
+    try {
+      const response = await fetch(`/api/socket-work-orders/${swo.swo_id}/excel`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        }
+      });
+      if (!response.ok) throw new Error('다운로드 실패');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      const disposition = response.headers.get('Content-Disposition');
+      let filename = `${swo.project_name || '소켓'}_작업지시서_${swo.swo_number}.xlsx`;
+      if (disposition && disposition.indexOf('filename*=') !== -1) {
+        const parts = disposition.split("filename*=UTF-8''");
+        if (parts.length > 1) filename = decodeURIComponent(parts[1]);
+      }
+      
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e: any) {
+      alert('엑셀 다운로드 중 오류가 발생했습니다: ' + e.message);
+    }
+  };
+
+  const handlePrintPDF = () => {
+    window.print();
+  };
+
   const d = detail;
+  const projectTitle = swo.project_name || '소켓 작업지시서';
+  const vmItems = d?.items?.filter((it: any) => {
+    const pType = (it.product_type || it.structure || '').toUpperCase();
+    return pType.includes('VM') || pType.includes('VA');
+  }) || [];
+  const vtItems = d?.items?.filter((it: any) => {
+    const pType = (it.product_type || it.structure || '').toUpperCase();
+    return pType.includes('VT');
+  }) || [];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-6 pb-6 px-4 overflow-y-auto">
+    <>
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          .print-area, .print-area * {
+            visibility: visible !important;
+          }
+          .print-area {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            display: block !important;
+            font-family: 'Malgun Gothic', sans-serif;
+            color: #000;
+          }
+          .page-break {
+            page-break-after: always;
+            break-after: page;
+          }
+          .print-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+            margin-top: 10px;
+          }
+          .print-table th, .print-table td {
+            border: 1px solid #000;
+            padding: 6px 4px;
+            text-align: center;
+          }
+          .print-table th {
+            background-color: #f3f4f6 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .print-header-title {
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 5px;
+            text-decoration: underline;
+          }
+          .print-header-meta {
+            font-size: 12px;
+            text-align: right;
+            margin-bottom: 10px;
+          }
+        }
+      `}} />
+
+      <div className="print-area hidden">
+        <div className="page-break p-8">
+          <div className="print-header-title">구조체작업지시서 (소켓인수검사)</div>
+          <div className="print-header-meta">현장명: {projectTitle}</div>
+          <table className="print-table">
+            <thead>
+              <tr>
+                <th rowSpan={2}>No</th>
+                <th rowSpan={2}>구조</th>
+                <th colSpan={2}>규격</th>
+                <th rowSpan={2}>분할구조</th>
+                <th rowSpan={2}>재고여부</th>
+                <th rowSpan={2}>설치위치(비고)</th>
+              </tr>
+              <tr>
+                <th>가로</th>
+                <th>세로</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d?.items?.map((item: any, idx: number) => (
+                <tr key={item.swi_id}>
+                  <td>{String(idx + 1).padStart(2, '0')}</td>
+                  <td>{item.product_type || item.structure || '-'}</td>
+                  <td>{item.pipe_width_mm || ''}</td>
+                  <td>{item.pipe_height_mm || ''}</td>
+                  <td>-</td>
+                  <td>-</td>
+                  <td>{item.remark || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {vmItems.length > 0 && (
+          <div className="page-break p-8">
+            <div className="print-header-title">재단작업지시서(VM)</div>
+            <div className="print-header-meta">현장명: {projectTitle}</div>
+            <table className="print-table">
+              <thead>
+                <tr>
+                  <th rowSpan={3}>No.</th>
+                  <th rowSpan={3}>구조</th>
+                  <th colSpan={2} rowSpan={2}>규격</th>
+                  <th rowSpan={3}>소켓 Lot</th>
+                  <th rowSpan={3}>수량</th>
+                  <th colSpan={4}>소켓내부용</th>
+                  <th colSpan={4}>소켓외부용</th>
+                  <th rowSpan={3}>비고</th>
+                </tr>
+                <tr>
+                  <th colSpan={2}>가로</th>
+                  <th colSpan={2}>세로</th>
+                  <th colSpan={2}>상하</th>
+                  <th colSpan={2}>좌우</th>
+                </tr>
+                <tr>
+                  <th>가로</th>
+                  <th>세로</th>
+                  <th>규격</th>
+                  <th>수량</th>
+                  <th>규격</th>
+                  <th>수량</th>
+                  <th>규격</th>
+                  <th>수량</th>
+                  <th>규격</th>
+                  <th>수량</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vmItems.map((item: any, idx: number) => {
+                  const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                  const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                  return (
+                    <tr key={item.swi_id}>
+                      <td>{String(idx + 1).padStart(2, '0')}</td>
+                      <td>{item.product_type || item.structure || '-'}</td>
+                      <td>{wVal}</td>
+                      <td>{hVal}</td>
+                      <td>{item.insp_lot_no || '-'}</td>
+                      <td>1</td>
+                      <td>{wVal > 0 ? wVal - 5 : ''}</td>
+                      <td>{wVal > 0 ? 4 : ''}</td>
+                      <td>{hVal > 0 ? hVal - 30 : ''}</td>
+                      <td>{hVal > 0 ? 4 : ''}</td>
+                      <td>{wVal > 0 ? wVal + 60 : ''}</td>
+                      <td>{wVal > 0 ? 2 : ''}</td>
+                      <td>{hVal > 0 ? hVal : ''}</td>
+                      <td>{hVal > 0 ? 2 : ''}</td>
+                      <td>{item.remark || '-'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {vtItems.length > 0 && (
+          <div className="page-break p-8">
+            <div className="print-header-title">재단작업지시서(VT)</div>
+            <div className="print-header-meta">현장명: {projectTitle}</div>
+            <table className="print-table">
+              <thead>
+                <tr>
+                  <th rowSpan={3}>No.</th>
+                  <th rowSpan={3}>구조</th>
+                  <th colSpan={2} rowSpan={2}>규격</th>
+                  <th rowSpan={3}>소켓 Lot</th>
+                  <th rowSpan={3}>수량</th>
+                  <th colSpan={4}>소켓내부용</th>
+                  <th colSpan={4}>소켓외부용</th>
+                  <th rowSpan={3}>비고</th>
+                </tr>
+                <tr>
+                  <th colSpan={2}>가로</th>
+                  <th colSpan={2}>세로</th>
+                  <th colSpan={2}>상하</th>
+                  <th colSpan={2}>좌우</th>
+                </tr>
+                <tr>
+                  <th>가로</th>
+                  <th>세로</th>
+                  <th>규격</th>
+                  <th>수량</th>
+                  <th>규격</th>
+                  <th>수량</th>
+                  <th>규격</th>
+                  <th>수량</th>
+                  <th>규격</th>
+                  <th>수량</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vtItems.map((item: any, idx: number) => {
+                  const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                  const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                  return (
+                    <tr key={item.swi_id}>
+                      <td>{String(idx + 1).padStart(2, '0')}</td>
+                      <td>{item.product_type || item.structure || '-'}</td>
+                      <td>{wVal}</td>
+                      <td>{hVal}</td>
+                      <td>{item.insp_lot_no || '-'}</td>
+                      <td>1</td>
+                      <td>{wVal > 0 ? (wVal - 40) / 2 : ''}</td>
+                      <td>{wVal > 0 ? 16 : ''}</td>
+                      <td>{hVal > 0 ? (hVal - 40) / 2 : ''}</td>
+                      <td>{hVal > 0 ? 16 : ''}</td>
+                      <td>{wVal > 0 ? wVal + 60 : ''}</td>
+                      <td>{wVal > 0 ? 4 : ''}</td>
+                      <td>{hVal > 0 ? hVal : ''}</td>
+                      <td>{hVal > 0 ? 4 : ''}</td>
+                      <td>{item.remark || '-'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {vtItems.length > 0 && (
+          <div className="page-break p-8">
+            <div className="print-header-title">절곡생산일지(VT_브라켓)</div>
+            <div className="print-header-meta">현장명: {projectTitle}</div>
+            <table className="print-table">
+              <thead>
+                <tr>
+                  <th rowSpan={3}>No.</th>
+                  <th colSpan={2} rowSpan={2}>규격</th>
+                  <th rowSpan={3}>수량(EA)</th>
+                  <th rowSpan={3}>소켓 Lot</th>
+                  <th rowSpan={3}>두께</th>
+                  <th rowSpan={3}>평철 폭</th>
+                  <th colSpan={3}>평철 가로</th>
+                  <th colSpan={3}>평철 세로</th>
+                </tr>
+                <tr>
+                  <th colSpan={2}>가로 규격 및 수량</th>
+                  <th rowSpan={2}>수량확인</th>
+                  <th colSpan={2}>세로 규격 및 수량</th>
+                  <th rowSpan={2}>수량확인</th>
+                </tr>
+                <tr>
+                  <th>가로</th>
+                  <th>세로</th>
+                  <th>규격</th>
+                  <th>수량</th>
+                  <th>규격</th>
+                  <th>수량</th>
+                </tr>
+              </thead>
+              <tbody>
+                {vtItems.map((item: any, idx: number) => {
+                  const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                  const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                  return (
+                    <tr key={item.swi_id}>
+                      <td>{String(idx + 1).padStart(2, '0')}</td>
+                      <td>{wVal}</td>
+                      <td>{hVal}</td>
+                      <td>1</td>
+                      <td>{item.insp_lot_no || '-'}</td>
+                      <td>1.6이상</td>
+                      <td>60mm</td>
+                      <td>{wVal > 0 ? (wVal - 40) / 2 + 4 : ''}</td>
+                      <td>{wVal > 0 ? 16 : ''}</td>
+                      <td>32</td>
+                      <td>{hVal > 0 ? (hVal - 40) / 2 - 1 : ''}</td>
+                      <td>{hVal > 0 ? 32 : ''}</td>
+                      <td>32</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-6 pb-6 px-4 overflow-y-auto no-print">
+
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl" onClick={e => e.stopPropagation()}>
         {/* 헤더 */}
         <div className="flex items-center justify-between p-5 border-b">
@@ -986,16 +1304,33 @@ function DetailSwoModal({ swo, onClose, onRefresh }: { swo: SWO; onClose: () => 
 
         {/* 푸터 */}
         <div className="flex items-center justify-between p-4 border-t bg-gray-50 rounded-b-2xl">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">닫기</button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 text-xs border rounded-lg text-gray-500 hover:bg-gray-100 bg-white">
+              닫기
+            </button>
+            <button
+              onClick={handleDownloadExcel}
+              className="px-4 py-2 text-xs bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium flex items-center gap-1.5 shadow-sm"
+            >
+              📥 엑셀 다운로드
+            </button>
+            <button
+              onClick={handlePrintPDF}
+              className="px-4 py-2 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium flex items-center gap-1.5 shadow-sm"
+            >
+              🖨️ PDF 인쇄 출력
+            </button>
+          </div>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-5 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-medium"
+            className="px-5 py-2 text-xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg font-medium"
           >
             {saving ? '저장 중...' : '저장'}
           </button>
         </div>
       </div>
     </div>
+    </>
   );
 }

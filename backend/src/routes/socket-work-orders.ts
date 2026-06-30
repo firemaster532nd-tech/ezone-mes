@@ -2,8 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 import { expandAndSortSocketItems } from '../lib/socket-sort.js';
+import XLSX from 'xlsx';
 
 // ─────────────────────────────────────────────────────────────────────────────
+
 // 소켓 작업지시서 라우트
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -237,8 +239,17 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
     if (!po_id) return reply.code(400).send({ error: 'po_id 필수' });
     if (!items.length) return reply.code(400).send({ error: '품목을 1개 이상 선택하세요' });
 
+    let finalProjectId = project_id;
+    if (!finalProjectId && po_id) {
+      const { rows: poRows } = await pool.query('SELECT project_id FROM purchase_order WHERE po_id = $1', [po_id]);
+      if (poRows[0]) {
+        finalProjectId = poRows[0].project_id;
+      }
+    }
+
     const date = wo_date || new Date().toISOString().slice(0, 10);
     const swoNumber = await generateSwoNumber(date);
+
 
     // 경고 메시지 수집
     const warnings: string[] = [];
@@ -279,7 +290,7 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
         RETURNING swo_id, swo_number
       `, [
-        swoNumber, po_id, project_id || null, project_name || null, sheet_name || null,
+        swoNumber, po_id, finalProjectId || null, project_name || null, sheet_name || null,
         date, delivery_date || null, worker || null, remarks || null,
         warnings.length ? warnings.join(' / ') : null,
         user?.worker_id || null,
@@ -374,4 +385,181 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
     await pool.query(`DELETE FROM socket_work_order WHERE swo_id = $1`, [id]);
     return { ok: true };
   });
+
+  // ── GET /api/socket-work-orders/:id/excel ─ 엑셀 지시서 템플릿 다운로드 ───────
+  app.get('/api/socket-work-orders/:id/excel', { preHandler: requireAuth }, async (req, reply) => {
+    const id = (req.params as any).id;
+    
+    // 1. 데이터 조회
+    const { rows: swoRows } = await pool.query(
+      `SELECT swo.*, po.file_name AS po_file_name, po.project_name AS po_project_name 
+       FROM socket_work_order swo
+       LEFT JOIN purchase_order po ON po.po_id = swo.po_id
+       WHERE swo.swo_id = $1`, [id]
+    );
+    if (!swoRows[0]) return reply.code(404).send({ error: 'not_found' });
+    const swo = swoRows[0];
+
+    const { rows: items } = await pool.query(
+      `SELECT * FROM socket_work_order_item WHERE swo_id = $1 ORDER BY seq_no`, [id]
+    );
+
+    // 2. 템플릿 로드
+    const templatePath = 'c:/Users/edwar/OneDrive/ezone-mes/upload/26.04.24 그린산업_ 일우엠이씨_GS건설_아산탕정자이퍼스트시티 작업지시서.xlsx';
+    let workbook;
+    try {
+      workbook = XLSX.readFile(templatePath);
+    } catch (e: any) {
+      return reply.code(500).send({ error: '엑셀 템플릿 파일을 찾을 수 없습니다: ' + e.message });
+    }
+
+    // 3. 엑셀 편집
+    const projectTitle = swo.project_name || swo.po_project_name || '소켓 작업지시서';
+
+    const writeCell = (sheet: any, r: number, c: number, val: any) => {
+      const cellRef = XLSX.utils.encode_cell({ r, c });
+      if (!sheet[cellRef]) {
+        sheet[cellRef] = { t: 's', v: '' };
+      }
+      sheet[cellRef].v = val;
+      sheet[cellRef].t = typeof val === 'number' ? 'n' : 's';
+    };
+
+    // ── 시트 1: 1. 소켓인수검사
+    const sheet1 = workbook.Sheets['1. 소켓인수검사'];
+    if (sheet1) {
+      writeCell(sheet1, 0, 3, projectTitle);
+      
+      let startRow = 8;
+      items.forEach((item, idx) => {
+        const r = startRow + idx;
+        const noStr = String(idx + 1).padStart(2, '0');
+        writeCell(sheet1, r, 0, noStr);
+        writeCell(sheet1, r, 1, item.product_type || item.structure || '');
+        
+        const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : '';
+        const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : '';
+        writeCell(sheet1, r, 2, wVal);
+        writeCell(sheet1, r, 3, hVal);
+        writeCell(sheet1, r, 6, item.remark || '');
+      });
+      const maxRow = startRow + items.length;
+      sheet1['!ref'] = `A1:O${maxRow + 5}`;
+    }
+
+    // VM/VT 분류
+    const vmItems = items.filter(it => {
+      const pType = (it.product_type || it.structure || '').toUpperCase();
+      return pType.includes('VM') || pType.includes('VA');
+    });
+    const vtItems = items.filter(it => {
+      const pType = (it.product_type || it.structure || '').toUpperCase();
+      return pType.includes('VT');
+    });
+
+    // ── 시트 2: 2.재단(VM)작업
+    const sheet2 = workbook.Sheets['2.재단(VM)작업'];
+    if (sheet2 && vmItems.length > 0) {
+      writeCell(sheet2, 0, 7, projectTitle);
+
+      let startRow = 7;
+      vmItems.forEach((item, idx) => {
+        const r = startRow + idx;
+        const noStr = String(idx + 1).padStart(2, '0');
+        writeCell(sheet2, r, 0, noStr);
+        writeCell(sheet2, r, 1, item.product_type || item.structure || '');
+        
+        const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+        const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+        writeCell(sheet2, r, 2, wVal);
+        writeCell(sheet2, r, 3, hVal);
+        writeCell(sheet2, r, 4, item.insp_lot_no || '');
+        writeCell(sheet2, r, 5, 1);
+        
+        writeCell(sheet2, r, 6, wVal > 0 ? wVal - 5 : '');
+        writeCell(sheet2, r, 7, wVal > 0 ? 4 : '');
+        writeCell(sheet2, r, 8, hVal > 0 ? hVal - 30 : '');
+        writeCell(sheet2, r, 9, hVal > 0 ? 4 : '');
+        writeCell(sheet2, r, 10, wVal > 0 ? wVal + 60 : '');
+        writeCell(sheet2, r, 11, wVal > 0 ? 2 : '');
+        writeCell(sheet2, r, 12, hVal > 0 ? hVal : '');
+        writeCell(sheet2, r, 13, wVal > 0 ? 2 : '');
+        writeCell(sheet2, r, 14, item.remark || '');
+      });
+      const maxRow = startRow + vmItems.length;
+      sheet2['!ref'] = `A1:O${maxRow + 5}`;
+    }
+
+    // ── 시트 3: 2.1 재단작업(VT)
+    const sheet3 = workbook.Sheets['2.1 재단작업(VT)'];
+    if (sheet3 && vtItems.length > 0) {
+      writeCell(sheet3, 0, 7, projectTitle);
+
+      let startRow = 7;
+      vtItems.forEach((item, idx) => {
+        const r = startRow + idx;
+        const noStr = String(idx + 1).padStart(2, '0');
+        writeCell(sheet3, r, 0, noStr);
+        writeCell(sheet3, r, 1, item.product_type || item.structure || '');
+        
+        const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+        const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+        writeCell(sheet3, r, 2, wVal);
+        writeCell(sheet3, r, 3, hVal);
+        writeCell(sheet3, r, 4, item.insp_lot_no || '');
+        writeCell(sheet3, r, 5, 1);
+        
+        writeCell(sheet3, r, 6, wVal > 0 ? (wVal - 40) / 2 : '');
+        writeCell(sheet3, r, 7, wVal > 0 ? 16 : '');
+        writeCell(sheet3, r, 8, hVal > 0 ? (hVal - 40) / 2 : '');
+        writeCell(sheet3, r, 9, hVal > 0 ? 16 : '');
+        writeCell(sheet3, r, 10, wVal > 0 ? wVal + 60 : '');
+        writeCell(sheet3, r, 11, wVal > 0 ? 4 : '');
+        writeCell(sheet3, r, 12, hVal > 0 ? hVal : '');
+        writeCell(sheet3, r, 13, hVal > 0 ? 4 : '');
+        writeCell(sheet3, r, 14, item.remark || '');
+      });
+      const maxRow = startRow + vtItems.length;
+      sheet3['!ref'] = `A1:O${maxRow + 5}`;
+    }
+
+    // ── 시트 4: 3.2 절곡(VT)
+    const sheet4 = workbook.Sheets['3.2 절곡(VT)'];
+    if (sheet4 && vtItems.length > 0) {
+      writeCell(sheet4, 4, 13, projectTitle);
+
+      let startRow = 10;
+      vtItems.forEach((item, idx) => {
+        const r = startRow + idx;
+        const noStr = String(idx + 1).padStart(2, '0');
+        writeCell(sheet4, r, 0, noStr);
+        
+        const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+        const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+        writeCell(sheet4, r, 1, wVal);
+        writeCell(sheet4, r, 2, hVal);
+        writeCell(sheet4, r, 3, 1);
+        writeCell(sheet4, r, 4, item.insp_lot_no || '');
+        writeCell(sheet4, r, 5, '1.6이상');
+        writeCell(sheet4, r, 6, '60mm');
+        
+        writeCell(sheet4, r, 7, wVal > 0 ? (wVal - 40) / 2 + 4 : '');
+        writeCell(sheet4, r, 8, wVal > 0 ? 16 : '');
+        
+        writeCell(sheet4, r, 10, hVal > 0 ? (hVal - 40) / 2 - 1 : '');
+        writeCell(sheet4, r, 13, hVal > 0 ? 32 : '');
+      });
+      const maxRow = startRow + vtItems.length;
+      sheet4['!ref'] = `A1:O${maxRow + 5}`;
+    }
+
+    const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const safeFileName = encodeURIComponent(`${projectTitle}_작업지시서_${swo.swo_number}.xlsx`);
+    
+    reply
+      .header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+      .header('Content-Disposition', `attachment; filename*=UTF-8''${safeFileName}`)
+      .send(excelBuffer);
+  });
 }
+
