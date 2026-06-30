@@ -32,9 +32,8 @@ export async function socketIncomingRoutes(app: FastifyInstance) {
     const soId = parseInt((req.params as any).id);
 
     const soRes = await pool.query(
-      `SELECT so.*, pm.project_name
+      `SELECT so.*
        FROM socket_order so
-       LEFT JOIN project_master pm ON pm.project_id = so.project_id
        WHERE so.so_id = $1`,
       [soId]
     );
