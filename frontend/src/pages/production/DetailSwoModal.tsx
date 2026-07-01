@@ -1317,8 +1317,57 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                   );
                 })()}
 
-                {activeTab === '5. 차열재 출하용(VM,VT,VAG)' && (() => {
+                {(activeTab === '5. 차열재 출하용(VM,VT,VAG)' || activeTab === '5. 차열재 출하용') && (() => {
                   if (!d?.items?.length) return <div className="text-center py-6 text-gray-400 text-xs border rounded-xl">항목 없음</div>;
+                  const isRiser = activeTab === '5. 차열재 출하용';
+
+                  if (isRiser) {
+                    return (
+                      <div className="border rounded-xl overflow-hidden">
+                        <table className="w-full text-[11px] text-center border-collapse">
+                          <thead className="bg-gray-50 border-b">
+                            <tr>
+                              <th className="px-2 py-1.5 border-r">No</th>
+                              <th className="px-2 py-1.5 border-r">가로(W)</th>
+                              <th className="px-2 py-1.5 border-r">세로(H)</th>
+                              <th className="px-2 py-1.5 border-r">구조/모델</th>
+                              <th className="px-2 py-1.5 border-r">면적(㎡)</th>
+                              <th className="px-2 py-1.5 border-r">둘레(m)</th>
+                              <th className="px-2 py-1.5 border-r text-teal-700">차열재 소요(둘레+0.4)</th>
+                              <th className="px-2 py-1.5 border-r">수량(개)</th>
+                              <th className="px-2 py-1.5 border-r text-teal-700">차열재 총소요</th>
+                              <th className="px-2 py-1">브라켓 수량</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200 bg-white">
+                            {d.items.map((item: any, idx: number) => {
+                              const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                              const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                              const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
+                              const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
+                              const pVal = Number(perimeter);
+                              const req = pVal > 0 ? (pVal + 0.4).toFixed(1) : '-';
+                              return (
+                                <tr key={item.swi_id} className={idx % 2 === 0 ? 'bg-slate-50/30' : 'bg-white'}>
+                                  <td className="px-2 py-1.5 border-r font-mono">{idx + 1}</td>
+                                  <td className="px-2 py-1.5 border-r font-mono">{w}</td>
+                                  <td className="px-2 py-1.5 border-r font-mono">{h}</td>
+                                  <td className="px-2 py-1.5 border-r font-bold">{item.product_type || item.structure}</td>
+                                  <td className="px-2 py-1.5 border-r font-mono text-gray-700">{area}</td>
+                                  <td className="px-2 py-1.5 border-r font-mono text-gray-700">{perimeter}</td>
+                                  <td className="px-2 py-1.5 border-r text-teal-700 font-bold">{req}</td>
+                                  <td className="px-2 py-1.5 border-r">1</td>
+                                  <td className="px-2 py-1.5 border-r text-teal-700 font-bold">{req}</td>
+                                  <td className="px-2 py-1 font-semibold">2</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  }
+
                   return (
                     <div className="border rounded-xl overflow-hidden">
                       <table className="w-full text-[11px] text-center border-collapse">
@@ -1388,8 +1437,101 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                   );
                 })()}
 
-                {activeTab === '6. 라벨소요량' && (() => {
+                {(activeTab === '6. 라벨소요량' || activeTab === '라벨소요량' || activeTab === '5. 라벨소요량') && (() => {
                   if (!d?.items?.length) return <div className="text-center py-6 text-gray-400 text-xs border rounded-xl">項目 없음</div>;
+
+                  if (activeTab === '라벨소요량') {
+                    // RISER 입상 전용 라벨소요량
+                    return (
+                      <div className="border rounded-xl overflow-hidden">
+                        <table className="w-full text-[11px] text-center border-collapse">
+                          <thead className="bg-gray-50 border-b">
+                            <tr>
+                              <th className="px-2 py-1.5 border-r">No</th>
+                              <th className="px-2 py-1.5 border-r">구조/모델</th>
+                              <th className="px-2 py-1.5 border-r">가로(W)</th>
+                              <th className="px-2 py-1.5 border-r">세로(H)</th>
+                              <th className="px-2 py-1.5 border-r">검사 LOT</th>
+                              <th className="px-2 py-1.5 border-r">면적(㎡)</th>
+                              <th className="px-2 py-1.5 border-r">둘레(m)</th>
+                              <th className="px-2 py-1.5 border-r text-indigo-600">라벨수량</th>
+                              <th className="px-2 py-1.5 border-r text-teal-700">차열재 소요(둘레+0.4)</th>
+                              <th className="px-2 py-1.5 border-r text-rose-700">글라스울(둘레+0.5)</th>
+                              <th className="px-2 py-1">수량</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200 bg-white">
+                            {d.items.map((item: any, idx: number) => {
+                              const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                              const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                              const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
+                              const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
+                              const pVal = Number(perimeter);
+                              const reqIns = pVal > 0 ? (pVal + 0.4).toFixed(1) : '-';
+                              const reqGw = pVal > 0 ? (pVal + 0.5).toFixed(1) : '-';
+                              return (
+                                <tr key={item.swi_id} className={idx % 2 === 0 ? 'bg-slate-50/30' : 'bg-white'}>
+                                  <td className="px-2 py-1.5 border-r font-mono">{idx + 1}</td>
+                                  <td className="px-2 py-1.5 border-r font-bold">{item.product_type || item.structure}</td>
+                                  <td className="px-2 py-1.5 border-r font-mono">{w}</td>
+                                  <td className="px-2 py-1.5 border-r font-mono">{h}</td>
+                                  <td className="px-2 py-1.5 border-r">{item.insp_lot_no || '-'}</td>
+                                  <td className="px-2 py-1.5 border-r font-mono text-gray-700">{area}</td>
+                                  <td className="px-2 py-1.5 border-r font-mono text-gray-700">{perimeter}</td>
+                                  <td className="px-2 py-1.5 border-r font-bold text-indigo-600">2</td>
+                                  <td className="px-2 py-1.5 border-r text-teal-700 font-bold">{reqIns}</td>
+                                  <td className="px-2 py-1.5 border-r text-rose-700 font-bold">{reqGw}</td>
+                                  <td className="px-2 py-1 font-semibold">2</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  }
+
+                  if (activeTab === '5. 라벨소요량') {
+                    // BUSDUCT 부스덕트 전용 라벨소요량
+                    return (
+                      <div className="border rounded-xl overflow-hidden">
+                        <table className="w-full text-[11px] text-center border-collapse">
+                          <thead className="bg-gray-50 border-b">
+                            <tr>
+                              <th className="px-2 py-1.5 border-r">No</th>
+                              <th className="px-2 py-1.5 border-r">구조/모델명</th>
+                              <th className="px-2 py-1.5 border-r">가로(W)</th>
+                              <th className="px-2 py-1.5 border-r">세로(H)</th>
+                              <th className="px-2 py-1.5 border-r">면적(㎡)</th>
+                              <th className="px-2 py-1.5 border-r">둘레(m)</th>
+                              <th className="px-2 py-1">필요 라벨 수량(개)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200 bg-white">
+                            {d.items.map((item: any, idx: number) => {
+                              const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                              const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                              const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
+                              const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
+                              return (
+                                <tr key={item.swi_id} className={idx % 2 === 0 ? 'bg-slate-50/30' : 'bg-white'}>
+                                  <td className="px-2 py-1.5 border-r font-mono">{idx + 1}</td>
+                                  <td className="px-2 py-1.5 border-r font-bold">{item.product_type || item.structure}</td>
+                                  <td className="px-2 py-1.5 border-r font-mono">{w}</td>
+                                  <td className="px-2 py-1.5 border-r font-mono">{h}</td>
+                                  <td className="px-2 py-1.5 border-r font-mono text-gray-700">{area}</td>
+                                  <td className="px-2 py-1.5 border-r font-mono text-gray-700">{perimeter}</td>
+                                  <td className="px-2 py-1 font-bold text-indigo-600">2</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  }
+
+                  // 기존 벽체 전용 6. 라벨소요량
                   return (
                     <div className="border rounded-xl overflow-hidden">
                       <table className="w-full text-[11px] text-center border-collapse">
