@@ -490,10 +490,130 @@ export async function fnStockRoutes(app: FastifyInstance) {
     }
   });
 
-  // ── DELETE 일일 생산량 삭제 ───────────────────────────────────────────────
+  // ── DELETE 일일 생산량 삭제 (관리자용 + 재고 복구) ───────────────────────────
   app.delete('/api/fn-stock/daily/:prod_id', { preHandler: requireAuth }, async (req, reply) => {
+    const auth = req.auth;
+    if (!auth || auth.role !== 'admin') {
+      return reply.code(403).send({ error: '관리자 권한이 필요합니다.' });
+    }
+
     const id = parseInt((req.params as any).prod_id);
-    await pool.query(`DELETE FROM fn_daily_production WHERE prod_id = $1`, [id]);
-    return { data: { success: true } };
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. 기존 데이터 조회
+      const rProd = await client.query('SELECT * FROM fn_daily_production WHERE prod_id = $1', [id]);
+      if (!rProd.rows[0]) {
+        return reply.code(404).send({ error: '해당 생산 기록이 존재하지 않습니다.' });
+      }
+
+      const prod = rProd.rows[0];
+      const prevQty = Number(prod.qty);
+      const delta = -prevQty; // 수량을 0으로 환원
+
+      if (delta !== 0) {
+        const dia = prod.diameter_mm || 100;
+        const specName = `${dia}파이`;
+
+        if (prod.prod_type === 'SEMI') {
+          // 반제품 생산 취소 -> 원자재 복원 및 반제품 차감
+          await client.query(`UPDATE fn_material_stock SET qty = qty - $1, updated_at = NOW() WHERE item_name = '소켓' AND spec = $2`, [delta, specName]);
+          await client.query(`UPDATE fn_material_stock SET qty = qty - $1, updated_at = NOW() WHERE item_name = '보호철판' AND spec = $2`, [delta, specName]);
+          await client.query(`UPDATE fn_material_stock SET qty = qty - $1, updated_at = NOW() WHERE item_name = '볼트,너트,와샤'`, [delta * 4]);
+          await client.query(`UPDATE fn_material_stock SET qty = qty - $1, updated_at = NOW() WHERE item_name = '시트(재단)' AND spec = $2`, [delta, specName]);
+          await client.query(`UPDATE fn_finished_stock SET qty_semi = qty_semi + $1, updated_at = NOW() WHERE diameter_mm = $2 AND spec = $3`, [delta, dia, prod.spec]);
+        } else {
+          // 완제품 생산 취소 -> 반제품 복원 및 완제품 차감
+          await client.query(`UPDATE fn_finished_stock SET qty_semi = qty_semi - $1, updated_at = NOW() WHERE diameter_mm = $2 AND spec = $3`, [delta, dia, prod.spec]);
+          await client.query(`UPDATE fn_finished_stock SET qty = qty + $1, updated_at = NOW() WHERE diameter_mm = $2 AND spec = $3`, [delta, dia, prod.spec]);
+        }
+
+        // 복구 트랜잭션 기록 적재
+        const finishedStock = await client.query(`SELECT stock_id FROM fn_finished_stock WHERE diameter_mm=$1 AND spec=$2`, [dia, prod.spec]);
+        if (finishedStock.rows[0]) {
+          await client.query(
+            `INSERT INTO fn_stock_tx (tx_date, tx_type, stock_type, stock_id, item_name, spec, qty, memo)
+             VALUES ($1, 'ADJUST', 'FINISHED', $2, $3, $4, $5, '생산 기록 삭제로 인한 재고 복구')`,
+            [prod.prod_date, finishedStock.rows[0].stock_id, `${prod.item_name}(${prod.spec})`, prod.spec, delta]
+          );
+        }
+      }
+
+      // 2. 생산 기록 삭제
+      await client.query('DELETE FROM fn_daily_production WHERE prod_id = $1', [id]);
+
+      await client.query('COMMIT');
+      return { data: { success: true, message: '생산량 삭제 및 재고 복구 완료' } };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  });
+
+  // ── DELETE 입출고 이력 삭제 (관리자용 + 재고 복구) ───────────────────────────
+  app.delete('/api/fn-stock/transactions/:tx_id', { preHandler: requireAuth }, async (req, reply) => {
+    const auth = req.auth;
+    if (!auth || auth.role !== 'admin') {
+      return reply.code(403).send({ error: '관리자 권한이 필요합니다.' });
+    }
+
+    const txId = parseInt((req.params as any).tx_id);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. 트랜잭션 정보 조회
+      const rTx = await client.query('SELECT * FROM fn_stock_tx WHERE tx_id = $1', [txId]);
+      if (!rTx.rows[0]) {
+        return reply.code(404).send({ error: '해당 트랜잭션이 존재하지 않습니다.' });
+      }
+
+      const tx = rTx.rows[0];
+      const qty = Number(tx.qty);
+      const stockId = tx.stock_id;
+
+      // 2. 재고 복구 연산
+      if (stockId) {
+        if (tx.stock_type === 'FINISHED') {
+          const isSemi = tx.item_name && (tx.item_name.includes('반제품') || tx.item_name.includes('SEMI'));
+          
+          if (tx.tx_type === 'IN') {
+            if (isSemi) {
+              await client.query('UPDATE fn_finished_stock SET qty_semi = qty_semi - $1, updated_at = NOW() WHERE stock_id = $2', [qty, stockId]);
+            } else {
+              await client.query('UPDATE fn_finished_stock SET qty = qty - $1, updated_at = NOW() WHERE stock_id = $2', [qty, stockId]);
+            }
+          } else if (tx.tx_type === 'OUT') {
+            if (isSemi) {
+              await client.query('UPDATE fn_finished_stock SET qty_semi = qty_semi + $1, updated_at = NOW() WHERE stock_id = $2', [qty, stockId]);
+            } else {
+              await client.query('UPDATE fn_finished_stock SET qty = qty + $1, updated_at = NOW() WHERE stock_id = $2', [qty, stockId]);
+            }
+          }
+        } else if (tx.stock_type === 'MATERIAL') {
+          if (tx.tx_type === 'IN') {
+            await client.query('UPDATE fn_material_stock SET qty = qty - $1, updated_at = NOW() WHERE stock_id = $2', [qty, stockId]);
+          } else if (tx.tx_type === 'OUT') {
+            await client.query('UPDATE fn_material_stock SET qty = qty + $1, updated_at = NOW() WHERE stock_id = $2', [qty, stockId]);
+          } else if (tx.tx_type === 'ADJUST') {
+            await client.query('UPDATE fn_material_stock SET qty = qty - $1, updated_at = NOW() WHERE stock_id = $2', [qty, stockId]);
+          }
+        }
+      }
+
+      // 3. 트랜잭션 삭제
+      await client.query('DELETE FROM fn_stock_tx WHERE tx_id = $1', [txId]);
+
+      await client.query('COMMIT');
+      return { data: { success: true, message: '이력 삭제 및 재고 복구 완료' } };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
   });
 }
