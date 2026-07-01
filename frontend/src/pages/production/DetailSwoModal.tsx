@@ -652,31 +652,74 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
             {/* 9개 시트별 분리 탭 네비게이션 및 전용 테이블 */}
             <div className="space-y-3">
               <div className="flex border-b overflow-x-auto gap-1 pb-1 scrollbar-thin">
-                {[
-                  '1. 소켓인수검사',
-                  '2.재단(VM)작업',
-                  '2.1 재단작업(VT)',
-                  '차열재 재단(VM,VT)',
-                  '3. 1절곡(VM)',
-                  '3.2 절곡(VT)',
-                  '3.3 절곡(VT-보강대)',
-                  '5. 차열재 출하용(VM,VT,VAG)',
-                  '6. 라벨소요량'
-                ].map(tab => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setActiveTab(tab)}
-                    className={cn(
-                      'px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap rounded-t-lg border-t border-x transition-colors',
-                      activeTab === tab
-                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                        : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100 bg-gray-50 border-gray-200'
-                    )}
-                  >
-                    {tab}
-                  </button>
-                ))}
+                {(() => {
+                  const getSocketCategoryLocal = (pt: string, st: string): 'RISER' | 'WALL' | 'BUSDUCT' => {
+                    const p = (pt || '').toUpperCase();
+                    const s = (st || '').toUpperCase();
+                    if (p.startsWith('BD') || s.startsWith('BD')) return 'BUSDUCT';
+                    if (s.startsWith('H') || p.startsWith('H') || p.includes('HAG') || p.includes('HTG')) return 'RISER';
+                    return 'WALL';
+                  };
+
+                  let cat: 'RISER' | 'WALL' | 'BUSDUCT' = 'WALL';
+                  if (d?.items?.some((it: any) => getSocketCategoryLocal(it.product_type, it.structure) === 'BUSDUCT')) {
+                    cat = 'BUSDUCT';
+                  } else if (d?.items?.some((it: any) => getSocketCategoryLocal(it.product_type, it.structure) === 'RISER')) {
+                    cat = 'RISER';
+                  }
+
+                  let tabsList: string[] = [];
+                  if (cat === 'RISER') {
+                    tabsList = [
+                      '1. 소켓인수검사',
+                      '2.1 재단(1.69,064)',
+                      '3.1 절곡(HTG1.69)(브라켓,보강대,받침대)',
+                      '4. 차열재 소켓용 (수정)',
+                      '5. 차열재 출하용',
+                      '라벨소요량'
+                    ];
+                  } else if (cat === 'BUSDUCT') {
+                    tabsList = [
+                      '1. 소켓인수검사',
+                      '2.1 방화플래싱 재단 및 가공',
+                      '3.1 틈새복합시트(차열재) 재단',
+                      '4. 단열재 시공(세라믹 블랭킷)',
+                      '5. 라벨소요량'
+                    ];
+                  } else {
+                    tabsList = [
+                      '1. 소켓인수검사',
+                      '2.재단(VM)작업',
+                      '2.1 재단작업(VT)',
+                      '차열재 재단(VM,VT)',
+                      '3. 1절곡(VM)',
+                      '3.2 절곡(VT)',
+                      '3.3 절곡(VT-보강대)',
+                      '5. 차열재 출하용(VM,VT,VAG)',
+                      '6. 라벨소요량'
+                    ];
+                  }
+
+                  if (tabsList.length > 0 && !tabsList.includes(activeTab)) {
+                    setTimeout(() => setActiveTab(tabsList[0]), 0);
+                  }
+
+                  return tabsList.map(tab => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setActiveTab(tab)}
+                      className={cn(
+                        'px-3 py-1.5 text-[11px] font-semibold whitespace-nowrap rounded-t-lg border-t border-x transition-colors',
+                        activeTab === tab
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100 bg-gray-50 border-gray-200'
+                      )}
+                    >
+                      {tab}
+                    </button>
+                  ));
+                })()}
               </div>
 
               <div className="pt-1">
@@ -792,7 +835,7 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                             <th className="px-2 py-1">좌우(세로)</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-200">
+                        <tbody className="divide-y divide-gray-200 bg-white">
                           {vmItems.map((item: any, idx: number) => {
                             const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
                             const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
@@ -837,7 +880,7 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                             <th className="px-2 py-1">좌우(세로)</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-200">
+                        <tbody className="divide-y divide-gray-200 bg-white">
                           {vtItems.map((item: any, idx: number) => {
                             const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
                             const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
@@ -882,7 +925,7 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                             <th className="px-2 py-1">수량</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-200">
+                        <tbody className="divide-y divide-gray-200 bg-white">
                           {d.items.map((item: any, idx: number) => {
                             const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
                             const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
@@ -901,6 +944,240 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                               </tr>
                             );
                           })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+
+                {/* ─── RISER 입상 재단 및 절곡 탭 ─── */}
+                {activeTab === '2.1 재단(1.69,064)' && (() => {
+                  if (!d?.items?.length) return null;
+                  return (
+                    <div className="border rounded-xl overflow-hidden">
+                      <table className="w-full text-[11px] text-center border-collapse">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="px-2 py-1.5 border-r">No</th>
+                            <th className="px-2 py-1.5 border-r">구조/모델</th>
+                            <th className="px-2 py-1.5 border-r">가로(W)</th>
+                            <th className="px-2 py-1.5 border-r">세로(H)</th>
+                            <th className="px-2 py-1.5 border-r">검사 LOT</th>
+                            <th className="px-2 py-1.5 border-r text-blue-700">A부재 가로재단(W-5)</th>
+                            <th className="px-2 py-1.5 border-r">A부재 수량(6개)</th>
+                            <th className="px-2 py-1.5 border-r text-teal-700">B부재 세로재단(H-35)</th>
+                            <th className="px-2 py-1.5 border-r">B부재 수량(6개)</th>
+                            <th className="px-2 py-1">높이</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                          {d.items.map((item: any, idx: number) => {
+                            const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                            const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                            return (
+                              <tr key={item.swi_id} className={idx % 2 === 0 ? 'bg-slate-50/30' : 'bg-white'}>
+                                <td className="px-2 py-1.5 border-r font-mono">{idx + 1}</td>
+                                <td className="px-2 py-1.5 border-r font-medium">{item.product_type || item.structure}</td>
+                                <td className="px-2 py-1.5 border-r font-mono">{w}</td>
+                                <td className="px-2 py-1.5 border-r font-mono">{h}</td>
+                                <td className="px-2 py-1.5 border-r">{item.insp_lot_no || '-'}</td>
+                                <td className="px-2 py-1.5 border-r font-bold text-blue-700">{w > 0 ? w - 5 : '-'}</td>
+                                <td className="px-2 py-1.5 border-r font-semibold">6</td>
+                                <td className="px-2 py-1.5 border-r font-bold text-teal-700">{h > 0 ? h - 35 : '-'}</td>
+                                <td className="px-2 py-1.5 border-r font-semibold">6</td>
+                                <td className="px-2 py-1.5 font-mono">255</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+
+                {activeTab === '3.1 절곡(HTG1.69)(브라켓,보강대,받침대)' && (() => {
+                  if (!d?.items?.length) return null;
+                  return (
+                    <div className="border rounded-xl overflow-hidden">
+                      <table className="w-full text-[11px] text-center border-collapse">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="px-2 py-1.5 border-r">No</th>
+                            <th className="px-2 py-1.5 border-r">가로(W)</th>
+                            <th className="px-2 py-1.5 border-r">세로(H)</th>
+                            <th className="px-2 py-1.5 border-r">검사 LOT</th>
+                            <th className="px-2 py-1.5 border-r text-indigo-700">받침대/브라켓 가로(W-5)</th>
+                            <th className="px-2 py-1.5 border-r">절곡규격(mm)</th>
+                            <th className="px-2 py-1">수량</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                          {d.items.map((item: any, idx: number) => {
+                            const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                            const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                            return (
+                              <tr key={item.swi_id} className={idx % 2 === 0 ? 'bg-slate-50/30' : 'bg-white'}>
+                                <td className="px-2 py-1.5 border-r font-mono">{idx + 1}</td>
+                                <td className="px-2 py-1.5 border-r font-mono">{w}</td>
+                                <td className="px-2 py-1.5 border-r font-mono">{h}</td>
+                                <td className="px-2 py-1.5 border-r">{item.insp_lot_no || '-'}</td>
+                                <td className="px-2 py-1.5 border-r font-bold text-indigo-700">{w > 0 ? w - 5 : '-'}</td>
+                                <td className="px-2 py-1.5 border-r">23 - 23</td>
+                                <td className="px-2 py-1 font-semibold">2</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+
+                {activeTab === '4. 차열재 소켓용 (수정)' && (() => {
+                  if (!d?.items?.length) return null;
+                  return (
+                    <div className="border rounded-xl overflow-hidden">
+                      <table className="w-full text-[11px] text-center border-collapse">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="px-2 py-1.5 border-r">No</th>
+                            <th className="px-2 py-1.5 border-r">구조/모델</th>
+                            <th className="px-2 py-1.5 border-r">가로(W)</th>
+                            <th className="px-2 py-1.5 border-r">세로(H)</th>
+                            <th className="px-2 py-1.5 border-r text-blue-700">가로재단(W+60)</th>
+                            <th className="px-2 py-1.5 border-r">수량</th>
+                            <th className="px-2 py-1.5 border-r text-teal-700">세로재단(H)</th>
+                            <th className="px-2 py-1">수량</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                          {d.items.map((item: any, idx: number) => {
+                            const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                            const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                            return (
+                              <tr key={item.swi_id} className={idx % 2 === 0 ? 'bg-slate-50/30' : 'bg-white'}>
+                                <td className="px-2 py-1.5 border-r font-mono">{idx + 1}</td>
+                                <td className="px-2 py-1.5 border-r font-medium">{item.product_type || item.structure}</td>
+                                <td className="px-2 py-1.5 border-r font-mono">{w}</td>
+                                <td className="px-2 py-1.5 border-r font-mono">{h}</td>
+                                <td className="px-2 py-1.5 border-r font-bold text-blue-700">{w > 0 ? w + 60 : '-'}</td>
+                                <td className="px-2 py-1.5 border-r font-semibold">2</td>
+                                <td className="px-2 py-1.5 border-r font-bold text-teal-700">{h > 0 ? h : '-'}</td>
+                                <td className="px-2 py-1 font-semibold">2</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+
+                {/* ─── BUSDUCT 부스덕트 전용 탭 ─── */}
+                {activeTab === '2.1 방화플래싱 재단 및 가공' && (() => {
+                  if (!d?.items?.length) return null;
+                  return (
+                    <div className="border rounded-xl overflow-hidden">
+                      <table className="w-full text-[11px] text-center border-collapse">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="px-2 py-1.5 border-r">No</th>
+                            <th className="px-2 py-1.5 border-r">모델/유형</th>
+                            <th className="px-2 py-1.5 border-r">재질</th>
+                            <th className="px-2 py-1.5 border-r">가로재단 길이</th>
+                            <th className="px-2 py-1.5 border-r">세로재단 너비</th>
+                            <th className="px-2 py-1.5 border-r">두께 기준</th>
+                            <th className="px-2 py-1">수량</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                          {d.items.map((item: any, idx: number) => {
+                            const pt = (item.product_type || '').toUpperCase();
+                            const isCv = pt.includes('CV');
+                            return (
+                              <tr key={item.swi_id} className={idx % 2 === 0 ? 'bg-slate-50/30' : 'bg-white'}>
+                                <td className="px-2 py-1.5 border-r font-mono">{idx + 1}</td>
+                                <td className="px-2 py-1.5 border-r font-medium">{item.product_type || item.structure}</td>
+                                <td className="px-2 py-1.5 border-r">{isCv ? 'SUS (스테인리스)' : 'GI (아연도금강판)'}</td>
+                                <td className="px-2 py-1.5 border-r font-bold text-indigo-700">{isCv ? '380 mm' : '1,100 mm'}</td>
+                                <td className="px-2 py-1.5 border-r font-bold text-indigo-700">{isCv ? '190 mm' : '175 mm'}</td>
+                                <td className="px-2 py-1.5 border-r text-gray-500">{isCv ? '0.5T 이상' : '1.0T 이상'}</td>
+                                <td className="px-2 py-1 font-semibold">1</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+
+                {activeTab === '3.1 틈새복합시트(차열재) 재단' && (() => {
+                  if (!d?.items?.length) return null;
+                  return (
+                    <div className="border rounded-xl overflow-hidden">
+                      <table className="w-full text-[11px] text-center border-collapse">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="px-2 py-1.5 border-r">No</th>
+                            <th className="px-2 py-1.5 border-r">모델/유형</th>
+                            <th className="px-2 py-1.5 border-r">차열시트 가로</th>
+                            <th className="px-2 py-1.5 border-r">차열시트 세로</th>
+                            <th className="px-2 py-1.5 border-r">두께(mm)</th>
+                            <th className="px-2 py-1.5 border-r">수량(개)</th>
+                            <th className="px-2 py-1">비고</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                          {d.items.map((item: any, idx: number) => {
+                            const pt = (item.product_type || '').toUpperCase();
+                            const isCv = pt.includes('CV');
+                            return (
+                              <tr key={item.swi_id} className={idx % 2 === 0 ? 'bg-slate-50/30' : 'bg-white'}>
+                                <td className="px-2 py-1.5 border-r font-mono">{idx + 1}</td>
+                                <td className="px-2 py-1.5 border-r font-medium">{item.product_type || item.structure}</td>
+                                <td className="px-2 py-1.5 border-r font-bold text-teal-700">{isCv ? '150H 복합' : '1,000 mm'}</td>
+                                <td className="px-2 py-1.5 border-r font-bold text-teal-700">{isCv ? '외경비례' : '125 mm'}</td>
+                                <td className="px-2 py-1.5 border-r">{isCv ? '5.5' : '5.0'}</td>
+                                <td className="px-2 py-1.5 border-r font-bold text-indigo-600">{isCv ? '1' : '2'}</td>
+                                <td className="px-2 py-1 text-gray-500 text-left text-xs">{isCv ? '외경 200파이 이하용' : '상/하부 밀도 1.2g/㎤ 이상'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+
+                {activeTab === '4. 단열재 시공(세라믹 블랭킷)' && (() => {
+                  if (!d?.items?.length) return null;
+                  return (
+                    <div className="border rounded-xl overflow-hidden">
+                      <table className="w-full text-[11px] text-center border-collapse">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="px-2 py-1.5 border-r">No</th>
+                            <th className="px-2 py-1.5 border-r">모델/유형</th>
+                            <th className="px-2 py-1.5 border-r">단열재 종류</th>
+                            <th className="px-2 py-1.5 border-r">밀도 기준</th>
+                            <th className="px-2 py-1.5 border-r">너비 기준</th>
+                            <th className="px-2 py-1.5 border-r">두께 기준</th>
+                            <th className="px-2 py-1">고정 방식</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200 bg-white">
+                          {d.items.map((item: any, idx: number) => (
+                            <tr key={item.swi_id} className={idx % 2 === 0 ? 'bg-slate-50/30' : 'bg-white'}>
+                              <td className="px-2 py-1.5 border-r font-mono">{idx + 1}</td>
+                              <td className="px-2 py-1.5 border-r font-medium">{item.product_type || item.structure}</td>
+                              <td className="px-2 py-1.5 border-r">세라믹 섬유 블랭킷</td>
+                              <td className="px-2 py-1.5 border-r">96 kg/㎥ 이상</td>
+                              <td className="px-2 py-1.5 border-r font-bold text-indigo-700">600 mm</td>
+                              <td className="px-2 py-1.5 border-r font-bold text-indigo-700">25 ㎜ 이상</td>
+                              <td className="px-2 py-1">양면 대칭 철사 고정</td>
+                            </tr>
+                          ))}
                         </tbody>
                       </table>
                     </div>
@@ -1067,7 +1344,7 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                             <th className="px-2 py-1">수량</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-200">
+                        <tbody className="divide-y divide-gray-200 bg-white">
                           {d.items.map((item: any, idx: number) => {
                             const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
                             const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
@@ -1131,7 +1408,7 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                             <th className="px-2 py-1">차열재(4EA) VT</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-200">
+                        <tbody className="divide-y divide-gray-200 bg-white">
                           {d.items.map((item: any, idx: number) => {
                             const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
                             const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
