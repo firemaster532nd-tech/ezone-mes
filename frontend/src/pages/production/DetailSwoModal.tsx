@@ -128,6 +128,24 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
   const vmItems = d?.items?.filter((it: any) => getSocketType(it.product_type) === 'VM') || [];
   const vtItems = d?.items?.filter((it: any) => getSocketType(it.product_type) === 'VT') || [];
 
+  const getSocketCategoryLocal = (pt: string, st: string): 'RISER' | 'WALL' | 'BUSDUCT' => {
+    const p = (pt || '').toUpperCase();
+    const s = (st || '').toUpperCase();
+    if (p.startsWith('BD') || s.startsWith('BD')) return 'BUSDUCT';
+    if (s.startsWith('H') || p.startsWith('H') || p.includes('HAG') || p.includes('HTG')) return 'RISER';
+    return 'WALL';
+  };
+
+  const cat: 'RISER' | 'WALL' | 'BUSDUCT' = (() => {
+    if (d?.items?.some((it: any) => getSocketCategoryLocal(it.product_type, it.structure) === 'BUSDUCT')) {
+      return 'BUSDUCT';
+    }
+    if (d?.items?.some((it: any) => getSocketCategoryLocal(it.product_type, it.structure) === 'RISER')) {
+      return 'RISER';
+    }
+    return 'WALL';
+  })();
+
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: `
@@ -187,406 +205,774 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
           </table>
         </div>
 
-        {/* 2. 재단(VM) */}
-        {vmItems.length > 0 && (
-          <div className="page-break p-8">
-            <div className="print-header-title text-base font-bold text-center mb-4">재단작업일지 (VM)</div>
-            <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
-            <table className="print-table w-full border border-collapse text-[10px]">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border p-1" rowSpan={2}>No.</th>
-                  <th className="border p-1" rowSpan={2}>구조</th>
-                  <th className="border p-1" colSpan={2}>소켓 규격</th>
-                  <th className="border p-1" colSpan={2}>내부재단 (4EA)</th>
-                  <th className="border p-1" colSpan={2}>외부재단 (2EA)</th>
-                </tr>
-                <tr className="bg-gray-100">
-                  <th className="border p-1">가로</th>
-                  <th className="border p-1">세로</th>
-                  <th className="border p-1">가로 (W-5)</th>
-                  <th className="border p-1">세로 (H-30)</th>
-                  <th className="border p-1">상하 (W+60)</th>
-                  <th className="border p-1">좌우 (H)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vmItems.map((item: any, idx: number) => {
-                  const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-                  const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-                  return (
-                    <tr key={item.swi_id} className="text-center">
-                      <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
-                      <td className="border p-1 font-semibold">{item.product_type}</td>
-                      <td className="border p-1 font-mono">{w}</td>
-                      <td className="border p-1 font-mono">{h}</td>
-                      <td className="border p-1 font-semibold text-blue-700">{w > 0 ? w - 5 : '-'}</td>
-                      <td className="border p-1 font-semibold text-blue-700">{h > 0 ? h - 30 : '-'}</td>
-                      <td className="border p-1 font-semibold text-indigo-700">{w > 0 ? w + 60 : '-'}</td>
-                      <td className="border p-1 font-semibold text-indigo-700">{h > 0 ? h : '-'}</td>
+        {/* WALL 카테고리 인쇄 양식 */}
+        {cat === 'WALL' && (
+          <>
+            {/* 2. 재단(VM) */}
+            {vmItems.length > 0 && (
+              <div className="page-break p-8">
+                <div className="print-header-title text-base font-bold text-center mb-4">재단작업일지 (VM)</div>
+                <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+                <table className="print-table w-full border border-collapse text-[10px]">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border p-1" rowSpan={2}>No.</th>
+                      <th className="border p-1" rowSpan={2}>구조</th>
+                      <th className="border p-1" colSpan={2}>소켓 규격</th>
+                      <th className="border p-1" colSpan={2}>내부재단 (4EA)</th>
+                      <th className="border p-1" colSpan={2}>외부재단 (2EA)</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* 2.1 재단작업(VT) */}
-        {vtItems.length > 0 && (
-          <div className="page-break p-8">
-            <div className="print-header-title text-base font-bold text-center mb-4">재단작업일지 (VT)</div>
-            <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
-            <table className="print-table w-full border border-collapse text-[10px]">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border p-1" rowSpan={2}>No.</th>
-                  <th className="border p-1" rowSpan={2}>구조</th>
-                  <th className="border p-1" colSpan={2}>소켓 규격</th>
-                  <th className="border p-1" colSpan={2}>내부재단 (16EA)</th>
-                  <th className="border p-1" colSpan={2}>외부재단 (4EA)</th>
-                </tr>
-                <tr className="bg-gray-100">
-                  <th className="border p-1">가로</th>
-                  <th className="border p-1">세로</th>
-                  <th className="border p-1">가로 (W-40)/2</th>
-                  <th className="border p-1">세로 (H-40)/2</th>
-                  <th className="border p-1">상하 (W+60)</th>
-                  <th className="border p-1">좌우 (H)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vtItems.map((item: any, idx: number) => {
-                  const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-                  const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-                  return (
-                    <tr key={item.swi_id} className="text-center">
-                      <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
-                      <td className="border p-1 font-bold text-blue-800">{item.product_type}</td>
-                      <td className="border p-1 font-mono">{w}</td>
-                      <td className="border p-1 font-mono">{h}</td>
-                      <td className="border p-1 font-semibold text-blue-700">{w > 0 ? (w - 40) / 2 : '-'}</td>
-                      <td className="border p-1 font-semibold text-blue-700">{h > 0 ? (h - 40) / 2 : '-'}</td>
-                      <td className="border p-1 font-semibold text-indigo-700">{w > 0 ? w + 60 : '-'}</td>
-                      <td className="border p-1 font-semibold text-indigo-700">{h > 0 ? h : '-'}</td>
+                    <tr className="bg-gray-100">
+                      <th className="border p-1">가로</th>
+                      <th className="border p-1">세로</th>
+                      <th className="border p-1">가로 (W-5)</th>
+                      <th className="border p-1">세로 (H-30)</th>
+                      <th className="border p-1">상하 (W+60)</th>
+                      <th className="border p-1">좌우 (H)</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                  </thead>
+                  <tbody>
+                    {vmItems.map((item: any, idx: number) => {
+                      const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                      const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                      return (
+                        <tr key={item.swi_id} className="text-center">
+                          <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
+                          <td className="border p-1 font-semibold">{item.product_type}</td>
+                          <td className="border p-1 font-mono">{w}</td>
+                          <td className="border p-1 font-mono">{h}</td>
+                          <td className="border p-1 font-semibold text-blue-700">{w > 0 ? w - 5 : '-'}</td>
+                          <td className="border p-1 font-semibold text-blue-700">{h > 0 ? h - 30 : '-'}</td>
+                          <td className="border p-1 font-semibold text-indigo-700">{w > 0 ? w + 60 : '-'}</td>
+                          <td className="border p-1 font-semibold text-indigo-700">{h > 0 ? h : '-'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
-        {/* 차열재 재단 */}
-        <div className="page-break p-8">
-          <div className="print-header-title text-base font-bold text-center mb-4">차열재 재단작업일지 (VM,VT)</div>
-          <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
-          <table className="print-table w-full border border-collapse text-[10px]">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border p-1" rowSpan={2}>No.</th>
-                <th className="border p-1" rowSpan={2}>구조</th>
-                <th className="border p-1" colSpan={2}>소켓 규격</th>
-                <th className="border p-1" colSpan={2}>외부 차열재 상하</th>
-                <th className="border p-1" colSpan={2}>외부 차열재 좌우</th>
-              </tr>
-              <tr>
-                <th className="border p-1">가로</th>
-                <th className="border p-1">세로</th>
-                <th className="border p-1">규격 (W+60)</th>
-                <th className="border p-1">수량</th>
-                <th className="border p-1">규격 (H)</th>
-                <th className="border p-1">수량</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d?.items?.map((item: any, idx: number) => {
-                const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-                const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-                const isVm = getSocketType(item.product_type) === 'VM';
-                const qty = isVm ? 2 : 4;
-                return (
-                  <tr key={item.swi_id} className="text-center">
-                    <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
-                    <td className="border p-1 font-semibold">{item.product_type}</td>
-                    <td className="border p-1 font-mono">{w}</td>
-                    <td className="border p-1 font-mono">{h}</td>
-                    <td className="border p-1 font-semibold text-rose-700">{w > 0 ? w + 60 : '-'}</td>
-                    <td className="border p-1 font-bold">{qty}</td>
-                    <td className="border p-1 font-semibold text-rose-700">{h > 0 ? h : '-'}</td>
-                    <td className="border p-1 font-bold">{qty}</td>
+            {/* 2.1 재단작업(VT) */}
+            {vtItems.length > 0 && (
+              <div className="page-break p-8">
+                <div className="print-header-title text-base font-bold text-center mb-4">재단작업일지 (VT)</div>
+                <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+                <table className="print-table w-full border border-collapse text-[10px]">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border p-1" rowSpan={2}>No.</th>
+                      <th className="border p-1" rowSpan={2}>구조</th>
+                      <th className="border p-1" colSpan={2}>소켓 규격</th>
+                      <th className="border p-1" colSpan={2}>내부재단 (16EA)</th>
+                      <th className="border p-1" colSpan={2}>외부재단 (4EA)</th>
+                    </tr>
+                    <tr className="bg-gray-100">
+                      <th className="border p-1">가로</th>
+                      <th className="border p-1">세로</th>
+                      <th className="border p-1">가로 (W-40)/2</th>
+                      <th className="border p-1">세로 (H-40)/2</th>
+                      <th className="border p-1">상하 (W+60)</th>
+                      <th className="border p-1">좌우 (H)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vtItems.map((item: any, idx: number) => {
+                      const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                      const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                      return (
+                        <tr key={item.swi_id} className="text-center">
+                          <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
+                          <td className="border p-1 font-bold text-blue-800">{item.product_type}</td>
+                          <td className="border p-1 font-mono">{w}</td>
+                          <td className="border p-1 font-mono">{h}</td>
+                          <td className="border p-1 font-semibold text-blue-700">{w > 0 ? (w - 40) / 2 : '-'}</td>
+                          <td className="border p-1 font-semibold text-blue-700">{h > 0 ? (h - 40) / 2 : '-'}</td>
+                          <td className="border p-1 font-semibold text-indigo-700">{w > 0 ? w + 60 : '-'}</td>
+                          <td className="border p-1 font-semibold text-indigo-700">{h > 0 ? h : '-'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 차열재 재단 */}
+            <div className="page-break p-8">
+              <div className="print-header-title text-base font-bold text-center mb-4">차열재 재단작업일지 (VM,VT)</div>
+              <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+              <table className="print-table w-full border border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1" rowSpan={2}>No.</th>
+                    <th className="border p-1" rowSpan={2}>구조</th>
+                    <th className="border p-1" colSpan={2}>소켓 규격</th>
+                    <th className="border p-1" colSpan={2}>외부 차열재 상하</th>
+                    <th className="border p-1" colSpan={2}>외부 차열재 좌우</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                  <tr>
+                    <th className="border p-1">가로</th>
+                    <th className="border p-1">세로</th>
+                    <th className="border p-1">규격 (W+60)</th>
+                    <th className="border p-1">수량</th>
+                    <th className="border p-1">규격 (H)</th>
+                    <th className="border p-1">수량</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d?.items?.map((item: any, idx: number) => {
+                    const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                    const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                    const isVm = getSocketType(item.product_type) === 'VM';
+                    const qty = isVm ? 2 : 4;
+                    return (
+                      <tr key={item.swi_id} className="text-center">
+                        <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
+                        <td className="border p-1 font-semibold">{item.product_type}</td>
+                        <td className="border p-1 font-mono">{w}</td>
+                        <td className="border p-1 font-mono">{h}</td>
+                        <td className="border p-1 font-semibold text-rose-700">{w > 0 ? w + 60 : '-'}</td>
+                        <td className="border p-1 font-bold">{qty}</td>
+                        <td className="border p-1 font-semibold text-rose-700">{h > 0 ? h : '-'}</td>
+                        <td className="border p-1 font-bold">{qty}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-        {/* 3. 1절곡(VM) */}
-        {vmItems.length > 0 && (
-          <div className="page-break p-8">
-            <div className="print-header-title text-base font-bold text-center mb-4">절곡생산일지 (VM)</div>
-            <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
-            <table className="print-table w-full border border-collapse text-[10px]">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border p-1" rowSpan={2}>No.</th>
-                  <th className="border p-1" colSpan={2}>소켓 규격</th>
-                  <th className="border p-1" rowSpan={2}>수량(EA)</th>
-                  <th className="border p-1" rowSpan={2}>소켓 Lot</th>
-                  <th className="border p-1" rowSpan={2}>두께</th>
-                  <th className="border p-1" colSpan={3}>평철 절곡 규격 (VM)</th>
-                </tr>
-                <tr className="bg-gray-100">
-                  <th className="border p-1">가로</th>
-                  <th className="border p-1">세로</th>
-                  <th className="border p-1">평철 가로 (W-1)</th>
-                  <th className="border p-1">평철 세로 (H-30)</th>
-                  <th className="border p-1">수량</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vmItems.map((item: any, idx: number) => {
-                  const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-                  const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-                  return (
-                    <tr key={item.swi_id} className="text-center">
-                      <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
-                      <td className="border p-1 font-mono">{w}</td>
-                      <td className="border p-1 font-mono">{h}</td>
-                      <td className="border p-1">1</td>
-                      <td className="border p-1 font-mono">{item.insp_lot_no || '-'}</td>
-                      <td className="border p-1">1.6</td>
-                      <td className="border p-1 font-bold text-orange-700">{w > 0 ? w - 1 : '-'}</td>
-                      <td className="border p-1 font-bold text-orange-700">{h > 0 ? h - 30 : '-'}</td>
-                      <td className="border p-1">각 4EA</td>
+            {/* 3. 1절곡(VM) */}
+            {vmItems.length > 0 && (
+              <div className="page-break p-8">
+                <div className="print-header-title text-base font-bold text-center mb-4">절곡생산일지 (VM)</div>
+                <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+                <table className="print-table w-full border border-collapse text-[10px]">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border p-1" rowSpan={2}>No.</th>
+                      <th className="border p-1" colSpan={2}>소켓 규격</th>
+                      <th className="border p-1" rowSpan={2}>수량(EA)</th>
+                      <th className="border p-1" rowSpan={2}>소켓 Lot</th>
+                      <th className="border p-1" rowSpan={2}>두께</th>
+                      <th className="border p-1" colSpan={3}>평철 절곡 규격 (VM)</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                    <tr className="bg-gray-100">
+                      <th className="border p-1">가로</th>
+                      <th className="border p-1">세로</th>
+                      <th className="border p-1">평철 가로 (W-1)</th>
+                      <th className="border p-1">평철 세로 (H-30)</th>
+                      <th className="border p-1">수량</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vmItems.map((item: any, idx: number) => {
+                      const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                      const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                      return (
+                        <tr key={item.swi_id} className="text-center">
+                          <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
+                          <td className="border p-1 font-mono">{w}</td>
+                          <td className="border p-1 font-mono">{h}</td>
+                          <td className="border p-1">1</td>
+                          <td className="border p-1 font-mono">{item.insp_lot_no || '-'}</td>
+                          <td className="border p-1">1.6</td>
+                          <td className="border p-1 font-bold text-orange-700">{w > 0 ? w - 1 : '-'}</td>
+                          <td className="border p-1 font-bold text-orange-700">{h > 0 ? h - 30 : '-'}</td>
+                          <td className="border p-1">각 4EA</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 3.2 절곡(VT) */}
+            {vtItems.length > 0 && (
+              <div className="page-break p-8">
+                <div className="print-header-title text-base font-bold text-center mb-4">절곡생산일지 (VT)</div>
+                <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+                <table className="print-table w-full border border-collapse text-[10px]">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border p-1" rowSpan={2}>No.</th>
+                      <th className="border p-1" colSpan={2}>소켓 규격</th>
+                      <th className="border p-1" rowSpan={2}>수량(EA)</th>
+                      <th className="border p-1" rowSpan={2}>소켓 Lot</th>
+                      <th className="border p-1" rowSpan={2}>평철폭</th>
+                      <th className="border p-1" colSpan={3}>평철 절곡 규격 (VT 브라켓)</th>
+                    </tr>
+                    <tr className="bg-gray-100">
+                      <th className="border p-1">가로</th>
+                      <th className="border p-1">세로</th>
+                      <th className="border p-1">평철 가로 (W-40)/2+4</th>
+                      <th className="border p-1">평철 세로 (H-40)/2-1</th>
+                      <th className="border p-1">수량합계</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vtItems.map((item: any, idx: number) => {
+                      const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                      const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                      return (
+                        <tr key={item.swi_id} className="text-center">
+                          <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
+                          <td className="border p-1 font-mono">{w}</td>
+                          <td className="border p-1 font-mono">{h}</td>
+                          <td className="border p-1">1</td>
+                          <td className="border p-1 font-mono">{item.insp_lot_no || '-'}</td>
+                          <td className="border p-1">60mm</td>
+                          <td className="border p-1 font-bold text-orange-700">{w > 0 ? (w - 40) / 2 + 4 : '-'} (16EA)</td>
+                          <td className="border p-1 font-bold text-orange-700">{h > 0 ? (h - 40) / 2 - 1 : '-'} (32EA)</td>
+                          <td className="border p-1 font-bold">32EA</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 3.3 절곡(VT-보강대) */}
+            {vtItems.length > 0 && (
+              <div className="page-break p-8">
+                <div className="print-header-title text-base font-bold text-center mb-4">절곡생산일지 (VT_보강대)</div>
+                <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+                <table className="print-table w-full border border-collapse text-[10px]">
+                  <thead>
+                    <tr className="bg-gray-100 border">
+                      <th className="border p-1" rowSpan={3}>No.</th>
+                      <th className="border p-1" colSpan={2} rowSpan={2}>규격</th>
+                      <th className="border p-1" rowSpan={3}>수량(EA)</th>
+                      <th className="border p-1" rowSpan={3}>소켓 Lot</th>
+                      <th className="border p-1" rowSpan={3}>두께</th>
+                      <th className="border p-1" colSpan={3}>평철 가로(받침대)</th>
+                      <th className="border p-1" colSpan={3}>평철 세로(보강대)</th>
+                    </tr>
+                    <tr className="bg-gray-100">
+                      <th className="border p-1" rowSpan={2}>폭</th>
+                      <th className="border p-1" colSpan={2}>가로 규격 및 수량</th>
+                      <th className="border p-1" rowSpan={2}>폭</th>
+                      <th className="border p-1" colSpan={2}>세로 규격 및 수량</th>
+                    </tr>
+                    <tr className="bg-gray-100">
+                      <th className="border p-1">가로</th>
+                      <th className="border p-1">세로</th>
+                      <th className="border p-1">규격</th>
+                      <th className="border p-1">수량</th>
+                      <th className="border p-1">규격</th>
+                      <th className="border p-1">수량</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vtItems.map((item: any, idx: number) => {
+                      const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                      const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                      return (
+                        <tr key={item.swi_id} className="text-center">
+                          <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
+                          <td className="border p-1 font-mono">{w}</td>
+                          <td className="border p-1 font-mono">{h}</td>
+                          <td className="border p-1">1</td>
+                          <td className="border p-1 font-mono">{item.insp_lot_no || '-'}</td>
+                          <td className="border p-1">1.6이상</td>
+                          <td className="border p-1">225</td>
+                          <td className="border p-1 text-amber-700 font-bold">{w > 0 ? (w - 40) / 2 + 4 : '-'}</td>
+                          <td className="border p-1">8EA</td>
+                          <td className="border p-1">237</td>
+                          <td className="border p-1 text-amber-700 font-bold">{h > 0 ? h : '-'}</td>
+                          <td className="border p-1">4EA</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 5. 차열재 출하용 */}
+            <div className="page-break p-8">
+              <div className="print-header-title text-base font-bold text-center mb-4">차열재 출하용 집계표</div>
+              <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+              <table className="print-table w-full border border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1" rowSpan={2}>No.</th>
+                    <th className="border p-1" colSpan={2}>소켓 규격</th>
+                    <th className="border p-1" rowSpan={2}>구조</th>
+                    <th className="border p-1" rowSpan={2}>면적(㎡)</th>
+                    <th className="border p-1" rowSpan={2}>둘레(m)</th>
+                    <th className="border p-1" colSpan={2}>글라스울 25*1400</th>
+                    <th className="border p-1" colSpan={2}>차열재 50*400(VT)</th>
+                    <th className="border p-1" colSpan={2}>차열재 25*200(VM)</th>
+                  </tr>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1">가로</th>
+                    <th className="border p-1">세로</th>
+                    <th className="border p-1">소요 (둘레+0.5)</th>
+                    <th className="border p-1">수량</th>
+                    <th className="border p-1">소요 (둘레+0.5)</th>
+                    <th className="border p-1">수량</th>
+                    <th className="border p-1">소요 (둘레+0.5)x4</th>
+                    <th className="border p-1">수량</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d?.items?.map((item: any, idx: number) => {
+                    const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                    const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                    const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
+                    const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
+                    const pVal = Number(perimeter);
+                    const isVm = getSocketType(item.product_type) === 'VM';
+                    return (
+                      <tr key={item.swi_id} className="text-center">
+                        <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
+                        <td className="border p-1 font-mono">{w}</td>
+                        <td className="border p-1 font-mono">{h}</td>
+                        <td className="border p-1 font-bold">{item.product_type || '-'}</td>
+                        <td className="border p-1 font-mono text-gray-700">{area}</td>
+                        <td className="border p-1 font-mono text-gray-700">{perimeter}</td>
+                        {!isVm ? (
+                          <>
+                            <td className="border p-1 text-teal-700 font-bold">{pVal > 0 ? (pVal + 0.5).toFixed(1) : ''}</td>
+                            <td className="border p-1">1</td>
+                            <td className="border p-1 text-teal-700 font-bold">{pVal > 0 ? (pVal + 0.5).toFixed(1) : ''}</td>
+                            <td className="border p-1">4</td>
+                            <td className="border p-1 text-gray-300">-</td>
+                            <td className="border p-1 text-gray-300">-</td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="border p-1 text-gray-300">-</td>
+                            <td className="border p-1 text-gray-300">-</td>
+                            <td className="border p-1 text-gray-300">-</td>
+                            <td className="border p-1 text-gray-300">-</td>
+                            <td className="border p-1 text-teal-700 font-bold">{pVal > 0 ? ((pVal + 0.5) * 4).toFixed(1) : ''}</td>
+                            <td className="border p-1">4</td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 6. 라벨소요량 */}
+            <div className="page-break p-8">
+              <div className="print-header-title text-base font-bold text-center mb-4">라벨소요량 집계표</div>
+              <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+              <table className="print-table w-full border border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1">No</th>
+                    <th className="border p-1">제품번호</th>
+                    <th className="border p-1">가로</th>
+                    <th className="border p-1">세로</th>
+                    <th className="border p-1">소켓 Lot</th>
+                    <th className="border p-1">면적(㎡)</th>
+                    <th className="border p-1">둘레(m)</th>
+                    <th className="border p-1">방화소켓(EA)</th>
+                    <th className="border p-1">글라스울(1EA)</th>
+                    <th className="border p-1">차열재 25*200 (VM)</th>
+                    <th className="border p-1">차열재 50*400 (VT)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d?.items?.map((item: any, idx: number) => {
+                    const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                    const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                    const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
+                    const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
+                    const pVal = Number(perimeter);
+                    const type = getSocketType(item.product_type);
+                    return (
+                      <tr key={item.swi_id} className="text-center">
+                        <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
+                        <td className="border p-1 font-semibold text-gray-700">{item.seq_no}</td>
+                        <td className="border p-1 font-mono">{w}</td>
+                        <td className="border p-1 font-mono">{h}</td>
+                        <td className="border p-1 font-mono text-blue-700 font-bold">{item.insp_lot_no || '-'}</td>
+                        <td className="border p-1 font-mono text-gray-600">{area}</td>
+                        <td className="border p-1 font-mono text-gray-600">{perimeter}</td>
+                        <td className="border p-1">2</td>
+                        <td className="border p-1 text-emerald-700 font-semibold">{type === 'VT' && pVal > 0 ? (pVal + 0.5).toFixed(1) : '-'}</td>
+                        <td className="border p-1 text-emerald-700 font-semibold">{type === 'VM' && pVal > 0 ? (pVal + 0.5).toFixed(1) : '-'}</td>
+                        <td className="border p-1 text-emerald-700 font-semibold">{type === 'VT' && pVal > 0 ? (pVal + 0.5).toFixed(1) : '-'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
-        {/* 3.2 절곡(VT) */}
-        {vtItems.length > 0 && (
-          <div className="page-break p-8">
-            <div className="print-header-title text-base font-bold text-center mb-4">절곡생산일지 (VT)</div>
-            <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
-            <table className="print-table w-full border border-collapse text-[10px]">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border p-1" rowSpan={2}>No.</th>
-                  <th className="border p-1" colSpan={2}>소켓 규격</th>
-                  <th className="border p-1" rowSpan={2}>수량(EA)</th>
-                  <th className="border p-1" rowSpan={2}>소켓 Lot</th>
-                  <th className="border p-1" rowSpan={2}>평철폭</th>
-                  <th className="border p-1" colSpan={3}>평철 절곡 규격 (VT 브라켓)</th>
-                </tr>
-                <tr className="bg-gray-100">
-                  <th className="border p-1">가로</th>
-                  <th className="border p-1">세로</th>
-                  <th className="border p-1">평철 가로 (W-40)/2+4</th>
-                  <th className="border p-1">평철 세로 (H-40)/2-1</th>
-                  <th className="border p-1">수량합계</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vtItems.map((item: any, idx: number) => {
-                  const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-                  const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-                  return (
-                    <tr key={item.swi_id} className="text-center">
-                      <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
-                      <td className="border p-1 font-mono">{w}</td>
-                      <td className="border p-1 font-mono">{h}</td>
-                      <td className="border p-1">1</td>
-                      <td className="border p-1 font-mono">{item.insp_lot_no || '-'}</td>
-                      <td className="border p-1">60mm</td>
-                      <td className="border p-1 font-bold text-orange-700">{w > 0 ? (w - 40) / 2 + 4 : '-'} (16EA)</td>
-                      <td className="border p-1 font-bold text-orange-700">{h > 0 ? (h - 40) / 2 - 1 : '-'} (32EA)</td>
-                      <td className="border p-1 font-bold">32EA</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {/* RISER 카테고리 인쇄 양식 */}
+        {cat === 'RISER' && (
+          <>
+            {/* 2.1 재단(1.69,064) */}
+            <div className="page-break p-8">
+              <div className="print-header-title text-base font-bold text-center mb-4">재단작업일지 (1.69,064)</div>
+              <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+              <table className="print-table w-full border border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1">No.</th>
+                    <th className="border p-1">구조/모델</th>
+                    <th className="border p-1">가로(W)</th>
+                    <th className="border p-1">세로(H)</th>
+                    <th className="border p-1">검사 LOT</th>
+                    <th className="border p-1">A부재 가로재단(W-5)</th>
+                    <th className="border p-1">A부재 수량(6개)</th>
+                    <th className="border p-1">B부재 세로재단(H-35)</th>
+                    <th className="border p-1">B부재 수량(6개)</th>
+                    <th className="border p-1">높이</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d?.items?.map((item: any, idx: number) => {
+                    const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                    const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                    return (
+                      <tr key={item.swi_id} className="text-center">
+                        <td className="border p-1 font-mono">{idx + 1}</td>
+                        <td className="border p-1 font-semibold">{item.product_type || item.structure}</td>
+                        <td className="border p-1 font-mono">{w}</td>
+                        <td className="border p-1 font-mono">{h}</td>
+                        <td className="border p-1">{item.insp_lot_no || '-'}</td>
+                        <td className="border p-1 font-bold text-blue-700">{w > 0 ? w - 5 : '-'}</td>
+                        <td className="border p-1">6</td>
+                        <td className="border p-1 font-bold text-teal-700">{h > 0 ? h - 35 : '-'}</td>
+                        <td className="border p-1">6</td>
+                        <td className="border p-1 font-mono">255</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-        {/* 3.3 절곡(VT-보강대) */}
-        {vtItems.length > 0 && (
-          <div className="page-break p-8">
-            <div className="print-header-title text-base font-bold text-center mb-4">절곡생산일지 (VT_보강대)</div>
-            <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
-            <table className="print-table w-full border border-collapse text-[10px]">
-              <thead>
-                <tr className="bg-gray-100 border">
-                  <th className="border p-1" rowSpan={3}>No.</th>
-                  <th className="border p-1" colSpan={2} rowSpan={2}>규격</th>
-                  <th className="border p-1" rowSpan={3}>수량(EA)</th>
-                  <th className="border p-1" rowSpan={3}>소켓 Lot</th>
-                  <th className="border p-1" rowSpan={3}>두께</th>
-                  <th className="border p-1" colSpan={3}>평철 가로(받침대)</th>
-                  <th className="border p-1" colSpan={3}>평철 세로(보강대)</th>
-                </tr>
-                <tr className="bg-gray-100">
-                  <th className="border p-1" rowSpan={2}>폭</th>
-                  <th className="border p-1" colSpan={2}>가로 규격 및 수량</th>
-                  <th className="border p-1" rowSpan={2}>폭</th>
-                  <th className="border p-1" colSpan={2}>세로 규격 및 수량</th>
-                </tr>
-                <tr className="bg-gray-100">
-                  <th className="border p-1">가로</th>
-                  <th className="border p-1">세로</th>
-                  <th className="border p-1">규격</th>
-                  <th className="border p-1">수량</th>
-                  <th className="border p-1">규격</th>
-                  <th className="border p-1">수량</th>
-                </tr>
-              </thead>
-              <tbody>
-                {vtItems.map((item: any, idx: number) => {
-                  const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-                  const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-                  return (
-                    <tr key={item.swi_id} className="text-center">
-                      <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
-                      <td className="border p-1 font-mono">{w}</td>
-                      <td className="border p-1 font-mono">{h}</td>
-                      <td className="border p-1">1</td>
-                      <td className="border p-1 font-mono">{item.insp_lot_no || '-'}</td>
-                      <td className="border p-1">1.6이상</td>
-                      <td className="border p-1">225</td>
-                      <td className="border p-1 text-amber-700 font-bold">{w > 0 ? (w - 40) / 2 + 4 : '-'}</td>
-                      <td className="border p-1">8EA</td>
-                      <td className="border p-1">237</td>
-                      <td className="border p-1 text-amber-700 font-bold">{h > 0 ? h : '-'}</td>
-                      <td className="border p-1">4EA</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+            {/* 3.1 절곡(HTG1.69) */}
+            <div className="page-break p-8">
+              <div className="print-header-title text-base font-bold text-center mb-4">절곡생산일지 (HTG1.69)</div>
+              <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+              <table className="print-table w-full border border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1">No.</th>
+                    <th className="border p-1">가로(W)</th>
+                    <th className="border p-1">세로(H)</th>
+                    <th className="border p-1">검사 LOT</th>
+                    <th className="border p-1">받침대/브라켓 가로(W-5)</th>
+                    <th className="border p-1">절곡규격(mm)</th>
+                    <th className="border p-1">수량</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d?.items?.map((item: any, idx: number) => {
+                    const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                    const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                    return (
+                      <tr key={item.swi_id} className="text-center">
+                        <td className="border p-1 font-mono">{idx + 1}</td>
+                        <td className="border p-1 font-mono">{w}</td>
+                        <td className="border p-1 font-mono">{h}</td>
+                        <td className="border p-1">{item.insp_lot_no || '-'}</td>
+                        <td className="border p-1 font-bold text-indigo-700">{w > 0 ? w - 5 : '-'}</td>
+                        <td className="border p-1">23 - 23</td>
+                        <td className="border p-1">2</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-        {/* 5. 차열재 출하용 */}
-        <div className="page-break p-8">
-          <div className="print-header-title text-base font-bold text-center mb-4">차열재 출하용 집계표</div>
-          <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
-          <table className="print-table w-full border border-collapse text-[10px]">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border p-1" rowSpan={2}>No.</th>
-                <th className="border p-1" colSpan={2}>소켓 규격</th>
-                <th className="border p-1" rowSpan={2}>구조</th>
-                <th className="border p-1" rowSpan={2}>면적(㎡)</th>
-                <th className="border p-1" rowSpan={2}>둘레(m)</th>
-                <th className="border p-1" colSpan={2}>글라스울 25*1400</th>
-                <th className="border p-1" colSpan={2}>차열재 50*400(VT)</th>
-                <th className="border p-1" colSpan={2}>차열재 25*200(VM)</th>
-              </tr>
-              <tr className="bg-gray-100">
-                <th className="border p-1">가로</th>
-                <th className="border p-1">세로</th>
-                <th className="border p-1">소요 (둘레+0.5)</th>
-                <th className="border p-1">수량</th>
-                <th className="border p-1">소요 (둘레+0.5)</th>
-                <th className="border p-1">수량</th>
-                <th className="border p-1">소요 (둘레+0.5)x4</th>
-                <th className="border p-1">수량</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d?.items?.map((item: any, idx: number) => {
-                const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-                const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-                const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
-                const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
-                const pVal = Number(perimeter);
-                const isVm = getSocketType(item.product_type) === 'VM';
-                return (
-                  <tr key={item.swi_id} className="text-center">
-                    <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
-                    <td className="border p-1 font-mono">{w}</td>
-                    <td className="border p-1 font-mono">{h}</td>
-                    <td className="border p-1 font-bold">{item.product_type || '-'}</td>
-                    <td className="border p-1 font-mono text-gray-700">{area}</td>
-                    <td className="border p-1 font-mono text-gray-700">{perimeter}</td>
-                    {!isVm ? (
-                      <>
-                        <td className="border p-1 text-teal-700 font-bold">{pVal > 0 ? (pVal + 0.5).toFixed(1) : ''}</td>
+            {/* 4. 차열재 소켓용 (수정) */}
+            <div className="page-break p-8">
+              <div className="print-header-title text-base font-bold text-center mb-4">차열재 소켓용 재단일지</div>
+              <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+              <table className="print-table w-full border border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1">No.</th>
+                    <th className="border p-1">구조/모델</th>
+                    <th className="border p-1">가로(W)</th>
+                    <th className="border p-1">세로(H)</th>
+                    <th className="border p-1">가로재단(W+60)</th>
+                    <th className="border p-1">수량</th>
+                    <th className="border p-1">세로재단(H)</th>
+                    <th className="border p-1">수량</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d?.items?.map((item: any, idx: number) => {
+                    const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                    const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                    return (
+                      <tr key={item.swi_id} className="text-center">
+                        <td className="border p-1 font-mono">{idx + 1}</td>
+                        <td className="border p-1 font-semibold">{item.product_type || item.structure}</td>
+                        <td className="border p-1 font-mono">{w}</td>
+                        <td className="border p-1 font-mono">{h}</td>
+                        <td className="border p-1 font-bold text-blue-700">{w > 0 ? w + 60 : '-'}</td>
+                        <td className="border p-1">2</td>
+                        <td className="border p-1 font-bold text-teal-700">{h > 0 ? h : '-'}</td>
+                        <td className="border p-1">2</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 5. 차열재 출하용 */}
+            <div className="page-break p-8">
+              <div className="print-header-title text-base font-bold text-center mb-4">차열재 출하용 집계표</div>
+              <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+              <table className="print-table w-full border border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1">No</th>
+                    <th className="border p-1">가로(W)</th>
+                    <th className="border p-1">세로(H)</th>
+                    <th className="border p-1">구조/모델</th>
+                    <th className="border p-1">면적(㎡)</th>
+                    <th className="border p-1">둘레(m)</th>
+                    <th className="border p-1 text-teal-700">차열재 소요(둘레+0.4)</th>
+                    <th className="border p-1">수량(개)</th>
+                    <th className="border p-1 text-teal-700">차열재 총소요</th>
+                    <th className="border p-1">브라켓 수량</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d?.items?.map((item: any, idx: number) => {
+                    const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                    const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                    const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
+                    const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
+                    const pVal = Number(perimeter);
+                    const req = pVal > 0 ? (pVal + 0.4).toFixed(1) : '-';
+                    return (
+                      <tr key={item.swi_id} className="text-center">
+                        <td className="border p-1 font-mono">{idx + 1}</td>
+                        <td className="border p-1 font-mono">{w}</td>
+                        <td className="border p-1 font-mono">{h}</td>
+                        <td className="border p-1 font-semibold">{item.product_type || item.structure}</td>
+                        <td className="border p-1 font-mono">{area}</td>
+                        <td className="border p-1 font-mono">{perimeter}</td>
+                        <td className="border p-1 text-teal-700 font-bold">{req}</td>
                         <td className="border p-1">1</td>
-                        <td className="border p-1 text-teal-700 font-bold">{pVal > 0 ? (pVal + 0.5).toFixed(1) : ''}</td>
-                        <td className="border p-1">4</td>
-                        <td className="border p-1 text-gray-300">-</td>
-                        <td className="border p-1 text-gray-300">-</td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="border p-1 text-gray-300">-</td>
-                        <td className="border p-1 text-gray-300">-</td>
-                        <td className="border p-1 text-gray-300">-</td>
-                        <td className="border p-1 text-gray-300">-</td>
-                        <td className="border p-1 text-teal-700 font-bold">{pVal > 0 ? ((pVal + 0.5) * 4).toFixed(1) : ''}</td>
-                        <td className="border p-1">4</td>
-                      </>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                        <td className="border p-1 text-teal-700 font-bold">{req}</td>
+                        <td className="border p-1">2</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-        {/* 6. 라벨소요량 */}
-        <div className="page-break p-8">
-          <div className="print-header-title text-base font-bold text-center mb-4">라벨소요량 집계표</div>
-          <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
-          <table className="print-table w-full border border-collapse text-[10px]">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border p-1">No</th>
-                <th className="border p-1">제품번호</th>
-                <th className="border p-1">가로</th>
-                <th className="border p-1">세로</th>
-                <th className="border p-1">소켓 Lot</th>
-                <th className="border p-1">면적(㎡)</th>
-                <th className="border p-1">둘레(m)</th>
-                <th className="border p-1">방화소켓(EA)</th>
-                <th className="border p-1">글라스울(1EA)</th>
-                <th className="border p-1">차열재 25*200 (VM)</th>
-                <th className="border p-1">차열재 50*400 (VT)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d?.items?.map((item: any, idx: number) => {
-                const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-                const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-                const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
-                const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
-                const pVal = Number(perimeter);
-                const type = getSocketType(item.product_type);
-                return (
-                  <tr key={item.swi_id} className="text-center">
-                    <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
-                    <td className="border p-1 font-semibold text-gray-700">{item.seq_no}</td>
-                    <td className="border p-1 font-mono">{w}</td>
-                    <td className="border p-1 font-mono">{h}</td>
-                    <td className="border p-1 font-mono text-blue-700 font-bold">{item.insp_lot_no || '-'}</td>
-                    <td className="border p-1 font-mono text-gray-600">{area}</td>
-                    <td className="border p-1 font-mono text-gray-600">{perimeter}</td>
-                    <td className="border p-1">2</td>
-                    <td className="border p-1 text-emerald-700 font-semibold">{type === 'VT' && pVal > 0 ? (pVal + 0.5).toFixed(1) : '-'}</td>
-                    <td className="border p-1 text-emerald-700 font-semibold">{type === 'VM' && pVal > 0 ? (pVal + 0.5).toFixed(1) : '-'}</td>
-                    <td className="border p-1 text-emerald-700 font-semibold">{type === 'VT' && pVal > 0 ? (pVal + 0.5).toFixed(1) : '-'}</td>
+            {/* 라벨소요량 */}
+            <div className="page-break p-8">
+              <div className="print-header-title text-base font-bold text-center mb-4">라벨소요량 집계표</div>
+              <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+              <table className="print-table w-full border border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1">No</th>
+                    <th className="border p-1">구조/모델</th>
+                    <th className="border p-1">가로(W)</th>
+                    <th className="border p-1">세로(H)</th>
+                    <th className="border p-1">검사 LOT</th>
+                    <th className="border p-1">면적(㎡)</th>
+                    <th className="border p-1">둘레(m)</th>
+                    <th className="border p-1 text-indigo-600">라벨수량</th>
+                    <th className="border p-1 text-teal-700">차열재 소요(둘레+0.4)</th>
+                    <th className="border p-1 text-rose-700">글라스울(둘레+0.5)</th>
+                    <th className="border p-1">수량</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {d?.items?.map((item: any, idx: number) => {
+                    const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                    const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                    const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
+                    const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
+                    const pVal = Number(perimeter);
+                    const reqIns = pVal > 0 ? (pVal + 0.4).toFixed(1) : '-';
+                    const reqGw = pVal > 0 ? (pVal + 0.5).toFixed(1) : '-';
+                    return (
+                      <tr key={item.swi_id} className="text-center">
+                        <td className="border p-1 font-mono">{idx + 1}</td>
+                        <td className="border p-1 font-semibold">{item.product_type || item.structure}</td>
+                        <td className="border p-1 font-mono">{w}</td>
+                        <td className="border p-1 font-mono">{h}</td>
+                        <td className="border p-1">{item.insp_lot_no || '-'}</td>
+                        <td className="border p-1 font-mono">{area}</td>
+                        <td className="border p-1 font-mono">{perimeter}</td>
+                        <td className="border p-1 font-bold text-indigo-600">2</td>
+                        <td className="border p-1 text-teal-700 font-bold">{reqIns}</td>
+                        <td className="border p-1 text-rose-700 font-bold">{reqGw}</td>
+                        <td className="border p-1">2</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {/* BUSDUCT 카테고리 인쇄 양식 */}
+        {cat === 'BUSDUCT' && (
+          <>
+            {/* 2.1 방화플래싱 재단 및 가공 */}
+            <div className="page-break p-8">
+              <div className="print-header-title text-base font-bold text-center mb-4">방화플래싱 재단 및 가공일지</div>
+              <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+              <table className="print-table w-full border border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1">No</th>
+                    <th className="border p-1">모델/유형</th>
+                    <th className="border p-1">재질</th>
+                    <th className="border p-1">가로재단 길이</th>
+                    <th className="border p-1">세로재단 너비</th>
+                    <th className="border p-1">두께 기준</th>
+                    <th className="border p-1">수량</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d?.items?.map((item: any, idx: number) => {
+                    const pt = (item.product_type || '').toUpperCase();
+                    const isCv = pt.includes('CV');
+                    return (
+                      <tr key={item.swi_id} className="text-center">
+                        <td className="border p-1 font-mono">{idx + 1}</td>
+                        <td className="border p-1 font-semibold">{item.product_type || item.structure}</td>
+                        <td className="border p-1">{isCv ? 'SUS' : 'GI'}</td>
+                        <td className="border p-1 font-bold text-indigo-700">{isCv ? '380 mm' : '1,000 mm'}</td>
+                        <td className="border p-1 font-bold text-indigo-700">{isCv ? '190 mm' : '175 mm'}</td>
+                        <td className="border p-1">{isCv ? '0.5T 이상' : '1.0T 이상'}</td>
+                        <td className="border p-1">1</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 3.1 틈새복합시트(차열재) 재단 */}
+            <div className="page-break p-8">
+              <div className="print-header-title text-base font-bold text-center mb-4">틈새복합시트(차열재) 재단일지</div>
+              <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+              <table className="print-table w-full border border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1">No</th>
+                    <th className="border p-1">모델/유형</th>
+                    <th className="border p-1">차열시트 가로</th>
+                    <th className="border p-1">차열시트 세로</th>
+                    <th className="border p-1">두께(mm)</th>
+                    <th className="border p-1">수량(개)</th>
+                    <th className="border p-1">비고</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d?.items?.map((item: any, idx: number) => {
+                    const pt = (item.product_type || '').toUpperCase();
+                    const isCv = pt.includes('CV');
+                    return (
+                      <tr key={item.swi_id} className="text-center">
+                        <td className="border p-1 font-mono">{idx + 1}</td>
+                        <td className="border p-1 font-semibold">{item.product_type || item.structure}</td>
+                        <td className="border p-1 font-bold text-teal-700">{isCv ? '150H 복합' : '1,000 mm'}</td>
+                        <td className="border p-1 font-bold text-teal-700">{isCv ? '외경비례' : '125 mm'}</td>
+                        <td className="border p-1">{isCv ? '5.5' : '5.0'}</td>
+                        <td className="border p-1 font-bold text-indigo-600">{isCv ? '1' : '2'}</td>
+                        <td className="border p-1 text-left text-xs">{isCv ? '외경 200파이 이하용' : '상/하부 밀도 1.2g/㎤ 이상'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 4. 단열재 시공(세라믹 블랭킷) */}
+            <div className="page-break p-8">
+              <div className="print-header-title text-base font-bold text-center mb-4">단열재 시공일지 (세라믹 블랭킷)</div>
+              <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+              <table className="print-table w-full border border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1">No</th>
+                    <th className="border p-1">모델/유형</th>
+                    <th className="border p-1">단열재 종류</th>
+                    <th className="border p-1">밀도 기준</th>
+                    <th className="border p-1">너비 기준</th>
+                    <th className="border p-1">두께 기준</th>
+                    <th className="border p-1">고정 방식</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d?.items?.map((item: any, idx: number) => (
+                    <tr key={item.swi_id} className="text-center">
+                      <td className="border p-1 font-mono">{idx + 1}</td>
+                      <td className="border p-1 font-semibold">{item.product_type || item.structure}</td>
+                      <td className="border p-1">세라믹 섬유 블랭킷</td>
+                      <td className="border p-1">96 kg/㎥ 이상</td>
+                      <td className="border p-1 font-bold text-indigo-700">600 mm</td>
+                      <td className="border p-1 font-bold text-indigo-700">25 ㎜ 이상</td>
+                      <td className="border p-1">양면 대칭 철사 고정</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 5. 라벨소요량 */}
+            <div className="page-break p-8">
+              <div className="print-header-title text-base font-bold text-center mb-4">라벨소요량 집계표</div>
+              <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+              <table className="print-table w-full border border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-1">No</th>
+                    <th className="border p-1">구조/모델명</th>
+                    <th className="border p-1">가로(W)</th>
+                    <th className="border p-1">세로(H)</th>
+                    <th className="border p-1">면적(㎡)</th>
+                    <th className="border p-1">둘레(m)</th>
+                    <th className="border p-1">필요 라벨 수량(개)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d?.items?.map((item: any, idx: number) => {
+                    const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                    const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                    const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
+                    const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
+                    return (
+                      <tr key={item.swi_id} className="text-center">
+                        <td className="border p-1 font-mono">{idx + 1}</td>
+                        <td className="border p-1 font-semibold">{item.product_type || item.structure}</td>
+                        <td className="border p-1 font-mono">{w}</td>
+                        <td className="border p-1 font-mono">{h}</td>
+                        <td className="border p-1 font-mono text-gray-700">{area}</td>
+                        <td className="border p-1 font-mono text-gray-700">{perimeter}</td>
+                        <td className="border p-1 font-bold text-indigo-600">2</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
 
       {/* 화면상 상세 모달 창 */}
@@ -653,21 +1039,6 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
             <div className="space-y-3">
               <div className="flex border-b overflow-x-auto gap-1 pb-1 scrollbar-thin">
                 {(() => {
-                  const getSocketCategoryLocal = (pt: string, st: string): 'RISER' | 'WALL' | 'BUSDUCT' => {
-                    const p = (pt || '').toUpperCase();
-                    const s = (st || '').toUpperCase();
-                    if (p.startsWith('BD') || s.startsWith('BD')) return 'BUSDUCT';
-                    if (s.startsWith('H') || p.startsWith('H') || p.includes('HAG') || p.includes('HTG')) return 'RISER';
-                    return 'WALL';
-                  };
-
-                  let cat: 'RISER' | 'WALL' | 'BUSDUCT' = 'WALL';
-                  if (d?.items?.some((it: any) => getSocketCategoryLocal(it.product_type, it.structure) === 'BUSDUCT')) {
-                    cat = 'BUSDUCT';
-                  } else if (d?.items?.some((it: any) => getSocketCategoryLocal(it.product_type, it.structure) === 'RISER')) {
-                    cat = 'RISER';
-                  }
-
                   let tabsList: string[] = [];
                   if (cat === 'RISER') {
                     tabsList = [
