@@ -675,7 +675,7 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
           String(idx + 1).padStart(2, '0'),
           item.product_type || item.structure || '',
           isCv ? '스테인리스강판(SUS)' : '아연도금강판(GI)',
-          isCv ? 380 : 1100,
+          isCv ? 380 : 1000,
           isCv ? 190 : 175,
           1,
           isCv ? '0.5 ㎜ 이상' : '1.0 ㎜ 이상'

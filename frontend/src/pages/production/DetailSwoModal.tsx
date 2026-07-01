@@ -1099,7 +1099,7 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                                 <td className="px-2 py-1.5 border-r font-mono">{idx + 1}</td>
                                 <td className="px-2 py-1.5 border-r font-medium">{item.product_type || item.structure}</td>
                                 <td className="px-2 py-1.5 border-r">{isCv ? 'SUS (스테인리스)' : 'GI (아연도금강판)'}</td>
-                                <td className="px-2 py-1.5 border-r font-bold text-indigo-700">{isCv ? '380 mm' : '1,100 mm'}</td>
+                                <td className="px-2 py-1.5 border-r font-bold text-indigo-700">{isCv ? '380 mm' : '1,000 mm'}</td>
                                 <td className="px-2 py-1.5 border-r font-bold text-indigo-700">{isCv ? '190 mm' : '175 mm'}</td>
                                 <td className="px-2 py-1.5 border-r text-gray-500">{isCv ? '0.5T 이상' : '1.0T 이상'}</td>
                                 <td className="px-2 py-1 font-semibold">1</td>
