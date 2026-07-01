@@ -393,13 +393,21 @@ export async function inventoryRoutes(app: FastifyInstance) {
 
     // 이미 반영되었는지 확인
     const logCheck = await pool.query(
-      `SELECT log_id, inventory_applied FROM process_log WHERE log_id = $1`,
+      `SELECT pl.log_id, pl.inventory_applied, pl.process_code, pl.raw_material_inputs, pl.wo_id, pl.worker_id, pl.worker_names,
+              pl.produced_qty, pl.weighed_loss,
+              wo.item_id as output_item_id, wo.lot_number as wo_lot_number,
+              im.unit as output_unit
+       FROM process_log pl
+       LEFT JOIN work_order wo ON wo.wo_id = pl.wo_id
+       LEFT JOIN item_master im ON im.item_id = wo.item_id
+       WHERE pl.log_id = $1`,
       [body.log_id]
     );
     if (logCheck.rows.length === 0) {
       return reply.status(404).send({ error: 'Not Found', message: '공정 로그를 찾을 수 없습니다.' });
     }
-    if (logCheck.rows[0].inventory_applied) {
+    const logRow = logCheck.rows[0];
+    if (logRow.inventory_applied) {
       return reply.status(400).send({ error: 'Bad Request', message: '이미 재고 반영된 공정 로그입니다.' });
     }
 
@@ -410,47 +418,202 @@ export async function inventoryRoutes(app: FastifyInstance) {
       const txnDate = new Date().toISOString().slice(0, 10);
       const createdTxns: unknown[] = [];
 
-      // 1. 투입 자재 출고 (OUT)
-      if (body.input_items && body.input_items.length > 0) {
-        for (const input of body.input_items) {
-          const r = await client.query(
-            `INSERT INTO inventory_transaction
-              (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id, ref_lot_number, worker)
-             VALUES ($1, $2, 'OUT', $3, $4, '공정투입', $5, $6, $7)
-             RETURNING *`,
-            [input.item_id, input.lot_id || null, txnDate, input.qty,
-             body.wo_id || null, body.lot_number || null, body.worker || null]
-          );
-          createdTxns.push(r.rows[0]);
+      const processCode = logRow.process_code;
+      const woId = logRow.wo_id;
+      const woLotNumber = logRow.wo_lot_number;
+      const outputItemId = logRow.output_item_id;
+      const outputQty = Number(logRow.produced_qty || body.output_qty || 0);
+      const lossQty = Number(logRow.weighed_loss || body.loss_qty || 0);
+      const outputUnit = logRow.output_unit || 'kg';
+
+      let workerName = '';
+      if (logRow.worker_names) {
+        try {
+          const parsed = JSON.parse(logRow.worker_names);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            workerName = parsed[0];
+          } else if (typeof parsed === 'string') {
+            workerName = parsed;
+          }
+        } catch {
+          workerName = logRow.worker_names;
         }
       }
 
-      // 2. 산출물 입고 (IN)
-      if (body.output_item_id && body.output_qty && body.output_qty > 0) {
-        const r = await client.query(
-          `INSERT INTO inventory_transaction
-            (item_id, txn_type, txn_date, qty, purpose, ref_wo_id, ref_lot_number, worker)
-           VALUES ($1, 'IN', $2, $3, '공정산출', $4, $5, $6)
-           RETURNING *`,
-          [body.output_item_id, txnDate, body.output_qty,
-           body.wo_id || null, body.lot_number || null, body.worker || null]
-        );
-        createdTxns.push(r.rows[0]);
-      }
+      if (processCode === 'MIX') {
+        // ─── 배합 공정 전용 재고 연계 로직 ───
+        let rawInputs: Array<{ item_id: number; qty: number }> = [];
+        if (logRow.raw_material_inputs) {
+          try {
+            const parsed = JSON.parse(logRow.raw_material_inputs);
+            if (Array.isArray(parsed)) {
+              rawInputs = parsed;
+            }
+          } catch {
+            rawInputs = [];
+          }
+        }
+        const inputAllocations: Array<{ item_id: number; lot_id: number; qty: number }> = [];
 
-      // 3. 로스 기록 (LOSS)
-      if (body.loss_qty && body.loss_qty > 0 && body.input_items && body.input_items.length > 0) {
-        // 로스는 첫번째 투입 품목 기준으로 기록
-        const firstInput = body.input_items[0];
-        const r = await client.query(
-          `INSERT INTO inventory_transaction
-            (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id, ref_lot_number, worker)
-           VALUES ($1, $2, 'LOSS', $3, $4, '공정로스', $5, $6, $7)
-           RETURNING *`,
-          [firstInput.item_id, firstInput.lot_id || null, txnDate, body.loss_qty,
-           body.wo_id || null, body.lot_number || null, body.worker || null]
-        );
-        createdTxns.push(r.rows[0]);
+        // A. 원재료 출고 및 LOT 잔량 차감 (FIFO 선입선출)
+        for (const input of rawInputs) {
+          const itemId = input.item_id;
+          const requiredQty = Number(input.qty);
+
+          if (requiredQty <= 0) continue;
+
+          // 가용 LOT 목록 조회 (FIFO)
+          const lotsRes = await client.query(
+            `SELECT lot_id, lot_number, qty, remaining_qty
+             FROM lot_transaction
+             WHERE item_id = $1 AND status = 'ACTIVE' AND COALESCE(remaining_qty, qty) > 0
+             ORDER BY created_at ASC`,
+            [itemId]
+          );
+
+          let remainingNeed = requiredQty;
+          for (const lot of lotsRes.rows) {
+            if (remainingNeed <= 0) break;
+
+            const available = parseFloat(lot.remaining_qty ?? lot.qty);
+            const allocate = Math.min(available, remainingNeed);
+
+            // 1. lot_transaction remaining_qty 감산
+            await client.query(
+              `UPDATE lot_transaction
+               SET remaining_qty = GREATEST(0, remaining_qty - $1),
+                   status = CASE WHEN remaining_qty - $1 <= 0 THEN 'SHIPPED' ELSE status END
+               WHERE lot_id = $2`,
+              [allocate, lot.lot_id]
+            );
+
+            // 2. inventory_transaction OUT 기록
+            const r = await client.query(
+              `INSERT INTO inventory_transaction
+                (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id, ref_lot_number, worker)
+               VALUES ($1, $2, 'OUT', $3, $4, '공정투입', $5, $6, $7)
+               RETURNING *`,
+              [itemId, lot.lot_id, txnDate, allocate, woId, woLotNumber || null, workerName || null]
+            );
+            createdTxns.push(r.rows[0]);
+            inputAllocations.push({ item_id: itemId, lot_id: lot.lot_id, qty: allocate });
+
+            remainingNeed -= allocate;
+          }
+
+          // 만약 가용 LOT 잔량이 부족해도, 남은 수량은 무LOT 혹은 기존 마지막 LOT에 임의 차감하여 이력은 남김
+          if (remainingNeed > 0) {
+            const r = await client.query(
+              `INSERT INTO inventory_transaction
+                (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id, ref_lot_number, worker)
+               VALUES ($1, NULL, 'OUT', $2, $3, '공정투입(LOT부족)', $4, $5, $6)
+               RETURNING *`,
+              [itemId, txnDate, remainingNeed, woId, woLotNumber || null, workerName || null]
+            );
+            createdTxns.push(r.rows[0]);
+          }
+        }
+
+        // B. 배합물 산출 LOT 생성 (lot_transaction 입고)
+        let outputLotId: number | null = null;
+        if (outputItemId && outputQty > 0) {
+          const lotRes = await client.query(
+            `INSERT INTO lot_transaction (lot_number, lot_type, item_id, qty, remaining_qty, unit, status, wo_id)
+             VALUES ($1, 'PRODUCTION', $2, $3, $3, $4, 'ACTIVE', $5)
+             ON CONFLICT (lot_number) DO UPDATE SET qty = lot_transaction.qty + $3, remaining_qty = lot_transaction.remaining_qty + $3
+             RETURNING lot_id`,
+            [woLotNumber || `MIX-${body.log_id}`, 'SA', outputItemId, outputQty, outputUnit, woId]
+          );
+          outputLotId = lotRes.rows[0]?.lot_id;
+
+          // inventory_transaction IN 기록
+          const r = await client.query(
+            `INSERT INTO inventory_transaction
+              (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id, ref_lot_number, worker)
+             VALUES ($1, $2, 'IN', $3, $4, '공정산출', $5, $6, $7)
+             RETURNING *`,
+            [outputItemId, outputLotId, txnDate, outputQty, woId, woLotNumber || null, workerName || null]
+          );
+          createdTxns.push(r.rows[0]);
+        }
+
+        // C. 배합 로스 기록
+        if (lossQty > 0 && inputAllocations.length > 0) {
+          const firstAlloc = inputAllocations[0];
+          const r = await client.query(
+            `INSERT INTO inventory_transaction
+              (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id, ref_lot_number, worker)
+             VALUES ($1, $2, 'LOSS', $3, $4, '공정로스', $5, $6, $7)
+             RETURNING *`,
+            [firstAlloc.item_id, firstAlloc.lot_id, txnDate, lossQty, woId, woLotNumber || null, workerName || null]
+          );
+          createdTxns.push(r.rows[0]);
+        }
+
+      } else {
+        // ─── 타 공정 (압출/재단/조립 등) 기존 범용 로직 ───
+        // 1. 투입 자재 출고 (OUT)
+        if (body.input_items && body.input_items.length > 0) {
+          for (const input of body.input_items) {
+            // 타 공정 자재 차감 시에도 lot_transaction.remaining_qty 차감 적용
+            if (input.lot_id) {
+              await client.query(
+                `UPDATE lot_transaction
+                 SET remaining_qty = GREATEST(0, remaining_qty - $1),
+                     status = CASE WHEN remaining_qty - $1 <= 0 THEN 'SHIPPED' ELSE status END
+                 WHERE lot_id = $2`,
+                [input.qty, input.lot_id]
+              );
+            }
+            const r = await client.query(
+              `INSERT INTO inventory_transaction
+                (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id, ref_lot_number, worker)
+               VALUES ($1, $2, 'OUT', $3, $4, '공정투입', $5, $6, $7)
+               RETURNING *`,
+              [input.item_id, input.lot_id || null, txnDate, input.qty,
+               woId || null, woLotNumber || null, workerName || null]
+            );
+            createdTxns.push(r.rows[0]);
+          }
+        }
+
+        // 2. 산출물 입고 (IN)
+        if (body.output_item_id && body.output_qty && body.output_qty > 0) {
+          // 타 공정 생산 입고 시에도 lot_transaction 생성
+          let outputLotId: number | null = null;
+          const lotRes = await client.query(
+            `INSERT INTO lot_transaction (lot_number, lot_type, item_id, qty, remaining_qty, unit, status, wo_id)
+             VALUES ($1, 'PRODUCTION', $2, $3, $3, $4, 'ACTIVE', $5)
+             ON CONFLICT (lot_number) DO UPDATE SET qty = lot_transaction.qty + $3, remaining_qty = lot_transaction.remaining_qty + $3
+             RETURNING lot_id`,
+            [woLotNumber || `PROD-${body.log_id}`, 'SA', body.output_item_id, body.output_qty, outputUnit, woId]
+          );
+          outputLotId = lotRes.rows[0]?.lot_id;
+
+          const r = await client.query(
+            `INSERT INTO inventory_transaction
+              (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id, ref_lot_number, worker)
+             VALUES ($1, $2, 'IN', $3, $4, '공정산출', $5, $6, $7)
+             RETURNING *`,
+            [body.output_item_id, outputLotId, txnDate, body.output_qty,
+             woId || null, woLotNumber || null, workerName || null]
+          );
+          createdTxns.push(r.rows[0]);
+        }
+
+        // 3. 로스 기록 (LOSS)
+        if (body.loss_qty && body.loss_qty > 0 && body.input_items && body.input_items.length > 0) {
+          const firstInput = body.input_items[0];
+          const r = await client.query(
+            `INSERT INTO inventory_transaction
+              (item_id, lot_id, txn_type, txn_date, qty, purpose, ref_wo_id, ref_lot_number, worker)
+             VALUES ($1, $2, 'LOSS', $3, $4, '공정로스', $5, $6, $7)
+             RETURNING *`,
+            [firstInput.item_id, firstInput.lot_id || null, txnDate, body.loss_qty,
+             woId || null, woLotNumber || null, workerName || null]
+          );
+          createdTxns.push(r.rows[0]);
+        }
       }
 
       // 4. process_log.inventory_applied = true 업데이트

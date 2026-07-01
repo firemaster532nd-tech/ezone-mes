@@ -6,6 +6,7 @@ export async function processExecutionRoutes(app: FastifyInstance) {
   // Migration: add worker_ids and worker_names columns, expand shift column
   await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS worker_ids TEXT`);
   await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS worker_names TEXT`);
+  await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS raw_material_inputs TEXT`);
   await pool.query(`ALTER TABLE process_log ALTER COLUMN shift TYPE VARCHAR(20)`);
   await pool.query(`ALTER TABLE process_log DROP CONSTRAINT IF EXISTS process_log_shift_check`);
 
@@ -104,7 +105,7 @@ export async function processExecutionRoutes(app: FastifyInstance) {
   // POST /api/process-logs - 공정 로그 생성
   app.post('/api/process-logs', async (request, reply) => {
     const body = request.body as Record<string, unknown>;
-    const { wo_id, process_code, shift, worker_id, planned_qty, worker_ids, worker_names } = body;
+    const { wo_id, process_code, shift, worker_id, planned_qty, worker_ids, worker_names, raw_material_inputs } = body;
 
     // shift can be comma-separated (e.g. "AM,PM") or single value
     const effectiveShift = shift as string || '';
@@ -123,11 +124,12 @@ export async function processExecutionRoutes(app: FastifyInstance) {
     const effectiveWorkerId = worker_id || (workerIdsArr.length > 0 ? workerIdsArr[0] : null);
     const workerIdsJson = workerIdsArr.length > 0 ? JSON.stringify(workerIdsArr) : null;
     const workerNamesJson = Array.isArray(worker_names) ? JSON.stringify(worker_names) : null;
+    const rawMaterialInputsJson = raw_material_inputs ? JSON.stringify(raw_material_inputs) : null;
 
     const result = await pool.query(
-      `INSERT INTO process_log (wo_id, process_code, shift, worker_id, planned_qty, worker_ids, worker_names)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [wo_id, process_code, effectiveShift, effectiveWorkerId || null, planned_qty || null, workerIdsJson, workerNamesJson]
+      `INSERT INTO process_log (wo_id, process_code, shift, worker_id, planned_qty, worker_ids, worker_names, raw_material_inputs)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [wo_id, process_code, effectiveShift, effectiveWorkerId || null, planned_qty || null, workerIdsJson, workerNamesJson, rawMaterialInputsJson]
     );
 
     return { data: result.rows[0] };
@@ -300,6 +302,32 @@ export async function processExecutionRoutes(app: FastifyInstance) {
          VALUES ($1, 'COMPLETE', $2, $3, $4)`,
         [logId, log.worker_id, produced_qty || 0, remarks || null]
       );
+
+      // 배합 공정(MIX) 완료 시 사규 C601-1에 맞추어 3대 중간검사 대기 데이터 자동 삽입
+      if (log.process_code === 'MIX') {
+        const batchCount = Math.max(1, Math.round(Number(produced_qty || log.planned_qty || 300) / 300));
+        
+        // 1. 배합 중량 (1batch 300kg ± 15kg)
+        await client.query(
+          `INSERT INTO self_inspection (wo_id, check_time, check_category, check_point, standard_value, tolerance, worker, remarks)
+           VALUES ($1, NOW(), 'DIM', '배합 중량', $2, $3, $4, '배합공정 완료 후 중간검사 자동인계')`,
+          [log.wo_id, 300 * batchCount, 15 * batchCount, log.worker_name]
+        );
+
+        // 2. 배합 온도 (110℃ ± 10℃)
+        await client.query(
+          `INSERT INTO self_inspection (wo_id, check_time, check_category, check_point, standard_value, tolerance, worker, remarks)
+           VALUES ($1, NOW(), 'TEMP', '배합 온도', 110, 10, $2, '배합공정 완료 후 중간검사 자동인계')`,
+          [log.wo_id, log.worker_name]
+        );
+
+        // 3. 외관 및 이물질 (이물질 혼입이 없으며, 배합이 균일할 것)
+        await client.query(
+          `INSERT INTO self_inspection (wo_id, check_time, check_category, check_point, standard_value, tolerance, worker, remarks)
+           VALUES ($1, NOW(), 'VISUAL', '이물질 혼입 및 배합 상태', 1, 0, $2, '배합공정 완료 후 중간검사 자동인계')`,
+          [log.wo_id, log.worker_name]
+        );
+      }
 
       await client.query('COMMIT');
       const updated = await pool.query(

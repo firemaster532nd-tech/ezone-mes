@@ -685,6 +685,55 @@ function CreateProcessLogModal({ onClose, onCreated }: { onClose: () => void; on
   }, [form.process_code]);
 
   const selectedWo = workOrders.find((wo) => wo.wo_id === parseInt(form.wo_id));
+  const [rmItems, setRmItems] = useState<any[]>([]);
+  const [rawMaterials, setRawMaterials] = useState<Array<{ item_id: number; item_name: string; qty: number }>>([]);
+
+  useEffect(() => {
+    api.get<{ data: any[] }>('/items?category=RM').then((r) => setRmItems(r.data));
+  }, []);
+
+  useEffect(() => {
+    if (form.process_code === 'MIX' && selectedWo && rmItems.length > 0) {
+      let lotItems: any[] = [];
+      try {
+        const parsed = JSON.parse(selectedWo.input_lot_numbers || '[]');
+        if (Array.isArray(parsed)) lotItems = parsed;
+      } catch {}
+
+      // Match with rmItems to find item_id
+      const initialInputs = lotItems.map(lot => {
+        const matched = rmItems.find(rm => rm.item_code === lot.item_code || rm.item_name === lot.item_name);
+        return {
+          item_id: matched ? matched.item_id : 0,
+          item_name: matched ? matched.item_name : (lot.item_name || lot.item_code || ''),
+          qty: lot.qty || 0,
+        };
+      }).filter(x => x.item_id > 0);
+
+      // If empty, pre-populate standard recipe for MIX based on planned_qty (default 300kg)
+      if (initialInputs.length === 0) {
+        const plannedVal = parseFloat(form.planned_qty) || 300;
+        const batchCount = Math.max(1, Math.round(plannedVal / 300));
+        const standardList = [
+          { code: 'RM-MB', name: '난연컴파운드(PE3005MB)', stdQty: 210 },
+          { code: 'RM-EG50', name: '팽창흑연 #50', stdQty: 60 },
+          { code: 'RM-EA', name: 'EVA-EA33045', stdQty: 15 },
+          { code: 'RM-EP', name: 'EVA-EP100', stdQty: 15 }
+        ];
+        const prepopulated = standardList.map(std => {
+          const matched = rmItems.find(rm => rm.item_code === std.code);
+          return {
+            item_id: matched ? matched.item_id : 0,
+            item_name: matched ? matched.item_name : std.name,
+            qty: std.stdQty * batchCount,
+          };
+        }).filter(x => x.item_id > 0);
+        setRawMaterials(prepopulated);
+      } else {
+        setRawMaterials(initialInputs);
+      }
+    }
+  }, [selectedWo, rmItems, form.planned_qty, form.process_code]);
 
   useEffect(() => {
     if (selectedWo) {
@@ -710,6 +759,7 @@ function CreateProcessLogModal({ onClose, onCreated }: { onClose: () => void; on
         worker_ids: selectedWorkerIds,
         worker_names: workerNames,
         planned_qty: form.planned_qty ? parseFloat(form.planned_qty) : undefined,
+        raw_material_inputs: form.process_code === 'MIX' ? rawMaterials : undefined,
       });
       onCreated();
     } catch {
@@ -896,6 +946,82 @@ function CreateProcessLogModal({ onClose, onCreated }: { onClose: () => void; on
               className="mt-1 block w-full rounded-md border px-3 py-2 text-shop-sm"
             />
           </label>
+
+          {/* 배합 공정 원재료 동적 투입 설정 */}
+          {form.process_code === 'MIX' && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50/50 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-shop-sm font-bold text-amber-900 flex items-center gap-1">
+                  <Scale size={16} className="text-amber-700" />
+                  원재료 투입 설정 (실제 투입량)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (rmItems.length > 0) {
+                      setRawMaterials(prev => [...prev, { item_id: rmItems[0].item_id, item_name: rmItems[0].item_name, qty: 0 }]);
+                    }
+                  }}
+                  className="px-2 py-1 bg-amber-600 text-white rounded text-xs font-semibold hover:bg-amber-700 flex items-center gap-1 cursor-pointer"
+                >
+                  <Plus size={12} /> 재료 추가
+                </button>
+              </div>
+
+              {rawMaterials.length > 0 ? (
+                <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
+                  {rawMaterials.map((mat, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <select
+                        value={mat.item_id}
+                        onChange={(e) => {
+                          const id = parseInt(e.target.value);
+                          const matched = rmItems.find(rm => rm.item_id === id);
+                          setRawMaterials(prev => prev.map((item, idx) => idx === index ? { ...item, item_id: id, item_name: matched ? matched.item_name : '' } : item));
+                        }}
+                        className="flex-1 rounded-md border border-amber-200 bg-white px-2 py-1.5 text-xs"
+                      >
+                        {rmItems.map(item => (
+                          <option key={item.item_id} value={item.item_id}>
+                            {item.item_name} ({item.item_code})
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex items-center gap-1.5 w-[120px]">
+                        <input
+                          type="number"
+                          value={mat.qty || ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            setRawMaterials(prev => prev.map((item, idx) => idx === index ? { ...item, qty: val } : item));
+                          }}
+                          className="w-full rounded-md border border-amber-200 bg-white px-2 py-1.5 text-xs text-right"
+                          placeholder="0"
+                          step="0.1"
+                          required
+                        />
+                        <span className="text-xs text-gray-500">kg</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setRawMaterials(prev => prev.filter((_, idx) => idx !== index))}
+                        className="p-1.5 text-red-500 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center text-xs text-gray-500 py-3 bg-white rounded border border-dashed border-amber-200">
+                  투입할 원재료가 설정되지 않았습니다.
+                </div>
+              )}
+              <div className="text-[10px] text-amber-700 bg-amber-100/50 rounded px-2.5 py-1.5">
+                💡 <strong>사규 배합비 기준 (1배치 300kg):</strong> 난연 PE 210kg / 팽창흑연 60kg / EVA EA 15kg / EVA EP 15kg
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="px-4 py-2 border rounded-md text-shop-sm hover:bg-gray-50">

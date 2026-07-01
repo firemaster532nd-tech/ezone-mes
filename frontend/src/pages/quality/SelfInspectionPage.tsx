@@ -74,6 +74,7 @@ export function SelfInspectionPage() {
   const [data, setData] = useState<SelfInspection[]>([]);
   const [processFilter, setProcessFilter] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [modifyingItem, setModifyingItem] = useState<SelfInspection | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const fetchData = () => {
@@ -192,11 +193,12 @@ export function SelfInspectionPage() {
               <th className="px-3 py-3 text-center font-medium text-gray-500">판정</th>
               <th className="px-3 py-3 text-left font-medium text-gray-500">작업자</th>
               <th className="px-3 py-3 text-left font-medium text-gray-500">시간</th>
+              <th className="px-3 py-3 text-center font-medium text-gray-500 w-24">작업</th>
             </tr>
           </thead>
           <tbody>
             {data.length === 0 ? (
-              <tr><td colSpan={11} className="px-4 py-12 text-center text-gray-400">등록된 자주검사가 없습니다.</td></tr>
+              <tr><td colSpan={12} className="px-4 py-12 text-center text-gray-400">등록된 자주검사가 없습니다.</td></tr>
             ) : (
               data.map((si) => (
                 <tr key={si.self_insp_id} className={cn(
@@ -236,6 +238,19 @@ export function SelfInspectionPage() {
                   <td className="px-3 py-3 text-xs text-gray-500">
                     {si.check_time ? new Date(si.check_time).toLocaleString('ko-KR', { hour: '2-digit', minute: '2-digit' }) : '-'}
                   </td>
+                  <td className="px-3 py-3 text-center">
+                    <button
+                      onClick={() => setModifyingItem(si)}
+                      className={cn(
+                        "px-2 py-0.5 rounded text-xs font-semibold cursor-pointer border",
+                        si.measured_value == null
+                          ? "bg-amber-500 text-white border-amber-600 hover:bg-amber-600"
+                          : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"
+                      )}
+                    >
+                      {si.measured_value == null ? '입력 대기' : '수정'}
+                    </button>
+                  </td>
                 </tr>
               ))
             )}
@@ -247,6 +262,14 @@ export function SelfInspectionPage() {
         <CreateSelfInspectionModal
           onClose={() => setShowCreate(false)}
           onSaved={() => { setShowCreate(false); fetchData(); }}
+        />
+      )}
+
+      {modifyingItem && (
+        <ModifySelfInspectionModal
+          item={modifyingItem}
+          onClose={() => setModifyingItem(null)}
+          onSaved={() => { setModifyingItem(null); fetchData(); }}
         />
       )}
     </div>
@@ -501,6 +524,147 @@ function CreateSelfInspectionModal({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ========== Modify Self Inspection Modal ========== */
+function ModifySelfInspectionModal({
+  item,
+  onClose,
+  onSaved,
+}: {
+  item: SelfInspection;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [measuredValue, setMeasuredValue] = useState(item.measured_value?.toString() || '');
+  const [worker, setWorker] = useState(item.worker || '');
+  const [remarks, setRemarks] = useState(item.remarks || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (measuredValue === '') return alert('측정값을 입력해주세요.');
+
+    setSaving(true);
+    try {
+      const val = parseFloat(measuredValue);
+      // calculate is_ok
+      let isOk: boolean | null = null;
+      if (item.standard_value != null) {
+        const tolerance = item.tolerance ?? 0;
+        if (item.standard_value === 1 && tolerance === 0) {
+          isOk = val >= 1;
+        } else {
+          isOk = Math.abs(val - item.standard_value) <= tolerance;
+        }
+      }
+
+      await api.patch(`/self-inspections/${item.self_insp_id}`, {
+        measured_value: val,
+        is_ok: isOk,
+        worker: worker || null,
+        remarks: remarks || null,
+      });
+      onSaved();
+    } catch {
+      alert('저장 실패');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const isVisual = item.check_point.includes('외관') || item.check_point.includes('이물질') || item.check_category === 'VISUAL';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <form onSubmit={handleSubmit} className="bg-white rounded-card shadow-xl w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <h2 className="text-shop-lg font-bold">검사 측정값 입력</h2>
+        <div className="bg-gray-50 rounded-lg p-3 space-y-1.5 text-xs text-gray-700">
+          <div><span className="text-gray-400">작업지시:</span> <span className="font-mono font-medium">{item.wo_number}</span></div>
+          <div><span className="text-gray-400">검사항목:</span> <span className="font-medium">{item.check_point}</span></div>
+          <div>
+            <span className="text-gray-400">기준규격:</span>{' '}
+            <span className="font-semibold text-blue-700">
+              {isVisual ? 'OK 기준' : `${item.standard_value} ± ${item.tolerance}`}
+            </span>
+          </div>
+        </div>
+
+        <label className="block">
+          <span className="text-shop-sm font-medium text-gray-700">측정값 입력</span>
+          {isVisual ? (
+            <div className="flex gap-2 mt-1">
+              <button
+                type="button"
+                onClick={() => setMeasuredValue('1')}
+                className={cn(
+                  'flex-1 py-2 rounded text-shop-sm font-bold border transition-colors',
+                  measuredValue === '1' ? 'bg-green-500 text-white border-green-500' : 'bg-white text-green-600 border-green-300 hover:bg-green-50'
+                )}
+              >
+                OK (합격)
+              </button>
+              <button
+                type="button"
+                onClick={() => setMeasuredValue('0')}
+                className={cn(
+                  'flex-1 py-2 rounded text-shop-sm font-bold border transition-colors',
+                  measuredValue === '0' ? 'bg-red-500 text-white border-red-500' : 'bg-white text-red-600 border-red-300 hover:bg-red-50'
+                )}
+              >
+                NG (불합격)
+              </button>
+            </div>
+          ) : (
+            <input
+              type="number"
+              step="any"
+              value={measuredValue}
+              onChange={(e) => setMeasuredValue(e.target.value)}
+              className="mt-1 block w-full rounded-md border px-3 py-2 text-shop-sm text-right"
+              placeholder="실측값 입력"
+              required
+            />
+          )}
+        </label>
+
+        <label className="block">
+          <span className="text-shop-sm font-medium text-gray-700">검사자</span>
+          <input
+            type="text"
+            value={worker}
+            onChange={(e) => setWorker(e.target.value)}
+            className="mt-1 block w-full rounded-md border px-3 py-2 text-shop-sm"
+            placeholder="검사자 이름"
+            required
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-shop-sm font-medium text-gray-700">비고 (선택)</span>
+          <textarea
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+            className="mt-1 block w-full rounded-md border px-3 py-2 text-shop-sm h-20 resize-none"
+            placeholder="특이사항 입력"
+          />
+        </label>
+
+        <div className="flex justify-end gap-3 pt-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 border rounded-md text-shop-sm">
+            취소
+          </button>
+          <button
+            type="submit"
+            disabled={saving || measuredValue === ''}
+            className="px-4 py-2 bg-process-mix text-white rounded-md text-shop-sm font-medium hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? '저장 중...' : '저장'}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }
