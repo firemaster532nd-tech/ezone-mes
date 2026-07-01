@@ -54,11 +54,6 @@ const DAILY_ITEMS = [
   { item_name:'발포소켓 몸체(100)(210H)', diameter_mm:100, spec:'210H' },
   { item_name:'발포소켓 몸체(75)',       diameter_mm:75,  spec:'몸통' },
   { item_name:'발포소켓 몸체(50)',       diameter_mm:50,  spec:'몸통' },
-  { item_name:'보호철판 / 100',          diameter_mm:100, spec:'보호철판' },
-  { item_name:'보호철판 / 75',           diameter_mm:75,  spec:'보호철판' },
-  { item_name:'보호철판 / 50',           diameter_mm:50,  spec:'보호철판' },
-  { item_name:'볼트,너트,와샤',          diameter_mm:null, spec:'-' },
-  { item_name:'시트(압출)',              diameter_mm:null, spec:'-' },
 ];
 
 function qtyColor(qty: number) {
