@@ -78,6 +78,7 @@ export function TbmPage() {
   const [loading, setLoading] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [workers, setWorkers] = useState<WorkerOption[]>([]);
 
   // Editable fields
   const [editData, setEditData] = useState({
@@ -169,6 +170,15 @@ export function TbmPage() {
   }, [date, session, fetchIssues]);
 
   useEffect(() => { fetchMeeting(); }, [fetchMeeting]);
+
+  useEffect(() => {
+    api.get<{ data: WorkerOption[] }>('/workers')
+      .then((res) => {
+        const activeWorkers = res.data.filter((w: any) => w.is_active !== false);
+        setWorkers(activeWorkers);
+      })
+      .catch(() => {});
+  }, []);
 
   const toggleAttendance = (id: number) => {
     setAttendees((prev) => prev.map((a) =>
@@ -356,7 +366,13 @@ export function TbmPage() {
             <div className="flex gap-2">
               <button
                 onClick={() => navigate(`/production/tbm-print/${meeting.tbm_id}`)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-shop-sm border rounded-md hover:bg-gray-50"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-shop-sm border border-green-200 text-green-700 bg-green-50 rounded-md hover:bg-green-100"
+              >
+                📄 PDF 변환 및 출력
+              </button>
+              <button
+                onClick={() => navigate(`/production/tbm-print/${meeting.tbm_id}`)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-shop-sm border rounded-md hover:bg-gray-50 bg-white"
               >
                 <Printer className="h-4 w-4" /> 인쇄
               </button>
@@ -400,11 +416,18 @@ export function TbmPage() {
                 <div>
                   <label className="text-shop-sm text-gray-500 block mb-1">진행자</label>
                   {editMode ? (
-                    <input
+                    <select
                       value={editData.conductor}
                       onChange={(e) => setEditData({ ...editData, conductor: e.target.value })}
-                      className="w-full px-3 py-2 border rounded-md text-shop-sm"
-                    />
+                      className="w-full px-3 py-2 border rounded-md text-shop-sm bg-white"
+                    >
+                      <option value="">선택하세요</option>
+                      {workers.map((w) => (
+                        <option key={`${w.worker_name}|${w.department || ''}`} value={w.worker_name}>
+                          {w.worker_name} {w.department ? `(${w.department})` : ''}
+                        </option>
+                      ))}
+                    </select>
                   ) : (
                     <p className="font-medium">{meeting.conductor}</p>
                   )}
@@ -748,6 +771,7 @@ export function TbmPage() {
         <CreateTbmModal
           defaultDate={date}
           defaultSession={session}
+          workersList={workers}
           onClose={() => setShowCreateModal(false)}
           onCreated={() => { setShowCreateModal(false); fetchMeeting(); }}
         />
@@ -912,8 +936,9 @@ function IssueCard({ issue, onStatusChange, onDelete, onResolve, resolutionValue
 }
 
 /* ── Create Modal ── */
-function CreateTbmModal({ defaultDate, defaultSession, onClose, onCreated }: {
+function CreateTbmModal({ defaultDate, defaultSession, workersList, onClose, onCreated }: {
   defaultDate: string; defaultSession: string;
+  workersList: WorkerOption[];
   onClose: () => void; onCreated: () => void;
 }) {
   const [form, setForm] = useState({
@@ -926,33 +951,29 @@ function CreateTbmModal({ defaultDate, defaultSession, onClose, onCreated }: {
     work_topics: '',
     issue_topics: '',
   });
-  const [workers, setWorkers] = useState<WorkerOption[]>([]);
-  const [selectedWorkers, setSelectedWorkers] = useState<Set<string>>(new Set());
+  const [selectedAttendees, setSelectedAttendees] = useState<string[]>(Array(20).fill(''));
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    api.get<{ data: WorkerOption[] }>('/tbm/workers').then((res) => {
-      setWorkers(res.data);
-      setSelectedWorkers(new Set(res.data.map((w) => `${w.worker_name}|${w.department || ''}`)));
-    }).catch(() => {});
-  }, []);
-
-  const toggleWorker = (key: string) => {
-    setSelectedWorkers((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  };
+    if (workersList && workersList.length > 0) {
+      const initial = Array(20).fill('');
+      workersList.slice(0, 20).forEach((w, idx) => {
+        initial[idx] = `${w.worker_name}|${w.department || ''}`;
+      });
+      setSelectedAttendees(initial);
+    }
+  }, [workersList]);
 
   const handleSubmit = async () => {
-    if (!form.conductor.trim()) { alert('진행자를 입력해주세요.'); return; }
+    if (!form.conductor.trim()) { alert('진행자를 선택해주세요.'); return; }
     setSubmitting(true);
     try {
-      const workerList = Array.from(selectedWorkers).map((key) => {
-        const [name, dept] = key.split('|');
-        return { worker_name: name, department: dept || undefined };
-      });
+      const workerList = selectedAttendees
+        .filter((val) => val !== '')
+        .map((val) => {
+          const [name, dept] = val.split('|');
+          return { worker_name: name, department: dept || undefined };
+        });
       await api.post('/tbm', { ...form, workers: workerList });
       onCreated();
     } catch (err: unknown) {
@@ -963,9 +984,11 @@ function CreateTbmModal({ defaultDate, defaultSession, onClose, onCreated }: {
     }
   };
 
+  const selectedCount = selectedAttendees.filter(v => v !== '').length;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
+      <div className="bg-white rounded-lg shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto m-4">
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-lg font-semibold">새 TBM 작성</h2>
           <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
@@ -1009,12 +1032,18 @@ function CreateTbmModal({ defaultDate, defaultSession, onClose, onCreated }: {
           <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="text-shop-sm font-medium block mb-1">진행자</label>
-              <input
+              <select
                 value={form.conductor}
                 onChange={(e) => setForm({ ...form, conductor: e.target.value })}
-                placeholder="이름"
-                className="w-full px-3 py-2 border rounded-md text-shop-sm"
-              />
+                className="w-full px-3 py-2 border rounded-md text-shop-sm bg-white"
+              >
+                <option value="">선택하세요</option>
+                {workersList.map((w) => (
+                  <option key={`${w.worker_name}|${w.department || ''}`} value={w.worker_name}>
+                    {w.worker_name} {w.department ? `(${w.department})` : ''}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-shop-sm font-medium block mb-1">날씨</label>
@@ -1070,34 +1099,37 @@ function CreateTbmModal({ defaultDate, defaultSession, onClose, onCreated }: {
             />
           </div>
 
-          {/* Workers */}
+          {/* Workers Dropdowns */}
           <div>
-            <label className="text-shop-sm font-medium block mb-2">
-              참석 대상자 ({selectedWorkers.size}명 선택)
+            <label className="text-shop-sm font-medium block mb-2 text-gray-700">
+              참석자 지정 (드롭다운 최대 20명, 현재 {selectedCount}명 선택)
             </label>
-            {workers.length > 0 ? (
-              <div className="border rounded-md p-3 max-h-48 overflow-y-auto space-y-1">
-                {workers.map((w) => {
-                  const key = `${w.worker_name}|${w.department || ''}`;
-                  return (
-                    <label key={key} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
-                      <input
-                        type="checkbox"
-                        checked={selectedWorkers.has(key)}
-                        onChange={() => toggleWorker(key)}
-                        className="rounded"
-                      />
-                      <span className="text-shop-sm">{w.worker_name}</span>
-                      {w.department && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">{w.department}</span>
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-shop-sm text-gray-400">이전 TBM 기록이 없습니다. 생성 후 작업자를 추가하세요.</p>
-            )}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 border rounded-md p-3 bg-gray-50 max-h-60 overflow-y-auto">
+              {Array.from({ length: 20 }).map((_, idx) => (
+                <div key={idx} className="flex flex-col gap-1 bg-white p-2 rounded border border-gray-200">
+                  <span className="text-[10px] text-gray-400 font-semibold">참석자 {idx + 1}</span>
+                  <select
+                    value={selectedAttendees[idx]}
+                    onChange={(e) => {
+                      const next = [...selectedAttendees];
+                      next[idx] = e.target.value;
+                      setSelectedAttendees(next);
+                    }}
+                    className="w-full px-2 py-1 border rounded text-[11px] bg-white cursor-pointer"
+                  >
+                    <option value="">선택 안함</option>
+                    {workersList.map((w) => {
+                      const val = `${w.worker_name}|${w.department || ''}`;
+                      return (
+                        <option key={val} value={val}>
+                          {w.worker_name} {w.department ? `(${w.department})` : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 

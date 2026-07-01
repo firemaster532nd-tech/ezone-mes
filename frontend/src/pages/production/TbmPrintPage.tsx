@@ -79,7 +79,13 @@ export function TbmPrintPage() {
         </button>
         <button
           onClick={() => window.print()}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-600 text-white rounded-md hover:bg-green-700 font-medium shadow-sm transition-colors"
+        >
+          📄 PDF 변환 및 출력
+        </button>
+        <button
+          onClick={() => window.print()}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border rounded-md hover:bg-gray-50 bg-white text-gray-700"
         >
           <Printer className="h-4 w-4" /> 인쇄
         </button>
@@ -98,16 +104,16 @@ export function TbmPrintPage() {
           <table className="border-collapse text-sm">
             <thead>
               <tr>
-                <th className="border px-4 py-1 bg-gray-50 font-medium">작성</th>
-                <th className="border px-4 py-1 bg-gray-50 font-medium">검토</th>
-                <th className="border px-4 py-1 bg-gray-50 font-medium">승인</th>
+                <th className="border px-4 py-1 bg-gray-50 font-medium">작성자</th>
+                <th className="border px-4 py-1 bg-gray-50 font-medium">검토자</th>
+                <th className="border px-4 py-1 bg-gray-50 font-medium">승인자</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td className="border px-4 py-4 h-12"></td>
-                <td className="border px-4 py-4 h-12"></td>
-                <td className="border px-4 py-4 h-12"></td>
+                <td className="border px-4 py-4 h-12 w-20"></td>
+                <td className="border px-4 py-4 h-12 w-20"></td>
+                <td className="border px-4 py-4 h-12 w-20"></td>
               </tr>
             </tbody>
           </table>
