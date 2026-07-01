@@ -13,6 +13,7 @@ async function migrateFnStock() {
       diameter_mm INTEGER NOT NULL,
       spec        VARCHAR(30) NOT NULL,
       qty         INTEGER DEFAULT 0,
+      qty_semi    INTEGER DEFAULT 0,
       updated_at  TIMESTAMPTZ DEFAULT NOW()
     );
     CREATE TABLE IF NOT EXISTS fn_material_stock (
@@ -46,6 +47,7 @@ async function migrateFnStock() {
       lot_number  VARCHAR(50),
       worker_name TEXT,
       memo        TEXT,
+      prod_type   VARCHAR(10) DEFAULT 'FINISHED',
       created_at  TIMESTAMPTZ DEFAULT NOW()
     );
   `);
@@ -53,13 +55,18 @@ async function migrateFnStock() {
   // 2. 컬럼 추가 (반드시 인덱스보다 먼저)
   await pool.query(`ALTER TABLE fn_stock_tx ADD COLUMN IF NOT EXISTS lot_number     VARCHAR(50)`);
   await pool.query(`ALTER TABLE fn_stock_tx ADD COLUMN IF NOT EXISTS inspect_result VARCHAR(10)`);
+  await pool.query(`ALTER TABLE fn_finished_stock ADD COLUMN IF NOT EXISTS qty_semi INTEGER DEFAULT 0`);
+  await pool.query(`ALTER TABLE fn_daily_production ADD COLUMN IF NOT EXISTS prod_type VARCHAR(10) DEFAULT 'FINISHED'`);
 
   // 3. 인덱스 (컬럼이 존재하는 상태에서)
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_fn_finished ON fn_finished_stock(diameter_mm, spec)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_fn_material ON fn_material_stock(item_name, spec)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_fn_stock_tx_date ON fn_stock_tx(tx_date DESC)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_fn_stock_tx_lot  ON fn_stock_tx(lot_number)`);
-  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_fn_daily ON fn_daily_production(prod_date, item_name, spec)`);
+  
+  // uq_fn_daily 인덱스 재구성 (prod_type 포함)
+  await pool.query(`DROP INDEX IF EXISTS uq_fn_daily`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_fn_daily ON fn_daily_production(prod_date, item_name, spec, prod_type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_fn_daily_date ON fn_daily_production(prod_date DESC)`);
 
   // 4. 초기 데이터
@@ -74,7 +81,8 @@ async function migrateFnStock() {
       ('보호철판','100파이',5759,'ea'),('보호철판','75파이',1030,'ea'),
       ('보호철판','50파이',2876,'ea'),('볼트,너트,와샤','-',35700,'ea'),
       ('시트(재단)','100파이',1063,'ea'),('시트(재단)','75파이',13,'ea'),
-      ('시트(재단)','50파이',-533,'ea'),('시트(압출)','-',31,'ea')
+      ('시트(재단)','50파이',-533,'ea'),('시트(압출)','-',31,'ea'),
+      ('소켓','100파이',0,'ea'),('소켓','75파이',0,'ea'),('소켓','50파이',0,'ea')
     ON CONFLICT (item_name, spec) DO NOTHING;
   `);
 }
@@ -89,12 +97,23 @@ export async function fnStockRoutes(app: FastifyInstance) {
   app.get('/api/fn-stock/finished', { preHandler: requireAuth }, async () => {
     const r = await pool.query(`
       SELECT f.*,
+        COALESCE(
+          (
+            SELECT dp.lot_number FROM fn_daily_production dp
+            WHERE dp.diameter_mm = f.diameter_mm AND dp.spec = f.spec AND dp.prod_type = 'FINISHED' AND dp.lot_number IS NOT NULL
+            ORDER BY dp.prod_date DESC, dp.prod_id DESC LIMIT 1
+          ),
+          (
+            SELECT t.lot_number FROM fn_stock_tx t
+            WHERE t.stock_id = f.stock_id AND t.stock_type = 'FINISHED' AND t.tx_type = 'IN' AND t.lot_number IS NOT NULL
+            ORDER BY t.created_at DESC LIMIT 1
+          )
+        ) AS last_finished_lot,
         (
-          SELECT t.lot_number FROM fn_stock_tx t
-          WHERE t.stock_id = f.stock_id AND t.stock_type = 'FINISHED' AND t.tx_type = 'IN'
-            AND t.lot_number IS NOT NULL
-          ORDER BY t.created_at DESC LIMIT 1
-        ) AS last_lot_number,
+          SELECT dp.lot_number FROM fn_daily_production dp
+          WHERE dp.diameter_mm = f.diameter_mm AND dp.spec = f.spec AND dp.prod_type = 'SEMI' AND dp.lot_number IS NOT NULL
+          ORDER BY dp.prod_date DESC, dp.prod_id DESC LIMIT 1
+        ) AS last_semi_lot,
         (
           SELECT t.tx_date FROM fn_stock_tx t
           WHERE t.stock_id = f.stock_id AND t.stock_type = 'FINISHED' AND t.tx_type = 'IN'
@@ -181,15 +200,56 @@ export async function fnStockRoutes(app: FastifyInstance) {
         itemLabel = `발포소켓(${diameter_mm}파이 ${spec})`;
       } else if (stock_type === 'MATERIAL') {
         if (!item_name || !spec) return reply.code(400).send({ error: 'item_name, spec 필요' });
-        const r = await client.query(
-          `INSERT INTO fn_material_stock (item_name, spec, qty)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (item_name, spec) DO UPDATE SET qty = fn_material_stock.qty + $3, updated_at = NOW()
-           RETURNING stock_id`,
-          [item_name, spec, qty]
-        );
-        stockId = r.rows[0].stock_id;
-        itemLabel = `${item_name}(${spec})`;
+        if (item_name === '소켓') {
+          // 1. 소켓 재고 증가
+          const r1 = await client.query(
+            `INSERT INTO fn_material_stock (item_name, spec, qty)
+             VALUES ('소켓', $1, $2)
+             ON CONFLICT (item_name, spec) DO UPDATE SET qty = fn_material_stock.qty + $2, updated_at = NOW()
+             RETURNING stock_id`,
+            [spec, qty]
+          );
+          stockId = r1.rows[0].stock_id;
+          itemLabel = `소켓(${spec})`;
+
+          // 2. 평철(보호철판) 재고 동시 증가
+          const r2 = await client.query(
+            `INSERT INTO fn_material_stock (item_name, spec, qty)
+             VALUES ('보호철판', $1, $2)
+             ON CONFLICT (item_name, spec) DO UPDATE SET qty = fn_material_stock.qty + $2, updated_at = NOW()
+             RETURNING stock_id`,
+            [spec, qty]
+          );
+
+          // 3. 소켓 입고 트랜잭션 기록
+          await client.query(
+            `INSERT INTO fn_stock_tx
+               (tx_date, tx_type, stock_type, stock_id, item_name, spec, qty, lot_number, inspect_result, memo, created_by)
+             VALUES ($1,'IN','MATERIAL',$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [tx_date || new Date(), stockId, itemLabel, spec, qty, lot_number, inspect_result, memo || null, created_by || null]
+          );
+
+          // 4. 평철(보호철판) 입고 트랜잭션 기록
+          await client.query(
+            `INSERT INTO fn_stock_tx
+               (tx_date, tx_type, stock_type, stock_id, item_name, spec, qty, lot_number, inspect_result, memo, created_by)
+             VALUES ($1,'IN','MATERIAL',$2,$3,$4,$5,$6,$7,$8,$9)`,
+            [tx_date || new Date(), r2.rows[0].stock_id, `보호철판(${spec})`, spec, qty, lot_number, inspect_result, '소켓 입고에 따른 평철 자동 동시입고', created_by || null]
+          );
+
+          await client.query('COMMIT');
+          return { data: { success: true, message: `소켓 및 평철(${spec}) ${qty}개 동시 입고 완료 (LOT: ${lot_number})` } };
+        } else {
+          const r = await client.query(
+            `INSERT INTO fn_material_stock (item_name, spec, qty)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (item_name, spec) DO UPDATE SET qty = fn_material_stock.qty + $3, updated_at = NOW()
+             RETURNING stock_id`,
+            [item_name, spec, qty]
+          );
+          stockId = r.rows[0].stock_id;
+          itemLabel = `${item_name}(${spec})`;
+        }
       } else {
         return reply.code(400).send({ error: 'stock_type: FINISHED | MATERIAL' });
       }
@@ -265,32 +325,169 @@ export async function fnStockRoutes(app: FastifyInstance) {
 
   // ── GET 일일 생산량 (월별) ────────────────────────────────────────────────
   app.get('/api/fn-stock/daily', { preHandler: requireAuth }, async (req) => {
-    const { year, month } = req.query as any;
+    const { year, month, prod_type } = req.query as any;
     const y = parseInt(year) || new Date().getFullYear();
     const m = parseInt(month) || new Date().getMonth() + 1;
-    const r = await pool.query(
-      `SELECT * FROM fn_daily_production
-       WHERE EXTRACT(YEAR FROM prod_date) = $1 AND EXTRACT(MONTH FROM prod_date) = $2
-       ORDER BY prod_date, item_name, spec`,
-      [y, m]
-    );
+    let queryStr = `SELECT * FROM fn_daily_production WHERE EXTRACT(YEAR FROM prod_date) = $1 AND EXTRACT(MONTH FROM prod_date) = $2`;
+    const params: any[] = [y, m];
+    if (prod_type) {
+      params.push(prod_type);
+      queryStr += ` AND prod_type = $${params.length}`;
+    }
+    queryStr += ` ORDER BY prod_date, item_name, spec`;
+    const r = await pool.query(queryStr, params);
     return { data: r.rows };
   });
 
   // ── POST 일일 생산량 기록 ─────────────────────────────────────────────────
   app.post('/api/fn-stock/daily', { preHandler: requireAuth }, async (req, reply) => {
-    const { prod_date, item_name, diameter_mm, spec, qty, lot_number, worker_name, memo } = req.body as any;
+    const { prod_date, item_name, diameter_mm, spec, qty, lot_number, worker_name, memo, prod_type = 'FINISHED' } = req.body as any;
     if (!prod_date || !item_name || !spec) return reply.code(400).send({ error: 'prod_date, item_name, spec 필요' });
 
-    const r = await pool.query(
-      `INSERT INTO fn_daily_production (prod_date, item_name, diameter_mm, spec, qty, lot_number, worker_name, memo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (prod_date, item_name, spec) DO UPDATE
-         SET qty = $5, lot_number = $6, worker_name = $7, memo = $8
-       RETURNING *`,
-      [prod_date, item_name, diameter_mm || null, spec, qty || 0, lot_number || null, worker_name || null, memo || null]
-    );
-    return { data: r.rows[0] };
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. 기존 데이터 조회
+      const prevRes = await client.query(
+        `SELECT qty FROM fn_daily_production 
+         WHERE prod_date = $1 AND item_name = $2 AND spec = $3 AND prod_type = $4`,
+        [prod_date, item_name, spec, prod_type]
+      );
+      const prevQty = prevRes.rows[0] ? Number(prevRes.rows[0].qty) : 0;
+      const delta = (qty || 0) - prevQty;
+
+      if (delta !== 0) {
+        const dia = diameter_mm || 100; // 기본 규격 지름
+        const specName = `${dia}파이`;
+
+        // 2. 재고 조정 분기
+        if (prod_type === 'SEMI') {
+          // --- 반제품 조립 등록: 부자재 차감 및 반제품 가산 ---
+          // A. 소켓 차감
+          await client.query(
+            `UPDATE fn_material_stock SET qty = qty - $1, updated_at = NOW() WHERE item_name = '소켓' AND spec = $2`,
+            [delta, specName]
+          );
+          // B. 보호철판 차감
+          await client.query(
+            `UPDATE fn_material_stock SET qty = qty - $1, updated_at = NOW() WHERE item_name = '보호철판' AND spec = $2`,
+            [delta, specName]
+          );
+          // C. 볼트,너트,와샤 차감 (4ea)
+          await client.query(
+            `UPDATE fn_material_stock SET qty = qty - $1, updated_at = NOW() WHERE item_name = '볼트,너트,와샤'`,
+            [delta * 4]
+          );
+          // D. 시트(재단) 차감
+          await client.query(
+            `UPDATE fn_material_stock SET qty = qty - $1, updated_at = NOW() WHERE item_name = '시트(재단)' AND spec = $2`,
+            [delta, specName]
+          );
+
+          // E. 반제품 재고 가산 (fn_finished_stock.qty_semi)
+          await client.query(
+            `INSERT INTO fn_finished_stock (diameter_mm, spec, qty_semi)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (diameter_mm, spec) DO UPDATE SET qty_semi = fn_finished_stock.qty_semi + $3, updated_at = NOW()`,
+            [dia, spec, delta]
+          );
+
+          // F. 상세 입출고 트랜잭션 기록
+          const socketStock = await client.query(`SELECT stock_id FROM fn_material_stock WHERE item_name='소켓' AND spec=$1`, [specName]);
+          const plateStock = await client.query(`SELECT stock_id FROM fn_material_stock WHERE item_name='보호철판' AND spec=$1`, [specName]);
+          const boltStock = await client.query(`SELECT stock_id FROM fn_material_stock WHERE item_name='볼트,너트,와샤'`);
+          const sheetStock = await client.query(`SELECT stock_id FROM fn_material_stock WHERE item_name='시트(재단)' AND spec=$1`, [specName]);
+          const finishedStock = await client.query(`SELECT stock_id FROM fn_finished_stock WHERE diameter_mm=$1 AND spec=$2`, [dia, spec]);
+
+          if (socketStock.rows[0]) {
+            await client.query(
+              `INSERT INTO fn_stock_tx (tx_date, tx_type, stock_type, stock_id, item_name, spec, qty, lot_number, memo)
+               VALUES ($1, 'OUT', 'MATERIAL', $2, '소켓', $3, $4, $5, '반제품 조립 소모')`,
+              [prod_date, socketStock.rows[0].stock_id, specName, delta, lot_number]
+            );
+          }
+          if (plateStock.rows[0]) {
+            await client.query(
+              `INSERT INTO fn_stock_tx (tx_date, tx_type, stock_type, stock_id, item_name, spec, qty, lot_number, memo)
+               VALUES ($1, 'OUT', 'MATERIAL', $2, '보호철판', $3, $4, $5, '반제품 조립 소모')`,
+              [prod_date, plateStock.rows[0].stock_id, specName, delta, lot_number]
+            );
+          }
+          if (boltStock.rows[0]) {
+            await client.query(
+              `INSERT INTO fn_stock_tx (tx_date, tx_type, stock_type, stock_id, item_name, spec, qty, lot_number, memo)
+               VALUES ($1, 'OUT', 'MATERIAL', $2, '볼트,너트,와샤', '-', $3, $4, '반제품 조립 소모')`,
+              [prod_date, boltStock.rows[0].stock_id, delta * 4, lot_number]
+            );
+          }
+          if (sheetStock.rows[0]) {
+            await client.query(
+              `INSERT INTO fn_stock_tx (tx_date, tx_type, stock_type, stock_id, item_name, spec, qty, lot_number, memo)
+               VALUES ($1, 'OUT', 'MATERIAL', $2, '시트(재단)', $3, $4, $5, '반제품 조립 소모')`,
+              [prod_date, sheetStock.rows[0].stock_id, specName, delta, lot_number]
+            );
+          }
+          if (finishedStock.rows[0]) {
+            await client.query(
+              `INSERT INTO fn_stock_tx (tx_date, tx_type, stock_type, stock_id, item_name, spec, qty, lot_number, memo)
+               VALUES ($1, 'IN', 'FINISHED', $2, $3, $4, $5, $6, '반제품 조립 생산')`,
+              [prod_date, finishedStock.rows[0].stock_id, `발포소켓 반제품(${dia}파이 ${spec})`, spec, delta, lot_number]
+            );
+          }
+        } else {
+          // --- 완제품 생산 등록: 반제품 차감 및 완제품 가산 ---
+          // A. 반제품 재고 차감 (fn_finished_stock.qty_semi)
+          await client.query(
+            `UPDATE fn_finished_stock SET qty_semi = qty_semi - $1, updated_at = NOW()
+             WHERE diameter_mm = $2 AND spec = $3`,
+            [delta, dia, spec]
+          );
+
+          // B. 완제품 재고 가산 (fn_finished_stock.qty)
+          await client.query(
+            `UPDATE fn_finished_stock SET qty = qty + $1, updated_at = NOW()
+             WHERE diameter_mm = $2 AND spec = $3`,
+            [delta, dia, spec]
+          );
+
+          // C. 상세 입출고 트랜잭션 기록
+          const finishedStock = await client.query(`SELECT stock_id FROM fn_finished_stock WHERE diameter_mm=$1 AND spec=$2`, [dia, spec]);
+          if (finishedStock.rows[0]) {
+            // 반제품 소모 기록
+            await client.query(
+              `INSERT INTO fn_stock_tx (tx_date, tx_type, stock_type, stock_id, item_name, spec, qty, lot_number, memo)
+               VALUES ($1, 'OUT', 'FINISHED', $2, $3, $4, $5, $6, '완제품 생산을 위한 반제품 소모')`,
+              [prod_date, finishedStock.rows[0].stock_id, `발포소켓 반제품(${dia}파이 ${spec})`, spec, delta, lot_number]
+            );
+            // 완제품 생산 기록
+            await client.query(
+              `INSERT INTO fn_stock_tx (tx_date, tx_type, stock_type, stock_id, item_name, spec, qty, lot_number, memo)
+               VALUES ($1, 'IN', 'FINISHED', $2, $3, $4, $5, $6, '구조체 완제품 조립 생산 완료')`,
+              [prod_date, finishedStock.rows[0].stock_id, `발포소켓 완제품(${dia}파이 ${spec})`, spec, delta, lot_number]
+            );
+          }
+        }
+      }
+
+      // 3. 일일 생산량 등록 처리
+      const r = await client.query(
+        `INSERT INTO fn_daily_production (prod_date, item_name, diameter_mm, spec, qty, lot_number, worker_name, memo, prod_type)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (prod_date, item_name, spec, prod_type) DO UPDATE
+           SET qty = $5, lot_number = $6, worker_name = $7, memo = $8
+         RETURNING *`,
+        [prod_date, item_name, diameter_mm || null, spec, qty || 0, lot_number || null, worker_name || null, memo || null, prod_type]
+      );
+
+      await client.query('COMMIT');
+      return { data: r.rows[0] };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
   });
 
   // ── DELETE 일일 생산량 삭제 ───────────────────────────────────────────────
