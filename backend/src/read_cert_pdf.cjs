@@ -19,35 +19,58 @@ async function parsePdfText(pdfPath) {
 }
 
 async function main() {
-  const certDir = 'c:/Users/edwar/OneDrive/ezone-mes/upload/(주)이지원 품질인정서 원본(G4B)/2차 품질인정(24.7.22)';
-  const vt049Pdf = path.join(certDir, 'EZ F.B POSMAC Duct-VT-049-9990124_KICT-2024-0181620250325162516_UCSDA.pdf');
+  const certDir = 'c:/Users/edwar/OneDrive/ezone-mes/upload/(주)이지원 품질인정서 원본(G4B)/3차 품질인정(25.09.10)';
   
-  if (!fs.existsSync(vt049Pdf)) {
-    console.error('File not found:', vt049Pdf);
-    return;
-  }
-  
-  try {
-    console.log('Reading VT-049 PDF with legacy build...');
-    const text = await parsePdfText(vt049Pdf);
-    fs.writeFileSync('c:/Users/edwar/OneDrive/ezone-mes/backend/src/vt049_text.txt', text);
-    console.log('Saved PDF text to vt049_text.txt');
+  const files = [
+    '원본-(주)이지원-건기원 KICT(FS-BD25-0910-07) EZ-BD-CV-1S(200A) 품질인정서-25.09.10.pdf',
+    '원본-(주)이지원-건기원 KICT(FS-BD25-0910-08) EZ-BD-RV-3S(025M) 품질인정서-25.09.10.pdf'
+  ];
+
+  for (const file of files) {
+    const pdfPath = path.join(certDir, file);
+    if (!fs.existsSync(pdfPath)) {
+      console.error('File not found:', pdfPath);
+      continue;
+    }
     
-    // 키워드 '소켓', 'socket', 'vm', 'vt', 'va' 검색 출력
-    const lines = text.split('\n');
-    lines.forEach((l, idx) => {
-      const lower = l.toLowerCase();
-      if (lower.includes('소켓') || lower.includes('socket') || lower.includes('vm') || lower.includes('vt') || lower.includes('va')) {
-        // 너무 긴 행은 줄여서 출력
-        const trimmed = l.trim();
-        if (trimmed.length > 0) {
-          console.log(`L${idx+1}:`, trimmed.slice(0, 150));
+    try {
+      console.log(`\n======================================================`);
+      console.log(`🔍 [PDF 분석] ${file}`);
+      console.log(`======================================================`);
+      
+      const text = await parsePdfText(pdfPath);
+      const lines = text.split('\n');
+      console.log(`📄 총 페이지 수 분석 완료.`);
+      
+      lines.forEach((l, idx) => {
+        const lower = l.toLowerCase();
+        if (
+          lower.includes('구성') ||
+          lower.includes('자재') ||
+          lower.includes('두께') ||
+          lower.includes('치수') ||
+          lower.includes('프레임') ||
+          lower.includes('패킹') ||
+          lower.includes('실란트') ||
+          lower.includes('차열재') ||
+          lower.includes('글라스울') ||
+          lower.includes('posmac') ||
+          lower.includes('플레이트') ||
+          lower.includes('댐퍼') ||
+          lower.includes('가스켓') ||
+          lower.includes('하우징')
+        ) {
+          const trimmed = l.trim();
+          if (trimmed.length > 0) {
+            console.log(`[L${idx+1}]`, trimmed.slice(0, 140));
+          }
         }
-      }
-    });
-  } catch (e) {
-    console.error('Error parsing PDF:', e);
+      });
+    } catch (e) {
+      console.error('Error parsing PDF:', e);
+    }
   }
 }
 
 main();
+

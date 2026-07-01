@@ -411,6 +411,24 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
     'HTG-169':      'VT', // 소켓명: HTG300C -> VT
   };
 
+  const getSocketCategory = (productType: string, structure: string): 'RISER' | 'WALL' | 'BUSDUCT' => {
+    const pt = (productType || '').trim().toUpperCase();
+    const st = (structure || '').trim().toUpperCase();
+
+    // 1. 부스덕트 판별
+    if (pt.startsWith('BD') || st.startsWith('BD')) {
+      return 'BUSDUCT';
+    }
+
+    // 2. 입상(Riser) 판별
+    if (st.startsWith('H') || pt.startsWith('H') || pt.includes('HAG') || pt.includes('HTG')) {
+      return 'RISER';
+    }
+
+    // 3. 벽체(Wall) 판별
+    return 'WALL';
+  };
+
   const getSocketType = (productType: string): 'VM' | 'VT' => {
     const pt = (productType || '').trim();
     if (SOCKET_TYPE_MAP[pt]) {
@@ -438,20 +456,18 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
     const swo = swoRows[0];
 
     const { rows: items } = await pool.query(
-      `SELECT * FROM socket_work_order_item WHERE swo_id = $1 ORDER BY seq_no`, [id]
+      `SELECT * FROM socket_work_order_item WHERE swo_id = $1 ORDER BY seq_no`
     );
 
-    // 2. 템플릿 로드
-    const templatePath = 'c:/Users/edwar/OneDrive/ezone-mes/upload/26.04.24 그린산업_ 일우엠이씨_GS건설_아산탕정자이퍼스트시티 작업지시서.xlsx';
-    let workbook;
-    try {
-      workbook = XLSX.readFile(templatePath);
-    } catch (e: any) {
-      return reply.code(500).send({ error: '엑셀 템플릿 파일을 찾을 수 없습니다: ' + e.message });
-    }
-
-    // 3. 엑셀 편집
     const projectTitle = swo.project_name || swo.po_project_name || '소켓 작업지시서';
+
+    // 대표 카테고리 결정
+    let category: 'RISER' | 'WALL' | 'BUSDUCT' = 'WALL';
+    if (items.some(it => getSocketCategory(it.product_type, it.structure) === 'BUSDUCT')) {
+      category = 'BUSDUCT';
+    } else if (items.some(it => getSocketCategory(it.product_type, it.structure) === 'RISER')) {
+      category = 'RISER';
+    }
 
     const writeCell = (sheet: any, r: number, c: number, val: any) => {
       const cellRef = XLSX.utils.encode_cell({ r, c });
@@ -462,303 +478,542 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
       sheet[cellRef].t = typeof val === 'number' ? 'n' : 's';
     };
 
-    // ── 시트 1: 1. 소켓인수검사
-    const sheet1 = workbook.Sheets['1. 소켓인수검사'];
-    if (sheet1) {
-      writeCell(sheet1, 0, 3, projectTitle);
-      
-      let startRow = 8;
-      items.forEach((item, idx) => {
-        const r = startRow + idx;
-        const noStr = String(idx + 1).padStart(2, '0');
-        writeCell(sheet1, r, 0, noStr);
-        writeCell(sheet1, r, 1, item.product_type || item.structure || '');
-        
-        const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : '';
-        const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : '';
-        writeCell(sheet1, r, 2, wVal);
-        writeCell(sheet1, r, 3, hVal);
-        writeCell(sheet1, r, 6, item.remark || '');
-      });
-      const maxRow = startRow + items.length;
-      sheet1['!ref'] = `A1:O${maxRow + 5}`;
-    }
+    let workbook;
 
-    // 정밀 매핑을 반영한 VM/VT 분류
-    const vmItems = items.filter(it => getSocketType(it.product_type) === 'VM');
-    const vtItems = items.filter(it => getSocketType(it.product_type) === 'VT');
+    if (category === 'RISER') {
+      // ─── [입상 전용 분기] ───
+      const templatePath = 'c:/Users/edwar/OneDrive/ezone-mes/upload/26.06.04 씨에스_우진아이엔에스_포스코건설_양평동삼화인쇄(입상) 작업지시서.xlsx';
+      try {
+        workbook = XLSX.readFile(templatePath);
+      } catch (e: any) {
+        return reply.code(500).send({ error: '입상용 엑셀 템플릿 파일을 찾을 수 없습니다: ' + e.message });
+      }
 
-    // ── 시트 2: 2.재단(VM)작업
-    const sheet2 = workbook.Sheets['2.재단(VM)작업'];
-    if (sheet2 && vmItems.length > 0) {
-      writeCell(sheet2, 0, 7, projectTitle);
+      // 시트 1: 1. 소켓인수검사
+      const sheet1 = workbook.Sheets['1. 소켓인수검사'];
+      if (sheet1) {
+        writeCell(sheet1, 0, 3, projectTitle);
+        let startRow = 8;
+        items.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          writeCell(sheet1, r, 0, noStr);
+          writeCell(sheet1, r, 1, item.product_type || item.structure || '');
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : '';
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : '';
+          writeCell(sheet1, r, 2, wVal);
+          writeCell(sheet1, r, 3, hVal);
+          writeCell(sheet1, r, 6, item.remark || '');
+        });
+        sheet1['!ref'] = `A1:O${startRow + items.length + 5}`;
+      }
 
-      let startRow = 7;
-      vmItems.forEach((item, idx) => {
-        const r = startRow + idx;
-        const noStr = String(idx + 1).padStart(2, '0');
-        writeCell(sheet2, r, 0, noStr);
-        writeCell(sheet2, r, 1, item.product_type || item.structure || '');
-        
-        const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-        const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-        writeCell(sheet2, r, 2, wVal);
-        writeCell(sheet2, r, 3, hVal);
-        writeCell(sheet2, r, 4, item.insp_lot_no || '');
-        writeCell(sheet2, r, 5, 1);
-        
-        writeCell(sheet2, r, 6, wVal > 0 ? wVal - 5 : '');
-        writeCell(sheet2, r, 7, wVal > 0 ? 4 : '');
-        writeCell(sheet2, r, 8, hVal > 0 ? hVal - 30 : '');
-        writeCell(sheet2, r, 9, hVal > 0 ? 4 : '');
-        writeCell(sheet2, r, 10, wVal > 0 ? wVal + 60 : '');
-        writeCell(sheet2, r, 11, wVal > 0 ? 2 : '');
-        writeCell(sheet2, r, 12, hVal > 0 ? hVal : '');
-        writeCell(sheet2, r, 13, wVal > 0 ? 2 : '');
-        writeCell(sheet2, r, 14, item.remark || '');
-      });
-      const maxRow = startRow + vmItems.length;
-      sheet2['!ref'] = `A1:O${maxRow + 5}`;
-    }
+      // 시트 2: 2.1 재단(1.69,064)
+      const sheet2 = workbook.Sheets['2.1 재단(1.69,064)'];
+      if (sheet2) {
+        writeCell(sheet2, 1, 9, projectTitle);
+        let startRow = 7;
+        items.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          writeCell(sheet2, r, 0, noStr);
+          writeCell(sheet2, r, 1, item.product_type || item.structure || '');
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+          writeCell(sheet2, r, 2, wVal);
+          writeCell(sheet2, r, 3, hVal);
+          writeCell(sheet2, r, 4, item.insp_lot_no || '');
+          writeCell(sheet2, r, 5, 255); // 높이 고정 255
+          writeCell(sheet2, r, 6, wVal > 0 ? wVal - 5 : ''); // 가로재단 W - 5
+          writeCell(sheet2, r, 7, wVal > 0 ? 6 : ''); // 가로수량 6개
+          writeCell(sheet2, r, 13, hVal > 0 ? hVal - 35 : ''); // 세로재단 H - 35
+          writeCell(sheet2, r, 14, hVal > 0 ? 6 : ''); // 세로수량 6개
+        });
+        sheet2['!ref'] = `A1:T${startRow + items.length + 5}`;
+      }
 
-    // ── 시트 3: 2.1 재단작업(VT)
-    const sheet3 = workbook.Sheets['2.1 재단작업(VT)'];
-    if (sheet3 && vtItems.length > 0) {
-      writeCell(sheet3, 0, 7, projectTitle);
+      // 시트 3: 3.1 절곡(HTG1.69)(브라켓,보강대,받침대)
+      const sheet3 = workbook.Sheets['3.1 절곡(HTG1.69)(브라켓,보강대,받침대)'];
+      if (sheet3) {
+        writeCell(sheet3, 0, 12, projectTitle);
+        let startRow = 7;
+        items.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          writeCell(sheet3, r, 0, noStr);
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+          writeCell(sheet3, r, 2, wVal);
+          writeCell(sheet3, r, 3, hVal);
+          writeCell(sheet3, r, 4, item.insp_lot_no || '');
+          writeCell(sheet3, r, 5, 1);
+          writeCell(sheet3, r, 8, wVal > 0 ? wVal - 5 : '');
+          writeCell(sheet3, r, 9, wVal > 0 ? 2 : '');
+          writeCell(sheet3, r, 12, wVal > 0 ? wVal - 5 : '');
+          writeCell(sheet3, r, 13, wVal > 0 ? 23 : ''); // 고정 절곡치수 23
+          writeCell(sheet3, r, 14, wVal > 0 ? 23 : '');
+          writeCell(sheet3, r, 15, wVal > 0 ? 2 : '');
+        });
+        sheet3['!ref'] = `A1:P${startRow + items.length + 5}`;
+      }
 
-      let startRow = 7;
-      vtItems.forEach((item, idx) => {
-        const r = startRow + idx;
-        const noStr = String(idx + 1).padStart(2, '0');
-        writeCell(sheet3, r, 0, noStr);
-        writeCell(sheet3, r, 1, item.product_type || item.structure || '');
-        
-        const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-        const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-        writeCell(sheet3, r, 2, wVal);
-        writeCell(sheet3, r, 3, hVal);
-        writeCell(sheet3, r, 4, item.insp_lot_no || '');
-        writeCell(sheet3, r, 5, 1);
-        
-        writeCell(sheet3, r, 6, wVal > 0 ? (wVal - 40) / 2 : '');
-        writeCell(sheet3, r, 7, wVal > 0 ? 16 : '');
-        writeCell(sheet3, r, 8, hVal > 0 ? (hVal - 40) / 2 : '');
-        writeCell(sheet3, r, 9, hVal > 0 ? 16 : '');
-        writeCell(sheet3, r, 10, wVal > 0 ? wVal + 60 : '');
-        writeCell(sheet3, r, 11, wVal > 0 ? 4 : '');
-        writeCell(sheet3, r, 12, hVal > 0 ? hVal : '');
-        writeCell(sheet3, r, 13, hVal > 0 ? 4 : '');
-        writeCell(sheet3, r, 14, item.remark || '');
-      });
-      const maxRow = startRow + vtItems.length;
-      sheet3['!ref'] = `A1:O${maxRow + 5}`;
-    }
+      // 시트 4: 4. 차열재 소켓용 (수정)
+      const sheet4 = workbook.Sheets['4. 차열재 소켓용 (수정)'];
+      if (sheet4) {
+        writeCell(sheet4, 4, 12, projectTitle);
+        let startRow = 10;
+        items.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          writeCell(sheet4, r, 0, noStr);
+          writeCell(sheet4, r, 1, item.product_type || item.structure || '');
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+          writeCell(sheet4, r, 2, wVal);
+          writeCell(sheet4, r, 3, hVal);
+          writeCell(sheet4, r, 4, item.insp_lot_no || '');
+          writeCell(sheet4, r, 7, wVal > 0 ? wVal + 60 : '');
+          writeCell(sheet4, r, 8, wVal > 0 ? 2 : '');
+          writeCell(sheet4, r, 9, hVal > 0 ? hVal : '');
+          writeCell(sheet4, r, 10, hVal > 0 ? 2 : '');
+        });
+        sheet4['!ref'] = `A1:L${startRow + items.length + 5}`;
+      }
 
-    // ── 시트 4: 3.2 절곡(VT)
-    const sheet4 = workbook.Sheets['3.2 절곡(VT)'];
-    if (sheet4 && vtItems.length > 0) {
-      writeCell(sheet4, 4, 13, projectTitle);
-
-      let startRow = 10;
-      vtItems.forEach((item, idx) => {
-        const r = startRow + idx;
-        const noStr = String(idx + 1).padStart(2, '0');
-        writeCell(sheet4, r, 0, noStr);
-        
-        const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-        const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-        writeCell(sheet4, r, 1, wVal);
-        writeCell(sheet4, r, 2, hVal);
-        writeCell(sheet4, r, 3, 1);
-        writeCell(sheet4, r, 4, item.insp_lot_no || '');
-        writeCell(sheet4, r, 5, '1.6이상');
-        writeCell(sheet4, r, 6, '60mm');
-        
-        writeCell(sheet4, r, 7, wVal > 0 ? (wVal - 40) / 2 + 4 : '');
-        writeCell(sheet4, r, 8, wVal > 0 ? 16 : '');
-        
-        writeCell(sheet4, r, 10, hVal > 0 ? (hVal - 40) / 2 - 1 : '');
-        writeCell(sheet4, r, 13, hVal > 0 ? 32 : '');
-      });
-      const maxRow = startRow + vtItems.length;
-      sheet4['!ref'] = `A1:O${maxRow + 5}`;
-    }
-
-    // ── 시트 5: 차열재 재단(VM,VT)
-    const sheet5 = workbook.Sheets['차열재 재단(VM,VT)'];
-    if (sheet5) {
-      writeCell(sheet5, 0, 7, projectTitle);
-
-      let startRow = 7;
-      items.forEach((item, idx) => {
-        const r = startRow + idx;
-        const noStr = String(idx + 1).padStart(2, '0');
-        const isVm = getSocketType(item.product_type) === 'VM';
-        
-        writeCell(sheet5, r, 0, noStr);
-        writeCell(sheet5, r, 1, item.product_type || item.structure || '');
-        
-        const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-        const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-        writeCell(sheet5, r, 2, wVal);
-        writeCell(sheet5, r, 3, hVal);
-        writeCell(sheet5, r, 4, item.insp_lot_no || '');
-        writeCell(sheet5, r, 5, 1);
-        
-        writeCell(sheet5, r, 6, wVal > 0 ? wVal + 60 : '');
-        writeCell(sheet5, r, 7, wVal > 0 ? (isVm ? 2 : 4) : '');
-        
-        writeCell(sheet5, r, 8, hVal > 0 ? hVal : '');
-        writeCell(sheet5, r, 9, hVal > 0 ? (isVm ? 2 : 4) : '');
-      });
-      const maxRow = startRow + items.length;
-      sheet5['!ref'] = `A1:K${maxRow + 5}`;
-    }
-
-    // ── 시트 6: 3. 1절곡(VM)
-    const sheet6 = workbook.Sheets['3. 1절곡(VM)'];
-    if (sheet6 && vmItems.length > 0) {
-      writeCell(sheet6, 4, 13, projectTitle);
-
-      let startRow = 10;
-      vmItems.forEach((item, idx) => {
-        const r = startRow + idx;
-        const noStr = String(idx + 1).padStart(2, '0');
-        writeCell(sheet6, r, 0, noStr);
-        
-        const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-        const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-        writeCell(sheet6, r, 1, wVal);
-        writeCell(sheet6, r, 2, hVal);
-        writeCell(sheet6, r, 3, 1);
-        writeCell(sheet6, r, 4, item.insp_lot_no || '');
-        writeCell(sheet6, r, 5, 1.6);
-        writeCell(sheet6, r, 6, '');
-        
-        writeCell(sheet6, r, 7, wVal > 0 ? wVal - 1 : '');
-        writeCell(sheet6, r, 8, wVal > 0 ? 4 : '');
-        
-        writeCell(sheet6, r, 10, hVal > 0 ? hVal - 30 : '');
-        writeCell(sheet6, r, 13, hVal > 0 ? 4 : '');
-      });
-      const maxRow = startRow + vmItems.length;
-      sheet6['!ref'] = `A1:O${maxRow + 5}`;
-    }
-
-    // ── 시트 7: 3.3 절곡(VT-보강대)
-    const sheet7 = workbook.Sheets['3.3 절곡(VT-보강대)'];
-    if (sheet7 && vtItems.length > 0) {
-      writeCell(sheet7, 4, 14, projectTitle);
-
-      let startRow = 10;
-      vtItems.forEach((item, idx) => {
-        const r = startRow + idx;
-        const noStr = String(idx + 1).padStart(2, '0');
-        writeCell(sheet7, r, 0, noStr);
-        
-        const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-        const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-        writeCell(sheet7, r, 1, wVal);
-        writeCell(sheet7, r, 2, hVal);
-        writeCell(sheet7, r, 3, 1);
-        writeCell(sheet7, r, 4, item.insp_lot_no || '');
-        writeCell(sheet7, r, 5, '1.6이상');
-        writeCell(sheet7, r, 6, 225);
-        
-        writeCell(sheet7, r, 7, wVal > 0 ? (wVal - 40) / 2 + 4 : '');
-        writeCell(sheet7, r, 8, wVal > 0 ? 8 : '');
-        
-        writeCell(sheet7, r, 10, 237);
-        writeCell(sheet7, r, 11, hVal > 0 ? hVal : '');
-        writeCell(sheet7, r, 14, hVal > 0 ? 4 : '');
-      });
-      const maxRow = startRow + vtItems.length;
-      sheet7['!ref'] = `A1:O${maxRow + 5}`;
-    }
-
-    // ── 시트 8: 5. 차열재 출하용(VM,VT,VAG)
-    const sheet8 = workbook.Sheets['5. 차열재 출하용(VM,VT,VAG)'];
-    if (sheet8) {
-      writeCell(sheet8, 4, 11, projectTitle);
-
-      let startRow = 9;
-      items.forEach((item, idx) => {
-        const r = startRow + idx;
-        const noStr = String(idx + 1).padStart(2, '0');
-        const isVm = getSocketType(item.product_type) === 'VM';
-        
-        writeCell(sheet8, r, 0, noStr);
-        
-        const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-        const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-        writeCell(sheet8, r, 1, wVal);
-        writeCell(sheet8, r, 2, hVal);
-        writeCell(sheet8, r, 3, item.product_type || item.structure || '');
-        
-        const area = wVal > 0 && hVal > 0 ? Number(((wVal * hVal) / 1000000).toFixed(4)) : 0;
-        writeCell(sheet8, r, 4, area);
-        
-        const perimeter = wVal > 0 && hVal > 0 ? Number((((wVal + hVal) * 2) / 1000).toFixed(1)) : 0;
-        writeCell(sheet8, r, 5, perimeter);
-        
-        if (!isVm) {
-          writeCell(sheet8, r, 6, '25*1400');
-          writeCell(sheet8, r, 7, 1);
-          writeCell(sheet8, r, 8, perimeter > 0 ? Number((perimeter + 0.5).toFixed(1)) : '');
+      // 시트 5: 5. 차열재 출하용
+      const sheet5 = workbook.Sheets['5. 차열재 출하용'];
+      if (sheet5) {
+        writeCell(sheet5, 4, 15, projectTitle);
+        let startRow = 9;
+        items.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          writeCell(sheet5, r, 0, noStr);
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+          writeCell(sheet5, r, 1, wVal);
+          writeCell(sheet5, r, 2, hVal);
+          writeCell(sheet5, r, 3, item.product_type || item.structure || '');
           
-          writeCell(sheet8, r, 9, '50*400');
-          writeCell(sheet8, r, 10, 4);
-          writeCell(sheet8, r, 11, perimeter > 0 ? Number((perimeter + 0.5).toFixed(1)) : '');
-        } else {
-          writeCell(sheet8, r, 12, '25*200');
-          writeCell(sheet8, r, 13, 4);
-          const vmUsage = perimeter > 0 ? Number((perimeter + 0.5).toFixed(1)) : 0;
-          writeCell(sheet8, r, 14, vmUsage > 0 ? vmUsage * 4 : '');
-        }
-      });
-      const maxRow = startRow + items.length;
-      sheet8['!ref'] = `A1:O${maxRow + 5}`;
-    }
+          const area = wVal > 0 && hVal > 0 ? Number(((wVal * hVal) / 1000000).toFixed(4)) : 0;
+          const perimeter = wVal > 0 && hVal > 0 ? Number((((wVal + hVal) * 2) / 1000).toFixed(1)) : 0;
+          
+          writeCell(sheet5, r, 4, area);
+          writeCell(sheet5, r, 5, perimeter);
+          writeCell(sheet5, r, 6, perimeter > 0 ? Number((perimeter + 0.4).toFixed(1)) : '');
+          writeCell(sheet5, r, 7, 1);
+          writeCell(sheet5, r, 8, perimeter > 0 ? Number((perimeter + 0.4).toFixed(1)) : '');
+          writeCell(sheet5, r, 13, 2);
+        });
+        sheet5['!ref'] = `A1:U${startRow + items.length + 5}`;
+      }
 
-    // ── 시트 9: 6. 라벨소요량
-    const sheet9 = workbook.Sheets['6. 라벨소요량'];
-    if (sheet9) {
-      writeCell(sheet9, 0, 10, projectTitle);
+      // 시트 6: 라벨소요량
+      const sheet6 = workbook.Sheets['라벨소요량'];
+      if (sheet6) {
+        writeCell(sheet6, 0, 9, projectTitle);
+        let startRow = 6;
+        items.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          writeCell(sheet6, r, 0, noStr);
+          writeCell(sheet6, r, 1, item.product_type || item.structure || '');
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+          writeCell(sheet6, r, 2, wVal);
+          writeCell(sheet6, r, 3, hVal);
+          writeCell(sheet6, r, 4, item.insp_lot_no || '');
 
-      let startRow = 6;
+          const area = wVal > 0 && hVal > 0 ? Number(((wVal * hVal) / 1000000).toFixed(4)) : 0;
+          const perimeter = wVal > 0 && hVal > 0 ? Number((((wVal + hVal) * 2) / 1000).toFixed(1)) : 0;
+
+          writeCell(sheet6, r, 5, area);
+          writeCell(sheet6, r, 6, perimeter);
+          writeCell(sheet6, r, 7, 2);
+          writeCell(sheet6, r, 8, perimeter > 0 ? Number((perimeter + 0.4).toFixed(1)) : '');
+          writeCell(sheet6, r, 14, perimeter > 0 ? Number((perimeter + 0.5).toFixed(1)) : '');
+          writeCell(sheet6, r, 15, 2);
+        });
+        sheet6['!ref'] = `A1:P${startRow + items.length + 5}`;
+      }
+
+    } else if (category === 'BUSDUCT') {
+      // ─── [부스덕트 신규 분기] ───
+      // 템플릿 부재 시 동적 빌딩을 위해 빈 워크북 생성
+      workbook = XLSX.utils.book_new();
+
+      // 시트 1: 1. 소켓인수검사
+      const aoa1 = [
+        ['[부스덕트] 소켓인수검사 대장', '', '', projectTitle],
+        [],
+        ['No', '구조/모델명', '덕트 가로(mm)', '덕트 세로(mm)', '수량', '검사 LOT 번호', '비고']
+      ];
       items.forEach((item, idx) => {
-        const r = startRow + idx;
-        const noStr = String(idx + 1).padStart(2, '0');
-        const isVm = getSocketType(item.product_type) === 'VM';
-        
-        writeCell(sheet9, r, 0, noStr);
-        writeCell(sheet9, r, 1, item.seq_no || '');
-        
+        aoa1.push([
+          String(idx + 1).padStart(2, '0'),
+          item.product_type || item.structure || '',
+          item.pipe_width_mm ? Number(item.pipe_width_mm) : '',
+          item.pipe_height_mm ? Number(item.pipe_height_mm) : '',
+          1,
+          item.insp_lot_no || '',
+          item.remark || ''
+        ]);
+      });
+      workbook.SheetNames.push('1. 소켓인수검사');
+      workbook.Sheets['1. 소켓인수검사'] = XLSX.utils.aoa_to_sheet(aoa1);
+
+      // 시트 2: 2.1 방화플래싱 재단 및 가공
+      const aoa2 = [
+        ['2.1 방화플래싱 재단 및 가공', '', '', projectTitle],
+        [],
+        ['No', '구조/모델명', '재질', '방화플래싱 길이(mm)', '방화플래싱 너비(mm)', '수량', '두께 기준']
+      ];
+      items.forEach((item, idx) => {
+        const pt = (item.product_type || '').toUpperCase();
+        const isCv = pt.includes('CV');
+        aoa2.push([
+          String(idx + 1).padStart(2, '0'),
+          item.product_type || item.structure || '',
+          isCv ? '스테인리스강판(SUS)' : '아연도금강판(GI)',
+          isCv ? 380 : 1100,
+          isCv ? 190 : 175,
+          1,
+          isCv ? '0.5 ㎜ 이상' : '1.0 ㎜ 이상'
+        ]);
+      });
+      workbook.SheetNames.push('2.1 방화플래싱 재단 및 가공');
+      workbook.Sheets['2.1 방화플래싱 재단 및 가공'] = XLSX.utils.aoa_to_sheet(aoa2);
+
+      // 시트 3: 3.1 틈새복합시트(차열재) 재단
+      const aoa3 = [
+        ['3.1 틈새복합시트(차열재) 재단', '', '', projectTitle],
+        [],
+        ['No', '구조/모델명', '차열시트 길이(mm)', '차열시트 너비(mm)', '두께(mm)', '수량(개)', '비고']
+      ];
+      items.forEach((item, idx) => {
+        const pt = (item.product_type || '').toUpperCase();
+        const isCv = pt.includes('CV');
+        aoa3.push([
+          String(idx + 1).padStart(2, '0'),
+          item.product_type || item.structure || '',
+          isCv ? '150H 복합사양' : 1000,
+          isCv ? '외경비례' : 125,
+          isCv ? 5.5 : 5.0,
+          isCv ? 1 : 2, // RV-3S는 상/하부 2세트 고정
+          isCv ? '외경 200 mm 이하 틈새 시트' : '상/하부 밀도 1.2g/㎤ 이상 차열시트'
+        ]);
+      });
+      workbook.SheetNames.push('3.1 틈새복합시트(차열재) 재단');
+      workbook.Sheets['3.1 틈새복합시트(차열재) 재단'] = XLSX.utils.aoa_to_sheet(aoa3);
+
+      // 시트 4: 4. 단열재 시공(세라믹 블랭킷)
+      const aoa4 = [
+        ['4. 단열재 시공(세라믹 블랭킷)', '', '', projectTitle],
+        [],
+        ['No', '구조/모델명', '단열재 종류', '밀도 기준(kg/㎥)', '너비 기준(mm)', '두께 기준(mm)', '고정 방식']
+      ];
+      items.forEach((item, idx) => {
+        aoa4.push([
+          String(idx + 1).padStart(2, '0'),
+          item.product_type || item.structure || '',
+          '세라믹 섬유 블랭킷',
+          '96 kg/㎥ 이상',
+          600,
+          '25 ㎜ 이상',
+          '양면 대칭 철사 고정'
+        ]);
+      });
+      workbook.SheetNames.push('4. 단열재 시공(세라믹 블랭킷)');
+      workbook.Sheets['4. 단열재 시공(세라믹 블랭킷)'] = XLSX.utils.aoa_to_sheet(aoa4);
+
+      // 시트 5: 5. 라벨소요량
+      const aoa5 = [
+        ['5. 라벨소요량', '', '', projectTitle],
+        [],
+        ['No', '구조/모델명', '가로(mm)', '세로(mm)', '면적(㎡)', '둘레(m)', '필요 라벨 수량(개)']
+      ];
+      items.forEach((item, idx) => {
         const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
         const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-        writeCell(sheet9, r, 2, wVal);
-        writeCell(sheet9, r, 3, hVal);
-        writeCell(sheet9, r, 4, item.insp_lot_no || '');
-        
         const area = wVal > 0 && hVal > 0 ? Number(((wVal * hVal) / 1000000).toFixed(4)) : 0;
-        writeCell(sheet9, r, 5, area);
-        
         const perimeter = wVal > 0 && hVal > 0 ? Number((((wVal + hVal) * 2) / 1000).toFixed(1)) : 0;
-        writeCell(sheet9, r, 6, perimeter);
-        writeCell(sheet9, r, 7, 2);
-        
-        if (!isVm) {
-          writeCell(sheet9, r, 8, perimeter > 0 ? Number((perimeter + 0.5).toFixed(1)) : '');
-          writeCell(sheet9, r, 9, 1);
-          writeCell(sheet9, r, 12, perimeter > 0 ? Number((perimeter + 0.5).toFixed(1)) : '');
-          writeCell(sheet9, r, 13, 4);
-        } else {
-          writeCell(sheet9, r, 10, perimeter > 0 ? Number((perimeter + 0.5).toFixed(1)) : '');
-          writeCell(sheet9, r, 11, 4);
-        }
+
+        aoa5.push([
+          String(idx + 1).padStart(2, '0'),
+          item.product_type || item.structure || '',
+          wVal || '-',
+          hVal || '-',
+          area || '-',
+          perimeter || '-',
+          2 // 소켓당 라벨 2개 기본 소요
+        ]);
       });
-      const maxRow = startRow + items.length;
-      sheet9['!ref'] = `A1:O${maxRow + 5}`;
+      workbook.SheetNames.push('5. 라벨소요량');
+      workbook.Sheets['5. 라벨소요량'] = XLSX.utils.aoa_to_sheet(aoa5);
+
+    } else {
+      // ─── [벽체 전용 분기 (기존 벽체 로직 동일)] ───
+      const templatePath = 'c:/Users/edwar/OneDrive/ezone-mes/upload/26.04.24 그린산업_ 일우엠이씨_GS건설_아산탕정자이퍼스트시티 작업지시서.xlsx';
+      try {
+        workbook = XLSX.readFile(templatePath);
+      } catch (e: any) {
+        return reply.code(500).send({ error: '엑셀 템플릿 파일을 찾을 수 없습니다: ' + e.message });
+      }
+
+      // ── 시트 1: 1. 소켓인수검사
+      const sheet1 = workbook.Sheets['1. 소켓인수검사'];
+      if (sheet1) {
+        writeCell(sheet1, 0, 3, projectTitle);
+        let startRow = 8;
+        items.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          writeCell(sheet1, r, 0, noStr);
+          writeCell(sheet1, r, 1, item.product_type || item.structure || '');
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : '';
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : '';
+          writeCell(sheet1, r, 2, wVal);
+          writeCell(sheet1, r, 3, hVal);
+          writeCell(sheet1, r, 6, item.remark || '');
+        });
+        sheet1['!ref'] = `A1:O${startRow + items.length + 5}`;
+      }
+
+      const vmItems = items.filter(it => getSocketType(it.product_type) === 'VM');
+      const vtItems = items.filter(it => getSocketType(it.product_type) === 'VT');
+
+      // ── 시트 2: 2.재단(VM)작업
+      const sheet2 = workbook.Sheets['2.재단(VM)작업'];
+      if (sheet2 && vmItems.length > 0) {
+        writeCell(sheet2, 0, 7, projectTitle);
+        let startRow = 7;
+        vmItems.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          writeCell(sheet2, r, 0, noStr);
+          writeCell(sheet2, r, 1, item.product_type || item.structure || '');
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+          writeCell(sheet2, r, 2, wVal);
+          writeCell(sheet2, r, 3, hVal);
+          writeCell(sheet2, r, 4, item.insp_lot_no || '');
+          writeCell(sheet2, r, 5, 1);
+          writeCell(sheet2, r, 6, wVal > 0 ? wVal - 5 : '');
+          writeCell(sheet2, r, 7, wVal > 0 ? 4 : '');
+          writeCell(sheet2, r, 8, hVal > 0 ? hVal - 30 : '');
+          writeCell(sheet2, r, 9, hVal > 0 ? 4 : '');
+          writeCell(sheet2, r, 10, wVal > 0 ? wVal + 60 : '');
+          writeCell(sheet2, r, 11, wVal > 0 ? 2 : '');
+          writeCell(sheet2, r, 12, hVal > 0 ? hVal : '');
+          writeCell(sheet2, r, 13, wVal > 0 ? 2 : '');
+          writeCell(sheet2, r, 14, item.remark || '');
+        });
+        sheet2['!ref'] = `A1:O${startRow + vmItems.length + 5}`;
+      }
+
+      // ── 시트 3: 2.1 재단작업(VT)
+      const sheet3 = workbook.Sheets['2.1 재단작업(VT)'];
+      if (sheet3 && vtItems.length > 0) {
+        writeCell(sheet3, 0, 7, projectTitle);
+        let startRow = 7;
+        vtItems.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          writeCell(sheet3, r, 0, noStr);
+          writeCell(sheet3, r, 1, item.product_type || item.structure || '');
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+          writeCell(sheet3, r, 2, wVal);
+          writeCell(sheet3, r, 3, hVal);
+          writeCell(sheet3, r, 4, item.insp_lot_no || '');
+          writeCell(sheet3, r, 5, 1);
+          writeCell(sheet3, r, 6, wVal > 0 ? (wVal - 40) / 2 : '');
+          writeCell(sheet3, r, 7, wVal > 0 ? 16 : '');
+          writeCell(sheet3, r, 8, hVal > 0 ? (hVal - 40) / 2 : '');
+          writeCell(sheet3, r, 9, hVal > 0 ? 16 : '');
+          writeCell(sheet3, r, 10, wVal > 0 ? wVal + 60 : '');
+          writeCell(sheet3, r, 11, wVal > 0 ? 4 : '');
+          writeCell(sheet3, r, 12, hVal > 0 ? hVal : '');
+          writeCell(sheet3, r, 13, hVal > 0 ? 4 : '');
+          writeCell(sheet3, r, 14, item.remark || '');
+        });
+        sheet3['!ref'] = `A1:O${startRow + vtItems.length + 5}`;
+      }
+
+      // ── 시트 4: 3.2 절곡(VT)
+      const sheet4 = workbook.Sheets['3.2 절곡(VT)'];
+      if (sheet4 && vtItems.length > 0) {
+        writeCell(sheet4, 4, 13, projectTitle);
+        let startRow = 10;
+        vtItems.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          writeCell(sheet4, r, 0, noStr);
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+          writeCell(sheet4, r, 1, wVal);
+          writeCell(sheet4, r, 2, hVal);
+          writeCell(sheet4, r, 3, 1);
+          writeCell(sheet4, r, 4, item.insp_lot_no || '');
+          writeCell(sheet4, r, 5, '1.6이상');
+          writeCell(sheet4, r, 6, '60mm');
+          writeCell(sheet4, r, 7, wVal > 0 ? (wVal - 40) / 2 + 4 : '');
+          writeCell(sheet4, r, 8, wVal > 0 ? 16 : '');
+          writeCell(sheet4, r, 10, hVal > 0 ? (hVal - 40) / 2 - 1 : '');
+          writeCell(sheet4, r, 13, hVal > 0 ? 32 : '');
+        });
+        sheet4['!ref'] = `A1:O${startRow + vtItems.length + 5}`;
+      }
+
+      // ── 시트 5: 차열재 재단(VM,VT)
+      const sheet5 = workbook.Sheets['차열재 재단(VM,VT)'];
+      if (sheet5) {
+        writeCell(sheet5, 0, 7, projectTitle);
+        let startRow = 7;
+        items.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          const isVm = getSocketType(item.product_type) === 'VM';
+          writeCell(sheet5, r, 0, noStr);
+          writeCell(sheet5, r, 1, item.product_type || item.structure || '');
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+          writeCell(sheet5, r, 2, wVal);
+          writeCell(sheet5, r, 3, hVal);
+          writeCell(sheet5, r, 4, item.insp_lot_no || '');
+          writeCell(sheet5, r, 5, 1);
+          writeCell(sheet5, r, 6, wVal > 0 ? wVal + 60 : '');
+          writeCell(sheet5, r, 7, wVal > 0 ? (isVm ? 2 : 4) : '');
+          writeCell(sheet5, r, 8, hVal > 0 ? hVal : '');
+          writeCell(sheet5, r, 9, hVal > 0 ? (isVm ? 2 : 4) : '');
+        });
+        sheet5['!ref'] = `A1:K${startRow + items.length + 5}`;
+      }
+
+      // ── 시트 6: 3. 1절곡(VM)
+      const sheet6 = workbook.Sheets['3. 1절곡(VM)'];
+      if (sheet6 && vmItems.length > 0) {
+        writeCell(sheet6, 4, 13, projectTitle);
+        let startRow = 10;
+        vmItems.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          writeCell(sheet6, r, 0, noStr);
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+          writeCell(sheet6, r, 1, wVal);
+          writeCell(sheet6, r, 2, hVal);
+          writeCell(sheet6, r, 3, 1);
+          writeCell(sheet6, r, 4, item.insp_lot_no || '');
+          writeCell(sheet6, r, 5, 1.6);
+          writeCell(sheet6, r, 6, '');
+          writeCell(sheet6, r, 7, wVal > 0 ? wVal - 1 : '');
+          writeCell(sheet6, r, 8, wVal > 0 ? 4 : '');
+          writeCell(sheet6, r, 10, hVal > 0 ? hVal - 30 : '');
+          writeCell(sheet6, r, 13, hVal > 0 ? 4 : '');
+        });
+        sheet6['!ref'] = `A1:O${startRow + vmItems.length + 5}`;
+      }
+
+      // ── 시트 7: 3.3 절곡(VT-보강대)
+      const sheet7 = workbook.Sheets['3.3 절곡(VT-보강대)'];
+      if (sheet7 && vtItems.length > 0) {
+        writeCell(sheet7, 4, 14, projectTitle);
+        let startRow = 10;
+        vtItems.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          writeCell(sheet7, r, 0, noStr);
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+          writeCell(sheet7, r, 1, wVal);
+          writeCell(sheet7, r, 2, hVal);
+          writeCell(sheet7, r, 3, 1);
+          writeCell(sheet7, r, 4, item.insp_lot_no || '');
+          writeCell(sheet7, r, 5, '1.6이상');
+          writeCell(sheet7, r, 6, 225);
+          writeCell(sheet7, r, 7, wVal > 0 ? (wVal - 40) / 2 + 4 : '');
+          writeCell(sheet7, r, 8, wVal > 0 ? 8 : '');
+          writeCell(sheet7, r, 10, 237);
+          writeCell(sheet7, r, 11, hVal > 0 ? hVal : '');
+          writeCell(sheet7, r, 14, hVal > 0 ? 4 : '');
+        });
+        sheet7['!ref'] = `A1:O${startRow + vtItems.length + 5}`;
+      }
+
+      // ── 시트 8: 5. 차열재 출하용(VM,VT,VAG)
+      const sheet8 = workbook.Sheets['5. 차열재 출하용(VM,VT,VAG)'];
+      if (sheet8) {
+        writeCell(sheet8, 4, 11, projectTitle);
+        let startRow = 9;
+        items.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          const isVm = getSocketType(item.product_type) === 'VM';
+          writeCell(sheet8, r, 0, noStr);
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+          writeCell(sheet8, r, 1, wVal);
+          writeCell(sheet8, r, 2, hVal);
+          writeCell(sheet8, r, 3, item.product_type || item.structure || '');
+
+          const area = wVal > 0 && hVal > 0 ? Number(((wVal * hVal) / 1000000).toFixed(4)) : 0;
+          const perimeter = wVal > 0 && hVal > 0 ? Number((((wVal + hVal) * 2) / 1000).toFixed(1)) : 0;
+          writeCell(sheet8, r, 4, area);
+          writeCell(sheet8, r, 5, perimeter);
+
+          if (!isVm) {
+            writeCell(sheet8, r, 6, '25*1400');
+            writeCell(sheet8, r, 7, 1);
+            writeCell(sheet8, r, 8, perimeter > 0 ? Number((perimeter + 0.5).toFixed(1)) : '');
+            writeCell(sheet8, r, 9, '50*400');
+            writeCell(sheet8, r, 10, 4);
+            writeCell(sheet8, r, 11, perimeter > 0 ? Number((perimeter + 0.5).toFixed(1)) : '');
+          } else {
+            writeCell(sheet8, r, 12, '25*200');
+            writeCell(sheet8, r, 13, 4);
+            const vmUsage = perimeter > 0 ? Number((perimeter + 0.5).toFixed(1)) : 0;
+            writeCell(sheet8, r, 14, vmUsage > 0 ? vmUsage * 4 : '');
+          }
+        });
+        sheet8['!ref'] = `A1:O${startRow + items.length + 5}`;
+      }
+
+      // ── 시트 9: 6. 라벨소요량
+      const sheet9 = workbook.Sheets['6. 라벨소요량'];
+      if (sheet9) {
+        writeCell(sheet9, 0, 10, projectTitle);
+        let startRow = 6;
+        items.forEach((item, idx) => {
+          const r = startRow + idx;
+          const noStr = String(idx + 1).padStart(2, '0');
+          const isVm = getSocketType(item.product_type) === 'VM';
+          writeCell(sheet9, r, 0, noStr);
+          writeCell(sheet9, r, 1, item.seq_no || '');
+          const wVal = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+          const hVal = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+          writeCell(sheet9, r, 2, wVal);
+          writeCell(sheet9, r, 3, hVal);
+          writeCell(sheet9, r, 4, item.insp_lot_no || '');
+
+          const area = wVal > 0 && hVal > 0 ? Number(((wVal * hVal) / 1000000).toFixed(4)) : 0;
+          const perimeter = wVal > 0 && hVal > 0 ? Number((((wVal + hVal) * 2) / 1000).toFixed(1)) : 0;
+          writeCell(sheet9, r, 5, area);
+          writeCell(sheet9, r, 6, perimeter);
+          writeCell(sheet9, r, 7, 2);
+
+          if (!isVm) {
+            writeCell(sheet9, r, 8, perimeter > 0 ? Number((perimeter + 0.5).toFixed(1)) : '');
+            writeCell(sheet9, r, 9, 1);
+            writeCell(sheet9, r, 12, perimeter > 0 ? Number((perimeter + 0.5).toFixed(1)) : '');
+            writeCell(sheet9, r, 13, 4);
+          } else {
+            writeCell(sheet9, r, 10, perimeter > 0 ? Number((perimeter + 0.5).toFixed(1)) : '');
+            writeCell(sheet9, r, 11, 4);
+          }
+        });
+        sheet9['!ref'] = `A1:O${startRow + items.length + 5}`;
+      }
     }
 
     const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
