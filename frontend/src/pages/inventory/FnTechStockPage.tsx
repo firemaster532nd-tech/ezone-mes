@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import {
   Package, BarChart3, ArrowDownToLine, RefreshCw, Plus,
   AlertTriangle, ChevronDown, CheckCircle, XCircle, Clock,
@@ -251,6 +252,10 @@ function ReceiveModal({ open, onClose, onSubmit, finished, material }: {
 
 // ─── 일일 생산량 탭 ─────────────────────────────────────────────────────────
 function DailyProductionTab() {
+  const { isAdmin } = useAuth();
+  const isAdminMode = typeof window !== 'undefined' && localStorage.getItem('sidebar_mode') === 'admin';
+  const canDelete = isAdmin && isAdminMode;
+
   const now = new Date();
   const [year, setYear]   = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -260,6 +265,23 @@ function DailyProductionTab() {
   const [editQty, setEditQty]   = useState(0);
   const [editLot, setEditLot]   = useState('');
   const [saving, setSaving]     = useState(false);
+
+  const handleDeleteDaily = async (prodId: number) => {
+    if (!window.confirm("정말로 이 생산 기록을 삭제하시겠습니까?\n삭제 시 관련된 원부자재/반제품/완제품 재고가 자동으로 복구됩니다.")) {
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.delete(`/fn-stock/daily/${prodId}`);
+      alert('생산 기록 및 재고 복구 완료');
+      await loadDaily();
+      setEditCell(null);
+    } catch (err: any) {
+      alert(err?.message || '삭제 실패');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const daysInMonth = new Date(year, month, 0).getDate();
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
@@ -446,7 +468,18 @@ function DailyProductionTab() {
                   placeholder={prodType === 'SEMI' ? "예: J260602D01" : "예: 260602-FN-100(0001~0960)"} />
               </div>
             </div>
-            <div className="flex gap-3 mt-5">
+            <div className="flex gap-2.5 mt-5">
+              {canDelete && (() => {
+                const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(editCell.day).padStart(2,'0')}`;
+                const matched = dailyData.find(d => d.item_name === editCell.item && d.spec === editCell.spec && d.prod_date.slice(0,10) === dateStr);
+                const prodId = matched?.prod_id;
+                return prodId ? (
+                  <button onClick={() => handleDeleteDaily(prodId)} disabled={saving}
+                    className="px-2.5 py-2 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-xs font-semibold transition disabled:opacity-50">
+                    기록 삭제
+                  </button>
+                ) : null;
+              })()}
               <button onClick={() => setEditCell(null)}
                 className="flex-1 py-2 border rounded-lg text-sm text-gray-600">취소</button>
               <button onClick={saveCell} disabled={saving}
@@ -463,6 +496,10 @@ function DailyProductionTab() {
 
 // ─── 메인 컴포넌트 ─────────────────────────────────────────────────────────
 export function FnTechStockPage() {
+  const { isAdmin } = useAuth();
+  const isAdminMode = typeof window !== 'undefined' && localStorage.getItem('sidebar_mode') === 'admin';
+  const canDelete = isAdmin && isAdminMode;
+
   type TabKey = 'FINISHED' | 'MATERIAL' | 'DAILY' | 'TX';
   const [activeTab, setActiveTab] = useState<TabKey>('FINISHED');
   const [finished, setFinished]   = useState<FinishedStock[]>(FALLBACK_FINISHED);
@@ -472,6 +509,19 @@ export function FnTechStockPage() {
   const [showReceive, setShowReceive] = useState(false);
   const [adjustId, setAdjustId]   = useState<number | null>(null);
   const [adjustDelta, setAdjustDelta] = useState(0);
+
+  const handleDeleteTx = async (txId: number) => {
+    if (!window.confirm("정말로 이 입출고 이력을 삭제하시겠습니까?\n삭제 시 관련된 재고 수량이 자동으로 원상 복구됩니다.")) {
+      return;
+    }
+    try {
+      await api.delete(`/fn-stock/transactions/${txId}`);
+      alert('이력 삭제 및 재고 복구 완료');
+      await Promise.all([loadData(), loadTx()]);
+    } catch (err: any) {
+      alert(err?.message || '삭제 실패');
+    }
+  };
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -772,11 +822,12 @@ export function FnTechStockPage() {
                       <th className="px-3 py-3 text-left text-xs font-semibold text-blue-600 bg-blue-50">입고 로트번호</th>
                       <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500">인수검사</th>
                       <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500">메모</th>
+                      {canDelete && <th className="px-3 py-3 text-center text-xs font-semibold text-red-500">관리</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {txList.length === 0 ? (
-                      <tr><td colSpan={9} className="px-4 py-10 text-center text-gray-400">이력 없음</td></tr>
+                      <tr><td colSpan={canDelete ? 10 : 9} className="px-4 py-10 text-center text-gray-400">이력 없음</td></tr>
                     ) : txList.map(tx => (
                       <tr key={tx.tx_id} className="hover:bg-gray-50">
                         <td className="px-3 py-2.5 text-gray-500 text-xs">{tx.tx_date}</td>
@@ -805,6 +856,14 @@ export function FnTechStockPage() {
                         </td>
                         <td className="px-3 py-2.5">{inspectBadge(tx.inspect_result)}</td>
                         <td className="px-3 py-2.5 text-gray-400 text-xs">{tx.memo}</td>
+                        {canDelete && (
+                          <td className="px-3 py-2 text-center">
+                            <button onClick={() => handleDeleteTx(tx.tx_id)}
+                              className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded text-xs font-semibold transition animate-fade-in">
+                              삭제
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
