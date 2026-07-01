@@ -9,7 +9,8 @@ import {
 // ─── 타입 ───────────────────────────────────────────────────────────────────
 interface FinishedStock {
   stock_id?: number; id?: number; diameter_mm: number; spec: string; qty: number;
-  last_lot_number?: string; last_receive_date?: string;
+  qty_semi?: number;
+  last_finished_lot?: string; last_semi_lot?: string; last_receive_date?: string;
 }
 interface MaterialStock  {
   stock_id?: number; id?: number; item_name: string; spec: string; qty: number; unit?: string;
@@ -253,6 +254,7 @@ function DailyProductionTab() {
   const now = new Date();
   const [year, setYear]   = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const [prodType, setProdType] = useState<'SEMI'|'FINISHED'>('FINISHED');
   const [dailyData, setDailyData] = useState<DailyProd[]>([]);
   const [editCell, setEditCell] = useState<{item:string;spec:string;day:number}|null>(null);
   const [editQty, setEditQty]   = useState(0);
@@ -264,10 +266,10 @@ function DailyProductionTab() {
 
   const loadDaily = useCallback(async () => {
     try {
-      const r = await api.get<{data: DailyProd[]}>(`/fn-stock/daily?year=${year}&month=${month}`);
+      const r = await api.get<{data: DailyProd[]}>(`/fn-stock/daily?year=${year}&month=${month}&prod_type=${prodType}`);
       if (r.data) setDailyData(r.data);
     } catch { /* ignore */ }
-  }, [year, month]);
+  }, [year, month, prodType]);
 
   useEffect(() => { loadDaily(); }, [loadDaily]);
 
@@ -296,7 +298,7 @@ function DailyProductionTab() {
     try {
       await api.post('/fn-stock/daily', {
         prod_date: dateStr, item_name: item, diameter_mm: rowInfo?.diameter_mm,
-        spec, qty: editQty, lot_number: editLot || null,
+        spec, qty: editQty, lot_number: editLot || null, prod_type: prodType
       });
       await loadDaily();
       setEditCell(null);
@@ -309,11 +311,27 @@ function DailyProductionTab() {
 
   return (
     <div className="space-y-4">
-      {/* 연월 선택 */}
-      <div className="flex items-center gap-3 bg-white rounded-xl border border-gray-200 p-4">
-        <Calendar className="h-5 w-5 text-blue-500" />
-        <span className="font-semibold text-gray-700">일일 생산량 기록표</span>
-        <div className="ml-auto flex items-center gap-2">
+      {/* 연월 및 모드 선택 */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+        <div className="flex items-center gap-3">
+          <Calendar className="h-5 w-5 text-blue-500" />
+          <span className="font-semibold text-gray-700">일일 생산량 기록표</span>
+          <div className="flex gap-1.5 ml-4">
+            <button onClick={() => setProdType('SEMI')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition ${
+                prodType==='SEMI' ? 'bg-purple-600 text-white border-purple-600' : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+              }`}>
+              반제품 조립 등록
+            </button>
+            <button onClick={() => setProdType('FINISHED')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition ${
+                prodType==='FINISHED' ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'
+              }`}>
+              완제품 생산 등록
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
           <select value={year} onChange={e => setYear(Number(e.target.value))}
             className="border rounded-lg px-3 py-1.5 text-sm">
             {[2025,2026,2027].map(y => <option key={y} value={y}>{y}년</option>)}
@@ -329,6 +347,25 @@ function DailyProductionTab() {
           </button>
         </div>
       </div>
+
+      {/* 실시간 BOM 공제 경고창 */}
+      {prodType === 'SEMI' ? (
+        <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-800 flex items-start gap-2">
+          <span className="text-lg">💡</span>
+          <div>
+            <strong>[반제품 조립 기록 등록]</strong> 수량을 기입하시면 자동으로 부자재 창고의 
+            <span className="text-purple-700 font-bold"> 소켓 1개, 보호철판 1개, 볼트세트 4개, 시트 1개</span>가 차감되고 반제품 재고로 적재됩니다. (조립 LOT 필요)
+          </div>
+        </div>
+      ) : (
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 flex items-start gap-2">
+          <span className="text-lg">💡</span>
+          <div>
+            <strong>[완제품 구조체 생산 등록]</strong> 수량을 기입하시면 자동으로 완성된 반제품 보관 창고의 
+            <span className="text-blue-700 font-bold"> 반제품 재고가 차감</span>되고 최종 완제품 재고로 적재됩니다. (완제품 LOT 필요)
+          </div>
+        </div>
+      )}
 
       {/* 생산량 격자표 */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-auto shadow-sm">
@@ -366,8 +403,8 @@ function DailyProductionTab() {
                       className={`px-1 py-1 text-center cursor-pointer hover:bg-blue-50 transition border-r border-gray-100 ${isWeekend ? 'bg-gray-50' : ''}`}>
                       {qty > 0 ? (
                         <div>
-                          <span className="font-bold text-blue-700 text-xs block">{qty.toLocaleString()}</span>
-                          {lot && <span className="text-[9px] text-blue-400 block truncate max-w-[50px] leading-tight font-mono">{lot.split('(')[0]}</span>}
+                          <span className={`font-bold text-xs block ${prodType==='SEMI'?'text-purple-700':'text-blue-700'}`}>{qty.toLocaleString()}</span>
+                          {lot && <span className="text-[9px] text-gray-400 block truncate max-w-[50px] leading-tight font-mono">{lot.split('(')[0]}</span>}
                         </div>
                       ) : (
                         <span className="text-gray-200">-</span>
@@ -383,19 +420,22 @@ function DailyProductionTab() {
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-gray-400">셀을 클릭하면 수량과 생산 로트를 입력할 수 있습니다.</p>
+      <p className="text-xs text-gray-400">셀을 클릭하여 수량과 생산 로트를 등록/변경하십시오.</p>
 
       {/* 셀 편집 모달 */}
       {editCell && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center">
           <div className="bg-white rounded-2xl p-6 w-80 shadow-2xl">
-            <h4 className="font-semibold text-gray-800 mb-1">{editCell.item}</h4>
-            <p className="text-xs text-gray-500 mb-4">
-              {year}년 {month}월 {editCell.day}일 생산량
+            <h4 className="font-semibold text-gray-800 mb-1">
+              {prodType === 'SEMI' ? '반제품 조립 등록' : '완제품 생산 등록'}
+            </h4>
+            <p className="text-xs text-gray-600 font-medium mb-1 truncate">{editCell.item}</p>
+            <p className="text-[10px] text-gray-400 mb-4">
+              {year}년 {month}월 {editCell.day}일 기록
             </p>
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-gray-600 mb-1 block">생산 수량 (ea)</label>
+                <label className="text-xs font-semibold text-gray-600 mb-1 block">생산량 (ea)</label>
                 <input type="number" min="0" value={editQty} onChange={e => setEditQty(Number(e.target.value))}
                   className="w-full border rounded-lg px-3 py-2 text-sm text-center text-lg font-bold" />
               </div>
@@ -403,7 +443,7 @@ function DailyProductionTab() {
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">생산 로트번호</label>
                 <input value={editLot} onChange={e => setEditLot(e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 text-sm font-mono"
-                  placeholder="예: 260602-FN-100(0001~0960)" />
+                  placeholder={prodType === 'SEMI' ? "예: J260602D01" : "예: 260602-FN-100(0001~0960)"} />
               </div>
             </div>
             <div className="flex gap-3 mt-5">
@@ -554,39 +594,90 @@ export function FnTechStockPage() {
 
           {/* ── 완제품 탭 ── */}
           {activeTab==='FINISHED' && !loading && (
-            <div className="space-y-4">
+            <div className="space-y-6">
+              {/* 100파이 방화소켓 */}
               <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="bg-blue-50 px-5 py-3 border-b border-blue-100 flex justify-between items-center">
-                  <h3 className="font-bold text-blue-800">100파이 방화소켓 (FN-100)</h3>
-                  <span className="text-xs text-blue-600 font-medium">
-                    합계: {byDiameter(100).reduce((s,f) => s+Math.max(0,f.qty),0).toLocaleString()} ea
-                  </span>
+                <div className="bg-blue-50 px-5 py-3.5 border-b border-blue-100 flex justify-between items-center">
+                  <div>
+                    <h3 className="font-bold text-blue-800 text-base">100파이 방화소켓 (FN-100)</h3>
+                    <p className="text-[11px] text-blue-600 mt-0.5">반제품(소켓+평철 조립)과 완제품(구조체 완성) 현황</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs bg-blue-100 text-blue-800 font-semibold px-2.5 py-1 rounded-full">
+                      완제품 합계: {byDiameter(100).reduce((s,f) => s+Math.max(0,f.qty),0).toLocaleString()} ea
+                    </span>
+                  </div>
                 </div>
-                <div className="p-5 grid grid-cols-5 gap-3">
+                <div className="p-5 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                   {byDiameter(100).map(f => (
-                    <div key={f.spec} className="text-center p-3 rounded-xl bg-gray-50 border border-gray-100">
-                      <p className="text-xs text-gray-500 mb-1">{f.spec}</p>
-                      <p className={`text-xl ${qtyColor(f.qty)}`}>{f.qty.toLocaleString()}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">ea</p>
+                    <div key={f.spec} className="p-4 rounded-xl bg-gray-50 border border-gray-200 flex flex-col justify-between">
+                      <div className="border-b border-gray-200 pb-2 mb-2">
+                        <span className="font-bold text-sm text-gray-800">{f.spec}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-center">
+                        <div className="border-r border-gray-200 pr-1.5">
+                          <span className="text-[10px] text-gray-400 block mb-0.5">반제품</span>
+                          <span className={`text-sm font-bold block ${qtyColor(f.qty_semi ?? 0)}`}>
+                            {(f.qty_semi ?? 0).toLocaleString()} <span className="text-[9px] text-gray-400 font-normal">ea</span>
+                          </span>
+                          <span className="text-[9px] font-mono text-gray-500 block truncate mt-1 bg-gray-150 px-1 py-0.5 rounded" title={f.last_semi_lot || '조립LOT 없음'}>
+                            {f.last_semi_lot || '-'}
+                          </span>
+                        </div>
+                        <div className="pl-1.5">
+                          <span className="text-[10px] text-gray-400 block mb-0.5">완제품</span>
+                          <span className={`text-sm font-bold block ${qtyColor(f.qty)}`}>
+                            {f.qty.toLocaleString()} <span className="text-[9px] text-gray-400 font-normal">ea</span>
+                          </span>
+                          <span className="text-[9px] font-mono text-blue-600 block truncate mt-1 bg-blue-50 px-1 py-0.5 rounded" title={f.last_finished_lot || '완제품LOT 없음'}>
+                            {f.last_finished_lot || '-'}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+
+              {/* 75파이 및 50파이 방화소켓 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {[75,50].map(d => (
                   <div key={d} className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                    <div className="bg-slate-50 px-5 py-3 border-b border-slate-100 flex justify-between">
-                      <h3 className="font-bold text-slate-700">{d}파이 방화소켓 (FN-{d})</h3>
-                      <span className="text-xs text-slate-500">
-                        {byDiameter(d).reduce((s,f)=>s+Math.max(0,f.qty),0)} ea
+                    <div className="bg-slate-50 px-5 py-3.5 border-b border-slate-100 flex justify-between items-center">
+                      <div>
+                        <h3 className="font-bold text-slate-700 text-base">{d}파이 방화소켓 (FN-{d})</h3>
+                        <p className="text-[11px] text-slate-500 mt-0.5">반제품 및 완제품 현황</p>
+                      </div>
+                      <span className="text-xs bg-slate-100 text-slate-700 font-semibold px-2.5 py-1 rounded-full">
+                        완제품 합계: {byDiameter(d).reduce((s,f)=>s+Math.max(0,f.qty),0).toLocaleString()} ea
                       </span>
                     </div>
-                    <div className="p-5">
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
                       {byDiameter(d).map(f => (
-                        <div key={f.spec} className="text-center p-4 rounded-xl bg-gray-50 border border-gray-100">
-                          <p className="text-xs text-gray-500 mb-1">{f.spec}</p>
-                          <p className={`text-2xl ${qtyColor(f.qty)}`}>{f.qty.toLocaleString()}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">ea</p>
+                        <div key={f.spec} className="p-4 rounded-xl bg-gray-50 border border-gray-200 flex flex-col justify-between">
+                          <div className="border-b border-gray-200 pb-2 mb-2">
+                            <span className="font-bold text-sm text-gray-800">{f.spec}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-center">
+                            <div className="border-r border-gray-200 pr-1.5">
+                              <span className="text-[10px] text-gray-400 block mb-0.5">반제품</span>
+                              <span className={`text-sm font-bold block ${qtyColor(f.qty_semi ?? 0)}`}>
+                                {(f.qty_semi ?? 0).toLocaleString()} <span className="text-[9px] text-gray-400 font-normal">ea</span>
+                              </span>
+                              <span className="text-[9px] font-mono text-gray-500 block truncate mt-1 bg-gray-150 px-1 py-0.5 rounded" title={f.last_semi_lot || '조립LOT 없음'}>
+                                {f.last_semi_lot || '-'}
+                              </span>
+                            </div>
+                            <div className="pl-1.5">
+                              <span className="text-[10px] text-gray-400 block mb-0.5">완제품</span>
+                              <span className={`text-sm font-bold block ${qtyColor(f.qty)}`}>
+                                {f.qty.toLocaleString()} <span className="text-[9px] text-gray-400 font-normal">ea</span>
+                              </span>
+                              <span className="text-[9px] font-mono text-blue-600 block truncate mt-1 bg-blue-50 px-1 py-0.5 rounded" title={f.last_finished_lot || '완제품LOT 없음'}>
+                                {f.last_finished_lot || '-'}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
