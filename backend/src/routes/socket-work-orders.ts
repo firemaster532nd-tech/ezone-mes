@@ -3,6 +3,11 @@ import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 import { expandAndSortSocketItems } from '../lib/socket-sort.js';
 import XLSX from 'xlsx';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -482,7 +487,7 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
 
     if (category === 'RISER') {
       // ─── [입상 전용 분기] ───
-      const templatePath = 'c:/Users/edwar/OneDrive/ezone-mes/upload/26.06.04 씨에스_우진아이엔에스_포스코건설_양평동삼화인쇄(입상) 작업지시서.xlsx';
+      const templatePath = path.join(__dirname, '../templates/26.06.04 씨에스_우진아이엔에스_포스코건설_양평동삼화인쇄(입상) 작업지시서.xlsx');
       try {
         workbook = XLSX.readFile(templatePath);
       } catch (e: any) {
@@ -753,7 +758,7 @@ export async function socketWorkOrderRoutes(app: FastifyInstance) {
 
     } else {
       // ─── [벽체 전용 분기 (기존 벽체 로직 동일)] ───
-      const templatePath = 'c:/Users/edwar/OneDrive/ezone-mes/upload/26.04.24 그린산업_ 일우엠이씨_GS건설_아산탕정자이퍼스트시티 작업지시서.xlsx';
+      const templatePath = path.join(__dirname, '../templates/26.04.24 그린산업_ 일우엠이씨_GS건설_아산탕정자이퍼스트시티 작업지시서.xlsx');
       try {
         workbook = XLSX.readFile(templatePath);
       } catch (e: any) {
