@@ -70,6 +70,7 @@ import LabelReprintPage from '@/pages/inventory/LabelReprintPage';
 import { ShipmentReadyPage } from '@/pages/shipment/ShipmentReadyPage';
 import { SocketOrderWaitPage } from '@/pages/orders/SocketOrderWaitPage';
 import SocketIncomingDetailPage from '@/pages/quality/SocketIncomingDetailPage';
+import { FqcInspectionPage } from '@/pages/quality/FqcInspectionPage';
 
 // ─── 라우트 에러 바운더리 ───
 function RouteErrorBoundary() {
@@ -124,6 +125,7 @@ export const router = createBrowserRouter([
       { path: 'quality/incoming', element: <IncomingInspectionPage /> },
       { path: 'quality/process-inspection', element: <ProcessInspectionPage /> },
       { path: 'quality/self-inspection', element: <SelfInspectionPage /> },
+      { path: 'quality/fqc-inspection', element: <FqcInspectionPage /> },
       { path: 'quality/lot-trace', element: <LotTracePage /> },
       { path: 'quality/cert-check', element: <CertCheckPage /> },
       { path: 'quality/inspection-print/:id', element: <InspectionPrintPage /> },

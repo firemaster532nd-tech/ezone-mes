@@ -836,22 +836,61 @@ function CreateProcessInspectionModal({
                           className="w-full border rounded px-1 py-0.5 text-right text-xs" />
                       </td>
                       <td className="px-2 py-1">
-                        <input type="number" value={m.n1}
-                          onChange={(e) => updateMeasurement(idx, 'n1', e.target.value)}
-                          disabled={!m.is_applicable}
-                          className="w-full border rounded px-1 py-0.5 text-right text-xs" placeholder="n1" />
+                        {m.check_method === '육안' ? (
+                          <select
+                            value={m.n1}
+                            onChange={(e) => updateMeasurement(idx, 'n1', e.target.value)}
+                            disabled={!m.is_applicable}
+                            className="w-full border rounded px-1 py-0.5 text-xs bg-white"
+                          >
+                            <option value="">판정</option>
+                            <option value="1">OK</option>
+                            <option value="0">NG</option>
+                          </select>
+                        ) : (
+                          <input type="number" value={m.n1}
+                            onChange={(e) => updateMeasurement(idx, 'n1', e.target.value)}
+                            disabled={!m.is_applicable}
+                            className="w-full border rounded px-1 py-0.5 text-right text-xs" placeholder="n1" />
+                        )}
                       </td>
                       <td className="px-2 py-1">
-                        <input type="number" value={m.n2}
-                          onChange={(e) => updateMeasurement(idx, 'n2', e.target.value)}
-                          disabled={!m.is_applicable}
-                          className="w-full border rounded px-1 py-0.5 text-right text-xs" placeholder="n2" />
+                        {m.check_method === '육안' ? (
+                          <select
+                            value={m.n2}
+                            onChange={(e) => updateMeasurement(idx, 'n2', e.target.value)}
+                            disabled={!m.is_applicable}
+                            className="w-full border rounded px-1 py-0.5 text-xs bg-white"
+                          >
+                            <option value="">판정</option>
+                            <option value="1">OK</option>
+                            <option value="0">NG</option>
+                          </select>
+                        ) : (
+                          <input type="number" value={m.n2}
+                            onChange={(e) => updateMeasurement(idx, 'n2', e.target.value)}
+                            disabled={!m.is_applicable}
+                            className="w-full border rounded px-1 py-0.5 text-right text-xs" placeholder="n2" />
+                        )}
                       </td>
                       <td className="px-2 py-1">
-                        <input type="number" value={m.n3}
-                          onChange={(e) => updateMeasurement(idx, 'n3', e.target.value)}
-                          disabled={!m.is_applicable}
-                          className="w-full border rounded px-1 py-0.5 text-right text-xs" placeholder="n3" />
+                        {m.check_method === '육안' ? (
+                          <select
+                            value={m.n3}
+                            onChange={(e) => updateMeasurement(idx, 'n3', e.target.value)}
+                            disabled={!m.is_applicable}
+                            className="w-full border rounded px-1 py-0.5 text-xs bg-white"
+                          >
+                            <option value="">판정</option>
+                            <option value="1">OK</option>
+                            <option value="0">NG</option>
+                          </select>
+                        ) : (
+                          <input type="number" value={m.n3}
+                            onChange={(e) => updateMeasurement(idx, 'n3', e.target.value)}
+                            disabled={!m.is_applicable}
+                            className="w-full border rounded px-1 py-0.5 text-right text-xs" placeholder="n3" />
+                        )}
                       </td>
                     </tr>
                   ))}

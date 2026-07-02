@@ -7,6 +7,9 @@ export async function processExecutionRoutes(app: FastifyInstance) {
   await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS worker_ids TEXT`);
   await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS worker_names TEXT`);
   await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS raw_material_inputs TEXT`);
+  await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS parent_lot_number TEXT`);
+  await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS dummy_weight_kg NUMERIC(10,2)`);
+  await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS scrap_kg NUMERIC(10,2)`);
   await pool.query(`ALTER TABLE process_log ALTER COLUMN shift TYPE VARCHAR(20)`);
   await pool.query(`ALTER TABLE process_log DROP CONSTRAINT IF EXISTS process_log_shift_check`);
 
@@ -105,7 +108,7 @@ export async function processExecutionRoutes(app: FastifyInstance) {
   // POST /api/process-logs - 공정 로그 생성
   app.post('/api/process-logs', async (request, reply) => {
     const body = request.body as Record<string, unknown>;
-    const { wo_id, process_code, shift, worker_id, planned_qty, worker_ids, worker_names, raw_material_inputs } = body;
+    const { wo_id, process_code, shift, worker_id, planned_qty, worker_ids, worker_names, raw_material_inputs, parent_lot_number } = body;
 
     // shift can be comma-separated (e.g. "AM,PM") or single value
     const effectiveShift = shift as string || '';
@@ -127,9 +130,9 @@ export async function processExecutionRoutes(app: FastifyInstance) {
     const rawMaterialInputsJson = raw_material_inputs ? JSON.stringify(raw_material_inputs) : null;
 
     const result = await pool.query(
-      `INSERT INTO process_log (wo_id, process_code, shift, worker_id, planned_qty, worker_ids, worker_names, raw_material_inputs)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-      [wo_id, process_code, effectiveShift, effectiveWorkerId || null, planned_qty || null, workerIdsJson, workerNamesJson, rawMaterialInputsJson]
+      `INSERT INTO process_log (wo_id, process_code, shift, worker_id, planned_qty, worker_ids, worker_names, raw_material_inputs, parent_lot_number)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      [wo_id, process_code, effectiveShift, effectiveWorkerId || null, planned_qty || null, workerIdsJson, workerNamesJson, rawMaterialInputsJson, parent_lot_number || null]
     );
 
     return { data: result.rows[0] };
@@ -272,7 +275,7 @@ export async function processExecutionRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const logId = parseInt(id, 10);
     const body = request.body as Record<string, unknown>;
-    const { produced_qty, defect_qty, remarks } = body;
+    const { produced_qty, defect_qty, remarks, dummy_weight_kg, scrap_kg } = body;
 
     const client = await pool.connect();
     try {
@@ -292,9 +295,10 @@ export async function processExecutionRoutes(app: FastifyInstance) {
 
       await client.query(
         `UPDATE process_log SET status = 'COMPLETED', produced_qty = $2, defect_qty = $3,
-         completed_at = NOW(), remarks = COALESCE($4, remarks)
+         completed_at = NOW(), remarks = COALESCE($4, remarks),
+         dummy_weight_kg = COALESCE($5, dummy_weight_kg), scrap_kg = COALESCE($6, scrap_kg)
          WHERE log_id = $1`,
-        [logId, produced_qty || 0, defect_qty || 0, remarks || null]
+        [logId, produced_qty || 0, defect_qty || 0, remarks || null, dummy_weight_kg || null, scrap_kg || null]
       );
 
       await client.query(
@@ -463,7 +467,7 @@ export async function processExecutionRoutes(app: FastifyInstance) {
     const allowedFields = [
       'remarks', 'planned_qty', 'produced_qty', 'defect_qty',
       'actual_input_qty', 'weighed_input', 'weighed_output', 'weighed_loss',
-      'loss_qty', 'loss_rate', 'bom_id',
+      'loss_qty', 'loss_rate', 'bom_id', 'parent_lot_number', 'dummy_weight_kg', 'scrap_kg',
     ];
     const updates: string[] = [];
     const values: unknown[] = [];

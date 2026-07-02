@@ -1178,4 +1178,218 @@ export async function inspectionRoutes(app: FastifyInstance) {
     `);
     return { data: result.rows, total: result.rows.length };
   });
+
+  // GET /api/inspections/final-templates
+  // 완제품검사 C-901 성적서 양식 목록
+  app.get('/api/inspections/final-templates', async () => {
+    return { data: FINAL_INSPECTION_TEMPLATES };
+  });
+
+  // GET /api/inspections/final-pending
+  // 완제품검사 대기 대상 (완료된 조립 공정 중 완제품검사가 아직 등록되지 않은 것)
+  app.get('/api/inspections/final-pending', async () => {
+    const result = await pool.query(`
+      SELECT wo.wo_id, wo.wo_number, wo.wo_date, wo.planned_qty, wo.actual_qty, wo.lot_number,
+             cm.cert_name, cm.structure_code, im.item_id, im.item_name, im.item_code, lt.lot_id
+      FROM work_order wo
+      LEFT JOIN certification_master cm ON cm.cert_id = wo.cert_id
+      LEFT JOIN lot_transaction lt ON lt.wo_id = wo.wo_id
+      LEFT JOIN item_master im ON im.item_id = lt.item_id
+      WHERE wo.process_code = 'ASM' AND wo.status = 'COMPLETED'
+        AND NOT EXISTS (
+          SELECT 1 FROM inspection ins WHERE ins.wo_id = wo.wo_id AND ins.insp_type = 'FINAL'
+        )
+      ORDER BY wo.wo_id DESC
+    `);
+    return { data: result.rows, total: result.rows.length };
+  });
+
+  // POST /api/inspections/final - 완제품검사 등록 (C-901 양식 기반)
+  app.post('/api/inspections/final', async (request, reply) => {
+    const body = request.body as {
+      wo_id: number;
+      form_code: string;
+      inspector?: string;
+      component_lots?: Record<string, string>; // 부속품 LOT 목록 매핑
+      details: Array<{
+        item_no: number;
+        quality_item: string;
+        check_item: string;
+        check_method: string;
+        cert_standard?: number;
+        prod_standard?: number;
+        measured_n1?: number;
+        measured_n2?: number;
+        measured_n3?: number;
+        is_applicable?: boolean;
+        direction?: string;
+      }>;
+    };
+
+    if (!body.wo_id || !body.form_code || !body.details) {
+      return reply.status(400).send({
+        error: 'Bad Request',
+        message: 'wo_id, form_code, details는 필수입니다.',
+      });
+    }
+
+    const woResult = await pool.query(
+      `SELECT w.*, lt.lot_id FROM work_order w
+       LEFT JOIN lot_transaction lt ON lt.wo_id = w.wo_id
+       WHERE w.wo_id = $1`,
+      [body.wo_id]
+    );
+    if (woResult.rows.length === 0) {
+      return reply.status(404).send({ error: 'Not Found', message: '작업지시를 찾을 수 없습니다.' });
+    }
+    const wo = woResult.rows[0];
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const lotId = wo.lot_id || null;
+      const componentLotsJson = body.component_lots ? JSON.stringify(body.component_lots) : null;
+
+      // 1. 완제품검사 헤더 생성
+      const inspResult = await client.query(
+        `INSERT INTO inspection
+         (insp_type, form_code, wo_id, lot_id, cert_id, sampling_n, accept_c, result, inspector, inspected_at, remarks)
+         VALUES ('FINAL', $1, $2, $3, $4, 3, 0, 'PENDING', $5, NOW(), $6)
+         RETURNING *`,
+        [body.form_code, body.wo_id, lotId, wo.cert_id || null, body.inspector || null, componentLotsJson]
+      );
+      const insp = inspResult.rows[0];
+
+      // 2. 검사항목별 상세 등록 및 판정
+      const itemResults: string[] = [];
+      for (const d of body.details) {
+        const itemResult = judgeDetailItem({
+          check_method: d.check_method,
+          cert_standard: d.cert_standard ?? null,
+          measured_n1: d.measured_n1 ?? null,
+          measured_n2: d.measured_n2 ?? null,
+          measured_n3: d.measured_n3 ?? null,
+          is_applicable: d.is_applicable !== false,
+        }, d.direction || 'MIN');
+
+        itemResults.push(itemResult);
+
+        await client.query(
+          `INSERT INTO inspection_detail
+           (insp_id, item_no, quality_item, check_item, check_method,
+            cert_standard, prod_standard, measured_n1, measured_n2, measured_n3,
+            is_applicable, item_result, direction)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+          [
+            insp.insp_id, d.item_no, d.quality_item, d.check_item, d.check_method,
+            d.cert_standard ?? null, d.prod_standard ?? null,
+            d.measured_n1 ?? null, d.measured_n2 ?? null, d.measured_n3 ?? null,
+            d.is_applicable ?? true, itemResult, d.direction || 'MIN',
+          ]
+        );
+      }
+
+      // 3. 전체 판정 업데이트
+      const overallResult = calculateOverallResult(itemResults);
+      await client.query(
+        `UPDATE inspection SET result = $1 WHERE insp_id = $2`,
+        [overallResult, insp.insp_id]
+      );
+
+      // 4. 생산 LOT에 검사결과 반영
+      if (lotId) {
+        await client.query(
+          `UPDATE lot_transaction SET inspection_result = $1 WHERE lot_id = $2`,
+          [overallResult, lotId]
+        );
+      }
+
+      await client.query('COMMIT');
+
+      return {
+        data: {
+          ...insp,
+          result: overallResult,
+        },
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
 }
+
+// 완제품검사 C-901 성적서 양식 정의
+interface FinalInspectionTemplate {
+  form_code: string;
+  form_name: string;
+  items: Array<{
+    item_no: number;
+    quality_item: string;
+    check_item: string;
+    check_method: string;
+    standard_desc: string;
+  }>;
+}
+
+const FINAL_INSPECTION_TEMPLATES: FinalInspectionTemplate[] = [
+  {
+    form_code: '901-1',
+    form_name: '벽체 내화채움구조 제품검사 성적서 (EZC-C-901-1)',
+    items: [
+      { item_no: 1, quality_item: '내화채움구조', check_item: '겉모양', check_method: '육안', standard_desc: '해로운 흠, 비틀림 등의 결함이 없고 한도견본 이상일 것' },
+      { item_no: 2, quality_item: '내화채움구조', check_item: '품질인정마크 부착상태', check_method: '육안', standard_desc: '인정마크 부착 상태 양호할 것' },
+      { item_no: 3, quality_item: '방화소켓(벽체)', check_item: '겉모양/브라켓 결합 상태', check_method: '육안', standard_desc: '파손 유무 및 흠, 비틀림이 없을 것' },
+      { item_no: 4, quality_item: '방화소켓(벽체)', check_item: '가로 치수(mm)', check_method: '줄자', standard_desc: '도면 기준 치수 이상' },
+      { item_no: 5, quality_item: '방화소켓(벽체)', check_item: '세로 치수(mm)', check_method: '줄자', standard_desc: '도면 기준 치수 이상' },
+      { item_no: 6, quality_item: '방화소켓(벽체)', check_item: '높이 치수(mm)', check_method: '줄자', standard_desc: '200 mm 이상' },
+      { item_no: 7, quality_item: '세라믹울 차열재', check_item: '겉모양/결합 상태', check_method: '육안', standard_desc: '색상, 파손 유무 및 차열시트 밀착 상태 양호' },
+      { item_no: 8, quality_item: '방화플래싱', check_item: '겉모양/결합 상태', check_method: '육안', standard_desc: '파손 유무 및 차열시트 밀착 여부 양호' },
+      { item_no: 9, quality_item: '방화플래싱', check_item: '품질인정마크 부착상태', check_method: '육안', standard_desc: '부착 상태 양호할 것' },
+      { item_no: 10, quality_item: '그라스울 단열재', check_item: '겉모양', check_method: '육안', standard_desc: '파손 및 흠집이 없을 것' },
+      { item_no: 11, quality_item: '세라믹울 단열재', check_item: '겉모양', check_method: '육안', standard_desc: '파손 및 흠집이 없을 것' }
+    ]
+  },
+  {
+    form_code: '901-2',
+    form_name: '입상 내화채움구조 제품검사 성적서 (EZC-C-901-2)',
+    items: [
+      { item_no: 1, quality_item: '내화채움구조', check_item: '겉모양', check_method: '육안', standard_desc: '해로운 흠, 비틀림 등의 결함이 없고 한도견본 이상일 것' },
+      { item_no: 2, quality_item: '내화채움구조', check_item: '품질인정마크 부착상태', check_method: '육안', standard_desc: '인정마크 부착 상태 양호할 것' },
+      { item_no: 3, quality_item: '방화소켓(입상)', check_item: '겉모양/브라켓 결합 상태', check_method: '육안', standard_desc: '파손 유무 및 흠, 비틀림이 없을 것' },
+      { item_no: 4, quality_item: '방화소켓(입상)', check_item: '가로 치수(mm)', check_method: '줄자', standard_desc: '도면 기준 치수 이상' },
+      { item_no: 5, quality_item: '방화소켓(입상)', check_item: '세로 치수(mm)', check_method: '줄자', standard_desc: '도면 기준 치수 이상' },
+      { item_no: 6, quality_item: '방화소켓(입상)', check_item: '높이 치수(mm)', check_method: '줄자', standard_desc: '200 mm 이상' },
+      { item_no: 7, quality_item: '세라믹울 차열재', check_item: '겉모양/결합 상태', check_method: '육안', standard_desc: '색상, 파손 유무 및 차열시트 밀착 상태 양호' },
+      { item_no: 8, quality_item: '방화플래싱', check_item: '겉모양/결합 상태', check_method: '육안', standard_desc: '파손 유무 및 차열시트 밀착 여부 양호' },
+      { item_no: 9, quality_item: '방화플래싱', check_item: '품질인정마크 부착상태', check_method: '육안', standard_desc: '부착 상태 양호할 것' },
+      { item_no: 10, quality_item: '그라스울 단열재', check_item: '겉모양', check_method: '육안', standard_desc: '파손 및 흠집이 없을 것' },
+      { item_no: 11, quality_item: '세라믹울 단열재', check_item: '겉모양', check_method: '육안', standard_desc: '파손 및 흠집이 없을 것' }
+    ]
+  },
+  {
+    form_code: '901-3',
+    form_name: '버스덕트 내화채움구조 제품검사 성적서 (EZC-C-901-3)',
+    items: [
+      { item_no: 1, quality_item: '내화채움구조', check_item: '겉모양', check_method: '육안', standard_desc: '해로운 흠, 비틀림 등의 결함이 없을 것' },
+      { item_no: 2, quality_item: '내화채움구조', check_item: '품질인정마크 부착상태', check_method: '육안', standard_desc: '인정마크 부착 상태 양호할 것' },
+      { item_no: 3, quality_item: '버스덕트 방화소켓', check_item: '겉모양/프래싱 결합 상태', check_method: '육안', standard_desc: '파손 유무 및 흠, 비틀림이 없을 것' },
+      { item_no: 4, quality_item: '틈새복합시트', check_item: '겉모양 및 밀착 상태', check_method: '육안', standard_desc: '밀착 상태가 양호하고 파손이 없을 것' },
+      { item_no: 5, quality_item: '단열재/고정핀', check_item: '결합 상태', check_method: '육안', standard_desc: '고정핀 부착 및 단열재 결합이 견고할 것' }
+    ]
+  },
+  {
+    form_code: '901-4',
+    form_name: '비금속배관 내화채움구조 제품검사 성적서 (EZC-C-901-4)',
+    items: [
+      { item_no: 1, quality_item: '내화채움구조', check_item: '겉모양', check_method: '육안', standard_desc: '해로운 흠, 비틀림 등의 결함이 없을 것' },
+      { item_no: 2, quality_item: '내화채움구조', check_item: '품질인정마크 부착상태', check_method: '육안', standard_desc: '인정마크 부착 상태 양호할 것' },
+      { item_no: 3, quality_item: '보호철판', check_item: '겉모양/결합 상태', check_method: '육안', standard_desc: '파손 및 흠집이 없고 견고하게 결합할 것' },
+      { item_no: 4, quality_item: '틈새복합시트', check_item: '겉모양 및 밀착 상태', check_method: '육안', standard_desc: '밀착 상태가 양호하고 파손이 없을 것' },
+      { item_no: 5, quality_item: '단열재/고정핀', check_item: '결합 상태', check_method: '육안', standard_desc: '고정핀 부착 및 단열재 결합이 견고할 것' }
+    ]
+  }
+];

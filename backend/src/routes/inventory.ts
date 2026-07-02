@@ -580,13 +580,25 @@ export async function inventoryRoutes(app: FastifyInstance) {
         // 2. 산출물 입고 (IN)
         if (body.output_item_id && body.output_qty && body.output_qty > 0) {
           // 타 공정 생산 입고 시에도 lot_transaction 생성
+          let finalLotNumber = woLotNumber || `PROD-${body.log_id}`;
+          if (processCode === 'EXT' && logRow.parent_lot_number) {
+            finalLotNumber = logRow.parent_lot_number.endsWith('-E') ? logRow.parent_lot_number : `${logRow.parent_lot_number}-E`;
+          } else if (processCode === 'CUT' && logRow.parent_lot_number) {
+            const base = logRow.parent_lot_number.endsWith('-E') ? logRow.parent_lot_number.slice(0, -2) : logRow.parent_lot_number;
+            finalLotNumber = base.endsWith('-C') ? base : `${base}-C`;
+          }
+
+          if (finalLotNumber !== woLotNumber) {
+            await client.query(`UPDATE work_order SET lot_number = $1 WHERE wo_id = $2`, [finalLotNumber, woId]);
+          }
+
           let outputLotId: number | null = null;
           const lotRes = await client.query(
             `INSERT INTO lot_transaction (lot_number, lot_type, item_id, qty, remaining_qty, unit, status, wo_id)
              VALUES ($1, 'PRODUCTION', $2, $3, $3, $4, 'ACTIVE', $5)
              ON CONFLICT (lot_number) DO UPDATE SET qty = lot_transaction.qty + $3, remaining_qty = lot_transaction.remaining_qty + $3
              RETURNING lot_id`,
-            [woLotNumber || `PROD-${body.log_id}`, 'SA', body.output_item_id, body.output_qty, outputUnit, woId]
+            [finalLotNumber, 'SA', body.output_item_id, body.output_qty, outputUnit, woId]
           );
           outputLotId = lotRes.rows[0]?.lot_id;
 
@@ -596,7 +608,7 @@ export async function inventoryRoutes(app: FastifyInstance) {
              VALUES ($1, $2, 'IN', $3, $4, '공정산출', $5, $6, $7)
              RETURNING *`,
             [body.output_item_id, outputLotId, txnDate, body.output_qty,
-             woId || null, woLotNumber || null, workerName || null]
+             woId || null, finalLotNumber, workerName || null]
           );
           createdTxns.push(r.rows[0]);
         }
