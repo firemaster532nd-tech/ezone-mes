@@ -56,6 +56,17 @@ export function getSocketType(productType: string): 'VM' | 'VT' {
   return 'VM';
 }
 
+// ── 롤 단위 계산 헬퍼 ──────────────────────────────────────
+// 세라믹울(차열재) 1롤당 기본 길이: 96K→7.32M, 128K→3.6M, 100K→3.6M
+const CW_ROLL_LEN_M = 7.32;  // 기본(96K) – 재고 item_master.roll_length_m 기준
+const GW_ROLL_LEN_M = 20.0;  // 그라스울 24K 기본
+
+/** 총소요(M)를 롤수(올림)로 환산 */
+function mToRolls(totalM: number, rollLenM: number): number {
+  if (totalM <= 0 || rollLenM <= 0) return 0;
+  return Math.ceil(totalM / rollLenM);
+}
+
 export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; onClose: () => void; onRefresh: () => void }) {
   const [detail, setDetail] = useState<any>(null);
   const [editStatus, setEditStatus] = useState(swo.status);
@@ -562,52 +573,100 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
             </div>
 
             {/* 6. 라벨소요량 */}
-            <div className="page-break p-8">
-              <div className="print-header-title text-base font-bold text-center mb-4">라벨소요량 집계표</div>
-              <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
-              <table className="print-table w-full border border-collapse text-[10px]">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border p-1">No</th>
-                    <th className="border p-1">제품번호</th>
-                    <th className="border p-1">가로</th>
-                    <th className="border p-1">세로</th>
-                    <th className="border p-1">소켓 Lot</th>
-                    <th className="border p-1">면적(㎡)</th>
-                    <th className="border p-1">둘레(m)</th>
-                    <th className="border p-1">방화소켓(EA)</th>
-                    <th className="border p-1">글라스울(1EA)</th>
-                    <th className="border p-1">차열재 25*200 (VM)</th>
-                    <th className="border p-1">차열재 50*400 (VT)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d?.items?.map((item: any, idx: number) => {
-                    const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-                    const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-                    const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
-                    const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
-                    const pVal = Number(perimeter);
-                    const type = getSocketType(item.product_type);
-                    return (
-                      <tr key={item.swi_id} className="text-center">
-                        <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
-                        <td className="border p-1 font-semibold text-gray-700">{item.seq_no}</td>
-                        <td className="border p-1 font-mono">{w}</td>
-                        <td className="border p-1 font-mono">{h}</td>
-                        <td className="border p-1 font-mono text-blue-700 font-bold">{item.insp_lot_no || '-'}</td>
-                        <td className="border p-1 font-mono text-gray-600">{area}</td>
-                        <td className="border p-1 font-mono text-gray-600">{perimeter}</td>
-                        <td className="border p-1">2</td>
-                        <td className="border p-1 text-emerald-700 font-semibold">{type === 'VT' && pVal > 0 ? (pVal + 0.5).toFixed(1) : '-'}</td>
-                        <td className="border p-1 text-emerald-700 font-semibold">{type === 'VM' && pVal > 0 ? (pVal + 0.5).toFixed(1) : '-'}</td>
-                        <td className="border p-1 text-emerald-700 font-semibold">{type === 'VT' && pVal > 0 ? (pVal + 0.5).toFixed(1) : '-'}</td>
+            {(() => {
+              const items = d?.items || [];
+              // 글라스울: VT 소켓별 (둘레+0.5)
+              const totalGwM = items.reduce((acc: number, item: any) => {
+                const type = getSocketType(item.product_type);
+                const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                const p = w > 0 && h > 0 ? ((w + h) * 2) / 1000 : 0;
+                return acc + (type === 'VT' && p > 0 ? p + 0.5 : 0);
+              }, 0);
+              // 차열재 VM: (둘레+0.5)
+              const totalCwVmM = items.reduce((acc: number, item: any) => {
+                const type = getSocketType(item.product_type);
+                const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                const p = w > 0 && h > 0 ? ((w + h) * 2) / 1000 : 0;
+                return acc + (type === 'VM' && p > 0 ? p + 0.5 : 0);
+              }, 0);
+              // 차열재 VT: (둘레+0.5)
+              const totalCwVtM = items.reduce((acc: number, item: any) => {
+                const type = getSocketType(item.product_type);
+                const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                const p = w > 0 && h > 0 ? ((w + h) * 2) / 1000 : 0;
+                return acc + (type === 'VT' && p > 0 ? p + 0.5 : 0);
+              }, 0);
+              const gwRolls = mToRolls(totalGwM, GW_ROLL_LEN_M);
+              const cwVmRolls = mToRolls(totalCwVmM, CW_ROLL_LEN_M);
+              const cwVtRolls = mToRolls(totalCwVtM, CW_ROLL_LEN_M);
+              return (
+                <div className="page-break p-8">
+                  <div className="print-header-title text-base font-bold text-center mb-4">라벨소요량 집계표</div>
+                  <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+                  <table className="print-table w-full border border-collapse text-[10px]">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border p-1">No</th>
+                        <th className="border p-1">제품번호</th>
+                        <th className="border p-1">가로</th>
+                        <th className="border p-1">세로</th>
+                        <th className="border p-1">소켓 Lot</th>
+                        <th className="border p-1">면적(㎡)</th>
+                        <th className="border p-1">둘레(m)</th>
+                        <th className="border p-1">방화소켓(EA)</th>
+                        <th className="border p-1">글라스울(M)</th>
+                        <th className="border p-1">차열재 VM(M)</th>
+                        <th className="border p-1">차열재 VT(M)</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {items.map((item: any, idx: number) => {
+                        const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                        const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                        const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
+                        const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
+                        const pVal = Number(perimeter);
+                        const type = getSocketType(item.product_type);
+                        return (
+                          <tr key={item.swi_id} className="text-center">
+                            <td className="border p-1 font-mono">{String(idx + 1).padStart(2, '0')}</td>
+                            <td className="border p-1 font-semibold text-gray-700">{item.seq_no}</td>
+                            <td className="border p-1 font-mono">{w}</td>
+                            <td className="border p-1 font-mono">{h}</td>
+                            <td className="border p-1 font-mono text-blue-700 font-bold">{item.insp_lot_no || '-'}</td>
+                            <td className="border p-1 font-mono text-gray-600">{area}</td>
+                            <td className="border p-1 font-mono text-gray-600">{perimeter}</td>
+                            <td className="border p-1">2</td>
+                            <td className="border p-1 text-emerald-700 font-semibold">{type === 'VT' && pVal > 0 ? (pVal + 0.5).toFixed(1) : '-'}</td>
+                            <td className="border p-1 text-emerald-700 font-semibold">{type === 'VM' && pVal > 0 ? (pVal + 0.5).toFixed(1) : '-'}</td>
+                            <td className="border p-1 text-emerald-700 font-semibold">{type === 'VT' && pVal > 0 ? (pVal + 0.5).toFixed(1) : '-'}</td>
+                          </tr>
+                        );
+                      })}
+                      {/* 합계 행 */}
+                      <tr className="bg-blue-50 font-bold text-[10px] border-t-2 border-blue-300">
+                        <td className="border p-1" colSpan={7}>합 계</td>
+                        <td className="border p-1 text-center">-</td>
+                        <td className="border p-1 text-center text-emerald-800">{totalGwM > 0 ? totalGwM.toFixed(1) + 'M' : '-'}</td>
+                        <td className="border p-1 text-center text-emerald-800">{totalCwVmM > 0 ? totalCwVmM.toFixed(1) + 'M' : '-'}</td>
+                        <td className="border p-1 text-center text-emerald-800">{totalCwVtM > 0 ? totalCwVtM.toFixed(1) + 'M' : '-'}</td>
+                      </tr>
+                      {/* 롤수 행 */}
+                      <tr className="bg-amber-50 font-bold text-[10px]">
+                        <td className="border p-1" colSpan={7}>필요 롤수 ({GW_ROLL_LEN_M}M/롤 · CW {CW_ROLL_LEN_M}M/롤)</td>
+                        <td className="border p-1 text-center">-</td>
+                        <td className="border p-1 text-center text-rose-700">{gwRolls > 0 ? gwRolls + ' 롤' : '-'}</td>
+                        <td className="border p-1 text-center text-rose-700">{cwVmRolls > 0 ? cwVmRolls + ' 롤' : '-'}</td>
+                        <td className="border p-1 text-center text-rose-700">{cwVtRolls > 0 ? cwVtRolls + ' 롤' : '-'}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </>
         )}
 
@@ -776,54 +835,87 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
               </table>
             </div>
 
-            {/* 라벨소요량 */}
-            <div className="page-break p-8">
-              <div className="print-header-title text-base font-bold text-center mb-4">라벨소요량 집계표</div>
-              <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
-              <table className="print-table w-full border border-collapse text-[10px]">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border p-1">No</th>
-                    <th className="border p-1">구조/모델</th>
-                    <th className="border p-1">가로(W)</th>
-                    <th className="border p-1">세로(H)</th>
-                    <th className="border p-1">검사 LOT</th>
-                    <th className="border p-1">면적(㎡)</th>
-                    <th className="border p-1">둘레(m)</th>
-                    <th className="border p-1 text-indigo-600">라벨수량</th>
-                    <th className="border p-1 text-teal-700">차열재 소요(둘레+0.4)</th>
-                    <th className="border p-1 text-rose-700">글라스울(둘레+0.5)</th>
-                    <th className="border p-1">수량</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {d?.items?.map((item: any, idx: number) => {
-                    const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-                    const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-                    const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
-                    const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
-                    const pVal = Number(perimeter);
-                    const reqIns = pVal > 0 ? (pVal + 0.4).toFixed(1) : '-';
-                    const reqGw = pVal > 0 ? (pVal + 0.5).toFixed(1) : '-';
-                    return (
-                      <tr key={item.swi_id} className="text-center">
-                        <td className="border p-1 font-mono">{idx + 1}</td>
-                        <td className="border p-1 font-semibold">{item.product_type || item.structure}</td>
-                        <td className="border p-1 font-mono">{w}</td>
-                        <td className="border p-1 font-mono">{h}</td>
-                        <td className="border p-1">{item.insp_lot_no || '-'}</td>
-                        <td className="border p-1 font-mono">{area}</td>
-                        <td className="border p-1 font-mono">{perimeter}</td>
-                        <td className="border p-1 font-bold text-indigo-600">2</td>
-                        <td className="border p-1 text-teal-700 font-bold">{reqIns}</td>
-                        <td className="border p-1 text-rose-700 font-bold">{reqGw}</td>
-                        <td className="border p-1">2</td>
+            {/* 라벨소요량 (RISER) */}
+            {(() => {
+              const items = d?.items || [];
+              const totalCwM = items.reduce((acc: number, item: any) => {
+                const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                const p = w > 0 && h > 0 ? ((w + h) * 2) / 1000 : 0;
+                return acc + (p > 0 ? p + 0.4 : 0);
+              }, 0);
+              const totalGwM = items.reduce((acc: number, item: any) => {
+                const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                const p = w > 0 && h > 0 ? ((w + h) * 2) / 1000 : 0;
+                return acc + (p > 0 ? p + 0.5 : 0);
+              }, 0);
+              const cwRolls = mToRolls(totalCwM, CW_ROLL_LEN_M);
+              const gwRolls = mToRolls(totalGwM, GW_ROLL_LEN_M);
+              return (
+                <div className="page-break p-8">
+                  <div className="print-header-title text-base font-bold text-center mb-4">라벨소요량 집계표</div>
+                  <div className="print-header-meta text-right mb-2">현장명: {projectTitle}</div>
+                  <table className="print-table w-full border border-collapse text-[10px]">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="border p-1">No</th>
+                        <th className="border p-1">구조/모델</th>
+                        <th className="border p-1">가로(W)</th>
+                        <th className="border p-1">세로(H)</th>
+                        <th className="border p-1">검사 LOT</th>
+                        <th className="border p-1">면적(㎡)</th>
+                        <th className="border p-1">둘레(m)</th>
+                        <th className="border p-1 text-indigo-600">라벨수량</th>
+                        <th className="border p-1 text-teal-700">차열재 소요(둘레+0.4)M</th>
+                        <th className="border p-1 text-rose-700">글라스울(둘레+0.5)M</th>
+                        <th className="border p-1">수량</th>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    </thead>
+                    <tbody>
+                      {items.map((item: any, idx: number) => {
+                        const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                        const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                        const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
+                        const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
+                        const pVal = Number(perimeter);
+                        const reqIns = pVal > 0 ? (pVal + 0.4).toFixed(1) : '-';
+                        const reqGw = pVal > 0 ? (pVal + 0.5).toFixed(1) : '-';
+                        return (
+                          <tr key={item.swi_id} className="text-center">
+                            <td className="border p-1 font-mono">{idx + 1}</td>
+                            <td className="border p-1 font-semibold">{item.product_type || item.structure}</td>
+                            <td className="border p-1 font-mono">{w}</td>
+                            <td className="border p-1 font-mono">{h}</td>
+                            <td className="border p-1">{item.insp_lot_no || '-'}</td>
+                            <td className="border p-1 font-mono">{area}</td>
+                            <td className="border p-1 font-mono">{perimeter}</td>
+                            <td className="border p-1 font-bold text-indigo-600">2</td>
+                            <td className="border p-1 text-teal-700 font-bold">{reqIns}</td>
+                            <td className="border p-1 text-rose-700 font-bold">{reqGw}</td>
+                            <td className="border p-1">2</td>
+                          </tr>
+                        );
+                      })}
+                      {/* 합계 행 */}
+                      <tr className="bg-blue-50 font-bold text-[10px] border-t-2 border-blue-300">
+                        <td className="border p-1" colSpan={8}>합 계</td>
+                        <td className="border p-1 text-center text-teal-800">{totalCwM > 0 ? totalCwM.toFixed(1) + 'M' : '-'}</td>
+                        <td className="border p-1 text-center text-rose-800">{totalGwM > 0 ? totalGwM.toFixed(1) + 'M' : '-'}</td>
+                        <td className="border p-1 text-center">-</td>
+                      </tr>
+                      {/* 롤수 행 */}
+                      <tr className="bg-amber-50 font-bold text-[10px]">
+                        <td className="border p-1" colSpan={8}>필요 롤수 (CW {CW_ROLL_LEN_M}M/롤 · GW {GW_ROLL_LEN_M}M/롤)</td>
+                        <td className="border p-1 text-center text-rose-700">{cwRolls > 0 ? cwRolls + ' 롤' : '-'}</td>
+                        <td className="border p-1 text-center text-rose-700">{gwRolls > 0 ? gwRolls + ' 롤' : '-'}</td>
+                        <td className="border p-1 text-center">-</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </>
         )}
 
@@ -1903,6 +1995,31 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                   }
 
                   // 기존 벽체 전용 6. 라벨소요량
+                  const wallItems = d.items;
+                  const wTotalGwM = wallItems.reduce((acc: number, item: any) => {
+                    const type = getSocketType(item.product_type);
+                    const w2 = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                    const h2 = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                    const p2 = w2 > 0 && h2 > 0 ? ((w2 + h2) * 2) / 1000 : 0;
+                    return acc + (type === 'VT' && p2 > 0 ? p2 + 0.5 : 0);
+                  }, 0);
+                  const wTotalCwVmM = wallItems.reduce((acc: number, item: any) => {
+                    const type = getSocketType(item.product_type);
+                    const w2 = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                    const h2 = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                    const p2 = w2 > 0 && h2 > 0 ? ((w2 + h2) * 2) / 1000 : 0;
+                    return acc + (type === 'VM' && p2 > 0 ? p2 + 0.5 : 0);
+                  }, 0);
+                  const wTotalCwVtM = wallItems.reduce((acc: number, item: any) => {
+                    const type = getSocketType(item.product_type);
+                    const w2 = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                    const h2 = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                    const p2 = w2 > 0 && h2 > 0 ? ((w2 + h2) * 2) / 1000 : 0;
+                    return acc + (type === 'VT' && p2 > 0 ? p2 + 0.5 : 0);
+                  }, 0);
+                  const wGwRolls = mToRolls(wTotalGwM, GW_ROLL_LEN_M);
+                  const wCwVmRolls = mToRolls(wTotalCwVmM, CW_ROLL_LEN_M);
+                  const wCwVtRolls = mToRolls(wTotalCwVtM, CW_ROLL_LEN_M);
                   return (
                     <div className="border rounded-xl overflow-hidden">
                       <table className="w-full text-[11px] text-center border-collapse">
@@ -1916,13 +2033,13 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                             <th className="px-2 py-1.5 border-r">면적(㎡)</th>
                             <th className="px-2 py-1.5 border-r">둘레(m)</th>
                             <th className="px-2 py-1.5 border-r">방화소켓</th>
-                            <th className="px-2 py-1 border-r">글라스울(1EA)</th>
-                            <th className="px-2 py-1 border-r">차열재(4EA) VM</th>
-                            <th className="px-2 py-1">차열재(4EA) VT</th>
+                            <th className="px-2 py-1 border-r">글라스울(M)</th>
+                            <th className="px-2 py-1 border-r">차열재 VM(M)</th>
+                            <th className="px-2 py-1">차열재 VT(M)</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 bg-white">
-                          {d.items.map((item: any, idx: number) => {
+                          {wallItems.map((item: any, idx: number) => {
                             const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
                             const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
                             const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
@@ -1945,6 +2062,20 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                               </tr>
                             );
                           })}
+                          {/* 합계 행 */}
+                          <tr className="bg-blue-50 font-bold text-[11px] border-t-2 border-blue-300">
+                            <td className="px-2 py-1.5 border-r" colSpan={8}>합 계</td>
+                            <td className="px-2 py-1.5 border-r text-emerald-800 text-center">{wTotalGwM > 0 ? wTotalGwM.toFixed(1) + 'M' : '-'}</td>
+                            <td className="px-2 py-1.5 border-r text-emerald-800 text-center">{wTotalCwVmM > 0 ? wTotalCwVmM.toFixed(1) + 'M' : '-'}</td>
+                            <td className="px-2 py-1.5 text-emerald-800 text-center">{wTotalCwVtM > 0 ? wTotalCwVtM.toFixed(1) + 'M' : '-'}</td>
+                          </tr>
+                          {/* 롤수 행 */}
+                          <tr className="bg-amber-50 font-bold text-[11px]">
+                            <td className="px-2 py-1 border-r text-gray-600" colSpan={8}>필요 롤수 (GW {GW_ROLL_LEN_M}M/롤 · CW {CW_ROLL_LEN_M}M/롤 기준)</td>
+                            <td className="px-2 py-1 border-r text-rose-700 text-center font-bold">{wGwRolls > 0 ? wGwRolls + ' 롤' : '-'}</td>
+                            <td className="px-2 py-1 border-r text-rose-700 text-center font-bold">{wCwVmRolls > 0 ? wCwVmRolls + ' 롤' : '-'}</td>
+                            <td className="px-2 py-1 text-rose-700 text-center font-bold">{wCwVtRolls > 0 ? wCwVtRolls + ' 롤' : '-'}</td>
+                          </tr>
                         </tbody>
                       </table>
                     </div>

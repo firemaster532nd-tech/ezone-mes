@@ -79,6 +79,29 @@ const PROCESS_PRESETS: Record<string, { label: string; description: string; item
 };
 
 export async function selfInspectionRoutes(app: FastifyInstance) {
+  // 마이그레이션: reviewer, approver 컬럼 자동 추가
+  try {
+    await pool.query(`
+      ALTER TABLE self_inspection
+        ADD COLUMN IF NOT EXISTS reviewer TEXT,
+        ADD COLUMN IF NOT EXISTS approver TEXT
+    `);
+  } catch (_) { /* ignore */ }
+
+  // GET /api/lots/mix-completed - 배합 완료 LOT 목록 (압출/재단에서 배합로트 불러오기)
+  app.get('/api/lots/mix-completed', async () => {
+    const result = await pool.query(`
+      SELECT wo_id, wo_number, wo_date, lot_number, actual_qty, input_weight_kg, item_name
+      FROM work_order
+      WHERE process_code = 'MIX'
+        AND status = 'COMPLETED'
+        AND lot_number IS NOT NULL
+      ORDER BY wo_date DESC, wo_id DESC
+      LIMIT 200
+    `);
+    return { data: result.rows };
+  });
+
   // GET /api/self-inspections/presets - 공정별 자주검사 프리셋 목록
   app.get('/api/self-inspections/presets', async () => {
     return {
@@ -141,9 +164,11 @@ export async function selfInspectionRoutes(app: FastifyInstance) {
 
   // POST /api/self-inspections/batch - 자주검사 일괄 등록 (공정 프리셋 기반)
   app.post('/api/self-inspections/batch', async (request, reply) => {
-    const { wo_id, worker, items } = request.body as {
+    const { wo_id, worker, reviewer, approver, items } = request.body as {
       wo_id: number;
       worker?: string;
+      reviewer?: string;
+      approver?: string;
       items: Array<{
         check_category: string;
         check_point: string;
@@ -181,8 +206,8 @@ export async function selfInspectionRoutes(app: FastifyInstance) {
 
         const res = await client.query(
           `INSERT INTO self_inspection
-           (wo_id, check_time, check_category, check_point, standard_value, tolerance, measured_value, is_ok, worker, remarks)
-           VALUES ($1, NOW(), $2, $3, $4, $5, $6, $7, $8, $9)
+           (wo_id, check_time, check_category, check_point, standard_value, tolerance, measured_value, is_ok, worker, reviewer, approver, remarks)
+           VALUES ($1, NOW(), $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            RETURNING *`,
           [
             wo_id,
@@ -193,6 +218,8 @@ export async function selfInspectionRoutes(app: FastifyInstance) {
             item.measured_value ?? null,
             isOk,
             worker || null,
+            reviewer || null,
+            approver || null,
             item.remarks || null,
           ]
         );
@@ -270,7 +297,7 @@ export async function selfInspectionRoutes(app: FastifyInstance) {
     const values: unknown[] = [];
     let idx = 1;
 
-    for (const key of ['measured_value', 'is_ok', 'worker', 'remarks']) {
+    for (const key of ['measured_value', 'is_ok', 'worker', 'reviewer', 'approver', 'remarks']) {
       if (body[key] !== undefined) {
         fields.push(`${key} = $${idx++}`);
         values.push(body[key]);
