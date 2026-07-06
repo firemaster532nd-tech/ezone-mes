@@ -1905,6 +1905,22 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
 
                   if (activeTab === '라벨소요량') {
                     // RISER 입상 전용 라벨소요량
+                    const rItems = d.items;
+                    const rTotalLabel = rItems.length * 2;
+                    const rTotalCwM = rItems.reduce((acc: number, it: any) => {
+                      const w2 = it.pipe_width_mm ? Number(it.pipe_width_mm) : 0;
+                      const h2 = it.pipe_height_mm ? Number(it.pipe_height_mm) : 0;
+                      const p2 = w2 > 0 && h2 > 0 ? ((w2 + h2) * 2) / 1000 : 0;
+                      return acc + (p2 > 0 ? p2 + 0.4 : 0);
+                    }, 0);
+                    const rTotalGwM = rItems.reduce((acc: number, it: any) => {
+                      const w2 = it.pipe_width_mm ? Number(it.pipe_width_mm) : 0;
+                      const h2 = it.pipe_height_mm ? Number(it.pipe_height_mm) : 0;
+                      const p2 = w2 > 0 && h2 > 0 ? ((w2 + h2) * 2) / 1000 : 0;
+                      return acc + (p2 > 0 ? p2 + 0.5 : 0);
+                    }, 0);
+                    const rCwRolls = mToRolls(rTotalCwM, CW_ROLL_LEN_M);
+                    const rGwRolls = mToRolls(rTotalGwM, GW_ROLL_LEN_M);
                     return (
                       <div className="border rounded-xl overflow-hidden">
                         <table className="w-full text-[11px] text-center border-collapse">
@@ -1924,7 +1940,7 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-200 bg-white">
-                            {d.items.map((item: any, idx: number) => {
+                            {rItems.map((item: any, idx: number) => {
                               const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
                               const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
                               const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
@@ -1948,6 +1964,22 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                                 </tr>
                               );
                             })}
+                            {/* ── 합계 행 ── */}
+                            <tr className="bg-indigo-50 font-bold text-[11px] border-t-2 border-indigo-300">
+                              <td className="px-2 py-2 border-r text-gray-500 text-left" colSpan={7}>합 계</td>
+                              <td className="px-2 py-2 border-r text-indigo-700 text-center text-[13px] font-extrabold">{rTotalLabel} EA</td>
+                              <td className="px-2 py-2 border-r text-teal-800 text-center font-bold">{rTotalCwM > 0 ? rTotalCwM.toFixed(1) + ' M' : '-'}</td>
+                              <td className="px-2 py-2 border-r text-rose-800 text-center font-bold">{rTotalGwM > 0 ? rTotalGwM.toFixed(1) + ' M' : '-'}</td>
+                              <td className="px-2 py-2 text-center text-gray-400">-</td>
+                            </tr>
+                            {/* ── 롤수 행 ── */}
+                            <tr className="bg-amber-50 text-[11px]">
+                              <td className="px-2 py-1.5 border-r text-gray-400 text-left" colSpan={7}>필요 롤수 (CW {CW_ROLL_LEN_M}M/롤 · GW {GW_ROLL_LEN_M}M/롤)</td>
+                              <td className="px-2 py-1.5 border-r text-center text-gray-300">-</td>
+                              <td className="px-2 py-1.5 border-r text-rose-600 text-center font-bold">{rCwRolls > 0 ? rCwRolls + ' 롤' : '-'}</td>
+                              <td className="px-2 py-1.5 border-r text-rose-600 text-center font-bold">{rGwRolls > 0 ? rGwRolls + ' 롤' : '-'}</td>
+                              <td className="px-2 py-1.5 text-center text-gray-300">-</td>
+                            </tr>
                           </tbody>
                         </table>
                       </div>
