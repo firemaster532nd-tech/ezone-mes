@@ -6,7 +6,7 @@ import {
   Upload, FileSpreadsheet, X, ChevronDown, ChevronRight,
   Building2, User, MapPin, Calendar, Package, Layers,
   CheckCircle2, Eye, Trash2, ExternalLink, Download, Wrench,
-  FolderOpen,
+  FolderOpen, PlusCircle, MinusCircle, ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -609,6 +609,718 @@ function DetailModal({ po, onClose }: { po: PurchaseOrder & { items?: PoItem[]; 
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// 수동 입력 모달
+// ────────────────────────────────────────────────────────────────────────────
+const PRODUCT_TYPES = [
+  'VT-049', 'VT-064', 'VT-01', 'VA-064', 'VAG-1.69',
+  'HTG-064', 'HTG-064DC', 'HTG-1.69',
+];
+
+const STRUCT_CALC_MANUAL: Partial<Record<string, (w: number, h: number, q: number) => { sw: number; sh: number; oq: number; depth: number }>> = {
+  'VT-01':     (w, h, q) => ({ sw: w,                       sh: h, oq: q * 2, depth: 200 }),
+  'VT-049':    (w, h, q) => ({ sw: w,                       sh: h, oq: q * 1, depth: 200 }),
+  'VT-064':    (w, h, q) => ({ sw: w,                       sh: h, oq: q * 1, depth: 200 }),
+  'VA-064':    (w, h, q) => ({ sw: w,                       sh: h, oq: q * 1, depth: 200 }),
+  'VAG-1.69':  (w, h, q) => ({ sw: Math.round(w / 2 - 30),  sh: h, oq: q * 2, depth: 200 }),
+  'HTG-064':   (w, h, q) => ({ sw: w,                       sh: h, oq: q * 1, depth: 300 }),
+  'HTG-064DC': (w, h, q) => ({ sw: w,                       sh: h, oq: q * 1, depth: 300 }),
+  'HTG-1.69':  (w, h, q) => ({ sw: Math.round(w / 2 - 30),  sh: h, oq: q * 2, depth: 300 }),
+};
+
+interface ManualItem {
+  product_type: string;
+  pipe_width_mm: string;
+  pipe_height_mm: string;
+  qty: string;
+  construction_type: 'SINGLE' | 'DOUBLE';
+  remark: string;
+}
+
+interface ManualSheet {
+  name: string;
+  items: ManualItem[];
+}
+
+function makeEmptyItem(): ManualItem {
+  return { product_type: 'VT-049', pipe_width_mm: '', pipe_height_mm: '', qty: '1', construction_type: 'DOUBLE', remark: '' };
+}
+
+function ManualPoModal({ onClose, onSaved, projects }: {
+  onClose: () => void;
+  onSaved: () => void;
+  projects: Project[];
+}) {
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [saving, setSaving] = useState(false);
+
+  // 기본 정보
+  const [projectId, setProjectId] = useState<number | null>(null);
+  const [projectName, setProjectName] = useState('');
+  const [orderDate, setOrderDate] = useState('');
+  const [deliveryDate, setDeliveryDate] = useState('');
+  const [bizName, setBizName] = useState('');
+  const [bizManager, setBizManager] = useState('');
+  const [bizContact, setBizContact] = useState('');
+  const [contractor, setContractor] = useState('');
+  const [builderName, setBuilderName] = useState('');
+  const [siteAddress, setSiteAddress] = useState('');
+  const [specialNotes, setSpecialNotes] = useState('');
+
+  // 시트별 품목
+  const [sheets, setSheets] = useState<ManualSheet[]>([{ name: 'A동', items: [makeEmptyItem()] }]);
+
+  // 프로젝트 선택 시 이름 자동 채우기
+  const handleProjectChange = (id: number | null) => {
+    setProjectId(id);
+    if (id) {
+      const p = projects.find(p => p.project_id === id);
+      if (p) setProjectName(p.project_name);
+    }
+  };
+
+  // 시트 추가/삭제
+  const addSheet = () => setSheets(s => [...s, { name: `${String.fromCharCode(65 + s.length)}동`, items: [makeEmptyItem()] }]);
+  const removeSheet = (si: number) => setSheets(s => s.length > 1 ? s.filter((_, i) => i !== si) : s);
+  const updateSheetName = (si: number, name: string) =>
+    setSheets(s => s.map((sh, i) => i === si ? { ...sh, name } : sh));
+
+  // 품목 CRUD
+  const addItem = (si: number) =>
+    setSheets(s => s.map((sh, i) => i === si ? { ...sh, items: [...sh.items, makeEmptyItem()] } : sh));
+  const removeItem = (si: number, ii: number) =>
+    setSheets(s => s.map((sh, i) => i === si ? { ...sh, items: sh.items.length > 1 ? sh.items.filter((_, j) => j !== ii) : sh.items } : sh));
+  const updateItem = (si: number, ii: number, field: keyof ManualItem, value: string) =>
+    setSheets(s => s.map((sh, i) => i === si ? {
+      ...sh,
+      items: sh.items.map((it, j) => j === ii ? { ...it, [field]: value } : it),
+    } : sh));
+
+  // ── 소켓 계산 (입력값 전체) ─────────────────────────────────────────────
+  type CalcRow = { sheetName: string; product_type: string; w: number; h: number; qty: number; sw: number; sh: number; oq: number; depth: number; construction_type: 'SINGLE'|'DOUBLE' };
+  const calcAllRows = (): CalcRow[] => {
+    const rows: CalcRow[] = [];
+    for (const sh of sheets) {
+      for (const it of sh.items) {
+        const w = Number(it.pipe_width_mm) || 0;
+        const h = Number(it.pipe_height_mm) || 0;
+        const q = Number(it.qty) || 1;
+        const calc = STRUCT_CALC_MANUAL[it.product_type];
+        if (calc && w > 0 && h > 0) {
+          rows.push({ sheetName: sh.name, product_type: it.product_type, w, h, qty: q, ...calc(w, h, q), construction_type: it.construction_type });
+        }
+      }
+    }
+    return rows;
+  };
+
+  // 평철(브라켓) 계산 — PurchaseRequestPage calcBrackets 동일 로직
+  type BracketRow = { label: string; t: number; bw: number; l: number; qty: number };
+  const calcBrackets = (code: string, w: number, h: number, q: number): BracketRow[] => {
+    const sw = Math.round(w / 2 - 30);
+    switch (code) {
+      case 'VT-049': case 'VT-064': case 'VA-064':
+        return [
+          { label: 'bracket-H', t: 1.6, bw: 60,  l: w - 1,  qty: q * 4 },
+          { label: 'bracket-V', t: 1.6, bw: 60,  l: h - 30, qty: q * 4 },
+        ];
+      case 'VT-01':
+        return [
+          { label: 'bracket-H', t: 1.6, bw: 60,  l: Math.round(w/2 - 16), qty: q * 16 },
+          { label: 'bracket-V', t: 1.6, bw: 60,  l: Math.round(h/2 - 20), qty: q * 32 },
+          { label: 'support-C', t: 1.6, bw: 225, l: Math.round(w/2 - 16), qty: q * 8  },
+          { label: 'reinforce', t: 1.6, bw: 237, l: h,                    qty: q * 4  },
+        ];
+      case 'VAG-1.69':
+        return [
+          { label: 'bracket-H', t: 1.6, bw: 60,  l: sw - 1, qty: q * 4 },
+          { label: 'bracket-V', t: 1.6, bw: 60,  l: h - 30, qty: q * 4 },
+        ];
+      case 'HTG-064': case 'HTG-064DC':
+        return [
+          { label: 'bracket-HA', t: 1.6, bw: 60,  l: w - 5,  qty: q * 2 },
+          { label: 'bracket-HB', t: 1.6, bw: 274, l: w - 5,  qty: q * 2 },
+          { label: 'bracket-V',  t: 1.6, bw: 60,  l: h - 35, qty: q * 4 },
+          { label: 'reinforce',  t: 1.6, bw: 50,  l: h,      qty: q * 3 },
+        ];
+      case 'HTG-1.69':
+        return [
+          { label: 'bracket-HA', t: 1.6, bw: 60,  l: sw - 5, qty: q * 4 },
+          { label: 'bracket-HB', t: 1.6, bw: 274, l: sw - 5, qty: q * 4 },
+          { label: 'bracket-V',  t: 1.6, bw: 60,  l: h - 35, qty: q * 4 },
+          { label: 'reinforce',  t: 1.6, bw: 50,  l: h,      qty: q * 6 },
+        ];
+      default: return [];
+    }
+  };
+
+  const handleSave = async () => {
+    if (!projectName.trim()) { toast.error('현장명을 입력해주세요'); return; }
+    const hasItems = sheets.some(sh => sh.items.some(it => Number(it.pipe_width_mm) > 0 && Number(it.pipe_height_mm) > 0));
+    if (!hasItems) { toast.error('최소 1개 이상의 품목을 입력해주세요 (가로/세로 필수)'); return; }
+
+    setSaving(true);
+    try {
+      const body = {
+        project_id: projectId || undefined,
+        project_name: projectName.trim(),
+        order_date: orderDate || undefined,
+        delivery_date: deliveryDate || undefined,
+        biz_name: bizName || undefined,
+        biz_manager: bizManager || undefined,
+        biz_contact: bizContact || undefined,
+        contractor: contractor || undefined,
+        builder_name: builderName || undefined,
+        site_address: siteAddress || undefined,
+        special_notes: specialNotes || undefined,
+        sheets: sheets.map(sh => ({
+          name: sh.name,
+          items: sh.items
+            .filter(it => it.product_type)
+            .map(it => ({
+              product_type: it.product_type,
+              pipe_width_mm: Number(it.pipe_width_mm) || null,
+              pipe_height_mm: Number(it.pipe_height_mm) || null,
+              qty: Number(it.qty) || 1,
+              construction_type: it.construction_type,
+              remark: it.remark || undefined,
+            })),
+        })).filter(sh => sh.items.length > 0),
+      };
+      const res = await api.post<{ data: any }>('/purchase-orders/manual', body);
+      toast.success(`발주서 등록 완료 — ${res.data.project_name} / ${res.data.item_count}건`);
+      onSaved();
+      onClose();
+    } catch (e: any) {
+      toast.error(`저장 실패: ${e?.body?.message || e.message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 스텝 2에서 실시간 인라인 계산용
+  const allRows = calcAllRows();
+  const totalOrderQty = allRows.reduce((s, r) => s + r.oq, 0);
+
+  // 스텝 3 전용: 구조체별 그룹
+  const PTYPE_ORDER: Record<string, number> = {
+    'VT-049': 1, 'VT-064': 2, 'VT-01': 3, 'VA-064': 4,
+    'VAG-1.69': 5, 'HTG-064': 6, 'HTG-064DC': 7, 'HTG-1.69': 8,
+  };
+  const grouped = new Map<string, CalcRow[]>();
+  for (const r of [...allRows].sort((a, b) => (PTYPE_ORDER[a.product_type] ?? 9) - (PTYPE_ORDER[b.product_type] ?? 9))) {
+    if (!grouped.has(r.product_type)) grouped.set(r.product_type, []);
+    grouped.get(r.product_type)!.push(r);
+  }
+
+  // 스텝 3 전용: 평철 집계
+  const bracketAgg = new Map<string, { t: number; bw: number; l: number; qty: number }>();
+  for (const r of allRows) {
+    for (const b of calcBrackets(r.product_type, r.w, r.h, r.qty)) {
+      const key = `${b.t}_${b.bw}_${b.l}`;
+      if (!bracketAgg.has(key)) bracketAgg.set(key, { t: b.t, bw: b.bw, l: b.l, qty: 0 });
+      bracketAgg.get(key)!.qty += b.qty;
+    }
+  }
+  const bracketList = [...bracketAgg.values()].sort((a, b) => a.bw - b.bw || a.l - b.l);
+  const bracketTotal = bracketList.reduce((s, r) => s + r.qty, 0);
+
+  const PTYPE_COLORS: Record<string, string> = {
+    'VT-049': 'bg-blue-100 text-blue-700', 'VT-064': 'bg-indigo-100 text-indigo-700',
+    'VT-01': 'bg-purple-100 text-purple-700', 'VA-064': 'bg-cyan-100 text-cyan-700',
+    'VAG-1.69': 'bg-teal-100 text-teal-700', 'HTG-064': 'bg-orange-100 text-orange-700',
+    'HTG-064DC': 'bg-amber-100 text-amber-700', 'HTG-1.69': 'bg-rose-100 text-rose-700',
+  };
+
+  const STEP_LABELS = ['1. 기본 정보', '2. 품목 입력', '3. 미리보기·확정'] as const;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center pt-6 pb-6 px-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl" onClick={e => e.stopPropagation()}>
+        {/* 헤더 */}
+        <div className="flex items-center justify-between p-6 border-b bg-gradient-to-r from-violet-50 to-blue-50 rounded-t-2xl">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-violet-100 rounded-xl">
+              <ClipboardList className="h-6 w-6 text-violet-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">수동 발주서 입력</h2>
+              <p className="text-xs text-gray-500">엑셀 인식이 안 될 때 직접 입력하세요. 소켓발주서 자동 생성 가능합니다.</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* 스텝 탭 (3단계) */}
+        <div className="flex border-b bg-gray-50">
+          {STEP_LABELS.map((label, i) => (
+            <button
+              key={label}
+              onClick={() => {
+                // 앞 단계로만 자유 이동 허용 (뒤는 순차적으로)
+                if (i + 1 <= step) setStep((i + 1) as 1 | 2 | 3);
+              }}
+              className={cn(
+                'flex-1 py-3 text-sm font-semibold border-b-2 transition-colors',
+                step === i + 1
+                  ? 'border-violet-500 text-violet-700 bg-white'
+                  : i + 1 < step
+                    ? 'border-green-400 text-green-600 hover:bg-green-50 cursor-pointer'
+                    : 'border-transparent text-gray-400 cursor-not-allowed'
+              )}
+            >
+              {i + 1 < step ? '✓ ' : ''}{label}
+            </button>
+          ))}
+        </div>
+
+        <div className="p-6 max-h-[65vh] overflow-y-auto">
+          {/* ── STEP 1: 기본 정보 ── */}
+          {step === 1 && (
+            <div className="space-y-5">
+              {/* 프로젝트 연결 */}
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4">
+                <h3 className="font-semibold text-indigo-800 text-sm mb-3 flex items-center gap-2">
+                  <FolderOpen className="h-4 w-4" />연결할 프로젝트
+                </h3>
+                <select
+                  value={projectId ?? ''}
+                  onChange={e => handleProjectChange(e.target.value === '' ? null : Number(e.target.value))}
+                  className="w-full border border-indigo-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                >
+                  <option value="">🔄 현장명으로 자동 매칭 또는 신규 생성</option>
+                  {projects.map(p => (
+                    <option key={p.project_id} value={p.project_id}>[{p.project_code}] {p.project_name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 현장명 + 날짜 */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-1">
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">현장명 (프로젝트명) <span className="text-red-500">*</span></label>
+                  <input type="text" value={projectName} onChange={e => setProjectName(e.target.value)}
+                    placeholder="예) 삼성 레이크뷰 APT" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1"><Calendar className="inline h-3 w-3 mr-1" />발주 일자</label>
+                  <input type="date" value={orderDate} onChange={e => setOrderDate(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1"><Calendar className="inline h-3 w-3 mr-1" />납기 요청일</label>
+                  <input type="date" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300" />
+                </div>
+              </div>
+
+              {/* 발주처 */}
+              <div className="bg-orange-50 border border-orange-100 rounded-xl p-4">
+                <h3 className="font-semibold text-orange-800 text-sm mb-3 flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />발주처 정보
+                </h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">업체명</label>
+                    <input type="text" value={bizName} onChange={e => setBizName(e.target.value)}
+                      placeholder="발주처 업체명" className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">담당자</label>
+                    <input type="text" value={bizManager} onChange={e => setBizManager(e.target.value)}
+                      placeholder="담당자 이름" className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">연락처</label>
+                    <input type="text" value={bizContact} onChange={e => setBizContact(e.target.value)}
+                      placeholder="전화번호" className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300" />
+                  </div>
+                </div>
+              </div>
+
+              {/* 현장·납품 */}
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                <h3 className="font-semibold text-blue-800 text-sm mb-3 flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />현장 및 납품 정보
+                </h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">시공사</label>
+                    <input type="text" value={contractor} onChange={e => setContractor(e.target.value)}
+                      placeholder="시공사명" className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">건설사</label>
+                    <input type="text" value={builderName} onChange={e => setBuilderName(e.target.value)}
+                      placeholder="건설사명" className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">납품지 주소</label>
+                    <input type="text" value={siteAddress} onChange={e => setSiteAddress(e.target.value)}
+                      placeholder="납품지 주소" className="w-full border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                  </div>
+                </div>
+              </div>
+
+              {/* 특기사항 */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">특기사항</label>
+                <textarea value={specialNotes} onChange={e => setSpecialNotes(e.target.value)}
+                  rows={2} placeholder="특이사항 메모..."
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 resize-none" />
+              </div>
+            </div>
+          )}
+
+          {/* ── STEP 2: 소켓 품목 입력 ── */}
+          {step === 2 && (
+            <div className="space-y-4">
+              {/* 실시간 요약 배너 */}
+              {allRows.length > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-3 flex items-center gap-4">
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-green-700">{allRows.length}</p>
+                    <p className="text-[10px] text-green-600">입력 품목</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-blue-700">{totalOrderQty}</p>
+                    <p className="text-[10px] text-blue-600">총 발주수량</p>
+                  </div>
+                  <div className="flex-1 flex flex-wrap gap-1.5">
+                    {[...new Set(allRows.map(r => r.product_type))].map(pt => (
+                      <span key={pt} className={cn('text-[10px] px-2 py-0.5 rounded-full font-semibold', PTYPE_COLORS[pt] || 'bg-gray-100 text-gray-700')}>
+                        {pt}: {allRows.filter(r => r.product_type === pt).reduce((s,r) => s+r.oq, 0)}ea
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 시트(동) 목록 */}
+              {sheets.map((sheet, si) => (
+                <div key={si} className="border rounded-xl overflow-hidden">
+                  {/* 시트 헤더 */}
+                  <div className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border-b">
+                    <span className="text-xs font-semibold text-gray-500">시트(동):</span>
+                    <input
+                      type="text"
+                      value={sheet.name}
+                      onChange={e => updateSheetName(si, e.target.value)}
+                      className="border-b border-gray-300 bg-transparent text-sm font-semibold text-gray-800 focus:outline-none focus:border-violet-500 w-24 pb-0.5"
+                    />
+                    <span className="ml-auto text-xs text-gray-400">{sheet.items.length}개 품목</span>
+                    {sheets.length > 1 && (
+                      <button onClick={() => removeSheet(si)}
+                        className="text-red-400 hover:text-red-600 transition-colors">
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* 품목 테이블 */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-gray-500 font-medium w-8">No</th>
+                          <th className="px-3 py-2 text-left text-gray-500 font-medium">제품형식</th>
+                          <th className="px-3 py-2 text-left text-gray-500 font-medium">가로 W (mm)</th>
+                          <th className="px-3 py-2 text-left text-gray-500 font-medium">세로 H (mm)</th>
+                          <th className="px-3 py-2 text-left text-gray-500 font-medium">수량</th>
+                          <th className="px-3 py-2 text-left text-gray-500 font-medium">단면/양면</th>
+                          <th className="px-3 py-2 text-left text-gray-500 font-medium">→ 소켓 계산</th>
+                          <th className="px-3 py-2 text-left text-gray-500 font-medium">비고</th>
+                          <th className="px-2 py-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {sheet.items.map((item, ii) => {
+                          const w = Number(item.pipe_width_mm) || 0;
+                          const h = Number(item.pipe_height_mm) || 0;
+                          const q = Number(item.qty) || 1;
+                          const calc = STRUCT_CALC_MANUAL[item.product_type];
+                          const result = (calc && w > 0 && h > 0) ? calc(w, h, q) : null;
+                          return (
+                            <tr key={ii} className="hover:bg-gray-50">
+                              <td className="px-3 py-1.5 text-gray-400">{ii + 1}</td>
+                              <td className="px-2 py-1.5">
+                                <select
+                                  value={item.product_type}
+                                  onChange={e => updateItem(si, ii, 'product_type', e.target.value)}
+                                  className={cn('text-xs px-2 py-1 rounded-lg border font-semibold focus:outline-none focus:ring-2 focus:ring-violet-300',
+                                    PTYPE_COLORS[item.product_type] || 'bg-gray-100 text-gray-700')}
+                                >
+                                  {PRODUCT_TYPES.map(pt => <option key={pt} value={pt}>{pt}</option>)}
+                                </select>
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="number" value={item.pipe_width_mm}
+                                  onChange={e => updateItem(si, ii, 'pipe_width_mm', e.target.value)}
+                                  placeholder="예) 400"
+                                  className="w-20 text-center border border-gray-200 rounded px-1.5 py-1 font-mono focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-300" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="number" value={item.pipe_height_mm}
+                                  onChange={e => updateItem(si, ii, 'pipe_height_mm', e.target.value)}
+                                  placeholder="예) 400"
+                                  className="w-20 text-center border border-gray-200 rounded px-1.5 py-1 font-mono focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-300" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="number" value={item.qty} min={1}
+                                  onChange={e => updateItem(si, ii, 'qty', e.target.value)}
+                                  className="w-14 text-center border border-gray-200 rounded px-1.5 py-1 font-mono focus:outline-none focus:border-violet-400 focus:ring-1 focus:ring-violet-300" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <button
+                                  onClick={() => updateItem(si, ii, 'construction_type', item.construction_type === 'SINGLE' ? 'DOUBLE' : 'SINGLE')}
+                                  className={cn('text-[10px] px-2 py-0.5 rounded-full font-semibold border transition-colors whitespace-nowrap',
+                                    item.construction_type === 'SINGLE'
+                                      ? 'bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200'
+                                      : 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200')}
+                                >
+                                  {item.construction_type === 'SINGLE' ? '🟠 단면' : '🔵 양면'}
+                                </button>
+                              </td>
+                              <td className="px-2 py-1.5">
+                                {result ? (
+                                  <span className="font-mono text-[10px] bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded whitespace-nowrap">
+                                    {result.sw}×{result.sh}×{result.depth} → {result.oq}ea
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-300 text-[10px]">W·H 입력 시 자동계산</span>
+                                )}
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <input type="text" value={item.remark}
+                                  onChange={e => updateItem(si, ii, 'remark', e.target.value)}
+                                  placeholder="비고"
+                                  className="w-24 border-b border-gray-200 bg-transparent text-xs focus:outline-none focus:border-violet-400 pb-0.5" />
+                              </td>
+                              <td className="px-2 py-1.5">
+                                <button onClick={() => removeItem(si, ii)}
+                                  className="text-gray-300 hover:text-red-500 transition-colors">
+                                  <MinusCircle className="h-4 w-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* 품목 추가 버튼 */}
+                  <div className="px-4 py-2 border-t bg-gray-50">
+                    <button onClick={() => addItem(si)}
+                      className="flex items-center gap-1.5 text-xs text-violet-600 hover:text-violet-800 font-semibold transition-colors">
+                      <PlusCircle className="h-3.5 w-3.5" />품목 추가
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* 시트(동) 추가 버튼 */}
+              <button onClick={addSheet}
+                className="w-full py-2.5 border-2 border-dashed border-violet-300 rounded-xl text-sm text-violet-600 hover:bg-violet-50 font-semibold flex items-center justify-center gap-2 transition-colors">
+                <PlusCircle className="h-4 w-4" />시트(동) 추가
+              </button>
+            </div>
+          )}
+
+          {/* ── STEP 3: 미리보기·확정 ── */}
+          {step === 3 && (
+            <div className="space-y-5">
+              {/* 헤더 요약 */}
+              <div className="bg-gradient-to-r from-violet-50 to-blue-50 border border-violet-200 rounded-xl p-4">
+                <div className="flex items-center gap-6 flex-wrap">
+                  <div>
+                    <p className="text-xs text-gray-500">현장명</p>
+                    <p className="font-bold text-gray-900">{projectName}</p>
+                  </div>
+                  {orderDate && <div>
+                    <p className="text-xs text-gray-500">발주일자</p>
+                    <p className="font-semibold text-gray-800 font-mono">{orderDate}</p>
+                  </div>}
+                  {deliveryDate && <div>
+                    <p className="text-xs text-gray-500">납기요청일</p>
+                    <p className="font-semibold text-gray-800 font-mono">{deliveryDate}</p>
+                  </div>}
+                  {contractor && <div>
+                    <p className="text-xs text-gray-500">시공사</p>
+                    <p className="font-semibold text-gray-800">{contractor}</p>
+                  </div>}
+                  <div className="ml-auto flex gap-4">
+                    <div className="text-center bg-white rounded-xl px-4 py-2 border">
+                      <p className="text-2xl font-bold text-violet-700">{allRows.length}</p>
+                      <p className="text-[10px] text-violet-500">총 품목 수</p>
+                    </div>
+                    <div className="text-center bg-white rounded-xl px-4 py-2 border">
+                      <p className="text-2xl font-bold text-blue-700">{totalOrderQty}</p>
+                      <p className="text-[10px] text-blue-500">총 발주수량</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 구조체별 소켓 집계표 */}
+              <div>
+                <h3 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
+                  <Package className="h-4 w-4 text-violet-500" />소켓 발주 명세 (구조체별)
+                </h3>
+                <div className="space-y-3">
+                  {[...grouped.entries()].map(([code, rows]) => {
+                    const label = PTYPE_COLORS[code];
+                    return (
+                      <div key={code} className="border rounded-xl overflow-hidden">
+                        <div className={cn('px-4 py-2 flex items-center gap-3', label?.includes('blue') ? 'bg-blue-50' : label?.includes('indigo') ? 'bg-indigo-50' : label?.includes('purple') ? 'bg-purple-50' : label?.includes('cyan') ? 'bg-cyan-50' : label?.includes('teal') ? 'bg-teal-50' : label?.includes('orange') ? 'bg-orange-50' : label?.includes('amber') ? 'bg-amber-50' : 'bg-rose-50')}>
+                          <span className={cn('text-xs font-bold px-2 py-0.5 rounded-full', PTYPE_COLORS[code] || 'bg-gray-100 text-gray-700')}>{code}</span>
+                          <span className="text-xs text-gray-600">{rows.length}개 규격</span>
+                          <span className="ml-auto text-xs font-bold text-gray-700">소켓 {rows.reduce((s, r) => s + r.oq, 0)}ea</span>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead className="bg-gray-50 border-b">
+                              <tr>
+                                <th className="px-3 py-1.5 text-left text-gray-500 font-medium">시트(동)</th>
+                                <th className="px-3 py-1.5 text-left text-gray-500 font-medium">관통재 W×H</th>
+                                <th className="px-3 py-1.5 text-left text-gray-500 font-medium">입력수량</th>
+                                <th className="px-3 py-1.5 text-left text-gray-500 font-medium">소켓 W×H×깊이</th>
+                                <th className="px-3 py-1.5 text-center text-gray-500 font-medium">발주수량</th>
+                                <th className="px-3 py-1.5 text-left text-gray-500 font-medium">단면/양면</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                              {rows.map((r, i) => (
+                                <tr key={i} className="hover:bg-gray-50">
+                                  <td className="px-3 py-1.5 text-gray-600 font-semibold">{r.sheetName}</td>
+                                  <td className="px-3 py-1.5 font-mono text-gray-700">{r.w} × {r.h}</td>
+                                  <td className="px-3 py-1.5 text-center text-gray-700">{r.qty}</td>
+                                  <td className="px-3 py-1.5 font-mono text-green-700 font-semibold">{r.sw} × {r.sh} × {r.depth}</td>
+                                  <td className="px-3 py-1.5 text-center font-bold text-violet-700">{r.oq}</td>
+                                  <td className="px-3 py-1.5">
+                                    <span className={cn('text-[10px] px-1.5 py-0.5 rounded-full font-semibold',
+                                      r.construction_type === 'SINGLE' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700')}>
+                                      {r.construction_type === 'SINGLE' ? '🟠 단면' : '🔵 양면'}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot className="bg-gray-50 border-t">
+                              <tr>
+                                <td colSpan={4} className="px-3 py-1.5 text-right text-xs font-semibold text-gray-600">{code} 소계</td>
+                                <td className="px-3 py-1.5 text-center font-bold text-violet-700">{rows.reduce((s,r) => s+r.oq, 0)}</td>
+                                <td></td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 평철(브라켓) 집계 */}
+              {bracketList.length > 0 && (
+                <div>
+                  <h3 className="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
+                    <Wrench className="h-4 w-4 text-gray-500" />평철 소요량 집계
+                    <span className="ml-auto text-xs font-normal text-gray-500">합계: {bracketTotal}개</span>
+                  </h3>
+                  <div className="border rounded-xl overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-gray-500 font-medium">두께(t)</th>
+                          <th className="px-3 py-2 text-left text-gray-500 font-medium">폭(bw, mm)</th>
+                          <th className="px-3 py-2 text-left text-gray-500 font-medium">길이(L, mm)</th>
+                          <th className="px-3 py-2 text-center text-gray-500 font-medium">수량</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {bracketList.map((b, i) => (
+                          <tr key={i} className="hover:bg-gray-50">
+                            <td className="px-3 py-1.5 font-mono text-gray-700">{b.t}</td>
+                            <td className="px-3 py-1.5 font-mono text-gray-700">{b.bw}</td>
+                            <td className="px-3 py-1.5 font-mono text-gray-700">{b.l}</td>
+                            <td className="px-3 py-1.5 text-center font-bold text-gray-800">{b.qty}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-gray-50 border-t">
+                        <tr>
+                          <td colSpan={3} className="px-3 py-2 text-right text-xs font-semibold text-gray-600">합계</td>
+                          <td className="px-3 py-2 text-center font-bold text-gray-900">{bracketTotal}</td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* 이상 없을 경우 등록 안내 */}
+              <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                <p className="text-sm text-green-800">
+                  내용을 확인하셨으면 <strong>발주서 등록 확정</strong> 버튼을 눌러주세요.
+                  저장 후 소켓발주서 탭에서 결재함 제출이 가능합니다.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 푸터 (3단계) */}
+        <div className="flex items-center justify-between p-5 border-t bg-gray-50 rounded-b-2xl">
+          <div>
+            {step > 1 && (
+              <button onClick={() => setStep((step - 1) as 1 | 2 | 3)}
+                className="px-4 py-2 border rounded-lg text-sm text-gray-600 hover:bg-white transition-colors">
+                ← 이전
+              </button>
+            )}
+          </div>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="px-4 py-2 border rounded-lg text-sm hover:bg-white transition-colors">
+              취소
+            </button>
+            {step < 3 ? (
+              <button
+                onClick={() => {
+                  if (step === 1) {
+                    if (!projectName.trim()) { toast.error('현장명을 입력해주세요'); return; }
+                    setStep(2);
+                  } else if (step === 2) {
+                    const hasItems = sheets.some(sh => sh.items.some(it => Number(it.pipe_width_mm) > 0 && Number(it.pipe_height_mm) > 0));
+                    if (!hasItems) { toast.error('최소 1개 이상의 품목을 입력해주세요 (가로/세로 필수)'); return; }
+                    setStep(3);
+                  }
+                }}
+                className="px-5 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 flex items-center gap-2 transition-colors"
+              >
+                {step === 1 ? '다음 → 품목 입력' : '다음 → 미리보기'}
+              </button>
+            ) : (
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="px-5 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 transition-colors shadow-sm"
+              >
+                {saving ? (
+                  <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />저장 중...</>
+                ) : (
+                  <><CheckCircle2 className="h-4 w-4" />발주서 등록 확정</>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+// ────────────────────────────────────────────────────────────────────────────
 // 소켓류발주 탭
 // ────────────────────────────────────────────────────────────────────────────
 const STRUCT_LABELS: Record<string, { color: string; bg: string }> = {
@@ -896,6 +1608,8 @@ export default function PurchaseOrdersPage() {
   // ★ 프로젝트 선택
   const [projects, setProjects] = useState<Project[]>([]);
   const [previewProjectId, setPreviewProjectId] = useState<number | null>(null);
+  // ★ 수동 입력 모달
+  const [showManualModal, setShowManualModal] = useState(false);
 
   // 비동기 base64 인코딩 (큰 파일 스택 오버플로우 방지)
   const toBase64 = (buffer: ArrayBuffer): string => {
@@ -1070,10 +1784,19 @@ export default function PurchaseOrdersPage() {
         <>
         {/* 업로드 영역 */}
         <div className="bg-white rounded-2xl shadow-sm border p-6 space-y-4">
-          <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-            <Upload className="h-5 w-5 text-blue-500" />
-            발주서 Excel 업로드
-          </h2>
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+              <Upload className="h-5 w-5 text-blue-500" />
+              발주서 Excel 업로드
+            </h2>
+            <button
+              onClick={() => setShowManualModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 transition-colors shadow-sm"
+            >
+              <ClipboardList className="h-4 w-4" />
+              ✏️ 수동 입력
+            </button>
+          </div>
           <DropZone onFile={handleFile} />
           {parsing && (
             <div className="flex items-center justify-center gap-2 py-3 text-blue-600 text-sm">
@@ -1245,6 +1968,15 @@ export default function PurchaseOrdersPage() {
 
       {/* 상세 모달 */}
       {detailPo && <DetailModal po={detailPo} onClose={() => setDetailPo(null)} />}
+
+      {/* 수동 입력 모달 */}
+      {showManualModal && (
+        <ManualPoModal
+          onClose={() => setShowManualModal(false)}
+          onSaved={fetchList}
+          projects={projects}
+        />
+      )}
     </div>
   );
 }

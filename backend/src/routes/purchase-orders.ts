@@ -369,7 +369,257 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
     }
   });
 
-  // ── POST /api/purchase-orders/upload ── 업로드 + 파싱 + DB 저장
+  // ── POST /api/purchase-orders/manual ── 수동 입력으로 발주서 저장 (엑셀 없이)
+  // Body: {
+  //   project_id?: number,
+  //   project_name: string,
+  //   order_date?: string, delivery_date?: string,
+  //   biz_name?, biz_no?, biz_ceo?, biz_address?, biz_manager?, biz_contact?,
+  //   submitter?, submitter_address?, construction_site?,
+  //   contractor?, contractor_address?,
+  //   supervisor?, supervisor_office?, supervisor_address?,
+  //   site_address?, consignee?, builder_name?, special_notes?,
+  //   sheets: [{ name: string, items: [{ product_type, pipe_width_mm, pipe_height_mm, qty, material?, structure?, remark?, construction_type? }] }]
+  // }
+  app.post('/api/purchase-orders/manual', { preHandler: requireAuth }, async (req, reply) => {
+    const body = req.body as any;
+    if (!body?.project_name) {
+      return reply.code(400).send({ error: 'missing_field', message: '현장명(project_name)은 필수입니다.' });
+    }
+    if (!Array.isArray(body.sheets) || body.sheets.length === 0) {
+      return reply.code(400).send({ error: 'missing_items', message: '발주 명세(sheets)가 없습니다.' });
+    }
+
+    const user = (req as any).user;
+    const explicitProjectId: number | null = body.project_id ? parseInt(body.project_id) : null;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // ── 프로젝트 연결 ──────────────────────────────────────────────────────
+      let projectId: number | null = null;
+
+      if (explicitProjectId) {
+        const chk = await client.query(
+          `SELECT project_id FROM project_master WHERE project_id = $1`,
+          [explicitProjectId]
+        );
+        if (chk.rows.length > 0) {
+          projectId = explicitProjectId;
+        } else {
+          await client.query('ROLLBACK');
+          return reply.code(400).send({ error: 'project_not_found', message: '선택한 프로젝트를 찾을 수 없습니다.' });
+        }
+      } else if (body.project_name && body.project_name !== '미등록 현장') {
+        const existProj = await client.query(
+          `SELECT project_id FROM project_master WHERE project_name = $1 LIMIT 1`,
+          [body.project_name]
+        );
+        if (existProj.rows.length > 0) {
+          projectId = existProj.rows[0].project_id;
+        } else {
+          const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+          const countRes = await client.query(
+            `SELECT COUNT(*) as cnt FROM project_master WHERE project_code LIKE $1`,
+            [`MAN-${dateStr}-%`]
+          );
+          const cnt = parseInt(countRes.rows[0].cnt) + 1;
+          const projectCode = `MAN-${dateStr}-${String(cnt).padStart(3, '0')}`;
+
+          let deliveryDate: string | null = null;
+          if (body.delivery_date && body.delivery_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            deliveryDate = body.delivery_date;
+          }
+
+          const newProj = await client.query(
+            `INSERT INTO project_master (
+               project_code, project_name, customer_name, order_date, delivery_date, status, remarks
+             ) VALUES ($1, $2, $3, CURRENT_DATE, $4, 'ACTIVE', $5) RETURNING project_id`,
+            [
+              projectCode,
+              body.project_name,
+              body.submitter || body.contractor || null,
+              deliveryDate,
+              `수동입력 / 시공사: ${body.contractor || '-'}`,
+            ]
+          );
+          projectId = newProj.rows[0].project_id;
+        }
+      }
+
+      // ── 발주서 헤더 저장 ──────────────────────────────────────────────────
+      const poRes = await client.query(
+        `INSERT INTO purchase_order (
+          project_id, file_name, project_name, order_date, delivery_date,
+          biz_name, biz_no, biz_ceo, biz_address, biz_manager, biz_contact,
+          submitter, submitter_address,
+          construction_site, contractor, contractor_address,
+          supervisor, supervisor_office, supervisor_address,
+          site_address, consignee, builder_name, special_notes,
+          uploaded_by
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24) RETURNING po_id`,
+        [
+          projectId,
+          '[수동입력]',
+          body.project_name,
+          body.order_date     || null,
+          body.delivery_date  || null,
+          body.biz_name       || null,
+          body.biz_no         || null,
+          body.biz_ceo        || null,
+          body.biz_address    || null,
+          body.biz_manager    || null,
+          body.biz_contact    || null,
+          body.submitter      || null,
+          body.submitter_address || null,
+          body.construction_site || null,
+          body.contractor     || null,
+          body.contractor_address || null,
+          body.supervisor     || null,
+          body.supervisor_office  || null,
+          body.supervisor_address || null,
+          body.site_address   || null,
+          body.consignee      || null,
+          body.builder_name   || null,
+          body.special_notes  || null,
+          user?.worker_id     || null,
+        ]
+      );
+      const poId = poRes.rows[0].po_id;
+
+      // ── 품목 저장 (소켓 qty=1 개별 행 원칙) ──────────────────────────────
+      let totalItemCount = 0;
+      const allSheetNames: string[] = [];
+
+      for (const sheet of body.sheets) {
+        const sheetName: string = sheet.name || '기본';
+        if (!allSheetNames.includes(sheetName)) allSheetNames.push(sheetName);
+        let seqNo = 1;
+
+        for (const item of (sheet.items || [])) {
+          const qty = item.qty && item.qty > 0 ? Number(item.qty) : 1;
+          const isSocket = !!(item.product_type);
+
+          if (isSocket) {
+            // 소켓: qty만큼 개별 행으로 분리
+            for (let qi = 0; qi < qty; qi++) {
+              await client.query(
+                `INSERT INTO purchase_order_item (
+                  po_id, sheet_name, seq_no, item_type, material, structure,
+                  pipe_width_mm, pipe_height_mm, opening_width_mm, opening_height_mm,
+                  qty, product_type, item_name, spec, remark, construction_type
+                 ) VALUES ($1,$2,$3,'socket',$4,$5,$6,$7,$8,$9,1,$10,$11,$12,$13,$14)`,
+                [
+                  poId,
+                  sheetName,
+                  seqNo++,
+                  item.material || null,
+                  item.structure || null,
+                  item.pipe_width_mm ? Number(item.pipe_width_mm) : null,
+                  item.pipe_height_mm ? Number(item.pipe_height_mm) : null,
+                  item.opening_width_mm ? Number(item.opening_width_mm) : null,
+                  item.opening_height_mm ? Number(item.opening_height_mm) : null,
+                  item.product_type,
+                  item.item_name || null,
+                  item.spec || null,
+                  item.remark || null,
+                  item.construction_type || 'DOUBLE',
+                ]
+              );
+              totalItemCount++;
+            }
+          } else {
+            // 부자재·추가품목: qty 그대로 1행
+            await client.query(
+              `INSERT INTO purchase_order_item (
+                po_id, sheet_name, seq_no, item_type, material, structure,
+                pipe_width_mm, pipe_height_mm, opening_width_mm, opening_height_mm,
+                qty, product_type, item_name, spec, remark, construction_type
+               ) VALUES ($1,$2,$3,'extra',$4,$5,$6,$7,$8,$9,$10,NULL,$11,$12,$13,'DOUBLE')`,
+              [
+                poId,
+                sheetName,
+                seqNo++,
+                item.material || null,
+                item.structure || null,
+                item.pipe_width_mm ? Number(item.pipe_width_mm) : null,
+                item.pipe_height_mm ? Number(item.pipe_height_mm) : null,
+                item.opening_width_mm ? Number(item.opening_width_mm) : null,
+                item.opening_height_mm ? Number(item.opening_height_mm) : null,
+                qty,
+                item.item_name || null,
+                item.spec || null,
+                item.remark || null,
+              ]
+            );
+            totalItemCount++;
+          }
+        }
+      }
+
+      // ── LOT 자동 부여 ──────────────────────────────────────────────────────
+      let lotDateStr = '';
+      if (body.order_date && body.order_date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        const yy = body.order_date.slice(2, 4);
+        const mm = body.order_date.slice(5, 7);
+        const dd = body.order_date.slice(8, 10);
+        lotDateStr = `${yy}${mm}${dd}`;
+      }
+      if (!lotDateStr) {
+        const t = new Date();
+        lotDateStr = `${String(t.getFullYear()).slice(2)}${String(t.getMonth()+1).padStart(2,'0')}${String(t.getDate()).padStart(2,'0')}`;
+      }
+
+      const socketLotRows = await client.query(`
+        SELECT po_item_id, product_type, sheet_name, pipe_width_mm, pipe_height_mm
+        FROM purchase_order_item
+        WHERE po_id = $1 AND item_type = 'socket' AND product_type IS NOT NULL
+        ORDER BY
+          COALESCE(sheet_name, '') ASC,
+          CASE product_type
+            WHEN 'VT-049'    THEN 1  WHEN 'VT-064'    THEN 2
+            WHEN 'VT-01'     THEN 3  WHEN 'VA-064'    THEN 4
+            WHEN 'VAG-1.69'  THEN 5  WHEN 'HTG-064'   THEN 6
+            WHEN 'HTG-064DC' THEN 7  WHEN 'HTG-1.69'  THEN 8
+            ELSE 9
+          END,
+          COALESCE(pipe_width_mm, 0) ASC,
+          COALESCE(pipe_height_mm, 0) ASC
+      `, [poId]);
+
+      const lotCounters: Record<string, number> = {};
+      for (const srow of socketLotRows.rows) {
+        const pt: string = srow.product_type || 'SOCKET';
+        if (!lotCounters[pt]) lotCounters[pt] = 1;
+        const seq = String(lotCounters[pt]++).padStart(3, '0');
+        const lotNum = `${lotDateStr}-${pt}-${seq}`;
+        await client.query(
+          'UPDATE purchase_order_item SET lot_number = $1 WHERE po_item_id = $2',
+          [lotNum, srow.po_item_id]
+        );
+      }
+
+      await client.query('COMMIT');
+
+      return {
+        data: {
+          po_id: poId,
+          project_id: projectId,
+          project_name: body.project_name,
+          item_count: totalItemCount,
+          sheets: allSheetNames,
+        }
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  });
+
+
   // { file_base64: string, file_name: string, project_id?: number }
   app.post('/api/purchase-orders/upload', { preHandler: requireAuth }, async (req, reply) => {
     const body = req.body as any;
