@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { X, Building2, MapPin, Calendar, User, FileText, AlertTriangle } from 'lucide-react';
 import { api } from '../../lib/api';
 import { cn } from '../../lib/utils';
@@ -1530,6 +1530,14 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                               </tr>
                             );
                           })}
+                          {/* ── 합계 행 ── */}
+                          <tr className="bg-indigo-50 font-bold text-[11px] border-t-2 border-indigo-300">
+                            <td className="px-2 py-2 border-r text-gray-500 text-left" colSpan={4}>합 계</td>
+                            <td className="px-2 py-2 border-r text-blue-700 text-center">-</td>
+                            <td className="px-2 py-2 border-r text-indigo-700 text-center text-[13px] font-extrabold">{d.items.length * 2} 개</td>
+                            <td className="px-2 py-2 border-r text-teal-700 text-center">-</td>
+                            <td className="px-2 py-2 text-indigo-700 text-center text-[13px] font-extrabold">{d.items.length * 2} 개</td>
+                          </tr>
                         </tbody>
                       </table>
                     </div>
@@ -1803,28 +1811,54 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-200 bg-white">
-                            {d.items.map((item: any, idx: number) => {
-                              const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
-                              const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
-                              const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
-                              const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
-                              const pVal = Number(perimeter);
-                              const req = pVal > 0 ? (pVal + 0.4).toFixed(1) : '-';
+                            {(() => {
+                              const rShipItems = d.items;
+                              const rShipTotalM = rShipItems.reduce((acc: number, it: any) => {
+                                const w2 = it.pipe_width_mm ? Number(it.pipe_width_mm) : 0;
+                                const h2 = it.pipe_height_mm ? Number(it.pipe_height_mm) : 0;
+                                const p2 = w2 > 0 && h2 > 0 ? ((w2 + h2) * 2) / 1000 : 0;
+                                return acc + (p2 > 0 ? p2 + 0.4 : 0);
+                              }, 0);
+                              const rShipRolls = mToRolls(rShipTotalM, CW_ROLL_LEN_M);
                               return (
-                                <tr key={item.swi_id} className={idx % 2 === 0 ? 'bg-slate-50/30' : 'bg-white'}>
-                                  <td className="px-2 py-1.5 border-r font-mono">{idx + 1}</td>
-                                  <td className="px-2 py-1.5 border-r font-mono">{w}</td>
-                                  <td className="px-2 py-1.5 border-r font-mono">{h}</td>
-                                  <td className="px-2 py-1.5 border-r font-bold">{item.product_type || item.structure}</td>
-                                  <td className="px-2 py-1.5 border-r font-mono text-gray-700">{area}</td>
-                                  <td className="px-2 py-1.5 border-r font-mono text-gray-700">{perimeter}</td>
-                                  <td className="px-2 py-1.5 border-r text-teal-700 font-bold">{req}</td>
-                                  <td className="px-2 py-1.5 border-r">1</td>
-                                  <td className="px-2 py-1.5 border-r text-teal-700 font-bold">{req}</td>
-                                  <td className="px-2 py-1 font-semibold">2</td>
-                                </tr>
+                                <>
+                                  {rShipItems.map((item: any, idx: number) => {
+                                    const w = item.pipe_width_mm ? Number(item.pipe_width_mm) : 0;
+                                    const h = item.pipe_height_mm ? Number(item.pipe_height_mm) : 0;
+                                    const area = w > 0 && h > 0 ? ((w * h) / 1000000).toFixed(4) : '0';
+                                    const perimeter = w > 0 && h > 0 ? (((w + h) * 2) / 1000).toFixed(1) : '0';
+                                    const pVal = Number(perimeter);
+                                    const req = pVal > 0 ? (pVal + 0.4).toFixed(1) : '-';
+                                    return (
+                                      <tr key={item.swi_id} className={idx % 2 === 0 ? 'bg-slate-50/30' : 'bg-white'}>
+                                        <td className="px-2 py-1.5 border-r font-mono">{idx + 1}</td>
+                                        <td className="px-2 py-1.5 border-r font-mono">{w}</td>
+                                        <td className="px-2 py-1.5 border-r font-mono">{h}</td>
+                                        <td className="px-2 py-1.5 border-r font-bold">{item.product_type || item.structure}</td>
+                                        <td className="px-2 py-1.5 border-r font-mono text-gray-700">{area}</td>
+                                        <td className="px-2 py-1.5 border-r font-mono text-gray-700">{perimeter}</td>
+                                        <td className="px-2 py-1.5 border-r text-teal-700 font-bold">{req}</td>
+                                        <td className="px-2 py-1.5 border-r">1</td>
+                                        <td className="px-2 py-1.5 border-r text-teal-700 font-bold">{req}</td>
+                                        <td className="px-2 py-1 font-semibold">2</td>
+                                      </tr>
+                                    );
+                                  })}
+                                  {/* ── 합계 행 ── */}
+                                  <tr className="bg-teal-50 font-bold text-[11px] border-t-2 border-teal-300">
+                                    <td className="px-2 py-2 border-r text-gray-500 text-left" colSpan={8}>합 계</td>
+                                    <td className="px-2 py-2 border-r text-teal-800 text-center text-[13px] font-extrabold">{rShipTotalM > 0 ? rShipTotalM.toFixed(1) + ' M' : '-'}</td>
+                                    <td className="px-2 py-2 text-center text-gray-400">-</td>
+                                  </tr>
+                                  {/* ── 롤수 행 ── */}
+                                  <tr className="bg-amber-50 text-[11px]">
+                                    <td className="px-2 py-1.5 border-r text-gray-400 text-left" colSpan={8}>필요 롤수 (CW {CW_ROLL_LEN_M}M/롤 기준)</td>
+                                    <td className="px-2 py-1.5 border-r text-rose-600 text-center font-bold">{rShipRolls > 0 ? rShipRolls + ' 롤' : '-'}</td>
+                                    <td className="px-2 py-1.5 text-center text-gray-300">-</td>
+                                  </tr>
+                                </>
                               );
-                            })}
+                            })()}
                           </tbody>
                         </table>
                       </div>
@@ -1894,6 +1928,55 @@ export default function DetailSwoModal({ swo, onClose, onRefresh }: { swo: any; 
                               </tr>
                             );
                           })}
+                           {/* ── 합계 행 ── */}
+                           {(() => {
+                             const wS = d.items;
+                             const wGw = wS.reduce((acc: number, it: any) => {
+                               const w2 = it.pipe_width_mm ? Number(it.pipe_width_mm) : 0;
+                               const h2 = it.pipe_height_mm ? Number(it.pipe_height_mm) : 0;
+                               const p2 = w2 > 0 && h2 > 0 ? ((w2 + h2) * 2) / 1000 : 0;
+                               return acc + (p2 > 0 ? p2 + 0.5 : 0);
+                             }, 0);
+                             const wVT = wS.reduce((acc: number, it: any) => {
+                               const t = getSocketType(it.product_type);
+                               const w2 = it.pipe_width_mm ? Number(it.pipe_width_mm) : 0;
+                               const h2 = it.pipe_height_mm ? Number(it.pipe_height_mm) : 0;
+                               const p2 = w2 > 0 && h2 > 0 ? ((w2 + h2) * 2) / 1000 : 0;
+                               return acc + (t === 'VT' && p2 > 0 ? p2 + 0.5 : 0);
+                             }, 0);
+                             const wVM = wS.reduce((acc: number, it: any) => {
+                               const t = getSocketType(it.product_type);
+                               const w2 = it.pipe_width_mm ? Number(it.pipe_width_mm) : 0;
+                               const h2 = it.pipe_height_mm ? Number(it.pipe_height_mm) : 0;
+                               const p2 = w2 > 0 && h2 > 0 ? ((w2 + h2) * 2) / 1000 : 0;
+                               return acc + (t === 'VM' && p2 > 0 ? (p2 + 0.5) * 4 : 0);
+                             }, 0);
+                             const gwR = mToRolls(wGw, GW_ROLL_LEN_M);
+                             const vtR = mToRolls(wVT, CW_ROLL_LEN_M);
+                             const vmR = mToRolls(wVM, CW_ROLL_LEN_M);
+                             return (
+                               <>
+                                 <tr className="bg-teal-50 font-bold text-[11px] border-t-2 border-teal-300">
+                                   <td className="px-2 py-2 border-r text-gray-500 text-left" colSpan={6}>합 계</td>
+                                   <td className="px-2 py-2 border-r text-emerald-800 text-center font-extrabold text-[12px]">{wGw > 0 ? wGw.toFixed(1) + ' M' : '-'}</td>
+                                   <td className="px-2 py-2 border-r text-center text-gray-400">-</td>
+                                   <td className="px-2 py-2 border-r text-teal-800 text-center font-extrabold text-[12px]">{wVT > 0 ? wVT.toFixed(1) + ' M' : '-'}</td>
+                                   <td className="px-2 py-2 border-r text-center text-gray-400">-</td>
+                                   <td className="px-2 py-2 border-r text-teal-800 text-center font-extrabold text-[12px]">{wVM > 0 ? wVM.toFixed(1) + ' M' : '-'}</td>
+                                   <td className="px-2 py-2 text-center text-gray-400">-</td>
+                                 </tr>
+                                 <tr className="bg-amber-50 text-[11px]">
+                                   <td className="px-2 py-1.5 border-r text-gray-400 text-left" colSpan={6}>필요 롤수 (GW {GW_ROLL_LEN_M}M/롤 · CW {CW_ROLL_LEN_M}M/롤)</td>
+                                   <td className="px-2 py-1.5 border-r text-rose-600 text-center font-bold">{gwR > 0 ? gwR + ' 롤' : '-'}</td>
+                                   <td className="px-2 py-1.5 border-r text-center text-gray-300">-</td>
+                                   <td className="px-2 py-1.5 border-r text-rose-600 text-center font-bold">{vtR > 0 ? vtR + ' 롤' : '-'}</td>
+                                   <td className="px-2 py-1.5 border-r text-center text-gray-300">-</td>
+                                   <td className="px-2 py-1.5 border-r text-rose-600 text-center font-bold">{vmR > 0 ? vmR + ' 롤' : '-'}</td>
+                                   <td className="px-2 py-1.5 text-center text-gray-300">-</td>
+                                 </tr>
+                               </>
+                             );
+                           })()}
                         </tbody>
                       </table>
                     </div>
