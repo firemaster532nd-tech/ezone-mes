@@ -1735,13 +1735,14 @@ export default function PurchaseOrdersPage() {
       toast.error('현장 프로젝트는 발주서관리에서 삭제할 수 없습니다. 현장프로젝트관리에서 삭제하세요.');
       return;
     }
-    if (!confirm(`"${po.project_name}" 발주서를 삭제하시겠습니까?`)) return;
+    if (!confirm(`"${po.project_name}" 발주서를 삭제하시겠습니까?\n\n※ 연결된 소켓발주(대기)가 있으면 함께 취소됩니다.`)) return;
     try {
       await api.delete(`/purchase-orders/${po.po_id}`);
       toast.success('삭제되었습니다.');
       fetchList();
-    } catch {
-      toast.error('삭제 실패');
+    } catch (err: any) {
+      const msg = err?.body?.message ?? err?.message ?? '삭제 실패';
+      toast.error(msg);
     }
   };
 

@@ -1029,12 +1029,58 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
   // ── DELETE /api/purchase-orders/:id ── 발주서 삭제 (soft)
   app.delete<{ Params: { id: string } }>('/api/purchase-orders/:id', { preHandler: requireAuth }, async (req, reply) => {
     const id = parseInt(req.params.id, 10);
-    const { rows } = await pool.query(
-      `UPDATE purchase_order SET status = 'DELETED' WHERE po_id = $1 RETURNING *`,
-      [id]
-    );
-    if (!rows[0]) return reply.code(404).send({ error: 'not_found' });
-    return { data: rows[0] };
+    try {
+      // 1) 발주서 존재 확인
+      const { rows: poRows } = await pool.query(
+        `SELECT po_id, project_name, status FROM purchase_order WHERE po_id = $1`,
+        [id]
+      );
+      if (!poRows[0]) return reply.code(404).send({ error: 'not_found', message: '발주서를 찾을 수 없습니다.' });
+      if (poRows[0].status === 'DELETED') return reply.code(400).send({ error: 'already_deleted', message: '이미 삭제된 발주서입니다.' });
+
+      // 2) 진행 중인 구조체 작업지시 확인 (COMPLETED 제외)
+      const { rows: swo } = await pool.query(
+        `SELECT wo_id FROM struct_work_order WHERE po_id = $1 AND status NOT IN ('COMPLETED','CANCELLED') LIMIT 1`,
+        [id]
+      );
+      if (swo.length > 0) {
+        return reply.code(409).send({
+          error: 'has_work_order',
+          message: '진행 중인 구조체 작업지시가 있어 삭제할 수 없습니다. 작업지시를 먼저 취소하세요.',
+        });
+      }
+
+      // 3) 소켓발주(socket_order) 연결된 경우 — DRAFT/RETURNED 상태면 같이 취소
+      const { rows: soRows } = await pool.query(
+        `SELECT so_id, status FROM socket_order WHERE po_id = $1`,
+        [id]
+      );
+      const activeSocketOrders = soRows.filter(r => !['DRAFT','RETURNED','CANCELLED'].includes(r.status));
+      if (activeSocketOrders.length > 0) {
+        return reply.code(409).send({
+          error: 'has_socket_order',
+          message: `소켓 발주(${activeSocketOrders.map(r => `#${r.so_id} ${r.status}`).join(', ')})가 진행 중입니다. 소켓발주 대기 화면에서 먼저 취소하세요.`,
+        });
+      }
+      // DRAFT/RETURNED 상태 소켓발주는 CANCELLED 처리
+      for (const so of soRows.filter(r => ['DRAFT','RETURNED'].includes(r.status))) {
+        await pool.query(`UPDATE socket_order SET status = 'CANCELLED' WHERE so_id = $1`, [so.so_id]);
+      }
+
+      // 4) 발주서 soft delete
+      const { rows } = await pool.query(
+        `UPDATE purchase_order SET status = 'DELETED' WHERE po_id = $1 RETURNING *`,
+        [id]
+      );
+      return { data: rows[0], message: '발주서가 삭제되었습니다.' };
+
+    } catch (err: any) {
+      req.log.error(err, 'purchase-order delete error');
+      return reply.code(500).send({
+        error: 'delete_failed',
+        message: err?.message ?? '삭제 중 오류가 발생했습니다.',
+      });
+    }
   });
 
   // ── PATCH /api/purchase-orders/items/:po_item_id/construction-type ── 단면/양면 수동 변경
