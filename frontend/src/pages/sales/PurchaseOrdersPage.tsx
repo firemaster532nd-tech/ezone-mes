@@ -1729,10 +1729,18 @@ export default function PurchaseOrdersPage() {
     }
   };
 
-  // 삭제 — PROJECT_ONLY는 삭제 불가
+  // 삭제 — PO: 발주서 soft delete / PROJECT_ONLY: 프로젝트 삭제
   const handleDelete = async (po: PurchaseOrder) => {
     if (po.source_type === 'PROJECT_ONLY') {
-      toast.error('현장 프로젝트는 발주서관리에서 삭제할 수 없습니다. 현장프로젝트관리에서 삭제하세요.');
+      if (!confirm(`"${po.project_name}" 프로젝트를 삭제하시겠습니까?\n\n※ 연결된 작업지시 등 모든 하위 데이터가 함께 삭제됩니다.`)) return;
+      try {
+        await api.delete(`/projects/${po.project_id}`);
+        toast.success('프로젝트가 삭제되었습니다.');
+        fetchList();
+      } catch (err: any) {
+        const msg = err?.body?.message ?? err?.message ?? '삭제 실패';
+        toast.error(msg);
+      }
       return;
     }
     if (!confirm(`"${po.project_name}" 발주서를 삭제하시겠습니까?\n\n※ 연결된 소켓발주(대기)가 있으면 함께 취소됩니다.`)) return;
@@ -1923,23 +1931,13 @@ export default function PurchaseOrdersPage() {
                               <ExternalLink className="h-4 w-4" />
                             </button>
                           )}
-                          {po.source_type === 'PROJECT_ONLY' ? (
-                            // PROJECT_ONLY: 발주서 첨부 미리보기 버튼
-                            <span
-                              className="p-1.5 rounded text-amber-400 cursor-help"
-                              title="현장프로젝트관리에서 발주서를 첨부하면 여기에 표시됩니다"
-                            >
-                              <Upload className="h-4 w-4" />
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => handleDelete(po)}
-                              className="p-1.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors"
-                              title="삭제"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleDelete(po)}
+                            className="p-1.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-600 transition-colors"
+                            title={po.source_type === 'PROJECT_ONLY' ? '프로젝트 삭제' : '삭제'}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
