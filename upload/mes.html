@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MES 개발 실행 및 정합성 검토 지침 | (주)이지원</title>
+<style>
+ :root{
+  --logo:#DC2626; --navy:#1F3864; --blue:#2E75B6;
+  --ok-bg:#D1FAE5; --ok-bd:#10B981;
+  --warn-bg:#FEF3C7; --warn-bd:#F59E0B;
+  --ng-bg:#FEE2E2; --ng-bd:#EF4444;
+  --line:#D9DEE8; --soft:#F4F6FB; --ink:#1f2430; --muted:#5b6472;
+ }
+ *{box-sizing:border-box;}
+ body{ font-family:"Malgun Gothic","맑은 고딕","Apple SD Gothic Neo",sans-serif; color:var(--ink);
+  margin:0; background:#E9ECF3; line-height:1.62; font-size:14px;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+ .page{ max-width:980px; margin:24px auto; background:#fff; padding:40px 46px 60px; box-shadow:0 6px 26px rgba(20,30,60,.12);}
+ .brand{ display:flex; align-items:center; gap:12px; border-bottom:3px solid var(--navy); padding-bottom:14px;}
+ .logo{ font-weight:800; font-size:24px;} .logo .ez{ color:var(--logo);} .logo .one{ color:var(--navy);}
+ .brand .sub{ color:var(--muted); font-size:12px; margin-left:auto; text-align:right;}
+ .doc-type{ display:inline-block; background:var(--navy); color:#fff; font-size:12px; font-weight:700; padding:3px 10px; border-radius:4px; letter-spacing:1px; margin-top:16px;}
+ h1.title{ font-size:24px; color:var(--navy); margin:14px 0 4px; line-height:1.3;}
+ .title-en{ color:var(--muted); font-size:12.5px; margin:0 0 16px;}
+ .approval{ border-collapse:collapse; font-size:11.5px; float:right; margin:0 0 10px 14px;}
+ .approval td{ border:1px solid var(--navy); text-align:center;}
+ .approval .lab{ background:var(--navy); color:#fff; width:30px; padding:6px 2px; writing-mode:vertical-rl; letter-spacing:3px;}
+ .approval .cell{ width:78px; height:54px; vertical-align:bottom; padding-bottom:5px; color:var(--muted); font-size:10px;}
+ .approval .role{ background:var(--soft); color:var(--navy); font-weight:700; height:20px; padding:2px;}
+ .meta{ width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:8px;}
+ .meta th,.meta td{ border:1px solid var(--line); padding:6px 10px; text-align:left;}
+ .meta th{ background:var(--soft); color:var(--navy); width:104px; font-weight:700; white-space:nowrap;}
+ .toc{ background:var(--soft); border:1px solid var(--line); border-radius:8px; padding:12px 18px; font-size:12.8px; margin:14px 0;}
+ .toc b{ color:var(--navy);} .toc ol{ margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px;}
+ .toc li{ margin:3px 0;}
+ h2{ font-size:16.5px; color:#fff; background:var(--navy); margin:30px 0 12px; padding:8px 14px; border-radius:5px; display:flex; align-items:center; gap:9px;}
+ h2 .no{ background:#fff; color:var(--navy); width:24px; height:24px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; flex:none;}
+ h3{ font-size:14.5px; color:var(--blue); margin:18px 0 8px; padding-left:10px; border-left:4px solid var(--blue);}
+ p{ margin:8px 0;}
+ table.data{ width:100%; border-collapse:collapse; font-size:12.6px; margin:10px 0;}
+ table.data th,table.data td{ border:1px solid var(--line); padding:7px 9px; vertical-align:top;}
+ table.data th{ background:var(--blue); color:#fff; font-weight:700; text-align:center;}
+ table.data tr:nth-child(even) td{ background:#FAFBFE;}
+ table.data td.c{ text-align:center;}
+ code,.code{ font-family:Consolas,"D2Coding",monospace; background:#EEF1F8; color:var(--navy); padding:1px 6px; border-radius:4px; font-size:12.3px; font-weight:600;}
+ pre.prompt{ font-family:Consolas,"D2Coding",monospace; font-size:12px; background:#1F2430; color:#E8ECF4; padding:13px 16px; border-radius:8px; overflow-x:auto; line-height:1.55; margin:8px 0; white-space:pre-wrap;}
+ pre.prompt .cm{ color:#8fa3c4;}
+ .badge{ display:inline-block; padding:1px 9px; border-radius:11px; font-size:11.3px; font-weight:700; border:1px solid; white-space:nowrap;}
+ .b-ok{ background:var(--ok-bg); border-color:var(--ok-bd); color:#065F46;}
+ .b-warn{ background:var(--warn-bg); border-color:var(--warn-bd); color:#92400E;}
+ .b-ng{ background:var(--ng-bg); border-color:var(--ng-bd); color:#991B1B;}
+ .callout{ border-left:5px solid var(--blue); background:#F1F6FC; padding:12px 16px; border-radius:0 6px 6px 0; margin:14px 0;}
+ .callout.rec{ border-color:var(--ok-bd); background:#EDFBF3;}
+ .callout.warn{ border-color:var(--logo); background:#FFF5F5;}
+ .callout b{ color:var(--navy);}
+ ul.clean{ margin:8px 0; padding-left:20px;} ul.clean li{ margin:6px 0;}
+ .flow{ display:flex; flex-wrap:wrap; gap:8px; align-items:stretch; margin:12px 0;}
+ .step{ flex:1 1 150px; min-width:140px; border:1.5px solid var(--line); border-radius:8px; padding:9px 11px; font-size:12.2px; background:#FAFBFE;}
+ .step b{ display:block; color:var(--navy); font-size:12.5px; margin-bottom:3px;}
+ .step.ok{ border-color:var(--ok-bd); background:var(--ok-bg);}
+ .step.warn{ border-color:var(--warn-bd); background:var(--warn-bg);}
+ .step.ng{ border-color:var(--ng-bd); background:var(--ng-bg);}
+ .arrow{ align-self:center; color:var(--muted); font-weight:800;}
+ footer{ margin-top:34px; border-top:2px solid var(--navy); padding-top:8px; font-size:11px; color:var(--muted); display:flex; justify-content:space-between;}
+ @media print{ body{background:#fff;} .page{box-shadow:none; margin:0; max-width:none;} }
+</style>
+</head>
+<body>
+<div class="page">
+
+ <div class="brand">
+  <div class="logo"><span class="ez">EZ</span><span class="one">ONE</span></div>
+  <div class="sub">(주)이지원 품질관리 문서<br>내화채움구조 · 차열시트 전문 제조</div>
+ </div>
+
+ <span class="doc-type">GDL · 지침서</span>
+
+ <table class="approval">
+  <tr><td class="lab" rowspan="2">결재</td><td class="role">작성</td><td class="role">검토</td><td class="role">승인</td></tr>
+  <tr><td class="cell">&nbsp;</td><td class="cell">&nbsp;</td><td class="cell">&nbsp;</td></tr>
+ </table>
+
+ <h1 class="title">MES 개발 실행 및 정합성 검토 지침</h1>
+ <p class="title-en">MES Development Execution &amp; Data Integrity Review Guideline — Vercel Deploy · Supabase DB · AI Coding Backlog</p>
+
+ <table class="meta">
+  <tr><th>문서번호</th><td>GDL-20260708-MES02_Rev1</td><th>작성일</th><td>2026-07-08 (개정: 2026-07-09)</td></tr>
+  <tr><th>요청방향</th><td>SELF (Vercel + Supabase 기반 실행 지침)</td><th>피드백 마감</th><td>2026-07-15</td></tr>
+  <tr><th>배포대상</th><td colspan="3">MES TF · 공정 작업자 전원 · 품질관리 담당</td></tr>
+  <tr><th>관련 문서</th><td colspan="3">RPT_20260708_MES방향성품질관리제안_SELF_완료 · NOTE_20260708_MES방향성품질관리_SELF_완료 · VIS_20260708_MES이해와도입목적교육_SELF_완료 · C-302 Rev.8 / C-701 Rev.5 / C-601 Rev.4</td></tr>
+ </table>
+
+ <div class="toc"><b>목차</b>
+  <ol>
+   <li>개발 방향 (Vercel &amp; Supabase 기반)</li>
+   <li>AI(Claude Code) 코딩 백로그 — 스프린트별</li>
+   <li>AI 코딩 산출물 검토(QA) 절차</li>
+   <li>공정별 개인 입력 책임 매트릭스</li>
+   <li>관리자 정합성 검토 체계</li>
+   <li>권한·역할 매핑 및 운영 원칙</li>
+  </ol>
+ </div>
+
+ <!-- 1 -->
+ <h2><span class="no">1</span>개발 방향 (Vercel &amp; Supabase 기반)</h2>
+ <div class="callout rec"><b>권장</b> — 현재 운영 중인 <b>Vercel 배포 시스템 및 Supabase(PostgreSQL 클라우드) 환경을 기준 시스템(System of Record)으로 확정하여 고도화</b>를 진행한다. 이미 완성도 높은 클라우드 인프라가 확보되어 있으므로 불필요한 이전 공수 없이, 입력검증 5종·이상치 보고·정합성 대시보드 추가에 개발력을 집중한다.</div>
+ <table class="data">
+  <tr><th style="width:60px">근거</th><th>내용</th></tr>
+  <tr><td class="c">①</td><td>현 Vercel + Supabase v1 환경에 검사 4단계·LOT 계보·수불·결재가 구현되어 있어, 부족한 것은 인프라 변경이 아닌 <b>실시간 데이터 무결성을 보장하는 검증 계층(Validation Layer)</b>이다.</td></tr>
+  <tr><td class="c">②</td><td>Supabase는 강력한 PostgreSQL 제약조건(Constraints) 및 RLS(Row Level Security)를 제공하므로, 클라이언트 우회 입력 차단 및 데이터 잠금 처리를 가장 높은 보안 수준으로 바로 적용 가능하다.</td></tr>
+  <tr><td class="c">③</td><td>Vercel Serverless/Edge Functions를 이용해 API 응답 속도를 최적화하고 현장의 다양한 기기(태블릿, 모바일)에 신속한 검증 피드백을 전달할 수 있다.</td></tr>
+ </table>
+
+ <!-- 2 -->
+ <h2><span class="no">2</span>AI(Claude Code) 코딩 백로그 — 스프린트별</h2>
+ <p>작업 단위는 "1작업 = 1기능 = 1커밋 + 테스트"를 원칙으로 한다. Supabase의 스키마 정의 및 Vercel Route Handlers에 특화된 프롬프트 작성을 위해 프로젝트 루트의 <span class="code">CLAUDE.md</span>·<span class="code">DESIGN_GUIDE.md</span>를 활용한다.</p>
+
+ <h3>Sprint 1 (1~2주) — 입력검증 5종 및 DB 스키마 강화</h3>
+ <table class="data">
+  <tr><th style="width:36px">No</th><th style="width:250px">작업</th><th>구현 내용</th></tr>
+  <tr><td class="c">1-1</td><td>검사기준 마스터 확장 (Supabase DB)</td><td><span class="code">inspection_criteria</span> 테이블에 하한/상한/소수 자릿수/측정기구/필수여부 컬럼 추가 (Supabase SQL Migration 생성 및 시드 적용)</td></tr>
+  <tr><td class="c">1-2</td><td>Vercel Serverless 검증 미들웨어</td><td>데이터 저장 API(Next.js Route Handler / Express Route)에서 입력 형식(자릿수)·범위·반복값(n1=n2=n3)·필수값 검증. 범위 이탈 시 <span class="code">409 OUT_OF_RANGE</span> 응답 → 사유 포함 재요청 시에만 <span class="code">is_outlier=true</span>로 저장</td></tr>
+  <tr><td class="c">1-3</td><td>프론트엔드 입력 UI 고도화</td><td>측정기구별 step/자릿수 고정(버니어 0.01, 줄자 정수), 범위 이탈 경고 모달(수정 / 실측 확인→사유 필수), 저장 후 실시간 상태 배지</td></tr>
+  <tr><td class="c">1-4</td><td>LOT 추적 필수입력 강제</td><td>재단(세라믹울 LOT)·조립(글라스울 LOT, J-LOT 자동채번) 필수 필드화 — 데이터베이스 수준(NOT NULL Constraint)에서 원천 차단</td></tr>
+ </table>
+ <pre class="prompt"><span class="cm"># Claude Code 프롬프트 예시 (작업 1-2: Next.js API Routes / Vercel Serverless 환경)</span>
+app/api/inspections/route.ts 에 Supabase DB와 연동된 서버측 검증 로직을 추가해줘.
+
+규칙:
+1. supabase client를 이용해 inspection_criteria 테이블에서 항목별 min/max/decimal_places/is_required 를 조회
+2. 소수 자릿수 초과 → 400 INVALID_PRECISION 반환
+3. 필수값(LOT 포함) 누락 → 400 MISSING_REQUIRED 반환
+4. n1=n2=n3 완전 동일 → 응답에 warning: REPEATED_VALUE 포함 (저장은 허용)
+5. min/max 이탈 → outlier_reason 없으면 409 OUT_OF_RANGE 반환,
+   outlier_reason 있으면 is_outlier=true 로 저장하고, Supabase의 트랜잭션(or RPC)을 사용하여 approvals 테이블에 품질책임자 결재 레코드를 생성
+
+검증 로직은 유틸리티 함수로 분리하고, 경계값 테스트(4.74/4.75/5.25/5.26, 사유 유무) 코드를 작성해줘.</pre>
+
+ <h3>Sprint 2 (2~3주) — 이상치 보고 워크플로우 및 RLS 보안</h3>
+ <table class="data">
+  <tr><th style="width:36px">No</th><th style="width:250px">작업</th><th>구현 내용</th></tr>
+  <tr><td class="c">2-1</td><td>이상치 보고 자동 생성</td><td>이상치 저장 발생 시 Supabase Trigger 혹은 Edge Function을 활용해 품질책임자 결재함 알림 즉시 생성</td></tr>
+  <tr><td class="c">2-2</td><td>관리자 판정 화면</td><td>판정 3분기: 재검사 지시 / 오기 정정(정정 이력 기록) / 부적합 확정(불량 기록·CAR 연계)</td></tr>
+  <tr><td class="c">2-3</td><td>데이터 변경 방지 및 감사(Audit)</td><td>Supabase RLS(Row Level Security)를 설정하여 결재 완료된 검사기록은 Update/Delete를 차단하고, 수정 필요시 이력 테이블(<span class="code">audit_logs</span>)에만 기록 저장</td></tr>
+ </table>
+
+ <h3>Sprint 3 (3~4주) — 관리자 정합성 대시보드 (Vercel &amp; Supabase RPC)</h3>
+ <table class="data">
+  <tr><th style="width:36px">No</th><th style="width:250px">작업</th><th>구현 내용</th></tr>
+  <tr><td class="c">3-1</td><td>정합성 체크 쿼리 (RPC)</td><td>Supabase Database Function (RPC)으로 대량 데이터의 정합성 자동 체크 C1~C4 로직 구현 (Vercel API 부하 차단)</td></tr>
+  <tr><td class="c">3-2</td><td>실시간 대시보드 구현</td><td>Supabase Realtime 구독을 활용해 현장의 미입력·이상치 대기·끊김 LOT·편차 초과 상태를 관리자 화면에 즉각 반영</td></tr>
+  <tr><td class="c">3-3</td><td>일일 마감 시스템</td><td>마감 확정 처리 및 해결되지 않은 예외 데이터의 Supabase 이월 관리 테이블 구축</td></tr>
+ </table>
+
+ <h3>Sprint 4 (4~5주) — 건기연 최종 정합성 및 통합 테스트</h3>
+ <table class="data">
+  <tr><th style="width:36px">No</th><th style="width:250px">작업</th><th>구현 내용</th></tr>
+  <tr><td class="c">4-1</td><td>사후관리 연동 최종 점검</td><td>팽창률 ≥250 공식 양식 반영, 밀시트 LOT 매칭 로직 보완, C-304 출하지시서 이력 동기화</td></tr>
+  <tr><td class="c">4-2</td><td>엔드투엔드 시나리오 검증</td><td>클라우드 환경에서 입고→조립→출하 전 공정 시나리오를 구동하여 데이터 추적 무결성 100% 점검</td></tr>
+ </table>
+
+ <!-- 3 -->
+ <h2><span class="no">3</span>AI 코딩 산출물 검토(QA) 절차</h2>
+ <p>Vercel 배포 안정성을 확보하기 위해 AI 생성 코드는 "생성 → 검토 → 테스트 → 시나리오 검증"의 4단계를 통과해야 반영한다.</p>
+ <div class="flow">
+  <div class="step"><b>① 생성</b>Claude Code 작업 지시<br>(Vercel Route &amp; Supabase DB 기준)</div>
+  <div class="arrow">→</div>
+  <div class="step"><b>② diff 검토</b>Vercel 빌드 영향도 및<br>기존 Supabase 스키마 영향 분석</div>
+  <div class="arrow">→</div>
+  <div class="step"><b>③ 자동 테스트</b>Edge 환경 호환성 검증<br>경계값·필수값 테스트 통과 확인</div>
+  <div class="arrow">→</div>
+  <div class="step ok"><b>④ 시나리오 검증</b>Staging 환경 실데이터 체크<br>통과 시 Production 배포</div>
+ </div>
+ <h3>3-1. 경계값 테스트 기준 (예: 두께 4.75~5.25mm)</h3>
+ <table class="data">
+  <tr><th>입력</th><th>기대 동작</th><th style="width:96px">판정</th></tr>
+  <tr><td>5.02 (범위 내)</td><td>정상 저장, 플래그 없음</td><td class="c"><span class="badge b-ok">저장</span></td></tr>
+  <tr><td>4.75 / 5.25 (경계)</td><td>정상 저장 (경계 포함)</td><td class="c"><span class="badge b-ok">저장</span></td></tr>
+  <tr><td>4.74 / 5.26 (이탈)</td><td>경고 + 사유 없으면 저장 거부</td><td class="c"><span class="badge b-warn">경고</span></td></tr>
+  <tr><td>이탈값 + 사유 입력</td><td>이상치 플래그 저장 + 보고 생성</td><td class="c"><span class="badge b-ng">보고</span></td></tr>
+  <tr><td>5.023 (자릿수 초과)</td><td>입력 차단 또는 형식 오류</td><td class="c"><span class="badge b-warn">차단</span></td></tr>
+  <tr><td>n1=n2=n3 동일</td><td>반복값 경고 표시</td><td class="c"><span class="badge b-warn">경고</span></td></tr>
+  <tr><td>LOT 미입력</td><td>저장 차단 (MISSING_REQUIRED)</td><td class="c"><span class="badge b-ng">차단</span></td></tr>
+ </table>
+ <h3>3-2. 기능 완료 판정 체크리스트 (클라우드 환경 타겟)</h3>
+ <ul class="clean">
+  <li>☐ Vercel edge/node 서버 및 프론트 양쪽 검증 동작 (클라이언트 변조 입력도 DB Constraints가 원천 차단)</li>
+  <li>☐ 이상치 저장 시 보고 및 결재 트랜잭션이 Supabase 내에서 단일 트랜잭션으로 안전하게 완료됨</li>
+  <li>☐ RLS 정책이 활성화되어, 비로그인 상태 및 권한 밖 사용자의 직접 데이터 수정 시도 차단됨</li>
+  <li>☐ 역추적 화면에서 새로 입력한 LOT 계보 정보가 깨짐 없이 실시간 연결됨</li>
+  <li>☐ Vercel Production Build 시 타입 및 린트 오류 없음, 기존 기능 회귀 없음</li>
+ </ul>
+
+ <!-- 4 -->
+ <h2><span class="no">4</span>공정별 개인 입력 책임 매트릭스</h2>
+ <p>입력 원칙: <b>공정 종료 즉시, 해당 작업자가, 본인 계정으로</b> 입력한다 (로그인 계정 = 서명, 대리입력 금지). 현장에서 실시간으로 데이터를 업로드하여 신뢰성을 유지한다.</p>
+ <table class="data">
+  <tr><th style="width:82px">공정</th><th style="width:88px">입력자</th><th>필수 입력 항목</th><th>자동 검증 (시스템)</th></tr>
+  <tr><td class="c"><b>인수검사</b></td><td class="c">김정용 책임</td><td>입고 LOT(자동채번), 밀시트 LOT 매칭, n1/n2/n3 실측값, 판정</td><td>범위검증(팽창률 ≥250 등), 반복값 감지, 매칭 불가 시 입고 차단</td></tr>
+  <tr><td class="c"><b>배합(MIX)</b></td><td class="c">공정 작업자</td><td>배합 LOT, 투입 원료 LOT, <b>실측 중량(kg)</b>, 시작/종료 시각</td><td>중량 필수화, 투입 LOT 유효성(검사 합격 LOT만 선택 가능)</td></tr>
+  <tr><td class="c"><b>압출(EXT)</b></td><td class="c">공정 작업자</td><td>배합 LOT 상속 확인, 투입량 실측, 중간검사 시편 측정값</td><td>C-701 기준 범위검증, KG→M 환산 자동 계산</td></tr>
+  <tr><td class="c"><b>재단(CUT)</b></td><td class="c">공정 작업자</td><td>투입 생산 LOT / <b>세라믹울 LOT(필수)</b>, 치수 실측(버니어 소수 2자리)</td><td>LOT 미입력 저장 차단, 자릿수 고정</td></tr>
+  <tr><td class="c"><b>조립(ASM)</b></td><td class="c">공정 작업자</td><td>구성자재 LOT(소켓/시트/차열재/실란트) + <b>글라스울 LOT(필수)</b>, 구조명, <b>J-LOT(자동채번)</b></td><td>구성 LOT 전체 필수화, 구조명 필수, 계보 자동 기록</td></tr>
+  <tr><td class="c"><b>출하(SHP)</b></td><td class="c">김봉민 책임</td><td>출하 LOT 연결, 최종검사 결과, 품질관리서 발행</td><td>미검사 LOT 출하 차단, 출하지시서(C-304) 연동</td></tr>
+ </table>
+ <div class="callout"><b>현장 정착 포인트</b> — 모바일/태블릿을 이용한 터치 및 목록 선택, 간소화된 데이터 입력을 유도하여 현장 작업자의 피로도를 최소화하고 데이터 입력 지연을 방지한다.</div>
+
+ <!-- 5 -->
+ <h2><span class="no">5</span>관리자 정합성 검토 체계</h2>
+ <p>개인 입력의 정합성은 "작업자 입력 → 시스템 자동 체크 → 관리자 일일 확인 → 주간 확정(잠금)"의 4겹으로 관리한다. 관리자는 개별 값을 다시 재는 것이 아니라 <b>시스템이 걸러낸 예외만 검토</b>한다.</p>
+
+ <h3>5-1. 자동 정합성 체크 4종 (Supabase SQL 기반 상시 실행)</h3>
+ <table class="data">
+  <tr><th style="width:52px">코드</th><th style="width:150px">체크</th><th>내용</th><th style="width:150px">예외 발생 시</th></tr>
+  <tr><td class="c"><b>C1</b></td><td>LOT 연결성</td><td>완제품 LOT에서 역추적 시 원재료까지 경로 단절 여부 (계보 gap 탐지)</td><td>끊김 LOT 목록 표시 → 해당 공정 입력 보완 지시</td></tr>
+  <tr><td class="c"><b>C2</b></td><td>수불 대사</td><td>공정 투입량 합계 vs 재고 출고 기록 vs BOM 소요량(로스율 포함) 대사</td><td>편차 초과 건 → 로스 기록 확인 또는 재고 조정 결재</td></tr>
+  <tr><td class="c"><b>C3</b></td><td>검사 누락</td><td>완료된 작업지시 중 대응 검사기록(인수/중간/자주) 없는 건</td><td>미검사 건 → 검사 소급 불가 원칙, 즉시 검사 지시</td></tr>
+  <tr><td class="c"><b>C4</b></td><td>입력 시점·이상치</td><td>공정 종료 후 미입력·지연 입력 건수, 이상치 보고 미처리 건</td><td>지연 상습 공정 → 원인 파악(입력 환경/교육)</td></tr>
+ </table>
+
+ <h3>5-2. 관리자 검토 루틴</h3>
+ <table class="data">
+  <tr><th style="width:76px">주기</th><th style="width:120px">담당</th><th>수행 내용</th></tr>
+  <tr><td class="c"><b>일 1회</b><br>(익일 오전)</td><td class="c">공정관리자<br>(임병용 파트장)</td><td>정합성 대시보드에서 C1~C4 예외 확인 → 건별 조치(보완 입력 지시/재검사). <b>예외 0건이면 당일분 확인 처리</b> — 정상 건은 개별 검토 불필요</td></tr>
+  <tr><td class="c"><b>수시</b></td><td class="c">품질책임자<br>(최진영 책임)</td><td>이상치 보고 결재함 처리 — 판정 3분기(재검사/오기 정정/부적합 확정→CAR). 판정 이력이 자동으로 검사기록에 연결됨</td></tr>
+  <tr><td class="c"><b>주 1회</b></td><td class="c">PM<br>(이동민 파트장)</td><td>주간 확정(잠금): 예외 미해결 건 이월 관리, 이상치·로스 추이 검토, 반복 원인은 개선과제 등록</td></tr>
+  <tr><td class="c"><b>월 1회</b></td><td class="c">PM + 품질</td><td>월마감과 함께 LOT 추적 샘플링 감사 — 임의 완제품 LOT 2~3건 역추적 전 구간 재현 (공장심사 리허설)</td></tr>
+ </table>
+
+ <h3>5-3. 정합성 검토 흐름</h3>
+ <div class="flow">
+  <div class="step"><b>작업자</b>공정 종료 즉시 입력<br>(검증 5종 통과)</div>
+  <div class="arrow">→</div>
+  <div class="step warn"><b>시스템</b>C1~C4 자동 체크<br>예외만 대시보드 표출</div>
+  <div class="arrow">→</div>
+  <div class="step"><b>공정관리자</b>일일 예외 조치<br>+ 당일분 확인</div>
+  <div class="arrow">→</div>
+  <div class="step ng"><b>품질책임자</b>이상치 판정<br>(재검사/정정/부적합)</div>
+  <div class="arrow">→</div>
+  <div class="step ok"><b>PM</b>주간 확정·잠금<br>월간 샘플링 감사</div>
+ </div>
+ <div class="callout warn"><b>불변 원칙</b> — ① 확정(잠금)된 기록은 수정 불가, 정정은 원본 보존 + 사유 이력으로만. ② 이상치는 삭제·수정 대상이 아니라 보고·판정 대상. ③ 검사 소급 입력 금지. 이 3가지가 공장심사에서 기록의 신뢰성을 지키는 최후 방어선이다.</div>
+
+ <!-- 6 -->
+ <h2><span class="no">6</span>권한·역할 매핑 및 운영 원칙</h2>
+ <table class="data">
+  <tr><th style="width:90px">권한</th><th style="width:180px">대상</th><th>가능 작업</th><th>불가 작업</th></tr>
+  <tr><td class="c"><span class="code">worker</span></td><td>공정 작업자</td><td>본인 공정 입력(작업지시 실행, 검사값, LOT), 본인 입력분 당일 수정</td><td>타 공정 입력, 확정 기록 수정, 기준값 변경</td></tr>
+  <tr><td class="c"><span class="code">manager</span></td><td>임병용·최진영·김정용·김봉민 책임</td><td>예외 조치, 이상치 판정 결재, 일일 확인, 재고 조정 승인</td><td>검사기준(min/max) 변경, 감사 로그 삭제</td></tr>
+  <tr><td class="c"><span class="code">admin</span></td><td>이동민 파트장 (+시스템 담당)</td><td>기준값 관리(개정 이력 기록), 주간 확정·잠금, 사용자·백업 관리</td><td>확정 기록의 이력 없는 수정 (시스템상 불가)</td></tr>
+ </table>
+ <ul class="clean">
+  <li><b>Supabase RLS 활용 기준값 변경 통제</b> — 검사기준(min/max·자릿수)은 admin 역할만 Update 가능하도록 RLS Policy를 설정하며, 변경 내역은 DB 트리거를 통해 감사 테이블에 이력을 남긴다 (기준 무단 완화 방지).</li>
+  <li><b>이카운트 연동</b>(중기 과제) — 작업지시·재고의 이중입력 제거 시 C2(수불 대사)의 비교 기준이 ERP로 일원화된다.</li>
+  <li><b>교육</b> — 적용 첫 주는 경고를 "차단"이 아닌 "안내" 모드로 운영해 현장 적응 후 강제 전환하는 방안 권장.</li>
+ </ul>
+
+ <footer>
+  <span>GDL-20260708-MES02_Rev1</span>
+  <span>(주)이지원</span>
+  <span>A4</span>
+ </footer>
+</div>
+</body>
+</html>

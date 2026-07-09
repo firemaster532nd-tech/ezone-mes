@@ -1038,34 +1038,38 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
       if (!poRows[0]) return reply.code(404).send({ error: 'not_found', message: '발주서를 찾을 수 없습니다.' });
       if (poRows[0].status === 'DELETED') return reply.code(400).send({ error: 'already_deleted', message: '이미 삭제된 발주서입니다.' });
 
-      // 2) 진행 중인 구조체 작업지시 확인 (COMPLETED 제외)
-      const { rows: swo } = await pool.query(
-        `SELECT wo_id FROM struct_work_order WHERE po_id = $1 AND status NOT IN ('COMPLETED','CANCELLED') LIMIT 1`,
-        [id]
-      );
-      if (swo.length > 0) {
-        return reply.code(409).send({
-          error: 'has_work_order',
-          message: '진행 중인 구조체 작업지시가 있어 삭제할 수 없습니다. 작업지시를 먼저 취소하세요.',
-        });
-      }
+      // 2) 진행 중인 구조체 작업지시 확인 (COMPLETED 제외) — 테이블/컬럼 없으면 skip
+      try {
+        const { rows: swo } = await pool.query(
+          `SELECT wo_id FROM struct_work_order WHERE po_id = $1 AND status NOT IN ('COMPLETED','CANCELLED') LIMIT 1`,
+          [id]
+        );
+        if (swo.length > 0) {
+          return reply.code(409).send({
+            error: 'has_work_order',
+            message: '진행 중인 구조체 작업지시가 있어 삭제할 수 없습니다. 작업지시를 먼저 취소하세요.',
+          });
+        }
+      } catch (_e) { /* struct_work_order 체크 실패 시 무시하고 진행 */ }
 
-      // 3) 소켓발주(socket_order) 연결된 경우 — DRAFT/RETURNED 상태면 같이 취소
-      const { rows: soRows } = await pool.query(
-        `SELECT so_id, status FROM socket_order WHERE po_id = $1`,
-        [id]
-      );
-      const activeSocketOrders = soRows.filter(r => !['DRAFT','RETURNED','CANCELLED'].includes(r.status));
-      if (activeSocketOrders.length > 0) {
-        return reply.code(409).send({
-          error: 'has_socket_order',
-          message: `소켓 발주(${activeSocketOrders.map(r => `#${r.so_id} ${r.status}`).join(', ')})가 진행 중입니다. 소켓발주 대기 화면에서 먼저 취소하세요.`,
-        });
-      }
-      // DRAFT/RETURNED 상태 소켓발주는 CANCELLED 처리
-      for (const so of soRows.filter(r => ['DRAFT','RETURNED'].includes(r.status))) {
-        await pool.query(`UPDATE socket_order SET status = 'CANCELLED' WHERE so_id = $1`, [so.so_id]);
-      }
+      // 3) 소켓발주(socket_order) 연결된 경우 처리 — po_id 컬럼 없으면 skip
+      try {
+        const { rows: soRows } = await pool.query(
+          `SELECT so_id, status FROM socket_order WHERE po_id = $1`,
+          [id]
+        );
+        const activeSocketOrders = soRows.filter(r => !['DRAFT','RETURNED','CANCELLED'].includes(r.status));
+        if (activeSocketOrders.length > 0) {
+          return reply.code(409).send({
+            error: 'has_socket_order',
+            message: `소켓 발주(${activeSocketOrders.map(r => `#${r.so_id} ${r.status}`).join(', ')})가 진행 중입니다. 소켓발주 대기 화면에서 먼저 취소하세요.`,
+          });
+        }
+        // DRAFT/RETURNED 상태 소켓발주는 CANCELLED 처리
+        for (const so of soRows.filter(r => ['DRAFT','RETURNED'].includes(r.status))) {
+          await pool.query(`UPDATE socket_order SET status = 'CANCELLED' WHERE so_id = $1`, [so.so_id]);
+        }
+      } catch (_e) { /* socket_order 체크 실패 시 무시하고 진행 */ }
 
       // 4) 발주서 soft delete
       const { rows } = await pool.query(
