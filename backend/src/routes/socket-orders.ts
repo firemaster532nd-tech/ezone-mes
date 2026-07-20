@@ -387,7 +387,7 @@ export async function socketOrderRoutes(app: FastifyInstance) {
               po.biz_name,
               iw.worker_name as insp_worker_name, ir.worker_name as insp_reviewer_name, ia.worker_name as insp_approver_name
        FROM socket_order so
-       LEFT JOIN worker w ON w.writer_id = so.writer_id OR w.worker_id = so.writer_id
+       LEFT JOIN worker w ON w.worker_id = so.writer_id
        LEFT JOIN approval ap ON ap.doc_type = 'SOCKET_ORDER' AND ap.doc_id = so.so_id
        LEFT JOIN worker rv ON rv.worker_id = ap.reviewer_id
        LEFT JOIN worker av ON av.worker_id = ap.approver_id
