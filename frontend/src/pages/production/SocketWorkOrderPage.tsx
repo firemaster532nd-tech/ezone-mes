@@ -157,7 +157,7 @@ export function SocketWorkOrderPage() {
 
   return (
     <div>
-      <PageHeader title="소켓 작업지시서" count={data.length} description="발주서 연동 소켓 조립 작업지시">
+      <PageHeader title="비인정제품 작업지시" count={data.length} description="인정서 없는 비인정제품에 대한 작업지시 (소켓 조립 등)">
         <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
