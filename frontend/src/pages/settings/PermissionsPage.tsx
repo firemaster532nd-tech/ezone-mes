@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { ShieldCheck, Save } from 'lucide-react';
+import { ShieldCheck, Save, Inbox } from 'lucide-react';
+import { PermissionRequestsPanel } from '@/components/PermissionRequestsPanel';
 
 interface Dept { dept_id: number; dept_code: string; dept_name: string }
 
@@ -21,6 +22,8 @@ type Action = 'can_read' | 'can_write' | 'can_update' | 'can_delete';
 
 export function PermissionsPage() {
   const { isAdmin } = useAuth();
+  const [pageTab, setPageTab] = useState<'perms' | 'requests'>('perms');
+  const [pendingCount, setPendingCount] = useState(0);
   const [depts, setDepts] = useState<Dept[]>([]);
   const [activeDept, setActiveDept] = useState<number | null>(null);
   const [rows, setRows] = useState<PermRow[]>([]);
@@ -90,71 +93,106 @@ export function PermissionsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="flex items-center gap-2 text-xl font-bold"><ShieldCheck className="h-5 w-5" /> 권한 관리</h1>
+        {pageTab === 'perms' && (
+          <button
+            onClick={save}
+            disabled={!dirty || saving}
+            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-300"
+          >
+            <Save className="h-4 w-4" /> {saving ? '저장 중...' : '저장'}
+          </button>
+        )}
+      </div>
+
+      {/* 탭 */}
+      <div className="flex gap-1 border-b border-slate-200">
         <button
-          onClick={save}
-          disabled={!dirty || saving}
-          className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:bg-gray-300"
+          onClick={() => setPageTab('perms')}
+          className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${
+            pageTab === 'perms' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
         >
-          <Save className="h-4 w-4" /> {saving ? '저장 중...' : '저장'}
+          <ShieldCheck className="h-3.5 w-3.5" /> 부서별 권한 설정
+        </button>
+        <button
+          onClick={() => setPageTab('requests')}
+          className={`flex items-center gap-1.5 px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${
+            pageTab === 'requests' ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <Inbox className="h-3.5 w-3.5" /> 권한 요청 처리
+          {pendingCount > 0 && (
+            <span className="rounded-full bg-amber-500 text-white text-[9px] px-1.5 py-0.5 font-bold">{pendingCount}</span>
+          )}
         </button>
       </div>
 
-      <div className="rounded-lg border bg-blue-50 px-4 py-3 text-sm text-blue-800">
-        <strong>이카운트 스타일 2-Track 권한.</strong> 여기서는 <strong>부서별 기본 권한</strong>을 설정합니다.
-        개인별 예외(특정 직원에게만 권한 추가/제거)는 사용자 관리 → 개별 직원 → "권한 오버라이드"에서 처리합니다.
-      </div>
+      {/* 권한 요청 탭 */}
+      {pageTab === 'requests' && (
+        <PermissionRequestsPanel onCountChange={setPendingCount} />
+      )}
 
-      <div className="flex gap-2 overflow-x-auto border-b">
-        {depts.map((d) => (
-          <button
-            key={d.dept_id}
-            onClick={() => {
-              if (dirty && !confirm('저장하지 않은 변경사항이 있습니다. 이동하시겠습니까?')) return;
-              setActiveDept(d.dept_id);
-            }}
-            className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium ${activeDept === d.dept_id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-          >
-            {d.dept_name}
-          </button>
-        ))}
-      </div>
+      {/* 부서별 권한 탭 */}
+      {pageTab === 'perms' && (
+        <>
+          <div className="rounded-lg border bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            <strong>이카운트 스타일 2-Track 권한.</strong> 여기서는 <strong>부서별 기본 권한</strong>을 설정합니다.
+            개인별 예외(특정 직원에게만 권한 추가/제거)는 사용자 관리 → 개별 직원 → &quot;권한 오버라이드&quot;에서 처리합니다.
+          </div>
 
-      <div className="overflow-x-auto rounded-lg border bg-white">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-xs text-gray-600">
-            <tr>
-              <th className="px-3 py-2 text-left">메뉴</th>
-              <th className="px-3 py-2 text-center w-20">조회 (R)</th>
-              <th className="px-3 py-2 text-center w-20">입력 (C)</th>
-              <th className="px-3 py-2 text-center w-20">수정 (U)</th>
-              <th className="px-3 py-2 text-center w-20">삭제 (D)</th>
-              <th className="px-3 py-2 text-center w-20">전체</th>
-            </tr>
-          </thead>
-          <tbody>
-            {grouped.map(({ row, depth }) => (
-              <tr key={row.menu_id} className="border-t hover:bg-gray-50">
-                <td className="px-3 py-2">
-                  <span style={{ paddingLeft: `${depth * 16}px` }} className={depth === 0 ? 'font-semibold text-gray-900' : 'text-gray-700'}>
-                    {depth > 0 && <span className="text-gray-300 mr-1">└</span>}
-                    {row.menu_name}
-                  </span>
-                  <span className="ml-2 text-xs font-mono text-gray-400">{row.menu_code}</span>
-                </td>
-                <td className="px-3 py-2 text-center"><input type="checkbox" checked={row.can_read} onChange={() => toggle(row.menu_id, 'can_read')} className="h-4 w-4 cursor-pointer" /></td>
-                <td className="px-3 py-2 text-center"><input type="checkbox" checked={row.can_write} onChange={() => toggle(row.menu_id, 'can_write')} className="h-4 w-4 cursor-pointer" /></td>
-                <td className="px-3 py-2 text-center"><input type="checkbox" checked={row.can_update} onChange={() => toggle(row.menu_id, 'can_update')} className="h-4 w-4 cursor-pointer" /></td>
-                <td className="px-3 py-2 text-center"><input type="checkbox" checked={row.can_delete} onChange={() => toggle(row.menu_id, 'can_delete')} className="h-4 w-4 cursor-pointer" /></td>
-                <td className="px-3 py-2 text-center">
-                  <button onClick={() => toggleAllInRow(row.menu_id)} className="rounded px-2 py-0.5 text-xs text-blue-600 hover:bg-blue-50">All</button>
-                </td>
-              </tr>
+          <div className="flex gap-2 overflow-x-auto border-b">
+            {depts.map((d) => (
+              <button
+                key={d.dept_id}
+                onClick={() => {
+                  if (dirty && !confirm('저장하지 않은 변경사항이 있습니다. 이동하시겠습니까?')) return;
+                  setActiveDept(d.dept_id);
+                }}
+                className={`whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium ${activeDept === d.dept_id ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              >
+                {d.dept_name}
+              </button>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border bg-white">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-600">
+                <tr>
+                  <th className="px-3 py-2 text-left">메뉴</th>
+                  <th className="px-3 py-2 text-center w-20">조회 (R)</th>
+                  <th className="px-3 py-2 text-center w-20">입력 (C)</th>
+                  <th className="px-3 py-2 text-center w-20">수정 (U)</th>
+                  <th className="px-3 py-2 text-center w-20">삭제 (D)</th>
+                  <th className="px-3 py-2 text-center w-20">전체</th>
+                </tr>
+              </thead>
+              <tbody>
+                {grouped.map(({ row, depth }) => (
+                  <tr key={row.menu_id} className="border-t hover:bg-gray-50">
+                    <td className="px-3 py-2">
+                      <span style={{ paddingLeft: `${depth * 16}px` }} className={depth === 0 ? 'font-semibold text-gray-900' : 'text-gray-700'}>
+                        {depth > 0 && <span className="text-gray-300 mr-1">└</span>}
+                        {row.menu_name}
+                      </span>
+                      <span className="ml-2 text-xs font-mono text-gray-400">{row.menu_code}</span>
+                    </td>
+                    <td className="px-3 py-2 text-center"><input type="checkbox" checked={row.can_read} onChange={() => toggle(row.menu_id, 'can_read')} className="h-4 w-4 cursor-pointer" /></td>
+                    <td className="px-3 py-2 text-center"><input type="checkbox" checked={row.can_write} onChange={() => toggle(row.menu_id, 'can_write')} className="h-4 w-4 cursor-pointer" /></td>
+                    <td className="px-3 py-2 text-center"><input type="checkbox" checked={row.can_update} onChange={() => toggle(row.menu_id, 'can_update')} className="h-4 w-4 cursor-pointer" /></td>
+                    <td className="px-3 py-2 text-center"><input type="checkbox" checked={row.can_delete} onChange={() => toggle(row.menu_id, 'can_delete')} className="h-4 w-4 cursor-pointer" /></td>
+                    <td className="px-3 py-2 text-center">
+                      <button onClick={() => toggleAllInRow(row.menu_id)} className="rounded px-2 py-0.5 text-xs text-blue-600 hover:bg-blue-50">All</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }

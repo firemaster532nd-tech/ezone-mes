@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
+import { NotificationBell } from './NotificationBell';
+import { RoutePermissionGuard } from './RoutePermissionGuard';
 import { Toaster } from 'sonner';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { 
   LogOut, User, KeyRound, Lock, ShieldAlert, 
-  ChevronDown, CheckCircle2, Eye, EyeOff, X 
+  ChevronDown, CheckCircle2, Eye, EyeOff, X, Menu
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -43,6 +45,7 @@ export function AppLayout() {
   // Dropdown & Modal States
   const [profileOpen, setProfileOpen] = useState(false);
   const [changePwOpen, setChangePwOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Self-Service Change Password State
@@ -175,25 +178,50 @@ export function AppLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
-      {/* Sidebar Navigation */}
-      <Sidebar />
+      {/* 모바일 사이드바 오버레이 */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
 
-      <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Sidebar — 데스크탑: 항상 표시, 모바일: mobileMenuOpen 시 슬라이드인 */}
+      <div className={`
+        fixed inset-y-0 left-0 z-50 lg:relative lg:z-auto lg:flex
+        transition-transform duration-300 ease-in-out
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        <Sidebar onMobileClose={() => setMobileMenuOpen(false)} />
+      </div>
+
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         {/* Top Header Bar */}
-        <header className="flex h-12 items-center justify-end border-b border-gray-200 bg-white px-6 gap-4 shadow-sm z-30">
-          {user && (
+        <header className="flex h-12 items-center justify-between border-b border-gray-200 bg-white px-3 md:px-6 gap-2 shadow-sm z-30 flex-shrink-0">
+          {/* 왼쪽: 모바일 햄버거 버튼 */}
+          <button
+            className="flex lg:hidden items-center justify-center h-8 w-8 rounded-lg hover:bg-slate-100 transition-colors"
+            onClick={() => setMobileMenuOpen(true)}
+          >
+            <Menu className="h-5 w-5 text-slate-600" />
+          </button>
+          <div className="hidden lg:block" />
+
+          {/* 오른쪽: 벨 아이콘 + 프로필 */}
+          <div className="flex items-center gap-2">
+            <NotificationBell />
             <div className="relative" ref={dropdownRef}>
               {/* Trigger Button */}
               <button
                 onClick={() => setProfileOpen(!profileOpen)}
-                className="flex items-center gap-2 rounded-lg hover:bg-slate-50 px-3 py-1.5 transition-all text-xs font-semibold text-slate-700 border border-slate-200/80 shadow-sm bg-white"
+                className="flex items-center gap-1.5 md:gap-2 rounded-lg hover:bg-slate-50 px-2 md:px-3 py-1.5 transition-all text-xs font-semibold text-slate-700 border border-slate-200/80 shadow-sm bg-white"
               >
                 <div className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-blue-700 font-bold text-[10px]">
-                  {user.worker_name[0]}
+                  {user?.worker_name?.[0] || 'U'}
                 </div>
-                <span className="font-bold">{user.worker_name}</span>
-                <span className="text-slate-400 font-normal">
-                  ({user.dept_name || '-'} / {user.position || '-'})
+                <span className="font-bold hidden sm:inline">{user?.worker_name}</span>
+                <span className="text-slate-400 font-normal hidden md:inline">
+                  ({user?.dept_name || '-'} / {user?.position || '-'})
                 </span>
                 <ChevronDown className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${profileOpen ? 'rotate-180' : ''}`} />
               </button>
@@ -204,11 +232,11 @@ export function AppLayout() {
                   {/* Avatar Profile Header */}
                   <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-black text-sm shadow-md">
-                      {user.worker_name[0]}
+                      {user?.worker_name?.[0] || 'U'}
                     </div>
                     <div>
-                      <div className="font-bold text-slate-800 text-sm">{user.worker_name}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">사번: {user.employee_no}</div>
+                      <div className="font-bold text-slate-800 text-sm">{user?.worker_name}</div>
+                      <div className="text-[10px] text-slate-400 font-mono">사번: {user?.employee_no}</div>
                     </div>
                   </div>
 
@@ -216,23 +244,24 @@ export function AppLayout() {
                   <div className="py-3.5 space-y-2.5 text-xs border-b border-slate-100">
                     <div className="flex justify-between">
                       <span className="text-slate-400">부서</span>
-                      <span className="font-semibold text-slate-800">{user.dept_name || '-'}</span>
+                      <span className="font-semibold text-slate-800">{user?.dept_name || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-400">직급</span>
-                      <span className="font-semibold text-slate-800">{user.position || '-'}</span>
+                      <span className="font-semibold text-slate-800">{user?.position || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-400">이메일</span>
-                      <span className="font-semibold text-slate-800">{user.email || '-'}</span>
+                      <span className="font-semibold text-slate-800">{user?.email || '-'}</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-slate-400">시스템 권한</span>
                       <span className="font-black text-blue-700 bg-blue-50/80 border border-blue-100 px-2 py-0.5 rounded-full text-[9px]">
-                        {user.role === 'admin' ? '최고 관리자' : user.role === 'manager' ? '부서 책임자' : '일반 작업자'}
+                        {user?.role === 'admin' ? '최고 관리자' : user?.role === 'manager' ? '부서 책임자' : '일반 작업자'}
                       </span>
                     </div>
                   </div>
+
 
                   {/* Actions Footer */}
                   <div className="pt-3 flex gap-2">
@@ -254,12 +283,12 @@ export function AppLayout() {
                 </div>
               )}
             </div>
-          )}
+          </div>{/* end right cluster */}
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
-          <Outlet />
+        <main className="flex-1 overflow-y-auto p-3 md:p-6 lg:p-8">
+          <RoutePermissionGuard />
         </main>
       </div>
 

@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { 
@@ -15,7 +16,10 @@ import {
   Mail, 
   Phone, 
   Briefcase, 
-  ShieldAlert 
+  ShieldAlert,
+  Download,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { validatePasswordComplexity } from '@/components/layout/AppLayout';
@@ -67,6 +71,7 @@ export function UsersPage() {
   const [activeDept, setActiveDept] = useState<number | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   
   // User Modal State
   const [showUserModal, setShowUserModal] = useState(false);
@@ -95,7 +100,6 @@ export function UsersPage() {
     sort_order: 0
   });
 
-  // Permission Override Modal State
   const [showPermModal, setShowPermModal] = useState(false);
   const [permUser, setPermUser] = useState<UserRow | null>(null);
   const [menus, setMenus] = useState<MenuRow[]>([]);
@@ -103,13 +107,47 @@ export function UsersPage() {
   const [userOverrides, setUserOverrides] = useState<Record<number, OverrideRow>>({});
   const [savingPerms, setSavingPerms] = useState(false);
 
+  // Delete Confirmation Modal State
+  const [deleteTarget, setDeleteTarget] = useState<UserRow | null>(null);
+  const [deleteStep, setDeleteStep] = useState<1 | 2>(1); // 1=첫번째확인, 2=최종확인
+  const [deleting, setDeleting] = useState(false);
+
+  // ── 권한 요청 관련 State ──
+  const [currentTab, setCurrentTab] = useState<'users' | 'requests'>('users');
+  const [requests, setRequests] = useState<any[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+
+  const loadRequests = async () => {
+    setLoadingRequests(true);
+    try {
+      const res = await api.get<{ data: any[] }>('/permission-requests');
+      setRequests(res.data);
+      const pendingCount = res.data.filter((r: any) => r.status === 'PENDING').length;
+      setPendingRequestsCount(pendingCount);
+    } catch {
+      toast.error('권한 요청 내역을 불러오는데 실패했습니다.');
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
   useEffect(() => { loadDepts(); }, []);
   useEffect(() => { if (activeDept != null) loadMembers(activeDept); }, [activeDept]);
+  useEffect(() => {
+    if (isAdmin) {
+      loadRequests();
+    }
+  }, [isAdmin]);
 
   const loadDepts = async () => {
-    const res = await api.get<{ data: DeptRow[] }>('/departments');
-    setDepts(res.data);
-    if (res.data.length && activeDept == null) setActiveDept(res.data[0].dept_id);
+    try {
+      const res = await api.get<{ data: DeptRow[] }>('/departments');
+      setDepts(res.data);
+      if (res.data.length && activeDept == null) setActiveDept(res.data[0].dept_id);
+    } catch (err: any) {
+      toast.error('부서 목록을 불러올 수 없습니다. 페이지를 새로고침 해주세요.');
+    }
   };
 
   const loadMembers = async (dept_id: number) => {
@@ -117,14 +155,104 @@ export function UsersPage() {
     try {
       const res = await api.get<{ data: UserRow[] }>(`/departments/${dept_id}/members`);
       setUsers(res.data);
+    } catch {
+      toast.error('직원 목록을 불러올 수 없습니다.');
     } finally { setLoading(false); }
   };
 
+  // ── 사내 연락망 엑셀(.xlsx) 다운로드 ──
+  const downloadContactList = async () => {
+    setDownloading(true);
+    try {
+      const res = await api.get<{ data: any[] }>('/departments/all-members');
+      const rows = res.data;
+
+      const ROLE_KO: Record<string, string> = { admin: '관리자', manager: '책임자', worker: '작업자' };
+
+      // 헤더
+      const header = ['부서', '이름', '직급', '사번', '권한', '이메일', '연락처'];
+
+      // 데이터 행 — 사번은 DB에서 이미 LPAD 5자리, 여기서도 한 번 더 보장
+      const body = rows.map((r) => [
+        r.dept_name   ?? '-',
+        r.worker_name ?? '-',
+        r.position    ?? '-',
+        r.employee_no != null ? String(r.employee_no).padStart(5, '0') : '-',
+        ROLE_KO[r.role] ?? r.role,
+        r.email  ?? '',
+        r.phone  ?? '',
+      ]);
+
+      // Sheet 생성
+      const wsData = [header, ...body];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+      // 사번(D열=3) · 연락처(G열=6) → 텍스트 타입 강제 (Excel 숫자 자동변환 방지)
+      const textCols = [3, 6];
+      const range = XLSX.utils.decode_range(ws['!ref'] ?? 'A1');
+      for (let R = 1; R <= range.e.r; R++) {
+        for (const C of textCols) {
+          const addr = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = ws[addr];
+          if (!cell) continue;
+          cell.t = 's';  // string 타입
+          cell.z = '@';  // 텍스트 서식 코드 (@)
+          // 값을 문자열로 재설정 (숫자로 파싱되지 않도록)
+          cell.v = String(cell.v);
+          delete cell.w; // 캐시된 포맷 제거
+        }
+      }
+
+      // 컬럼 너비
+      ws['!cols'] = [
+        { wch: 14 },  // 부서
+        { wch: 10 },  // 이름
+        { wch: 10 },  // 직급
+        { wch: 10 },  // 사번
+        { wch:  8 },  // 권한
+        { wch: 28 },  // 이메일
+        { wch: 16 },  // 연락처
+      ];
+
+      // Workbook 생성
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '사내연락망');
+
+      // ★ Blob 방식으로 다운로드 — 브라우저 환경에서 가장 안정적
+      const wbBuf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbBuf], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const today = new Date().toISOString().slice(0, 10);
+      a.download = `이지원_사내연락망_${today}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast.success(`사내 연락망 다운로드 완료 (${rows.length}명, 사번순 정렬)`);
+    } catch {
+      toast.error('다운로드 중 오류가 발생했습니다.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   // --- USER HANDLERS ---
-  const handleOpenCreateUser = () => {
+  const handleOpenCreateUser = async () => {
     setEditingUser(null);
+    setUserError('');
+    // 사번 자동 채번
+    let nextNo = '';
+    try {
+      const res = await api.get<{ employee_no: string | null }>('/auth/next-employee-no');
+      nextNo = res.employee_no ?? '';
+    } catch { nextNo = ''; }
     setUserForm({
-      employee_no: '',
+      employee_no: nextNo,
       worker_name: '',
       dept_id: activeDept ?? 0,
       role: 'worker',
@@ -134,7 +262,6 @@ export function UsersPage() {
       is_active: true,
       password: ''
     });
-    setUserError('');
     setShowUserModal(true);
   };
 
@@ -159,17 +286,21 @@ export function UsersPage() {
     e.preventDefault();
     setUserError('');
 
-    if (!userForm.employee_no || !userForm.worker_name || !userForm.phone) { 
-      setUserError('필수 항목(사번, 이름, 휴대폰 번호)을 입력하세요.'); 
+    if (!userForm.worker_name) { 
+      setUserError('이름을 입력하세요.'); 
       return; 
     }
-    if (userForm.employee_no.length > 10) {
-      setUserError('사번은 최대 10자리까지 허용됩니다.');
+    if (!editingUser && !userForm.phone) {
+      setUserError('휴대폰 번호를 입력하세요. (초기 비밀번호로 사용됩니다)');
       return;
     }
     if (!userForm.dept_id) { 
       setUserError('부서를 선택하세요.'); 
       return; 
+    }
+    if (userForm.employee_no && userForm.employee_no.length > 20) {
+      setUserError('사번은 최대 20자리까지 허용됩니다.');
+      return;
     }
 
     // Validate password complexity if custom password is provided
@@ -193,31 +324,43 @@ export function UsersPage() {
     }
 
     try {
+      // 빈 문자열 optional 필드 → undefined 처리 (Zod email 검증 오류 방지)
+      const cleanOptional = (v: string | undefined) => (v && v.trim() ? v.trim() : undefined);
+
       if (editingUser) {
         // Edit Mode
         const payload = {
           ...userForm,
-          password: userForm.password ? userForm.password : undefined
+          email:    cleanOptional(userForm.email),
+          position: cleanOptional(userForm.position),
+          password: userForm.password ? userForm.password : undefined,
         };
         await api.patch(`/auth/users/${editingUser.worker_id}`, payload);
         toast.success(`${userForm.worker_name} 직원의 정보가 수정되었습니다!`);
       } else {
-        // Create Mode
+        // Create Mode — 비밀번호 미입력 시 휴대폰번호로 초기 설정
         const initialPassword = userForm.password.trim() || userForm.phone.trim();
-        await api.post('/auth/users', {
+        const payload = {
           ...userForm,
-          password: initialPassword
-        });
+          email:    cleanOptional(userForm.email),
+          position: cleanOptional(userForm.position),
+          password: initialPassword,
+        };
+        await api.post('/auth/users', payload);
         toast.success('신규 직원이 성공적으로 등록되었습니다!');
       }
       setShowUserModal(false);
       if (activeDept) loadMembers(activeDept);
       loadDepts(); // Refresh member counts
     } catch (err: any) {
-      if (err?.body?.error === 'duplicate_employee_no') {
-        setUserError('이미 사용중인 사번입니다.');
+      const msg = err?.response?.data?.message
+        || err?.body?.message
+        || err?.message
+        || (editingUser ? '수정 실패' : '등록 실패');
+      if (err?.response?.data?.error === 'duplicate_employee_no' || err?.body?.error === 'duplicate_employee_no') {
+        setUserError('이미 사용중인 사번입니다. 다른 사번을 입력해주세요.');
       } else {
-        setUserError(editingUser ? '수정 실패' : '생성 실패');
+        setUserError(msg);
       }
     }
   };
@@ -247,6 +390,34 @@ export function UsersPage() {
       toast.success('비밀번호가 초기화되었습니다. 첫 로그인 시 비밀번호 변경을 강제합니다.');
     } catch (err: any) { 
       toast.error(err?.body?.message || '비밀번호 초기화 실패');
+    }
+  };
+
+  const handleDeleteUser = (u: UserRow) => {
+    setDeleteTarget(u);
+    setDeleteStep(1);
+  };
+
+  const executeDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await api.delete<{ ok: boolean; delete_type: 'hard' | 'soft'; worker_name: string; message?: string }>(
+        `/auth/users/${deleteTarget.worker_id}`
+      );
+      if (res.delete_type === 'hard') {
+        toast.success(`'${res.worker_name}' 직원이 DB에서 완전히 삭제되었습니다.`);
+      } else {
+        toast(`'${res.worker_name}': ${res.message ?? '비활성화 처리되었습니다.'}`, { icon: '⚠️' });
+      }
+      setDeleteTarget(null);
+      if (activeDept) loadMembers(activeDept);
+      loadDepts();
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.body?.message || err?.message || '삭제 실패';
+      toast.error(msg);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -289,14 +460,15 @@ export function UsersPage() {
   };
 
   const handleDeactivateDept = async (d: DeptRow) => {
-    if (!confirm(`'${d.dept_name}' 부서를 비활성화 하시겠습니까?`)) return;
+    if (!confirm(`'${d.dept_name}' 부서를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
     try {
       await api.delete(`/departments/${d.dept_id}`);
-      toast.success('부서가 비활성화되었습니다.');
+      toast.success(`'${d.dept_name}' 부서가 삭제되었습니다.`);
       loadDepts();
       if (activeDept === d.dept_id) setActiveDept(null);
-    } catch {
-      toast.error('부서 비활성화 실패');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.body?.message || err?.message || '삭제 실패';
+      toast.error(msg);
     }
   };
 
@@ -396,6 +568,18 @@ export function UsersPage() {
     }
   };
 
+  const handleApproveRequest = async (requestId: number, status: 'APPROVED' | 'REJECTED') => {
+    const actionText = status === 'APPROVED' ? '승인' : '반려';
+    if (!confirm(`해당 권한 요청을 ${actionText}하시겠습니까?`)) return;
+    try {
+      await api.patch(`/permission-requests/${requestId}`, { status });
+      toast.success(`권한 요청이 ${actionText}되었습니다.`);
+      loadRequests();
+    } catch (err: any) {
+      toast.error(err?.body?.message || `권한 요청 ${actionText} 실패`);
+    }
+  };
+
   // --- MEMU TREE FOR OVERRIDE GRID ---
   const menuTree = useMemo(() => {
     const byParent = new Map<number | null, MenuRow[]>();
@@ -416,17 +600,20 @@ export function UsersPage() {
     return out;
   }, [menus]);
 
-  // 트리형 부서 정렬
+  // 트리형 부서 정렬 (활성 부서만, 인원수 내림차순)
   const deptTree = useMemo(() => {
     const byParent = new Map<number | null, DeptRow[]>();
-    depts.forEach((d) => {
-      const arr = byParent.get(d.parent_dept_id) ?? [];
-      arr.push(d); byParent.set(d.parent_dept_id, arr);
-    });
+    depts
+      .filter((d) => d.is_active)  // 삭제(is_active=false)된 부서 제외
+      .forEach((d) => {
+        const arr = byParent.get(d.parent_dept_id) ?? [];
+        arr.push(d); byParent.set(d.parent_dept_id, arr);
+      });
     const out: Array<{ dept: DeptRow; depth: number }> = [];
     const walk = (parentId: number | null, depth: number) => {
       const arr = byParent.get(parentId) ?? [];
-      arr.sort((a, b) => a.sort_order - b.sort_order || a.dept_code.localeCompare(b.dept_code));
+      // 인원수 내림차순 → 부서명 가나다순
+      arr.sort((a, b) => (b.member_count ?? 0) - (a.member_count ?? 0) || a.dept_name.localeCompare(b.dept_name));
       for (const d of arr) { 
         out.push({ dept: d, depth }); 
         walk(d.dept_id, depth + 1); 
@@ -435,6 +622,7 @@ export function UsersPage() {
     walk(null, 0);
     return out;
   }, [depts]);
+
 
   if (!isAdmin) {
     return <div className="p-8 text-center text-gray-500">관리자만 접근 가능합니다.</div>;
@@ -462,183 +650,345 @@ export function UsersPage() {
         <h1 className="text-xl font-bold flex items-center gap-2">
           <Building2 className="h-5 w-5 text-slate-700" /> 사용자 및 조직 관리
         </h1>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowDeptModal(true)}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-          >
-            <Settings className="h-4 w-4" /> 부서 설정
-          </button>
-          <button
-            onClick={handleOpenCreateUser}
-            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="h-4 w-4" /> 신규 직원 등록
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[260px_1fr]">
-        {/* LEFT BAR: DEPARTMENTS */}
-        <aside className="rounded-lg border bg-white p-3 shadow-sm h-fit">
-          <div className="flex items-center justify-between px-2 pb-2 mb-2 border-b">
-            <span className="text-xs font-semibold text-gray-500">부서 (조직도)</span>
-            <button 
-              onClick={() => setShowDeptModal(true)}
-              className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5"
+        {currentTab === 'users' && (
+          <div className="flex gap-2 flex-wrap">
+            {/* 사내 연락망 다운로드 */}
+            <button
+              onClick={downloadContactList}
+              disabled={downloading}
+              className="flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-60"
+              title="전체 임직원 연락처를 CSV로 다운로드 (Excel에서 열기 가능)"
             >
-              <Settings className="h-3 w-3" /> 관리
+              {downloading
+                ? <><Loader2 className="h-4 w-4 animate-spin" /> 생성 중...</>
+                : <><Download className="h-4 w-4" /> 사내 연락망 다운로드</>
+              }
+            </button>
+            <button
+              onClick={() => setShowDeptModal(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <Settings className="h-4 w-4" /> 부서 설정
+            </button>
+            <button
+              onClick={handleOpenCreateUser}
+              className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="h-4 w-4" /> 신규 직원 등록
             </button>
           </div>
-          <ul className="space-y-1">
-            {deptTree.map(({ dept, depth }) => (
-              <li key={dept.dept_id}>
-                <button
-                  onClick={() => setActiveDept(dept.dept_id)}
-                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-sm transition-colors ${
-                    activeDept === dept.dept_id 
-                      ? 'bg-blue-50 text-blue-700 font-semibold' 
-                      : 'text-gray-700 hover:bg-slate-50'
-                  }`}
-                >
-                  <span style={{ paddingLeft: `${depth * 10}px` }} className="truncate">
-                    {depth > 0 && <span className="text-slate-300 mr-1.5">└</span>}
-                    {dept.dept_name}
-                  </span>
-                  <span className={`text-[10px] rounded-full px-1.5 py-0.5 font-medium ${
-                    activeDept === dept.dept_id ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-500'
-                  }`}>
-                    {dept.member_count ?? 0}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </aside>
+        )}
+      </div>
 
-        {/* RIGHT BOARD: MEMBERS */}
+      {/* TABS */}
+      <div className="flex border-b border-slate-200">
+        <button
+          onClick={() => setCurrentTab('users')}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors ${
+            currentTab === 'users'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          조직 및 직원 관리
+        </button>
+        <button
+          onClick={() => { setCurrentTab('requests'); loadRequests(); }}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-1.5 ${
+            currentTab === 'requests'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          권한 요청 결재함
+          {pendingRequestsCount > 0 && (
+            <span className="inline-flex items-center justify-center bg-rose-500 text-white font-bold text-[10px] rounded-full h-4 min-w-[16px] px-1 animate-pulse">
+              {pendingRequestsCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {currentTab === 'users' ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[260px_1fr]">
+          {/* LEFT BAR: DEPARTMENTS */}
+          <aside className="rounded-lg border bg-white p-3 shadow-sm h-fit">
+            <div className="flex items-center justify-between px-2 pb-2 mb-2 border-b">
+              <span className="text-xs font-semibold text-gray-500">부서 (조직도)</span>
+              <button 
+                onClick={() => setShowDeptModal(true)}
+                className="text-[10px] text-blue-600 hover:underline flex items-center gap-0.5"
+              >
+                <Settings className="h-3 w-3" /> 관리
+              </button>
+            </div>
+            <ul className="space-y-1">
+              {deptTree.map(({ dept, depth }) => (
+                <li key={dept.dept_id}>
+                  <button
+                    onClick={() => setActiveDept(dept.dept_id)}
+                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-sm transition-colors ${
+                      activeDept === dept.dept_id 
+                        ? 'bg-blue-50 text-blue-700 font-semibold' 
+                        : 'text-gray-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span style={{ paddingLeft: `${depth * 10}px` }} className="truncate">
+                      {depth > 0 && <span className="text-slate-300 mr-1.5">└</span>}
+                      {dept.dept_name}
+                    </span>
+                    <span className={`text-[10px] rounded-full px-1.5 py-0.5 font-medium ${
+                      activeDept === dept.dept_id ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-500'
+                    }`}>
+                      {dept.member_count ?? 0}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </aside>
+
+          {/* RIGHT BOARD: MEMBERS */}
+          <div className="rounded-lg border bg-white shadow-sm overflow-hidden flex flex-col">
+            <div className="border-b bg-slate-50 px-4 py-3 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-700">
+                {depts.find(d => d.dept_id === activeDept)?.dept_name || '부서'} 소속 임직원
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b text-xs text-slate-600">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-semibold">사번</th>
+                    <th className="px-4 py-3 text-left font-semibold">이름</th>
+                    <th className="px-4 py-3 text-left font-semibold">직급</th>
+                    <th className="px-4 py-3 text-left font-semibold">권한</th>
+                    <th className="px-4 py-3 text-center font-semibold w-28">모드접근</th>
+                    <th className="px-4 py-3 text-left font-semibold">연락처 / 이메일</th>
+                    <th className="px-4 py-3 text-center font-semibold w-28">상태</th>
+                    <th className="px-4 py-3 text-center font-semibold w-36">작업</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                        직원 정보를 불러오는 중...
+                      </td>
+                    </tr>
+                  ) : users.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-12 text-center text-slate-400">
+                        소속 직원이 없습니다.
+                      </td>
+                    </tr>
+                  ) : (
+                    users.map((u) => (
+                      <tr key={u.worker_id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-4 py-3.5 font-mono text-slate-700 font-medium">
+                          {u.employee_no ?? '-'}
+                        </td>
+                        <td className="px-4 py-3.5 font-semibold text-slate-900">
+                          {u.worker_name}
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-600">
+                          {u.position || '-'}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            u.role === 'admin' 
+                              ? 'bg-rose-50 text-rose-700 border border-rose-100' 
+                              : u.role === 'manager' 
+                              ? 'bg-amber-50 text-amber-700 border border-amber-100' 
+                              : 'bg-slate-100 text-slate-600'
+                          }`}>
+                            {ROLE_LABELS[u.role] ?? u.role}
+                          </span>
+                        </td>
+                        {/* 모드 접근 권한 토글 */}
+                        <td className="px-4 py-3.5 text-center">
+                          {u.role === 'admin' ? (
+                            <span className="inline-flex rounded px-2 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-100">
+                              관리자
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleModeToggle(u)}
+                              title="클릭하면 모드 접근 권한이 토글됩니다"
+                              className={`inline-flex rounded px-2 py-0.5 text-[10px] font-bold border transition-all cursor-pointer ${
+                                (u.allowed_modes ?? 'shop') === 'both'
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                                  : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              {(u.allowed_modes ?? 'shop') === 'both' ? '실무+관리' : '실무만'}
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 text-xs text-slate-500 space-y-0.5">
+                          {u.phone && (
+                            <div className="flex items-center gap-1 font-mono">
+                              <Phone className="h-3 w-3 text-slate-400" /> {u.phone}
+                            </div>
+                          )}
+                          {u.email && (
+                            <div className="flex items-center gap-1">
+                              <Mail className="h-3 w-3 text-slate-400" /> {u.email}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5 text-center">
+                          <span className={`inline-flex rounded px-1.5 py-0.5 text-xs font-semibold ${
+                            u.is_active 
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
+                              : 'bg-slate-100 text-slate-400 border border-slate-200'
+                          }`}>
+                            {u.is_active ? '재직' : '퇴사/정지'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex justify-center items-center gap-1.5">
+                            <button 
+                              onClick={() => handleOpenEditUser(u)} 
+                              title="기본 정보 수정" 
+                              className="rounded p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleOpenPerms(u)} 
+                              title="개별 권한 설정" 
+                              className="rounded p-1.5 text-slate-400 hover:bg-purple-50 hover:text-purple-600 transition-colors"
+                            >
+                              <ShieldCheck className="h-4 w-4" />
+                            </button>
+                            <button 
+                              onClick={() => handleResetPw(u.worker_id, u.worker_name)} 
+                              title="비밀번호 초기화" 
+                              className="rounded p-1.5 text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition-colors"
+                            >
+                              <KeyRound className="h-4 w-4" />
+                            </button>
+                            {/* 삭제 버튼 — admin 계정 및 본인 제외 */}
+                            {u.employee_no !== 'admin' && (
+                              <button
+                                onClick={() => handleDeleteUser(u)}
+                                title="직원 삭제 (비활성화)"
+                                className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* REQUESTS LIST */
         <div className="rounded-lg border bg-white shadow-sm overflow-hidden flex flex-col">
           <div className="border-b bg-slate-50 px-4 py-3 flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-700">
-              {depts.find(d => d.dept_id === activeDept)?.dept_name || '부서'} 소속 임직원
-            </span>
+            <span className="text-xs font-semibold text-slate-700">권한 요청 목록</span>
+            <button
+              onClick={loadRequests}
+              disabled={loadingRequests}
+              className="flex items-center gap-1 text-xs text-slate-600 hover:text-blue-600 disabled:opacity-50"
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> 새로고침
+            </button>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 border-b text-xs text-slate-600">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold">사번</th>
-                  <th className="px-4 py-3 text-left font-semibold">이름</th>
-                  <th className="px-4 py-3 text-left font-semibold">직급</th>
-                  <th className="px-4 py-3 text-left font-semibold">권한</th>
-                  <th className="px-4 py-3 text-center font-semibold w-28">모드접근</th>
-                  <th className="px-4 py-3 text-left font-semibold">연락처 / 이메일</th>
+                  <th className="px-4 py-3 text-left font-semibold">요청일시</th>
+                  <th className="px-4 py-3 text-left font-semibold">요청자</th>
+                  <th className="px-4 py-3 text-left font-semibold">부서</th>
+                  <th className="px-4 py-3 text-left font-semibold">요청 메뉴 (ID)</th>
+                  <th className="px-4 py-3 text-left font-semibold">요청 사유</th>
                   <th className="px-4 py-3 text-center font-semibold w-28">상태</th>
+                  <th className="px-4 py-3 text-left font-semibold">결재자</th>
                   <th className="px-4 py-3 text-center font-semibold w-36">작업</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {loading ? (
+                {loadingRequests ? (
                   <tr>
                     <td colSpan={8} className="py-12 text-center text-slate-400">
-                      직원 정보를 불러오는 중...
+                      요청 목록을 불러오는 중...
                     </td>
                   </tr>
-                ) : users.length === 0 ? (
+                ) : requests.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-12 text-center text-slate-400">
-                      소속 직원이 없습니다.
+                      제출된 권한 요청이 없습니다.
                     </td>
                   </tr>
                 ) : (
-                  users.map((u) => (
-                    <tr key={u.worker_id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3.5 font-mono text-slate-700 font-medium">
-                        {u.employee_no ?? '-'}
+                  requests.map((r) => (
+                    <tr key={r.request_id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-3.5 font-mono text-xs text-slate-500">
+                        {new Date(r.created_at).toLocaleString('ko-KR', { hour12: false })}
                       </td>
-                      <td className="px-4 py-3.5 font-semibold text-slate-900">
-                        {u.worker_name}
+                      <td className="px-4 py-3.5 font-semibold text-slate-950">
+                        {r.worker_name} <span className="font-mono font-normal text-xs text-slate-400">({r.employee_no})</span>
                       </td>
                       <td className="px-4 py-3.5 text-slate-600">
-                        {u.position || '-'}
+                        {r.dept_name || '-'}
                       </td>
-                      <td className="px-4 py-3.5">
-                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-                          u.role === 'admin' 
-                            ? 'bg-rose-50 text-rose-700 border border-rose-100' 
-                            : u.role === 'manager' 
-                            ? 'bg-amber-50 text-amber-700 border border-amber-100' 
-                            : 'bg-slate-100 text-slate-600'
-                        }`}>
-                          {ROLE_LABELS[u.role] ?? u.role}
-                        </span>
+                      <td className="px-4 py-3.5 font-medium text-slate-800">
+                        {r.menu_name || '-'} <span className="font-mono text-xs text-slate-400">({r.menu_id})</span>
                       </td>
-                      {/* 모드 접근 권한 토글 */}
-                      <td className="px-4 py-3.5 text-center">
-                        {u.role === 'admin' ? (
-                          <span className="inline-flex rounded px-2 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-100">
-                            관리자
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => handleModeToggle(u)}
-                            title="클릭하면 모드 접근 권한이 토글됩니다"
-                            className={`inline-flex rounded px-2 py-0.5 text-[10px] font-bold border transition-all cursor-pointer ${
-                              (u.allowed_modes ?? 'shop') === 'both'
-                                ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
-                                : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
-                            }`}
-                          >
-                            {(u.allowed_modes ?? 'shop') === 'both' ? '실무+관리' : '실무만'}
-                          </button>
-                        )}
-                      </td>
-                      <td className="px-4 py-3.5 text-xs text-slate-500 space-y-0.5">
-                        {u.phone && (
-                          <div className="flex items-center gap-1 font-mono">
-                            <Phone className="h-3 w-3 text-slate-400" /> {u.phone}
-                          </div>
-                        )}
-                        {u.email && (
-                          <div className="flex items-center gap-1">
-                            <Mail className="h-3 w-3 text-slate-400" /> {u.email}
-                          </div>
-                        )}
+                      <td className="px-4 py-3.5 text-slate-600 max-w-xs truncate" title={r.reason}>
+                        {r.reason || <span className="text-slate-300">-</span>}
                       </td>
                       <td className="px-4 py-3.5 text-center">
                         <span className={`inline-flex rounded px-1.5 py-0.5 text-xs font-semibold ${
-                          u.is_active 
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
-                            : 'bg-slate-100 text-slate-400 border border-slate-200'
+                          r.status === 'PENDING' 
+                            ? 'bg-amber-50 text-amber-700 border border-amber-100' 
+                            : r.status === 'APPROVED'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                            : 'bg-rose-50 text-rose-700 border border-rose-100'
                         }`}>
-                          {u.is_active ? '재직' : '퇴사/정지'}
+                          {r.status === 'PENDING' ? '대기중' : r.status === 'APPROVED' ? '승인됨' : '반려됨'}
                         </span>
                       </td>
-                      <td className="px-4 py-3.5">
-                        <div className="flex justify-center items-center gap-1.5">
-                          <button 
-                            onClick={() => handleOpenEditUser(u)} 
-                            title="기본 정보 수정" 
-                            className="rounded p-1.5 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                          <button 
-                            onClick={() => handleOpenPerms(u)} 
-                            title="개별 권한 설정" 
-                            className="rounded p-1.5 text-slate-400 hover:bg-purple-50 hover:text-purple-600 transition-colors"
-                          >
-                            <ShieldCheck className="h-4 w-4" />
-                          </button>
-                          <button 
-                            onClick={() => handleResetPw(u.worker_id, u.worker_name)} 
-                            title="비밀번호 초기화" 
-                            className="rounded p-1.5 text-slate-400 hover:bg-amber-50 hover:text-amber-600 transition-colors"
-                          >
-                            <KeyRound className="h-4 w-4" />
-                          </button>
-                        </div>
+                      <td className="px-4 py-3.5 text-xs text-slate-500">
+                        {r.reviewer_name ? (
+                          <>
+                            {r.reviewer_name}
+                            <span className="block text-[10px] text-slate-400">
+                              {new Date(r.reviewed_at).toLocaleString('ko-KR', { hour12: false })}
+                            </span>
+                          </>
+                        ) : '-'}
+                      </td>
+                      <td className="px-4 py-3.5 text-center">
+                        {r.status === 'PENDING' ? (
+                          <div className="flex gap-1 justify-center">
+                            <button
+                              onClick={() => handleApproveRequest(r.request_id, 'APPROVED')}
+                              className="rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-2 py-1 transition-colors"
+                            >
+                              승인
+                            </button>
+                            <button
+                              onClick={() => handleApproveRequest(r.request_id, 'REJECTED')}
+                              className="rounded bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-2 py-1 transition-colors"
+                            >
+                              반려
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400">-</span>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -647,7 +997,80 @@ export function UsersPage() {
             </table>
           </div>
         </div>
-      </div>
+      )}
+
+
+      {/* MODAL 0: DELETE CONFIRMATION */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-red-100">
+            {deleteStep === 1 ? (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
+                    <Trash2 className="h-5 w-5 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-base">직원 삭제</h3>
+                    <p className="text-xs text-slate-500">이 작업은 되돌리기 어렵습니다</p>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-700 mb-1">
+                  <span className="font-semibold text-slate-900">{deleteTarget.worker_name}</span> 직원을 삭제하시겠습니까?
+                </p>
+                <p className="text-xs text-slate-500 mb-5">
+                  연결된 업무 데이터가 없으면 DB에서 완전히 제거됩니다.<br/>
+                  연결 데이터가 있으면 로그인만 차단(비활성화)됩니다.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setDeleteTarget(null)}
+                    className="flex-1 rounded-lg border border-slate-200 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                  >취소</button>
+                  <button
+                    onClick={() => setDeleteStep(2)}
+                    className="flex-1 rounded-lg bg-red-500 py-2 text-sm font-semibold text-white hover:bg-red-600 transition-colors"
+                  >삭제 진행</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-600">
+                    <Trash2 className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-red-700 text-base">최종 확인</h3>
+                    <p className="text-xs text-red-400">복구가 어려울 수 있습니다</p>
+                  </div>
+                </div>
+                <div className="rounded-lg bg-red-50 border border-red-200 p-3 mb-4">
+                  <p className="text-sm font-semibold text-red-800 mb-1">정말로 삭제하시겠습니까?</p>
+                  <p className="text-xs text-red-600">
+                    <span className="font-bold">{deleteTarget.worker_name}</span> 직원의 계정이 영구 삭제됩니다.<br/>
+                    이 작업은 취소할 수 없습니다.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setDeleteStep(1)}
+                    disabled={deleting}
+                    className="flex-1 rounded-lg border border-slate-200 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  >돌아가기</button>
+                  <button
+                    onClick={executeDelete}
+                    disabled={deleting}
+                    className="flex-1 rounded-lg bg-red-600 py-2 text-sm font-bold text-white hover:bg-red-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
+                  >
+                    {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    {deleting ? '삭제 중...' : '완전 삭제'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* MODAL 1: REGISTER / EDIT USER */}
       {showUserModal && (
@@ -664,14 +1087,18 @@ export function UsersPage() {
             </div>
 
             <div className="space-y-3.5">
-              <Field label="사번 *">
+              <Field label={editingUser ? "사번" : "사번 (자동 채번 — 직접 수정 가능)"}>
                 <input 
                   type="text" 
                   value={userForm.employee_no} 
                   onChange={(e) => setUserForm({ ...userForm, employee_no: e.target.value })} 
-                  placeholder="사번을 기입해주세요"
-                  className="inp font-mono" 
+                  placeholder={editingUser ? "사번" : "미입력 시 자동 배정"}
+                  className={`inp font-mono ${!editingUser && userForm.employee_no ? 'bg-blue-50 border-blue-200' : ''}`}
                 />
+                {!editingUser && userForm.employee_no && (
+                  <p className="text-[10px] text-blue-500 mt-1">✓ 자동 배정된 사번입니다. 원하는 번호로 직접 변경할 수 있습니다.</p>
+                )}
+
               </Field>
               <Field label="이름 *">
                 <input 
@@ -702,7 +1129,8 @@ export function UsersPage() {
                   className="inp"
                 >
                   <option value={0}>부서 선택...</option>
-                  {depts.map((d) => <option key={d.dept_id} value={d.dept_id}>{d.dept_name}</option>)}
+                  {depts.filter((d) => d.is_active).map((d) => <option key={d.dept_id} value={d.dept_id}>{d.dept_name}</option>)}
+
                 </select>
               </Field>
               <div className="grid grid-cols-2 gap-3">

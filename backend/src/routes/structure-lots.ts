@@ -8,11 +8,49 @@ import { pool } from '../db/pool.js';
  */
 export async function structureLotRoutes(app: FastifyInstance) {
 
+  // ─── DB 마이그레이션 ─────────────────────────────────────────────────────
+  // lot_number_sequence: 구조체 LOT 번호 중복 방지용 전용 시퀀스 테이블
+  // SELECT FOR UPDATE로 잠금 → 동시 요청 시 순차 처리 보장
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS lot_number_sequence (
+      base_lot    VARCHAR(200) PRIMARY KEY,
+      last_serial INTEGER NOT NULL DEFAULT 0,
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    );
+  `).catch((e: unknown) => console.error('[Migration] lot_number_sequence:', e));
+
+  // lot_transaction.lot_number UNIQUE 제약 (안전망)
+  await pool.query(`
+    ALTER TABLE lot_transaction
+    ADD CONSTRAINT uk_lot_number_unique UNIQUE (lot_number);
+  `).catch(() => { /* 이미 존재하거나 다른 방식으로 처리 */ });
+
+  // ★ 서버 시작 시 기존 lot_transaction → lot_number_sequence 자동 동기화
+  // 기존에 시퀀스 테이블 없이 저장된 LOT들도 올바른 시퀀스로 초기화됨
+  await pool.query(`
+    INSERT INTO lot_number_sequence (base_lot, last_serial)
+    SELECT base_lot, COALESCE(MAX(serial_end), 0)
+    FROM lot_transaction
+    WHERE base_lot IS NOT NULL
+    GROUP BY base_lot
+    ON CONFLICT (base_lot) DO UPDATE
+      SET last_serial = GREATEST(
+        lot_number_sequence.last_serial,
+        EXCLUDED.last_serial
+      ),
+      updated_at = NOW()
+  `).catch((e: unknown) => console.error('[Migration] sync lot_number_sequence:', e));
+
+  console.log('[structureLotRoutes] LOT 시퀀스 테이블 초기화 완료');
+
+
   /**
    * POST /api/structure-lots/generate
    * 구조 LOT 번호 생성 (미리보기, DB 저장하지 않음)
+   * NOTE: lot_number_sequence 테이블에서 현재 마지막 시리얼을 읽어 정확한 미리보기 제공
    */
   app.post('/api/structure-lots/generate', async (request, reply) => {
+
     const body = request.body as {
       cert_id: number;
       production_date: string; // YYYY-MM-DD
@@ -69,6 +107,9 @@ export async function structureLotRoutes(app: FastifyInstance) {
   /**
    * POST /api/structure-lots
    * 구조 LOT 생성 (DB 저장)
+   * ★ 핵심 수정: lot_number_sequence 테이블을 사용한 원자적 시퀀스 관리
+   *   - 기존: lot_transaction FOR UPDATE → 기존 행 없으면 잠금 불가 → 레이스 컨디션
+   *   - 신규: lot_number_sequence UPSERT + SELECT FOR UPDATE → 행 항상 존재 → 완전 직렬화
    */
   app.post('/api/structure-lots', async (request, reply) => {
     const body = request.body as {
@@ -107,22 +148,37 @@ export async function structureLotRoutes(app: FastifyInstance) {
     try {
       await client.query('BEGIN');
 
-      // 동시성 보호를 위해 해당 base_lot 행들을 먼저 잠금
-      await client.query(
-        'SELECT lot_id FROM lot_transaction WHERE base_lot = $1 FOR UPDATE',
-        [baseLot]
-      );
-      // 기존 시리얼 최대값 조회
-      const existingResult = await client.query(
-        'SELECT COALESCE(MAX(serial_end), 0) as max_serial FROM lot_transaction WHERE base_lot = $1',
-        [baseLot]
-      );
-      const maxSerial = parseInt(existingResult.rows[0].max_serial, 10) || 0;
+      // ★ STEP 1: lot_number_sequence에 행이 없으면 lot_transaction의 현재 최대값으로 초기화
+      //   ON CONFLICT DO NOTHING → 이미 있으면 그대로 유지
+      await client.query(`
+        INSERT INTO lot_number_sequence (base_lot, last_serial)
+        SELECT $1, COALESCE(MAX(serial_end), 0)
+        FROM lot_transaction
+        WHERE base_lot = $1
+        ON CONFLICT (base_lot) DO NOTHING
+      `, [baseLot]);
 
-      const serialStart = maxSerial + 1;
-      const serialEnd = serialStart + body.serial_count - 1;
+      // ★ STEP 2: 행을 잠금 (SELECT FOR UPDATE)
+      //   이제 행이 반드시 존재 → 동시 요청 시 완전 직렬화 보장
+      const seqRow = await client.query(
+        'SELECT last_serial FROM lot_number_sequence WHERE base_lot = $1 FOR UPDATE',
+        [baseLot]
+      );
+      const currentMax = parseInt(seqRow.rows[0].last_serial, 10);
+
+      // ★ STEP 3: 시리얼 범위 계산
+      const serialStart = currentMax + 1;
+      const serialEnd = currentMax + body.serial_count;
       const lotNumber = `${baseLot}-${pad3(serialStart)}~${pad3(serialEnd)}`;
 
+      // ★ STEP 4: 시퀀스 테이블 업데이트
+      await client.query(
+        'UPDATE lot_number_sequence SET last_serial = $1, updated_at = NOW() WHERE base_lot = $2',
+        [serialEnd, baseLot]
+      );
+
+      // ★ STEP 5: lot_transaction INSERT
+      //   lot_number UNIQUE 제약이 있으므로 중복 시 오류로 안전하게 차단
       const insertResult = await client.query(
         `INSERT INTO lot_transaction
          (lot_number, lot_type, item_id, wo_id, qty, unit, base_lot, serial_start, serial_end, status, remaining_qty)
@@ -140,7 +196,7 @@ export async function structureLotRoutes(app: FastifyInstance) {
           serial_start: serialStart,
           serial_end: serialEnd,
           lot_number: lotNumber,
-          existing_count: maxSerial,
+          existing_count: currentMax,
           total_after: serialEnd,
         },
       };
@@ -151,6 +207,87 @@ export async function structureLotRoutes(app: FastifyInstance) {
       client.release();
     }
   });
+
+  /**
+   * GET /api/structure-lots/check-duplicates
+   * 중복 LOT 감지 — 관리자용
+   * lot_number 기준 중복, serial 범위 겹침 모두 체크
+   */
+  app.get('/api/structure-lots/check-duplicates', async () => {
+    // 1. lot_number 완전 중복
+    const exactDupes = await pool.query(`
+      SELECT lot_number, COUNT(*) AS cnt,
+             array_agg(lot_id) AS lot_ids,
+             array_agg(created_at::date) AS dates
+      FROM lot_transaction
+      WHERE base_lot IS NOT NULL
+      GROUP BY lot_number
+      HAVING COUNT(*) > 1
+      ORDER BY lot_number
+    `);
+
+    // 2. 같은 base_lot 내 serial 범위 겹침
+    const overlapDupes = await pool.query(`
+      SELECT a.base_lot,
+             a.lot_id AS lot_id_a, a.lot_number AS lot_number_a,
+             a.serial_start AS start_a, a.serial_end AS end_a,
+             b.lot_id AS lot_id_b, b.lot_number AS lot_number_b,
+             b.serial_start AS start_b, b.serial_end AS end_b
+      FROM lot_transaction a
+      JOIN lot_transaction b ON a.base_lot = b.base_lot
+        AND a.lot_id < b.lot_id
+        AND a.serial_start <= b.serial_end
+        AND b.serial_start <= a.serial_end
+      WHERE a.base_lot IS NOT NULL
+      ORDER BY a.base_lot, a.serial_start
+    `);
+
+    // 3. 시퀀스 테이블 vs lot_transaction 불일치
+    const seqMismatch = await pool.query(`
+      SELECT seq.base_lot,
+             seq.last_serial AS seq_last,
+             COALESCE(MAX(lt.serial_end), 0) AS lot_max
+      FROM lot_number_sequence seq
+      LEFT JOIN lot_transaction lt ON lt.base_lot = seq.base_lot
+      GROUP BY seq.base_lot, seq.last_serial
+      HAVING seq.last_serial != COALESCE(MAX(lt.serial_end), 0)
+    `);
+
+    return {
+      summary: {
+        exact_duplicates: exactDupes.rows.length,
+        overlap_duplicates: overlapDupes.rows.length,
+        sequence_mismatches: seqMismatch.rows.length,
+        total_issues: exactDupes.rows.length + overlapDupes.rows.length + seqMismatch.rows.length,
+      },
+      exact_duplicates: exactDupes.rows,
+      overlap_duplicates: overlapDupes.rows,
+      sequence_mismatches: seqMismatch.rows,
+    };
+  });
+
+  /**
+   * POST /api/structure-lots/repair-sequence
+   * 시퀀스 테이블을 lot_transaction 실제 데이터 기준으로 재초기화 (관리자용)
+   */
+  app.post('/api/structure-lots/repair-sequence', async () => {
+    const { rows } = await pool.query(`
+      INSERT INTO lot_number_sequence (base_lot, last_serial)
+      SELECT base_lot, COALESCE(MAX(serial_end), 0)
+      FROM lot_transaction
+      WHERE base_lot IS NOT NULL
+      GROUP BY base_lot
+      ON CONFLICT (base_lot) DO UPDATE
+        SET last_serial = GREATEST(
+          lot_number_sequence.last_serial,
+          EXCLUDED.last_serial
+        ),
+        updated_at = NOW()
+      RETURNING *
+    `);
+    return { data: rows, message: `${rows.length}개 base_lot 시퀀스 재초기화 완료` };
+  });
+
 
   /**
    * GET /api/structure-lots

@@ -330,28 +330,46 @@ export async function backupRoutes(app: FastifyInstance) {
   // ── GET /api/backup/stats - 현재 DB 통계 조회 ──
   app.get('/api/backup/stats', async () => {
     const tables = [
-      { key: 'certification_master', label: '인정구조', category: 'master' },
-      { key: 'item_master', label: '품목 마스터', category: 'master' },
-      { key: 'bom_master', label: 'BOM', category: 'master' },
-      { key: 'certification_rule', label: '인정규칙', category: 'master' },
-      { key: 'sales_order', label: '수주', category: 'transaction' },
-      { key: 'sales_order_item', label: '수주 품목', category: 'transaction' },
-      { key: 'order_bom_result', label: 'BOM 전개결과', category: 'transaction' },
-      { key: 'purchase_request', label: '발주서', category: 'transaction' },
-      { key: 'purchase_request_item', label: '발주 품목', category: 'transaction' },
-      { key: 'work_order', label: '작업지시', category: 'transaction' },
-      { key: 'lot_transaction', label: 'LOT', category: 'transaction' },
-      { key: 'inventory_transaction', label: '재고이력', category: 'transaction' },
-      { key: 'inspection', label: '인수검사', category: 'transaction' },
-      { key: 'inspection_detail', label: '검사항목', category: 'transaction' },
-      { key: 'self_inspection', label: '자주검사', category: 'transaction' },
+      // 마스터
+      { key: 'certification_master', label: '인정구조',      category: 'master' },
+      { key: 'item_master',          label: '품목 마스터',   category: 'master' },
+      { key: 'bom_master',           label: 'BOM',          category: 'master' },
+      { key: 'certification_rule',   label: '인정규칙',      category: 'master' },
+      { key: 'worker',               label: '사용자 계정',   category: 'master' },
+      { key: 'department',           label: '부서',          category: 'master' },
+      // 운영 — 프로젝트/발주
+      { key: 'project',                label: '프로젝트',       category: 'transaction', group: 'project' },
+      { key: 'purchase_order',         label: '발주서',         category: 'transaction', group: 'order' },
+      { key: 'purchase_order_item',    label: '발주 품목',      category: 'transaction', group: 'order' },
+      { key: 'socket_order',           label: '소켓 발주서',    category: 'transaction', group: 'order' },
+      { key: 'socket_order_item',      label: '소켓 발주 품목', category: 'transaction', group: 'order' },
+      // 운영 — 작업지시/LOT
+      { key: 'work_order',             label: '작업지시서',     category: 'transaction', group: 'work' },
+      { key: 'lot_transaction',        label: 'LOT',            category: 'transaction', group: 'lot' },
+      { key: 'lot_number_sequence',    label: 'LOT 시퀀스',     category: 'transaction', group: 'lot' },
+      // 운영 — 검사
+      { key: 'inspection_result',          label: '인수검사',     category: 'transaction', group: 'inspection' },
+      { key: 'process_inspection_result',  label: '공정검사',     category: 'transaction', group: 'inspection' },
+      { key: 'self_inspection_result',     label: '자주검사',     category: 'transaction', group: 'inspection' },
+      { key: 'socket_incoming',            label: '소켓수입검사', category: 'transaction', group: 'inspection' },
+      { key: 'socket_incoming_item',       label: '수입검사 항목',category: 'transaction', group: 'inspection' },
+      // 운영 — 공정실행
+      { key: 'process_execution',      label: '공정 실행',      category: 'transaction', group: 'process' },
+      // 운영 — 출하
+      { key: 'shipment_order',         label: '출하지시서',     category: 'transaction', group: 'shipment' },
+      { key: 'shipment_order_item',    label: '출하 품목',      category: 'transaction', group: 'shipment' },
+      // 운영 — 재고/기타
+      { key: 'inventory_transaction',  label: '재고 이동',      category: 'transaction', group: 'inventory' },
+      { key: 'approval',               label: '결재 기록',      category: 'transaction', group: 'log' },
+      { key: 'audit_logs',             label: '감사 로그',      category: 'transaction', group: 'log' },
+      { key: 'login_attempt',          label: '로그인 기록',    category: 'transaction', group: 'log' },
     ];
 
-    const stats: Array<{ key: string; label: string; category: string; count: number }> = [];
+    const stats: Array<{ key: string; label: string; category: string; group?: string; count: number }> = [];
 
     for (const t of tables) {
       try {
-        const res = await pool.query(`SELECT COUNT(*) as cnt FROM ${t.key}`);
+        const res = await pool.query(`SELECT COUNT(*) as cnt FROM "${t.key}"`);
         stats.push({ ...t, count: parseInt(res.rows[0].cnt, 10) });
       } catch {
         stats.push({ ...t, count: 0 });
@@ -359,5 +377,98 @@ export async function backupRoutes(app: FastifyInstance) {
     }
 
     return { data: stats };
+  });
+
+  // ── POST /api/backup/reset/selective - 선택적 초기화 ──
+  // body: { password: string, tables: string[] }
+  app.post('/api/backup/reset/selective', async (request, reply) => {
+    const body = request.body as { password?: string; tables?: string[] };
+    const password = body?.password || '';
+    const selectedKeys = body?.tables ?? [];
+
+    if (password !== RESET_PASSWORD) {
+      return reply.status(403).send({ error: 'Forbidden', message: '초기화 비밀번호가 일치하지 않습니다.' });
+    }
+    if (!Array.isArray(selectedKeys) || selectedKeys.length === 0) {
+      return reply.status(400).send({ error: 'Bad Request', message: '초기화할 테이블을 선택해주세요.' });
+    }
+
+    // 허용된 테이블 목록 (안전망 — 마스터·시스템 테이블 직접 삭제 방지)
+    const ALLOWED_TABLES = new Set([
+      'project', 'purchase_order', 'purchase_order_item',
+      'socket_order', 'socket_order_item',
+      'work_order', 'lot_transaction', 'lot_number_sequence', 'lot_properties',
+      'inspection_result', 'process_inspection_result', 'self_inspection_result',
+      'socket_incoming', 'socket_incoming_item',
+      'process_execution',
+      'shipment_order', 'shipment_order_item',
+      'inventory_transaction',
+      'approval', 'audit_logs', 'login_attempt',
+      'return_receipt', 'return_receipt_item',
+      // 레거시 (하위 호환)
+      'sales_order', 'sales_order_item', 'order_bom_result',
+      'purchase_request', 'purchase_request_item',
+      'inspection', 'inspection_detail', 'self_inspection',
+    ]);
+
+    const invalid = selectedKeys.filter(k => !ALLOWED_TABLES.has(k));
+    if (invalid.length > 0) {
+      return reply.status(400).send({ error: 'Bad Request', message: `허용되지 않은 테이블: ${invalid.join(', ')}` });
+    }
+
+    // FK 의존성 고려한 고정 삭제 순서
+    const DELETE_ORDER = [
+      'audit_logs', 'login_attempt', 'approval',
+      'shipment_order_item', 'shipment_order',
+      'return_receipt_item', 'return_receipt',
+      'lot_properties', 'lot_number_sequence', 'lot_transaction',
+      'inspection_result', 'process_inspection_result', 'self_inspection_result',
+      'socket_incoming_item', 'socket_incoming',
+      'process_execution',
+      'socket_order_item', 'socket_order',
+      'purchase_order_item', 'purchase_order',
+      'inventory_transaction',
+      'work_order',
+      'project',
+      // 레거시
+      'self_inspection', 'inspection_detail', 'inspection',
+      'purchase_request_item', 'purchase_request',
+      'order_bom_result', 'sales_order_item', 'sales_order',
+    ];
+
+    const ordered = DELETE_ORDER.filter(t => selectedKeys.includes(t));
+    const client = await pool.connect();
+    const resetCounts: Record<string, number> = {};
+
+    try {
+      await client.query('BEGIN');
+
+      for (const tableName of ordered) {
+        try {
+          const countRes = await client.query(`SELECT COUNT(*) as cnt FROM "${tableName}"`);
+          resetCounts[tableName] = parseInt(countRes.rows[0].cnt, 10);
+          await client.query(`TRUNCATE TABLE "${tableName}" CASCADE`);
+        } catch {
+          resetCounts[tableName] = 0;
+        }
+      }
+
+      await client.query('COMMIT');
+
+      return {
+        data: {
+          success: true,
+          mode: 'selective',
+          reset_at: new Date().toISOString(),
+          deleted_counts: resetCounts,
+          total_deleted: Object.values(resetCounts).reduce((a, b) => a + b, 0),
+        },
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   });
 }

@@ -102,6 +102,28 @@ async function migrateOrderTables() {
   try { await pool.query(`ALTER TABLE order_bom_result ADD COLUMN parent_group VARCHAR(30)`); } catch {}
   try { await pool.query(`ALTER TABLE order_bom_result ADD COLUMN source_type VARCHAR(15)`); } catch {}
   try { await pool.query(`ALTER TABLE order_bom_result ADD COLUMN group_sort INTEGER DEFAULT 0`); } catch {}
+  // 재고 상태 콼럼 (OK/PARTIAL/SHORTAGE)
+  await pool.query(`ALTER TABLE order_bom_result ADD COLUMN IF NOT EXISTS stock_status VARCHAR(10)`);
+  await pool.query(`ALTER TABLE order_bom_result ADD COLUMN IF NOT EXISTS stock_snapped_at TIMESTAMPTZ`);
+  // 수주-발주서 연결
+  await pool.query(`ALTER TABLE sales_order ADD COLUMN IF NOT EXISTS po_id INTEGER REFERENCES purchase_order(po_id)`);
+  await pool.query(`ALTER TABLE sales_order_item ADD COLUMN IF NOT EXISTS po_item_id INTEGER REFERENCES purchase_order_item(po_item_id)`);
+  await pool.query(`ALTER TABLE sales_order_item ADD COLUMN IF NOT EXISTS construction_type VARCHAR(10) DEFAULT 'DOUBLE'`);
+  // 소켓 재고 할당 테이블 (수주별 소켓 재고 할당 추적)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS socket_order_allocation (
+      alloc_id      SERIAL PRIMARY KEY,
+      order_id      INTEGER NOT NULL REFERENCES sales_order(order_id) ON DELETE CASCADE,
+      stock_id      INTEGER NOT NULL REFERENCES socket_stock(stock_id) ON DELETE CASCADE,
+      allocated_qty INTEGER NOT NULL DEFAULT 1 CHECK (allocated_qty > 0),
+      note          TEXT,
+      allocated_at  TIMESTAMPTZ DEFAULT NOW(),
+      allocated_by  VARCHAR(50),
+      UNIQUE (order_id, stock_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_soa_order ON socket_order_allocation(order_id);
+    CREATE INDEX IF NOT EXISTS idx_soa_stock ON socket_order_allocation(stock_id);
+  `);
 
   // work_order 컬럼 확장 (VARCHAR 길이 부족 방지)
   try { await pool.query(`ALTER TABLE work_order ALTER COLUMN wo_number TYPE VARCHAR(50)`); } catch {}
@@ -836,7 +858,7 @@ export async function orderRoutes(app: FastifyInstance) {
 
   app.post('/api/orders', async (req) => {
     const body = req.body as any;
-    const { order_date, customer_name, project_name, delivery_date, remarks, items, project_id } = body;
+    const { order_date, customer_name, project_name, delivery_date, remarks, items, project_id, po_id } = body;
 
     const dateStr = (order_date || new Date().toISOString().slice(0, 10)).replace(/-/g, '').slice(2);
     const seqRes = await pool.query(
@@ -848,25 +870,26 @@ export async function orderRoutes(app: FastifyInstance) {
     const totalSets = items?.reduce((s: number, i: any) => s + (i.qty || 1), 0) || 0;
 
     const result = await pool.query(`
-      INSERT INTO sales_order (order_number, order_date, customer_name, project_name, delivery_date, remarks, total_sets, project_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *
-    `, [orderNumber, order_date, customer_name, project_name || null, delivery_date || null, remarks || null, totalSets, project_id || null]);
+      INSERT INTO sales_order (order_number, order_date, customer_name, project_name, delivery_date, remarks, total_sets, project_id, po_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
+    `, [orderNumber, order_date, customer_name, project_name || null, delivery_date || null, remarks || null, totalSets, project_id || null, po_id || null]);
 
     const orderId = result.rows[0].order_id;
 
     if (items && Array.isArray(items)) {
       for (let idx = 0; idx < items.length; idx++) {
         const item = items[idx];
-        // 치수: 사용자 입력 또는 인정구조 기본값
         await pool.query(`
           INSERT INTO sales_order_item (order_id, cert_id, structure_code, qty,
-            opening_w_mm, opening_h_mm, penetration_w_mm, penetration_h_mm, spec_note, sort_order)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            opening_w_mm, opening_h_mm, penetration_w_mm, penetration_h_mm,
+            spec_note, sort_order, po_item_id, construction_type)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         `, [
           orderId, item.cert_id, item.structure_code, item.qty || 1,
           item.opening_w_mm || null, item.opening_h_mm || null,
           item.penetration_w_mm || null, item.penetration_h_mm || null,
           item.spec_note || null, idx,
+          item.po_item_id || null, item.construction_type || 'DOUBLE',
         ]);
       }
     }
@@ -1384,6 +1407,9 @@ export async function orderRoutes(app: FastifyInstance) {
       mat.required_qty = Math.round(mat.required_qty * 100) / 100;
       const shortage = Math.max(0, mat.required_qty - stock);
 
+      // 재고 상태: OK(충분) / PARTIAL(일부) / SHORTAGE(없음)
+      const stockStatus = shortage <= 0 ? 'OK' : stock > 0 ? 'PARTIAL' : 'SHORTAGE';
+
       const hierarchy = resolveHierarchy(mat);
 
       // ★ 그라스울(SM-GW), 세라믹블랭킷(SM-CW): 총합량으로 요약 (개별 라인 spec 나열하지 않음)
@@ -1397,14 +1423,11 @@ export async function orderRoutes(app: FastifyInstance) {
         // 그라스울/세라믹: 대표 spec 1건 + 총합 수량 요약
         const uniqueComponents = [...new Set(mat.details.map(d => d.component))];
         componentName = uniqueComponents.join(', ');
-        // 대표 스펙은 첫 번째 detail의 spec 사용
         const baseSpec = mat.details[0]?.spec || '';
         specDetail = baseSpec;
-        // calc_note: 총합량 요약 (개별 라인 계산식 대신)
         const structureCodes = [...new Set(mat.details.map(d => d.structureCode).filter(Boolean))];
         calcNote = `${structureCodes.join(', ')} 총 ${mat.details.length}건 합산 = ${mat.required_qty}${mat.unit}`;
       } else {
-        // 소켓 본체 등: 기존대로 개별 spec 나열
         componentName = mat.details.map(d => `${d.component}(${d.structureCode})`).join(', ');
         specDetail = mat.details.map(d => d.spec).filter(Boolean).join(' | ');
         calcNote = mat.details.map(d => d.calc).join('\n');
@@ -1413,13 +1436,14 @@ export async function orderRoutes(app: FastifyInstance) {
       await client.query(`
         INSERT INTO order_bom_result (order_id, item_id, item_code, item_name, item_category,
           required_qty, unit, current_stock, shortage_qty, component_name, spec_detail, calc_note,
-          bom_level, parent_group, source_type, group_sort)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+          bom_level, parent_group, source_type, group_sort, stock_status, stock_snapped_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())
       `, [
         orderId, mat.item_id, mat.item_code, mat.item_name, mat.item_category,
         mat.required_qty, mat.unit, stock, shortage,
         componentName, specDetail, calcNote,
         hierarchy.bom_level, hierarchy.parent_group, hierarchy.source_type, hierarchy.group_sort,
+        stockStatus,
       ]);
     }
 
@@ -1582,10 +1606,14 @@ export async function orderRoutes(app: FastifyInstance) {
       return { error: `이미 발주서 ${ep.pr_number} (${ep.status === 'DRAFT' ? '초안' : ep.status === 'SUBMITTED' ? '제출됨' : ep.status === 'APPROVED' ? '승인됨' : ep.status === 'ORDERED' ? '발주완료' : ep.status === 'RECEIVED' ? '입고완료' : ep.status})이 존재합니다. 기존 발주서를 취소 후 재생성하세요.` };
     }
 
-    // RM(배합원료)는 별도 발주서로 관리하므로 제외
+    // 자재발주서: SM 부자재만 (FP 소켓 완제품 및 SOCKET 그룹 저자재 제외)
+    // 소켓은 socket_stock에서 수동 할당 (별도 화면)
     const shortageItems = await pool.query(`
       SELECT * FROM order_bom_result
-      WHERE order_id = $1 AND shortage_qty > 0 AND item_category = 'SM'
+      WHERE order_id = $1
+        AND shortage_qty > 0
+        AND item_category = 'SM'
+        AND (parent_group IS NULL OR parent_group NOT IN ('SOCKET'))
       ORDER BY item_code
     `, [orderId]);
 
@@ -4251,4 +4279,153 @@ export async function orderRoutes(app: FastifyInstance) {
     }
   }
 
+  // ────── 소켓 재고 조회 (수주 BOM 기반 매칭) ──────
+
+  /**
+   * GET /api/orders/:id/socket-stock
+   * BOM의 FP 소켓 항목에 대해 가용 socket_stock 목록 반환
+   * - 수주의 FP 품목(관통구 치수별)과 socket_stock(width_mm×height_mm)을 매칭
+   * - 이미 이 수주에 할당된 내역도 포함
+   */
+  app.get('/api/orders/:id/socket-stock', async (req, reply) => {
+    const orderId = parseInt((req.params as any).id);
+
+    // 1. 이 수주의 FP BOM 항목 (소켓 완제품)
+    const fpBom = await pool.query(`
+      SELECT obr.*
+      FROM order_bom_result obr
+      WHERE obr.order_id = $1 AND obr.item_category = 'FP'
+      ORDER BY obr.item_code
+    `, [orderId]);
+
+    // 2. 이 수주의 각 품목 치수 (penetration_w_mm × h) — 소켓 매칭 기준
+    const orderItems = await pool.query(`
+      SELECT si.order_item_id, si.cert_id, si.qty,
+             si.penetration_w_mm, si.penetration_h_mm,
+             cm.install_qty, cm.install_position, cm.structure_code
+      FROM sales_order_item si
+      JOIN certification_master cm ON cm.cert_id = si.cert_id
+      WHERE si.order_id = $1
+    `, [orderId]);
+
+    // 3. 가용 socket_stock (전체 — 이 수주에 할당된 수량 차감)
+    const stockList = await pool.query(`
+      SELECT ss.*,
+             pm.project_name,
+             COALESCE(used.total_allocated, 0) AS total_allocated,
+             ss.qty - COALESCE(used.total_allocated, 0) AS available_qty
+      FROM socket_stock ss
+      LEFT JOIN project_master pm ON pm.project_id = ss.project_id
+      LEFT JOIN (
+        SELECT stock_id, SUM(allocated_qty) AS total_allocated
+        FROM socket_order_allocation
+        GROUP BY stock_id
+      ) used ON used.stock_id = ss.stock_id
+      WHERE ss.qty > 0
+      ORDER BY ss.updated_at DESC
+    `);
+
+    // 4. 이 수주에 할당된 내역
+    const myAllocs = await pool.query(`
+      SELECT soa.*, ss.product_type, ss.width_mm, ss.height_mm, ss.depth_mm,
+             pm.project_name AS stock_project_name
+      FROM socket_order_allocation soa
+      JOIN socket_stock ss ON ss.stock_id = soa.stock_id
+      LEFT JOIN project_master pm ON pm.project_id = ss.project_id
+      WHERE soa.order_id = $1
+    `, [orderId]);
+
+    return {
+      data: {
+        bom_fp_items: fpBom.rows,
+        order_items: orderItems.rows,
+        available_stock: stockList.rows.filter((s: any) => Number(s.available_qty) > 0),
+        my_allocations: myAllocs.rows,
+      }
+    };
+  });
+
+  /**
+   * POST /api/orders/:id/allocate-socket
+   * body: { stock_id: number, qty: number, note?: string }
+   * 소켓 재고를 이 수주에 할당
+   */
+  app.post('/api/orders/:id/allocate-socket', async (req, reply) => {
+    const orderId = parseInt((req.params as any).id);
+    const { stock_id, qty, note } = req.body as any;
+
+    if (!stock_id || !qty || qty < 1) {
+      return reply.code(400).send({ error: 'stock_id와 qty(>=1)가 필요합니다.' });
+    }
+
+    // 가용 재고 확인
+    const stockRes = await pool.query(`
+      SELECT ss.qty - COALESCE(SUM(soa.allocated_qty), 0) AS available_qty
+      FROM socket_stock ss
+      LEFT JOIN socket_order_allocation soa ON soa.stock_id = ss.stock_id
+      WHERE ss.stock_id = $1
+      GROUP BY ss.qty
+    `, [stock_id]);
+
+    const available = Number(stockRes.rows[0]?.available_qty ?? 0);
+    if (available < qty) {
+      return reply.code(409).send({ error: `가용 재고 ${available}개 부족. 요청 ${qty}개.` });
+    }
+
+    // 할당 (이미 있으면 수량 추가)
+    const result = await pool.query(`
+      INSERT INTO socket_order_allocation (order_id, stock_id, allocated_qty, note)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (order_id, stock_id) DO UPDATE
+        SET allocated_qty = socket_order_allocation.allocated_qty + $3,
+            note = COALESCE($4, socket_order_allocation.note),
+            allocated_at = NOW()
+      RETURNING *
+    `, [orderId, stock_id, qty, note || null]);
+
+    return { data: result.rows[0] };
+  });
+
+  /**
+   * DELETE /api/orders/:id/allocate-socket/:allocId
+   * 소켓 할당 해제
+   */
+  app.delete('/api/orders/:id/allocate-socket/:allocId', async (req, reply) => {
+    const orderId = parseInt((req.params as any).id);
+    const allocId = parseInt((req.params as any).allocId);
+
+    const res = await pool.query(`
+      DELETE FROM socket_order_allocation
+      WHERE alloc_id = $1 AND order_id = $2
+      RETURNING *
+    `, [allocId, orderId]);
+
+    if (res.rows.length === 0) return reply.code(404).send({ error: 'not_found' });
+    return { data: { success: true } };
+  });
+
+  /**
+   * PATCH /api/orders/:id/allocate-socket/:allocId
+   * 할당 수량 수정
+   */
+  app.patch('/api/orders/:id/allocate-socket/:allocId', async (req, reply) => {
+    const orderId = parseInt((req.params as any).id);
+    const allocId = parseInt((req.params as any).allocId);
+    const { qty } = req.body as any;
+
+    if (!qty || qty < 1) return reply.code(400).send({ error: 'qty(>=1)가 필요합니다.' });
+
+    const res = await pool.query(`
+      UPDATE socket_order_allocation
+      SET allocated_qty = $1, allocated_at = NOW()
+      WHERE alloc_id = $2 AND order_id = $3
+      RETURNING *
+    `, [qty, allocId, orderId]);
+
+    if (res.rows.length === 0) return reply.code(404).send({ error: 'not_found' });
+    return { data: res.rows[0] };
+  });
+
 }
+
+

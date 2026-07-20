@@ -829,7 +829,7 @@ function SocketOrderPreview({ soId }: { soId: number }) {
         add(1.6, 60, Math.round(w/2-16), q*16); add(1.6, 60, Math.round(h/2-20), q*32);
         add(1.6, 225, Math.round(w/2-16), q*8); add(1.6, 237, h-1, q*4); break;
       case 'VAG-1.69':
-        add(1.6, 60, sw-1, q*4); add(1.6, 60, h-30, q*4); break;
+        add(1.6, 60, sw-5, q*4); add(1.6, 204, sw-5, q*4); break;
       case 'HTG-064': case 'HTG-064DC':
         add(1.6, 60, w-5, q*2); add(1.6, 274, w-5, q*2);
         add(1.6, 60, h-35, q*4); add(1.6, 50, h, q*3); break;

@@ -34,30 +34,30 @@ function calcBrackets(code: string, w: number, h: number, q: number) {
   };
   switch (code) {
     case 'VT-049': case 'VT-064': case 'VA-064':
-      add(1.6, 60,  w - 1,  q * 4, '\uC0C1\uD558 \uBE0C\uB77C\uCF13');
-      add(1.6, 60,  h - 30, q * 4, '\uC88C\uC6B0 \uBE0C\uB77C\uCF13');
+      add(1.6, 60,  w - 1,  q * 4, '상하 브라켓');
+      add(1.6, 60,  h - 30, q * 4, '좌우 브라켓');
       break;
     case 'VT-01':
-      add(1.6, 60,  Math.round(w / 2 - 16), q * 16, '\uC0C1\uD558 \uBE0C\uB77C\uCF13');
-      add(1.6, 60,  Math.round(h / 2 - 20), q * 32, '\uC88C\uC6B0 \uBE0C\uB77C\uCF13');
-      add(1.6, 225, Math.round(w / 2 - 16), q * 8,  '\uC911\uC559 \uBC1B\uCE68\uB300');
-      add(1.6, 237, h - 1,                  q * 4,  '\uC138\uB85C \uBCF4\uAC15\uB300');
+      add(1.6, 60,  Math.round(w / 2 - 16), q * 16, '상하소 브라켓');
+      add(1.6, 60,  Math.round(h / 2 - 20), q * 32, '좌우소 브라켓');
+      add(1.6, 225, Math.round(w / 2 - 16), q * 8,  '중앙 받침대');
+      add(1.6, 237, h - 1,                  q * 4,  '세로 보강대');
       break;
     case 'VAG-1.69':
-      add(1.6, 60,  sw - 1,  q * 4, '\uC0C1\uD558 \uBE0C\uB77C\uCF13');
-      add(1.6, 60,  h - 30,  q * 4, '\uC88C\uC6B0 \uBE0C\uB77C\uCF13');
+      add(1.6, 60,  sw - 5,  q * 4, '상하평철1 브라켓');
+      add(1.6, 204, sw - 5,  q * 4, '상하평철2 브라켓');
       break;
     case 'HTG-064': case 'HTG-064DC':
-      add(1.6, 60,  w - 5,  q * 2, '\uC0C1\uD558 \uBE0C\uB77C\uCF13A');
-      add(1.6, 274, w - 5,  q * 2, '\uC0C1\uD558 \uBE0C\uB77C\uCF13B');
-      add(1.6, 60,  h - 35, q * 4, '\uC88C\uC6B0 \uBE0C\uB77C\uCF13');
-      add(1.6, 50,  h,      q * 3, '\uBCF4\uAC15\uB300');
+      add(1.6, 60,  w - 5,  q * 2, '상하평철1 브라켓');
+      add(1.6, 274, w - 5,  q * 2, '상하평철2 브라켓');
+      add(1.6, 60,  h - 35, q * 4, '좌우 브라켓');
+      add(1.6, 50,  h,      q * 3, '보강대(소켓하부)');
       break;
     case 'HTG-1.69':
-      add(1.6, 60,  sw - 5,  q * 4, '\uC0C1\uD558 \uBE0C\uB77C\uCF13A');
-      add(1.6, 274, sw - 5,  q * 4, '\uC0C1\uD558 \uBE0C\uB77C\uCF13B');
-      add(1.6, 60,  h - 35,  q * 4, '\uC88C\uC6B0 \uBE0C\uB77C\uCF13');
-      add(1.6, 50,  h,       q * 6, '\uBCF4\uAC15\uB300');
+      add(1.6, 60,  sw - 5,  q * 4, '상하평철1 브라켓');
+      add(1.6, 274, sw - 5,  q * 4, '상하평철2 브라켓');
+      add(1.6, 60,  h - 35,  q * 4, '좌우 브라켓');
+      add(1.6, 50,  h,       q * 6, '보강대(소켓하부)');
       break;
   }
   return rows;

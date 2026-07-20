@@ -1,0 +1,658 @@
+[
+  {
+    "item_id": 2606,
+    "item_code": "FP-BD-FL-GI-L",
+    "item_name": "BD플래싱(아연도금,대형)",
+    "spec": "아연도금 t1.6, W175×L1100",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 2607,
+    "item_code": "FP-BD-FL-GI-S",
+    "item_name": "BD플래싱(아연도금,소형)",
+    "spec": "아연도금 t1.6, W95×L195",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 2605,
+    "item_code": "FP-BD-FL-SUS",
+    "item_name": "BD플래싱(SUS304)",
+    "spec": "SUS304 t0.5, W190×L380",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 32,
+    "item_code": "FP-FL-I",
+    "item_name": "플래싱(I형)",
+    "spec": "W125×L1000",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 34,
+    "item_code": "FP-FL-L",
+    "item_name": "플래싱(L형)",
+    "spec": "W185×L1000",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 33,
+    "item_code": "FP-FL-Z",
+    "item_name": "플래싱(Z형)",
+    "spec": "W170×L1000",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 74,
+    "item_code": "FP-FN-100A",
+    "item_name": "발포소켓(100A)",
+    "spec": "100A",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 75,
+    "item_code": "FP-FN-75A",
+    "item_name": "발포소켓(75A)",
+    "spec": "75A",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 36,
+    "item_code": "FP-FN100",
+    "item_name": "내화충전발포소켓 100A",
+    "spec": "100A",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 73,
+    "item_code": "FP-GAP-SH",
+    "item_name": "틈새복합시트",
+    "spec": "200×1000",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 30,
+    "item_code": "FP-HTG064",
+    "item_name": "방화소켓(HTG-064)",
+    "spec": "HMG300C 바닥",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 29,
+    "item_code": "FP-HTG169",
+    "item_name": "방화소켓(HTG-1.69)",
+    "spec": "HTG300C 바닥 2개조립",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 31,
+    "item_code": "FP-HTGDC064",
+    "item_name": "방화소켓(HTG(DC)-064)",
+    "spec": "HMG300 바닥 DC형",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 76,
+    "item_code": "FP-STRUCT",
+    "item_name": "구조체",
+    "spec": "발주별 SET",
+    "item_category": "FP",
+    "unit": "SET"
+  },
+  {
+    "item_id": 35,
+    "item_code": "FP-TS",
+    "item_name": "틈새복합시트(200×1000)",
+    "spec": "200×1000",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 26,
+    "item_code": "FP-VA064",
+    "item_name": "방화소켓(VA-064)",
+    "spec": "VM200 벽체 4면",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 27,
+    "item_code": "FP-VAG169",
+    "item_name": "방화소켓(VAG-1.69)",
+    "spec": "VTG200 벽체 2개조립",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 2554,
+    "item_code": "FP-VS01",
+    "item_name": "방화소켓(VS-01)",
+    "spec": "VS200+VG200 벽체 2소켓",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 23,
+    "item_code": "FP-VT01",
+    "item_name": "방화소켓(VT-01)",
+    "spec": "VT200 벽체",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 24,
+    "item_code": "FP-VT049",
+    "item_name": "방화소켓(VT-049)",
+    "spec": "VM200 벽체",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 25,
+    "item_code": "FP-VT064",
+    "item_name": "방화소켓(VT-064)",
+    "spec": "VM200 벽체",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 28,
+    "item_code": "FP-VTI064",
+    "item_name": "방화소켓(VTI-064)",
+    "spec": "VIG200 벽체",
+    "item_category": "FP",
+    "unit": "EA"
+  },
+  {
+    "item_id": 3,
+    "item_code": "RM-EA",
+    "item_name": "EVA-EA33045",
+    "spec": "배합원료",
+    "item_category": "RM",
+    "unit": "kg"
+  },
+  {
+    "item_id": 2,
+    "item_code": "RM-EG50",
+    "item_name": "팽창흑연 #50",
+    "spec": "배합원료",
+    "item_category": "RM",
+    "unit": "kg"
+  },
+  {
+    "item_id": 4,
+    "item_code": "RM-EP",
+    "item_name": "EVA-EP100",
+    "spec": "배합원료",
+    "item_category": "RM",
+    "unit": "kg"
+  },
+  {
+    "item_id": 1,
+    "item_code": "RM-MB",
+    "item_name": "난연컴파운드(PE3005MB)",
+    "spec": "배합원료",
+    "item_category": "RM",
+    "unit": "kg"
+  },
+  {
+    "item_id": 22,
+    "item_code": "SA-CUT-FL",
+    "item_name": "재단(플래싱용)",
+    "spec": "규격별",
+    "item_category": "SA",
+    "unit": "매"
+  },
+  {
+    "item_id": 21,
+    "item_code": "SA-CUT-SK",
+    "item_name": "재단(소켓용)",
+    "spec": "규격별",
+    "item_category": "SA",
+    "unit": "매"
+  },
+  {
+    "item_id": 20,
+    "item_code": "SA-EXT-4125",
+    "item_name": "압출 플래싱차열시트 4T×125(Z형)",
+    "spec": "4T×125mm",
+    "item_category": "SA",
+    "unit": "m"
+  },
+  {
+    "item_id": 58,
+    "item_code": "SA-EXT-4125Z",
+    "item_name": "압출(4T-125) Z형",
+    "spec": "4T×125mm 플래싱",
+    "item_category": "SA",
+    "unit": "m"
+  },
+  {
+    "item_id": 19,
+    "item_code": "SA-EXT-5125",
+    "item_name": "압출 플래싱차열시트 5T×125(I형)",
+    "spec": "5T×125mm",
+    "item_category": "SA",
+    "unit": "m"
+  },
+  {
+    "item_id": 57,
+    "item_code": "SA-EXT-5125I",
+    "item_name": "압출(5T-125) I형",
+    "spec": "5T×125mm 플래싱",
+    "item_category": "SA",
+    "unit": "m"
+  },
+  {
+    "item_id": 17,
+    "item_code": "SA-EXT-5190",
+    "item_name": "압출(5T-190) 소켓용",
+    "spec": "5T×190mm",
+    "item_category": "SA",
+    "unit": "m"
+  },
+  {
+    "item_id": 18,
+    "item_code": "SA-EXT-65415",
+    "item_name": "압출(6.5T-415) FN용",
+    "spec": "6.5T×415mm",
+    "item_category": "SA",
+    "unit": "m"
+  },
+  {
+    "item_id": 16,
+    "item_code": "SA-MIX-MB",
+    "item_name": "인정배합",
+    "spec": "C-601 준수",
+    "item_category": "SA",
+    "unit": "kg"
+  },
+  {
+    "item_id": 46,
+    "item_code": "SM-CW-100",
+    "item_name": "세라믹차열재(100K)",
+    "spec": "밀도100kg/m³, t50, W600",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 45,
+    "item_code": "SM-CW-128",
+    "item_name": "세라믹차열재(128K)",
+    "spec": "밀도128kg/m³, t50, W600",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 2635,
+    "item_code": "SM-CW-128-25",
+    "item_name": "세라믹차열재 128K t25 W200",
+    "spec": "밀도128kg/m³, t25, W200 (블랭킷)",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 3535,
+    "item_code": "SM-CW-251507400",
+    "item_name": "100K수입 25T × 150W × 7400L",
+    "spec": "100K수입 25T × 150W × 7400L",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 3530,
+    "item_code": "SM-CW-252007320",
+    "item_name": "96K국산 25T × 200W × 7320L",
+    "spec": "96K국산 25T × 200W × 7320L",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 3541,
+    "item_code": "SM-CW-252007400",
+    "item_name": "128K수입 25T × 200W × 7400L",
+    "spec": "128K수입 25T × 200W × 7400L",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 3531,
+    "item_code": "SM-CW-253007320",
+    "item_name": "96K국산 25T × 300W × 7320L",
+    "spec": "96K국산 25T × 300W × 7320L",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 3542,
+    "item_code": "SM-CW-253007400",
+    "item_name": "100K수입 25T × 300W × 7400L",
+    "spec": "100K수입 25T × 300W × 7400L",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 3536,
+    "item_code": "SM-CW-381504800",
+    "item_name": "96K수입 38T × 150W × 4800L",
+    "spec": "96K수입 38T × 150W × 4800L",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 3532,
+    "item_code": "SM-CW-386004800",
+    "item_name": "100K수입 38T × 600W × 4800L",
+    "spec": "100K수입 38T × 600W × 4800L",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 3540,
+    "item_code": "SM-CW-5010003600",
+    "item_name": "96K수입 50T × 1000W × 3600L",
+    "spec": "96K수입 50T × 1000W × 3600L",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 3537,
+    "item_code": "SM-CW-501503600",
+    "item_name": "96K수입 50T × 150W × 3600L",
+    "spec": "96K수입 50T × 150W × 3600L",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 3538,
+    "item_code": "SM-CW-504003600",
+    "item_name": "96K수입 50T × 400W × 3600L",
+    "spec": "96K수입 50T × 400W × 3600L",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 3533,
+    "item_code": "SM-CW-504003800",
+    "item_name": "96K국산 50T × 400W × 3800L",
+    "spec": "96K국산 50T × 400W × 3800L",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 3539,
+    "item_code": "SM-CW-506003600",
+    "item_name": "100K수입 50T × 600W × 3600L",
+    "spec": "100K수입 50T × 600W × 3600L",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 3534,
+    "item_code": "SM-CW-506103600",
+    "item_name": "96K국산 50T × 610W × 3600L",
+    "spec": "96K국산 50T × 610W × 3600L",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 47,
+    "item_code": "SM-CW-96",
+    "item_name": "세라믹차열재(96K)",
+    "spec": "밀도96kg/m³, t25~50, W200~600",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 2631,
+    "item_code": "SM-CW-96-25W2",
+    "item_name": "세라믹차열재 96K t25 W200",
+    "spec": "밀도96kg/m³, t25, W200 (블랭킷 벽체)",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 2632,
+    "item_code": "SM-CW-96-25W3",
+    "item_name": "세라믹차열재 96K t25 W300",
+    "spec": "밀도96kg/m³, t25, W300 (블랭킷 바닥)",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 2634,
+    "item_code": "SM-CW-96-38",
+    "item_name": "세라믹차열재 96K t38 W600",
+    "spec": "밀도96kg/m³, t38, W600 (지지구조 1.69)",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 2633,
+    "item_code": "SM-CW-96-50",
+    "item_name": "세라믹차열재 96K t50 W600",
+    "spec": "밀도96kg/m³, t50, W600 (지지구조)",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 9,
+    "item_code": "SM-CW100",
+    "item_name": "세라믹차열재 100K",
+    "spec": "밀도100kg/m³, t50, W600",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 8,
+    "item_code": "SM-CW128",
+    "item_name": "세라믹차열재 128K",
+    "spec": "밀도128kg/m³, t50, W600",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 10,
+    "item_code": "SM-CW96",
+    "item_name": "세라믹차열재 96K",
+    "spec": "밀도96kg/m³, t50, W600",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 14,
+    "item_code": "SM-FN",
+    "item_name": "발포소켓 몸체(FN테크)",
+    "spec": "100A용",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 51,
+    "item_code": "SM-FN-SK",
+    "item_name": "발포소켓(FN Tech)",
+    "spec": "규격별",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 5,
+    "item_code": "SM-GI-I",
+    "item_name": "강재류 아연도금강판(I형)",
+    "spec": "W125, L1000, t0.5",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 2626,
+    "item_code": "SM-GI-I-10",
+    "item_name": "강재류 아연도금강판(I형) L1000",
+    "spec": "SGCC t0.5, W125×L1000",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 6,
+    "item_code": "SM-GI-L",
+    "item_name": "강재류 아연도금강판(L형)",
+    "spec": "W185, L1000, t0.5",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 2628,
+    "item_code": "SM-GI-L-10",
+    "item_name": "강재류 아연도금강판(L형) L1000",
+    "spec": "SGCC t0.5, W185×L1000",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 7,
+    "item_code": "SM-GI-Z",
+    "item_name": "강재류 아연도금강판(Z형)",
+    "spec": "W215, L1000, t0.5",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 2627,
+    "item_code": "SM-GI-Z-10",
+    "item_name": "강재류 아연도금강판(Z형) L1000",
+    "spec": "SGCC t0.5, W215×L1000",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 52,
+    "item_code": "SM-GP",
+    "item_name": "고정자재",
+    "spec": "아연도금강판 SGCC, L1000×H200×t0.5",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 2629,
+    "item_code": "SM-GP-10",
+    "item_name": "고정자재 L1000",
+    "spec": "아연도금강판 SGCC t0.5, L1000",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 48,
+    "item_code": "SM-GW-24",
+    "item_name": "그라스울(24K)",
+    "spec": "밀도24kg/m³, t25, W1400",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 2637,
+    "item_code": "SM-GW-24-10",
+    "item_name": "그라스울 24K W1000",
+    "spec": "밀도24kg/m³, t25, W1000",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 2636,
+    "item_code": "SM-GW-24-14",
+    "item_name": "그라스울 24K W1400",
+    "spec": "밀도24kg/m³, t25, W1400",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 11,
+    "item_code": "SM-GW24",
+    "item_name": "글라스울 24K",
+    "spec": "밀도24kg/m³, t25, W1400",
+    "item_category": "SM",
+    "unit": "M"
+  },
+  {
+    "item_id": 12,
+    "item_code": "SM-PE",
+    "item_name": "PE보온재",
+    "spec": "관통부 보온",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 49,
+    "item_code": "SM-PE-INS",
+    "item_name": "PE보온재",
+    "spec": "관통부 보온",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 2301,
+    "item_code": "SM-SCREW",
+    "item_name": "직결피스(#8x64)",
+    "spec": "#8×64mm, 간격237mm이하",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 50,
+    "item_code": "SM-SIL",
+    "item_name": "실란트",
+    "spec": "실리콘실란트",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 2630,
+    "item_code": "SM-SK-BODY",
+    "item_name": "금속소켓 본체(아연도금강판)",
+    "spec": "아연도금강판 SGCC t1.6, 소켓본체",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 15,
+    "item_code": "SM-SP",
+    "item_name": "보호철판",
+    "spec": "소켓 보호용",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 42,
+    "item_code": "SM-STL-I",
+    "item_name": "강재류(I형)",
+    "spec": "W125×L1000, T:0.5",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 43,
+    "item_code": "SM-STL-L",
+    "item_name": "강재류(L형)",
+    "spec": "W185×L1000, T:0.5",
+    "item_category": "SM",
+    "unit": "EA"
+  },
+  {
+    "item_id": 44,
+    "item_code": "SM-STL-Z",
+    "item_name": "강재류(Z형)",
+    "spec": "W215×L1000, T:0.5",
+    "item_category": "SM",
+    "unit": "EA"
+  }
+]

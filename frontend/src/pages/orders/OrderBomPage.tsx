@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
+import { X } from 'lucide-react';
 
 /* ─── 타입 ─── */
 interface Structure {
@@ -127,9 +128,27 @@ export default function OrderBomPage() {
   const [form, setForm] = useState({
     order_date: new Date().toISOString().slice(0, 10),
     customer_name: '', project_name: '', project_id: null as number | null,
-    delivery_date: '', remarks: '',
+    delivery_date: '', remarks: '', po_id: null as number | null,
   });
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
+
+  // 발주서 선택 관련 상태
+  const [purchaseOrders, setPurchaseOrders] = useState<any[]>([]);
+  const [poLoading, setPoLoading] = useState(false);
+  const [poDropOpen, setPoDropOpen] = useState(false);
+  const [poSearch, setPoSearch] = useState('');
+  const [poLoadWarning, setPoLoadWarning] = useState<string | null>(null);
+
+  // 소켓 재고 선택 패널 상태
+  const [socketPanel, setSocketPanel] = useState<{
+    open: boolean;
+    data: any | null;  // { bom_fp_items, order_items, available_stock, my_allocations }
+    loading: boolean;
+    allocating: boolean;
+    inputQty: Record<number, number>; // stock_id -> qty
+  }>({
+    open: false, data: null, loading: false, allocating: false, inputQty: {},
+  });
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -164,7 +183,81 @@ export default function OrderBomPage() {
     fetchStructures();
     fetchCompanies();
     fetchProjects();
+    // 발주서 목록 로드
+    api.get<{ data: any[] }>('/purchase-orders?status=ACTIVE').then(r => {
+      setPurchaseOrders((r.data || []).filter((p: any) => p.source_type === 'PO'));
+    }).catch(() => {});
   }, [fetchOrders, fetchStructures, fetchCompanies, fetchProjects]);
+
+  /* ─── 발주서에서 수주 품목 자동입력 ─── */
+  const loadFromPO = async (poId: number) => {
+    setPoLoading(true);
+    setPoLoadWarning(null);
+    try {
+      const r = await api.get<{ data: any }>(`/purchase-orders/${poId}/items-for-order`);
+      const { po, items, summary } = r.data;
+      // 기본 정보 자동입력
+      setForm(f => ({
+        ...f,
+        po_id: poId,
+        project_name: f.project_name || po.project_name || '',
+        delivery_date: f.delivery_date || po.delivery_date?.slice(0, 10) || '',
+      }));
+      // 매핑된 품목 자동입력
+      const mapped = items.filter((i: any) => i.cert_id && i.mapped);
+      setOrderItems(mapped.map((i: any) => ({
+        cert_id: i.cert_id,
+        structure_code: i.structure_code || '',
+        structure_name: i.structure_name || '',
+        qty: i.qty || 1,
+        opening_w_mm: i.opening_w_mm || 0,
+        opening_h_mm: i.opening_h_mm || 0,
+        penetration_w_mm: i.penetration_w_mm || 0,
+        penetration_h_mm: i.penetration_h_mm || 0,
+        install_qty: i.install_qty || 1,
+        spec_note: i.sheet_name || '',
+        po_item_id: i.po_item_id,
+        construction_type: i.construction_type || 'DOUBLE',
+      })));
+      if (summary.unmapped > 0) {
+        setPoLoadWarning(`⚠️ ${summary.unmapped}건은 인정구조 자동매핑 실패 — 수동으로 추가해주세요.`);
+      }
+    } catch { setPoLoadWarning('발주서 품목 로드 실패'); }
+    finally { setPoLoading(false); }
+  };
+
+  /* ─── 소켓 재고 로드 ─── */
+  const loadSocketStock = async () => {
+    if (!selectedOrder) return;
+    setSocketPanel(p => ({ ...p, open: true, loading: true }));
+    try {
+      const r = await api.get<{ data: any }>(`/orders/${selectedOrder.order_id}/socket-stock`);
+      setSocketPanel(p => ({ ...p, data: r.data, loading: false, inputQty: {} }));
+    } catch {
+      setSocketPanel(p => ({ ...p, loading: false }));
+    }
+  };
+
+  /* ─── 소켓 할당 ─── */
+  const allocateSocket = async (stockId: number) => {
+    if (!selectedOrder) return;
+    const qty = socketPanel.inputQty[stockId] || 1;
+    setSocketPanel(p => ({ ...p, allocating: true }));
+    try {
+      await api.post(`/orders/${selectedOrder.order_id}/allocate-socket`, { stock_id: stockId, qty });
+      await loadSocketStock(); // 새로고침
+    } catch (e: any) { alert(e.message || '할당 실패'); }
+    finally { setSocketPanel(p => ({ ...p, allocating: false })); }
+  };
+
+  /* ─── 소켓 할당 해제 ─── */
+  const deallocateSocket = async (allocId: number) => {
+    if (!selectedOrder || !confirm('할당을 해제하시겠습니까?')) return;
+    try {
+      await api.delete(`/orders/${selectedOrder.order_id}/allocate-socket/${allocId}`);
+      await loadSocketStock();
+    } catch (e: any) { alert(e.message || '해제 실패'); }
+  };
 
   const selectOrder = async (order: Order) => {
     setShowNewForm(false); setShowExcelUpload(false); setExcelPreview(null);
@@ -373,11 +466,15 @@ export default function OrderBomPage() {
           cert_id: it.cert_id, structure_code: it.structure_code, qty: it.qty,
           penetration_w_mm: it.penetration_w_mm || null, penetration_h_mm: it.penetration_h_mm || null,
           opening_w_mm: it.opening_w_mm || null, opening_h_mm: it.opening_h_mm || null,
+          po_item_id: (it as any).po_item_id || null,
+          construction_type: (it as any).construction_type || 'DOUBLE',
         })),
       });
       setShowNewForm(false);
-      setForm({ order_date: new Date().toISOString().slice(0, 10), customer_name: '', project_name: '', project_id: null, delivery_date: '', remarks: '' });
+      setForm({ order_date: new Date().toISOString().slice(0, 10), customer_name: '', project_name: '', project_id: null, delivery_date: '', remarks: '', po_id: null });
       setProjectSearch('');
+      setPoSearch('');
+      setPoLoadWarning(null);
       setOrderItems([]);
       await fetchOrders();
       if (r.data) selectOrder(r.data);
@@ -527,6 +624,61 @@ export default function OrderBomPage() {
           {showNewForm && (
             <div className="bg-white rounded-xl border shadow-sm p-5">
               <h3 className="font-semibold text-gray-800 mb-3">신규 수주 등록</h3>
+
+              {/* 발주서 연동 박스 */}
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-blue-800">📋 발주서에서 자동입력</span>
+                  {form.po_id && (
+                    <button onClick={() => { setForm(f => ({ ...f, po_id: null })); setOrderItems([]); setPoLoadWarning(null); }}
+                      className="text-xs text-red-500 hover:text-red-700">연결 해제</button>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={poSearch}
+                    onChange={e => { setPoSearch(e.target.value); setPoDropOpen(true); }}
+                    onFocus={() => setPoDropOpen(true)}
+                    onBlur={() => setTimeout(() => setPoDropOpen(false), 200)}
+                    placeholder={form.po_id ? `발주서 #${form.po_id} 연결됨` : '발주서 검색 (현장명)...'}
+                    className={`w-full px-3 py-2 border rounded-lg text-sm outline-none focus:border-blue-500 ${
+                      form.po_id ? 'border-blue-400 bg-blue-50' : ''
+                    }`}
+                  />
+                  {poLoading && <span className="absolute right-3 top-2.5 text-xs text-blue-500">로딩...</span>}
+                  {poDropOpen && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                      {purchaseOrders
+                        .filter(po => !poSearch || (po.project_name || '').includes(poSearch) || (po.biz_name || '').includes(poSearch))
+                        .slice(0, 20)
+                        .map(po => (
+                          <button key={po.po_id} type="button"
+                            onMouseDown={() => { loadFromPO(po.po_id); setPoSearch(po.project_name || ''); setPoDropOpen(false); }}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors ${
+                              form.po_id === po.po_id ? 'bg-blue-50 text-blue-700 font-bold' : 'text-slate-700'
+                            }`}
+                          >
+                            <span className="font-semibold">{po.project_name || '(현장명 없음)'}</span>
+                            <span className="ml-2 text-xs text-slate-400">{po.biz_name} | {po.item_count}건</span>
+                          </button>
+                        ))}
+                      {purchaseOrders.filter(po => !poSearch || (po.project_name || '').includes(poSearch)).length === 0 && (
+                        <div className="px-3 py-3 text-sm text-slate-400 text-center">검색 결과 없음</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {poLoadWarning && (
+                  <div className="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">{poLoadWarning}</div>
+                )}
+                {form.po_id && orderItems.length > 0 && (
+                  <div className="mt-2 text-xs text-green-700">
+                    ✅ {orderItems.length}건 자동입력 완료 — 아래에서 수량·치수 확인 후 등록하세요
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div>
                   <label className="text-xs text-gray-500">수주일</label>
@@ -987,6 +1139,12 @@ export default function OrderBomPage() {
                             <div className="text-xs text-gray-400">
                               소요 {items.length} / 부족 {items.filter(r => Number(r.shortage_qty) > 0).length}
                             </div>
+                            {key === 'FP' && items.length > 0 && (
+                              <button onClick={loadSocketStock}
+                                className="mt-1.5 w-full text-[10px] px-2 py-1 bg-violet-600 text-white rounded hover:bg-violet-700 font-medium">
+                                📳 소켓 재고 선택
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -1012,6 +1170,7 @@ export default function OrderBomPage() {
                                 <th className="py-1.5 text-right">롤수</th>
                                 <th className="py-1.5 text-right">현재고</th>
                                 <th className="py-1.5 text-right">부족량</th>
+                                <th className="py-1.5 text-center">상태</th>
                                 <th className="py-1.5 text-left">산출근거</th>
                               </tr>
                             </thead>
@@ -1020,8 +1179,19 @@ export default function OrderBomPage() {
                                 const rollLen = r.roll_length_m ? Number(r.roll_length_m) : null;
                                 const rollCount = rollLen && rollLen > 0 && (r.unit === 'M' || r.unit === 'm')
                                   ? Math.ceil(Number(r.required_qty) / rollLen) : null;
+                                const stockStatus = (r as any).stock_status ||
+                                  (Number(r.shortage_qty) <= 0 ? 'OK' : Number(r.current_stock) > 0 ? 'PARTIAL' : 'SHORTAGE');
+                                const statusBadge = ({
+                                  OK:       { icon: '✅', cls: 'text-green-700 bg-green-50',  label: '충분' },
+                                  PARTIAL:  { icon: '⚠️', cls: 'text-amber-700 bg-amber-50',  label: '일부' },
+                                  SHORTAGE: { icon: '❌', cls: 'text-red-700 bg-red-50',     label: '없음' },
+                                } as Record<string, { icon: string; cls: string; label: string }>)[stockStatus]
+                                  ?? { icon: '❓', cls: 'text-gray-500 bg-gray-50', label: '-' };
                                 return (
-                                <tr key={r.result_id} className={`${Number(r.shortage_qty) > 0 ? 'bg-red-50' : ''}`}>
+                                <tr key={r.result_id} className={`${
+                                  stockStatus === 'SHORTAGE' ? 'bg-red-50' :
+                                  stockStatus === 'PARTIAL'  ? 'bg-amber-50/40' : ''
+                                }`}>
                                   <td className="py-1.5 font-mono">{r.item_code}</td>
                                   <td className="py-1.5">{r.item_name}</td>
                                   <td className="py-1.5 text-right font-mono">{Number(r.required_qty).toLocaleString()}</td>
@@ -1036,8 +1206,16 @@ export default function OrderBomPage() {
                                     ) : <span className="text-gray-300">-</span>}
                                   </td>
                                   <td className="py-1.5 text-right font-mono">{Number(r.current_stock).toLocaleString()}</td>
-                                  <td className={`py-1.5 text-right font-mono font-medium ${Number(r.shortage_qty) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                  <td className={`py-1.5 text-right font-mono font-medium ${
+                                    Number(r.shortage_qty) > 0 ? 'text-red-600' : 'text-green-600'
+                                  }`}>
                                     {Number(r.shortage_qty) > 0 ? `-${Number(r.shortage_qty).toLocaleString()}` : '충분'}
+                                  </td>
+                                  <td className="py-1.5 text-center">
+                                    <span className={`inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${statusBadge.cls}`}
+                                      title={`인수검사 합격 재고 기준`}>
+                                      {statusBadge.icon} {statusBadge.label}
+                                    </span>
                                   </td>
                                   <td className="py-1.5">
                                     <button onClick={() => setExpandedCalc(expandedCalc === r.result_id ? null : r.result_id)}
@@ -1058,6 +1236,127 @@ export default function OrderBomPage() {
                         </div>
                       ))}
                     </>
+                  )}
+
+                  {/* ══ 소켓 재고 선택 패널 ══ */}
+                  {socketPanel.open && (
+                    <div className="border-t">
+                      <div className="flex items-center justify-between px-4 py-2 bg-violet-50 border-b">
+                        <span className="text-sm font-semibold text-violet-800">📳 소켓 재고 할당</span>
+                        <button onClick={() => setSocketPanel(p => ({ ...p, open: false }))}
+                          className="text-gray-400 hover:text-gray-600 text-xs">닫기 ×</button>
+                      </div>
+
+                      {socketPanel.loading ? (
+                        <div className="p-6 text-center text-sm text-gray-400">로딩 중...</div>
+                      ) : (
+                        <div className="p-4 space-y-4">
+
+                          {/* 이 수주에 할당된 소켓 */}
+                          {socketPanel.data?.my_allocations?.length > 0 && (
+                            <div>
+                              <div className="text-xs font-semibold text-violet-700 mb-2">✅ 현재 할당된 소켓</div>
+                              <table className="w-full text-xs border rounded-lg overflow-hidden">
+                                <thead>
+                                  <tr className="bg-violet-50 text-violet-700">
+                                    <th className="px-3 py-2 text-left">타입</th>
+                                    <th className="px-3 py-2 text-center">협의(W×H)</th>
+                                    <th className="px-3 py-2 text-right">할당수량</th>
+                                    <th className="px-3 py-2 text-left">재고 현장명</th>
+                                    <th className="px-3 py-2 text-center">해제</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                  {socketPanel.data.my_allocations.map((a: any) => (
+                                    <tr key={a.alloc_id} className="bg-white">
+                                      <td className="px-3 py-1.5 font-medium">{a.product_type}</td>
+                                      <td className="px-3 py-1.5 text-center font-mono">{a.width_mm}&times;{a.height_mm}</td>
+                                      <td className="px-3 py-1.5 text-right font-bold text-violet-700">{a.allocated_qty}개</td>
+                                      <td className="px-3 py-1.5 text-gray-500">{a.stock_project_name || '-'}</td>
+                                      <td className="px-3 py-1.5 text-center">
+                                        <button onClick={() => deallocateSocket(a.alloc_id)}
+                                          className="text-red-400 hover:text-red-600 text-[10px]">해제</button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+
+                          {/* 가용 재고 */}
+                          <div>
+                            <div className="text-xs font-semibold text-gray-700 mb-2">
+                              인수검사 합격 가용 재고
+                              <span className="ml-2 font-normal text-gray-400">— 협의 치수 확인 후 수량 입력 후 할당하세요</span>
+                            </div>
+                            {socketPanel.data?.available_stock?.length === 0 ? (
+                              <div className="text-sm text-gray-400 py-4 text-center bg-gray-50 rounded-lg">
+                                가용한 소켓 재고가 없습니다
+                              </div>
+                            ) : (
+                              <table className="w-full text-xs border rounded-lg overflow-hidden">
+                                <thead>
+                                  <tr className="bg-gray-50 text-gray-500">
+                                    <th className="px-3 py-2 text-left">타입</th>
+                                    <th className="px-3 py-2 text-center">협의(W×H)</th>
+                                    <th className="px-3 py-2 text-right">재고</th>
+                                    <th className="px-3 py-2 text-right">가용</th>
+                                    <th className="px-3 py-2 text-left">현장명</th>
+                                    <th className="px-3 py-2 text-center">수량</th>
+                                    <th className="px-3 py-2 text-center">할당</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                  {socketPanel.data.available_stock.map((s: any) => (
+                                    <tr key={s.stock_id} className="bg-white hover:bg-violet-50/30 transition-colors">
+                                      <td className="px-3 py-1.5 font-medium">{s.product_type}</td>
+                                      <td className="px-3 py-1.5 text-center font-mono">{s.width_mm}&times;{s.height_mm}</td>
+                                      <td className="px-3 py-1.5 text-right">{s.qty}개</td>
+                                      <td className="px-3 py-1.5 text-right font-bold text-green-700">{Number(s.available_qty)}개</td>
+                                      <td className="px-3 py-1.5 text-gray-400">{s.project_name || '-'}</td>
+                                      <td className="px-3 py-1.5 text-center">
+                                        <input
+                                          type="number" min={1} max={Number(s.available_qty)}
+                                          value={socketPanel.inputQty[s.stock_id] ?? 1}
+                                          onChange={e => setSocketPanel(p => ({
+                                            ...p,
+                                            inputQty: { ...p.inputQty, [s.stock_id]: parseInt(e.target.value) || 1 }
+                                          }))}
+                                          className="w-14 border rounded px-1.5 py-0.5 text-center text-xs"
+                                        />
+                                      </td>
+                                      <td className="px-3 py-1.5 text-center">
+                                        <button
+                                          onClick={() => allocateSocket(s.stock_id)}
+                                          disabled={socketPanel.allocating}
+                                          className="px-2 py-0.5 bg-violet-600 text-white rounded text-[10px] hover:bg-violet-700 disabled:opacity-50">
+                                          할당
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+
+                          {/* 이 수주에서 필요한 소켓 정보 */}
+                          {socketPanel.data?.bom_fp_items?.length > 0 && (
+                            <div className="p-3 bg-blue-50 rounded-lg">
+                              <div className="text-xs font-semibold text-blue-700 mb-2">📌 이 수주 소켓 요구 사항</div>
+                              {socketPanel.data.bom_fp_items.map((fp: any) => (
+                                <div key={fp.result_id} className="text-xs text-blue-800">
+                                  {fp.item_name}: <span className="font-mono font-bold">{Number(fp.required_qty)}개</span>
+                                  <span className="text-blue-400 ml-2">({fp.component_name})</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

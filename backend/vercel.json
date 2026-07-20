@@ -15,5 +15,11 @@
       "source": "/api/(.*)",
       "destination": "/api"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/inventory/sync-sheets",
+      "schedule": "0 21 * * *"
+    }
   ]
 }

@@ -270,12 +270,12 @@ function SocketOrderTabContent() {
           { ...base, label: 'bracket-H', t: 1.6, bw: 60,  l: Math.round(w/2 - 16), qty: q * 16 },
           { ...base, label: 'bracket-V', t: 1.6, bw: 60,  l: Math.round(h/2 - 20), qty: q * 32 },
           { ...base, label: 'support-C', t: 1.6, bw: 225, l: Math.round(w/2 - 16), qty: q * 8  },
-          { ...base, label: 'reinforce', t: 1.6, bw: 237, l: h,                   qty: q * 4  },
+          { ...base, label: 'reinforce', t: 1.6, bw: 237, l: h - 1,                qty: q * 4  },
         ];
       case 'VAG-1.69':
         return [
-          { ...base, label: 'bracket-H', t: 1.6, bw: 60,  l: sw - 1, qty: q * 4 },
-          { ...base, label: 'bracket-V', t: 1.6, bw: 60,  l: h - 30, qty: q * 4 },
+          { ...base, label: 'bracket-HA', t: 1.6, bw: 60,  l: sw - 5, qty: q * 4 },
+          { ...base, label: 'bracket-HB', t: 1.6, bw: 204, l: sw - 5, qty: q * 4 },
         ];
       case 'HTG-064': case 'HTG-064DC':
         return [

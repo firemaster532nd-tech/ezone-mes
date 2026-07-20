@@ -343,4 +343,152 @@ export async function shipmentOrderRoutes(app: FastifyInstance) {
     `);
     return { data: rows };
   });
+
+  // ─── GET /api/shipment-orders/work-order-lots ────────────────────────
+  // 작업지시서에서 생성된 구조체 LOT 목록 (출하지시서 품목 LOT 선택용)
+  // - lot_type = 'ASM' + base_lot IS NOT NULL → 구조체 LOT
+  // - 검색: 작업지시 번호, LOT번호, 품목명, 날짜
+  // - status = 'ACTIVE' 또는 'SHIPPED' 선택 가능
+  app.get('/api/shipment-orders/work-order-lots', async (req) => {
+    const q = req.query as Record<string, string>;
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    // 기본: 구조체 LOT (ASM + base_lot 있음) 또는 일반 공정 LOT
+    if (q.type === 'struct') {
+      // 구조체 LOT만
+      conditions.push(`lt.lot_type = 'ASM' AND lt.base_lot IS NOT NULL`);
+    } else {
+      // 전체 생산 LOT (MIX, EXT, CUT, ASM)
+      conditions.push(`lt.lot_type IN ('MIX','EXT','CUT','ASM')`);
+    }
+
+    // 가용 재고만 (기본)
+    if (q.include_shipped !== 'true') {
+      conditions.push(`lt.status IN ('ACTIVE')`);
+      conditions.push(`lt.remaining_qty > 0`);
+    }
+
+    // 날짜 필터 (작업지시 일자 기준)
+    if (q.from) {
+      params.push(q.from);
+      conditions.push(`wo.wo_date >= $${params.length}`);
+    }
+    if (q.to) {
+      params.push(q.to);
+      conditions.push(`wo.wo_date <= $${params.length}`);
+    }
+
+    // 수주 연결 필터
+    if (q.order_id) {
+      params.push(parseInt(q.order_id));
+      conditions.push(`wo.order_id = $${params.length}`);
+    }
+
+    // 텍스트 검색 (LOT번호 / WO번호 / 품목명)
+    if (q.search) {
+      params.push(`%${q.search}%`);
+      conditions.push(`(lt.lot_number ILIKE $${params.length}
+                    OR wo.wo_number ILIKE $${params.length}
+                    OR im.item_name ILIKE $${params.length}
+                    OR lt.base_lot ILIKE $${params.length})`);
+    }
+
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    const { rows } = await pool.query(`
+      SELECT
+        lt.lot_id,
+        lt.lot_number,
+        lt.lot_type,
+        lt.base_lot,
+        lt.serial_start,
+        lt.serial_end,
+        lt.qty,
+        lt.remaining_qty,
+        lt.unit,
+        lt.status,
+        lt.created_at,
+        wo.wo_id,
+        wo.wo_number,
+        wo.wo_date,
+        wo.process_code,
+        wo.planned_qty,
+        wo.order_id,
+        im.item_id,
+        im.item_name,
+        im.item_code,
+        im.item_category,
+        so.order_number,
+        so.customer_name AS order_customer,
+        so.project_name  AS order_project,
+        -- 구조체 LOT의 경우 인정구조 정보
+        cm.cert_id,
+        cm.structure_code,
+        cm.structure_name,
+        -- 검사 통과 여부
+        (SELECT COUNT(*) FROM inspection ins
+         WHERE ins.lot_id = lt.lot_id AND ins.result = 'PASS') AS pass_inspection_count
+      FROM lot_transaction lt
+      LEFT JOIN work_order wo     ON wo.wo_id = lt.wo_id
+      LEFT JOIN item_master im    ON im.item_id = lt.item_id
+      LEFT JOIN sales_order so    ON so.order_id = wo.order_id
+      -- 구조체 LOT: base_lot의 구조코드 파싱으로 인정구조 연결
+      LEFT JOIN certification_master cm ON (
+        lt.base_lot IS NOT NULL AND
+        cm.structure_code = SPLIT_PART(lt.base_lot, '-', 3) || '-' || SPLIT_PART(lt.base_lot, '-', 4)
+      )
+      ${where}
+      ORDER BY lt.created_at DESC, lt.lot_id DESC
+      LIMIT 200
+    `, params);
+
+    return { data: rows, total: rows.length };
+  });
+
+  // ─── GET /api/shipment-orders/work-order-lots/by-order/:orderId ──────
+  // 특정 수주의 작업지시서에서 생성된 LOT만 조회
+  app.get('/api/shipment-orders/work-order-lots/by-order/:orderId', async (req, reply) => {
+    const orderId = parseInt((req.params as any).orderId, 10);
+
+    const { rows } = await pool.query(`
+      SELECT
+        lt.lot_id,
+        lt.lot_number,
+        lt.lot_type,
+        lt.base_lot,
+        lt.serial_start,
+        lt.serial_end,
+        lt.qty,
+        lt.remaining_qty,
+        lt.unit,
+        lt.status,
+        lt.created_at,
+        wo.wo_id,
+        wo.wo_number,
+        wo.wo_date,
+        wo.process_code,
+        im.item_id,
+        im.item_name,
+        im.item_code,
+        cm.structure_code,
+        cm.structure_name,
+        (SELECT COUNT(*) FROM inspection ins
+         WHERE ins.lot_id = lt.lot_id AND ins.result = 'PASS') AS pass_inspection_count
+      FROM lot_transaction lt
+      JOIN work_order wo ON wo.wo_id = lt.wo_id
+      LEFT JOIN item_master im ON im.item_id = lt.item_id
+      LEFT JOIN certification_master cm ON (
+        lt.base_lot IS NOT NULL AND
+        cm.structure_code = SPLIT_PART(lt.base_lot, '-', 3) || '-' || SPLIT_PART(lt.base_lot, '-', 4)
+      )
+      WHERE wo.order_id = $1
+        AND lt.lot_type IN ('ASM', 'CUT', 'EXT', 'MIX')
+      ORDER BY wo.process_code, lt.created_at DESC
+    `, [orderId]);
+
+    return { data: rows };
+  });
 }
+
+

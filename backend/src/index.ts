@@ -38,6 +38,7 @@ import { authRoutes } from './routes/auth.js';
 import { departmentRoutes } from './routes/departments.js';
 import { permissionRoutes } from './routes/permissions.js';
 import { companyRoutes } from './routes/companies.js';
+import { inventoryLedgerRoutes } from './routes/inventory-ledger.js';
 import { statementRoutes } from './routes/statements.js';
 import { quotationRoutes } from './routes/quotations.js';
 import { projectRoutes } from './routes/projects.js';
@@ -57,6 +58,7 @@ import { returnReceiptRoutes } from './routes/return-receipts.js';
 import { shipmentReadyRoutes } from './routes/shipment-ready.js';
 import { returnRoutes } from './routes/returns.js';
 import { socketIncomingRoutes } from './routes/socket-incoming.js';
+import { announcementRoutes, ensureAnnouncementTables } from './routes/announcements.js';
 
 let appInstance: any = null;
 
@@ -103,6 +105,7 @@ export const initApp = async () => {
   await app.register(authRoutes);
   await app.register(departmentRoutes);
   await app.register(permissionRoutes);
+  await app.register(inventoryLedgerRoutes);
   await app.register(companyRoutes);
   await app.register(statementRoutes);
   await app.register(quotationRoutes);
@@ -123,6 +126,7 @@ export const initApp = async () => {
   await app.register(returnRoutes);
   await app.register(shipmentReadyRoutes);
   await app.register(socketIncomingRoutes);
+  await app.register(announcementRoutes);
 
   // Health check
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
@@ -231,6 +235,8 @@ export const initApp = async () => {
 
       console.log('✅ socket_incoming_inspection 테이블 및 2차 점검/결재선/통합외래키 컬럼 준비 완료');
 
+      // ── 공지/쪽지/권한요청 테이블 초기화 ──
+      await ensureAnnouncementTables();
 
       console.log('✅ Menu migration done: inventory + shipment + statement menus granted to all departments');
     } catch (e) {

@@ -7,7 +7,7 @@ import {
   Search, X, Plus, Pencil, Trash2, FolderGit2, 
   Calendar, FileText, Building2, ClipboardList, CheckCircle,
   Phone, User, ShieldAlert, Award, Clock, ChevronDown, ChevronUp,
-  Upload, FileSpreadsheet, AlertCircle
+  Upload, FileSpreadsheet, AlertCircle, RotateCcw
 } from 'lucide-react';
 
 interface DeliverySchedule {
@@ -28,7 +28,7 @@ interface Project {
   customer_name: string | null;
   order_date: string;
   delivery_date: string | null;
-  status: 'ACTIVE' | 'COMPLETED' | 'SUSPENDED';
+  status: 'ACTIVE' | 'COMPLETED' | 'SUSPENDED' | 'DELETED';
   remarks: string | null;
   order_count: number;
   total_qty: number;
@@ -76,6 +76,9 @@ export function ProjectPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(false);
+  // ★ 삭제된 프로젝트 복원
+  const [showDeletedProjects, setShowDeletedProjects] = useState(false);
+  const [deletedProjects, setDeletedProjects] = useState<Project[]>([]);
 
   // 하단 디테일 스케줄 확장 상태
   const [expandedProjectId, setExpandedProjectId] = useState<number | null>(null);
@@ -125,6 +128,13 @@ export function ProjectPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchDeletedProjects = async () => {
+    try {
+      const res = await api.get<{ data: Project[] }>('/projects?status=DELETED');
+      setDeletedProjects(res.data ?? []);
+    } catch { setDeletedProjects([]); }
   };
 
   const fetchDistributors = async () => {
@@ -387,10 +397,10 @@ export function ProjectPage() {
 
   // 프로젝트 삭제 (D)
   const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`현장 프로젝트 [${name}]를 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+    if (!confirm(`현장 프로젝트 [${name}]를 삭제하시겠습니까?\n\n휴지통에서 복원할 수 있습니다.`)) return;
     try {
       await api.delete(`/projects/${id}`);
-      toast.success('프로젝트가 삭제되었습니다.');
+      toast.success('프로젝트가 삭제되었습니다. (복원 가능)');
       fetchData();
       if (expandedProjectId === id) {
         setExpandedProjectId(null);
@@ -398,6 +408,17 @@ export function ProjectPage() {
       }
     } catch (e: any) {
       toast.error(e?.body?.message || e?.message || '삭제에 실패했습니다.');
+    }
+  };
+
+  const handleRestoreProject = async (id: number, name: string) => {
+    try {
+      await api.patch(`/projects/${id}/restore`, {});
+      toast.success(`[${name}] 프로젝트가 복원되었습니다.`);
+      fetchData();
+      fetchDeletedProjects();
+    } catch (e: any) {
+      toast.error(e?.body?.message || e?.message || '복원에 실패했습니다.');
     }
   };
 
@@ -639,6 +660,64 @@ export function ProjectPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* 삭제된 프로젝트 복원 패널 */}
+      <div className="bg-white rounded-xl border border-red-100 shadow-sm">
+        <button
+          onClick={() => {
+            const next = !showDeletedProjects;
+            setShowDeletedProjects(next);
+            if (next) fetchDeletedProjects();
+          }}
+          className="w-full flex items-center justify-between px-5 py-3.5 text-sm font-medium text-gray-500 hover:text-red-600 transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <Trash2 className="h-4 w-4" />
+            삭제된 프로젝트 {deletedProjects.length > 0 && <span className="bg-red-100 text-red-600 rounded-full px-2 py-0.5 text-xs">{deletedProjects.length}</span>}
+          </span>
+          <span className="text-xs text-gray-400">{showDeletedProjects ? '▲ 접기' : '▼ 펼쳐서 복원하기'}</span>
+        </button>
+
+        {showDeletedProjects && (
+          <div className="border-t">
+            {deletedProjects.length === 0 ? (
+              <p className="text-center text-gray-400 text-sm py-8">삭제된 프로젝트가 없습니다.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead className="bg-red-50 border-b">
+                  <tr>
+                    {['프로젝트코드', '현장명', '발주일', '납기일', ''].map(h => (
+                      <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {deletedProjects.map(p => (
+                    <tr key={p.project_id} className="hover:bg-red-50/40">
+                      <td className="px-4 py-2.5 font-mono text-xs text-gray-400">{p.project_code}</td>
+                      <td className="px-4 py-2.5">
+                        <div className="font-medium text-gray-700 text-sm">{p.project_name}</div>
+                        {p.customer_name && <div className="text-xs text-gray-400 mt-0.5">{p.customer_name}</div>}
+                      </td>
+                      <td className="px-4 py-2.5 text-gray-500 text-xs">{p.order_date ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-gray-500 text-xs">{p.delivery_date ?? '—'}</td>
+                      <td className="px-4 py-2.5">
+                        <button
+                          onClick={() => handleRestoreProject(p.project_id, p.project_name)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition-colors"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                          복원
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 등록 및 수정 모달 */}

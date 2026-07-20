@@ -4,7 +4,8 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import {
   Plus, Truck, FileText, Printer, Trash2, RefreshCw,
   Search, CheckCircle2, Clock, XCircle, ChevronDown, ChevronRight,
-  Building2, MapPin, Car, User, AlertTriangle, Package, RotateCcw
+  Building2, MapPin, Car, User, AlertTriangle, Package, RotateCcw,
+  Hash, X as XIcon, Filter
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -242,6 +243,205 @@ function ShipmentRow({ so, onRefresh }: { so: ShipmentOrder; onRefresh: () => vo
   );
 }
 
+// ─── 작업지시서 LOT 선택 모달 ────────────────────────────────────────────────
+interface WoLot {
+  lot_id: number;
+  lot_number: string;
+  lot_type: string;
+  base_lot: string | null;
+  serial_start: number | null;
+  serial_end: number | null;
+  qty: number;
+  remaining_qty: number;
+  unit: string;
+  status: string;
+  wo_number: string | null;
+  wo_date: string | null;
+  process_code: string | null;
+  item_id: number | null;
+  item_name: string | null;
+  item_code: string | null;
+  structure_code: string | null;
+  structure_name: string | null;
+  order_number: string | null;
+  order_customer: string | null;
+  order_project: string | null;
+  pass_inspection_count: number;
+}
+
+const PROC_LABELS: Record<string, string> = {
+  MIX: '배합', EXT: '압출', CUT: '재단', ASM: '조립',
+};
+
+function WoLotPickerModal({
+  onSelect, onClose,
+}: {
+  onSelect: (lot: WoLot) => void;
+  onClose: () => void;
+}) {
+  const [lots, setLots] = useState<WoLot[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'struct'>('struct'); // struct=구조체LOT만
+  const [includeShipped, setIncludeShipped] = useState(false);
+  const [from, setFrom] = useState(() => {
+    const d = new Date(); d.setMonth(d.getMonth() - 3);
+    return d.toISOString().slice(0, 10);
+  });
+  const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
+
+  const fetchLots = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (search) params.append('search', search);
+      if (typeFilter !== 'all') params.append('type', typeFilter);
+      if (includeShipped) params.append('include_shipped', 'true');
+      params.append('from', from);
+      params.append('to', to);
+      const res = await api.get<{ data: WoLot[] }>(`/shipment-orders/work-order-lots?${params}`);
+      setLots(res.data ?? []);
+    } catch { toast.error('LOT 목록 로드 실패'); }
+    finally { setLoading(false); }
+  }, [search, typeFilter, includeShipped, from, to]);
+
+  useEffect(() => { fetchLots(); }, [fetchLots]);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[88vh] flex flex-col">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <div className="flex items-center gap-2">
+            <Hash className="h-5 w-5 text-blue-600" />
+            <h3 className="font-bold text-gray-900">작업지시서 LOT 선택</h3>
+            <span className="text-xs text-gray-400 ml-1">— 구조체 LOT 및 공정 LOT</span>
+          </div>
+          <button onClick={onClose} className="p-1 rounded hover:bg-gray-100">
+            <XIcon className="h-4 w-4 text-gray-500" />
+          </button>
+        </div>
+
+        {/* 필터 영역 */}
+        <div className="px-5 py-3 border-b bg-gray-50 space-y-2">
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+              <input
+                type="text" value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="LOT번호, 작업지시 번호, 품목명 검색..."
+                className="w-full pl-8 pr-3 py-1.5 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+              />
+            </div>
+            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as any)}
+              className="border rounded-lg px-2 py-1.5 text-xs focus:outline-none">
+              <option value="struct">구조체 LOT만</option>
+              <option value="all">전체 생산 LOT</option>
+            </select>
+          </div>
+          <div className="flex gap-3 items-center text-xs">
+            <span className="text-gray-500">작업일:</span>
+            <input type="date" value={from} onChange={e => setFrom(e.target.value)}
+              className="border rounded px-2 py-1 text-xs" />
+            <span className="text-gray-400">~</span>
+            <input type="date" value={to} onChange={e => setTo(e.target.value)}
+              className="border rounded px-2 py-1 text-xs" />
+            <label className="flex items-center gap-1 ml-2 cursor-pointer">
+              <input type="checkbox" checked={includeShipped} onChange={e => setIncludeShipped(e.target.checked)}
+                className="rounded" />
+              <span>손진 포함</span>
+            </label>
+          </div>
+        </div>
+
+        {/* LOT 목록 */}
+        <div className="flex-1 overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-gray-400">
+              <div className="h-5 w-5 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin mr-2" />
+              로딩 중...
+            </div>
+          ) : lots.length === 0 ? (
+            <div className="text-center py-12 text-gray-400">
+              <Hash className="h-10 w-10 mx-auto mb-2 text-gray-200" />
+              <p>조건에 맞는 LOT이 없습니다</p>
+            </div>
+          ) : (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-gray-50 border-b">
+                <tr>
+                  <th className="px-4 py-2 text-left font-semibold text-gray-500">LOT번호</th>
+                  <th className="px-3 py-2 text-center font-semibold text-gray-500">공정</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-500">품목명</th>
+                  <th className="px-3 py-2 text-left font-semibold text-gray-500">수주/작업일</th>
+                  <th className="px-3 py-2 text-right font-semibold text-gray-500">잔여</th>
+                  <th className="px-3 py-2 text-center font-semibold text-gray-500">선택</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {lots.map(lot => (
+                  <tr key={lot.lot_id} className="hover:bg-blue-50/50 transition-colors">
+                    <td className="px-4 py-2">
+                      <div className="font-mono font-semibold text-blue-700">{lot.lot_number}</div>
+                      {lot.base_lot && (
+                        <div className="text-[10px] text-gray-400 mt-0.5">구조체 LOT</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <span className={cn(
+                        'inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold',
+                        lot.process_code === 'ASM' ? 'bg-violet-100 text-violet-700' :
+                        lot.process_code === 'CUT' ? 'bg-orange-100 text-orange-700' :
+                        lot.process_code === 'EXT' ? 'bg-blue-100 text-blue-700' :
+                        'bg-gray-100 text-gray-600'
+                      )}>
+                        {PROC_LABELS[lot.process_code || ''] || lot.process_code || '-'}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="text-gray-800">{lot.item_name || lot.structure_name || '-'}</div>
+                      {lot.structure_code && (
+                        <div className="text-[10px] text-indigo-500">{lot.structure_code}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="text-gray-600">{lot.order_project || lot.order_customer || '-'}</div>
+                      <div className="text-[10px] text-gray-400">{lot.wo_date?.slice(0,10) || '-'}</div>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <span className={cn(
+                        'font-mono font-bold',
+                        Number(lot.remaining_qty) > 0 ? 'text-green-700' : 'text-red-400'
+                      )}>
+                        {Number(lot.remaining_qty).toLocaleString()}
+                      </span>
+                      <span className="text-gray-400 ml-1">{lot.unit}</span>
+                    </td>
+                    <td className="px-3 py-2 text-center">
+                      <button onClick={() => onSelect(lot)}
+                        className="px-3 py-1 bg-blue-600 text-white rounded-lg text-[10px] font-bold hover:bg-blue-700">
+                        선택
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t bg-gray-50 flex justify-between items-center">
+          <span className="text-xs text-gray-400">전체 {lots.length}건</span>
+          <button onClick={onClose}
+            className="px-4 py-1.5 border rounded-lg text-sm hover:bg-gray-100">
+            닫기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── 출하지시서 작성 모달 (발주서 품목 자동 불러오기) ────────────────────────
 function CreateShipmentModal({
   onClose, onCreated
@@ -274,6 +474,11 @@ function CreateShipmentModal({
   }>>([]);
 
   const [submitting, setSubmitting] = useState(false);
+
+  // LOT 선택 모달 상태
+  const [lotPicker, setLotPicker] = useState<{ open: boolean; itemIdx: number | null }>({
+    open: false, itemIdx: null,
+  });
 
   // 발주서 목록 로드
   useEffect(() => {
@@ -520,7 +725,10 @@ function CreateShipmentModal({
                         <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">규격</th>
                         <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">수량</th>
                         <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">단위</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">LOT번호</th>
+                        <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500 min-w-[180px]">
+                          LOT번호
+                          <span className="ml-1 text-[9px] text-blue-500 font-normal">클릭하여 선택</span>
+                        </th>
                         <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">단가</th>
                         <th className="px-3 py-2 text-left text-xs font-semibold text-gray-500">금액</th>
                         <th className="w-6"></th>
@@ -546,8 +754,23 @@ function CreateShipmentModal({
                               className="w-10 border rounded px-1 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 text-center" />
                           </td>
                           <td className="px-2 py-1.5">
-                            <input type="text" value={item.lot_number} onChange={e => updateItem(idx, 'lot_number', e.target.value)}
-                              placeholder="LOT-..." className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 font-mono min-w-24" />
+                            {/* LOT 입력 + 선택 버튼 */}
+                            <div className="flex items-center gap-1">
+                              <input type="text" value={item.lot_number}
+                                onChange={e => updateItem(idx, 'lot_number', e.target.value)}
+                                placeholder="LOT-..."
+                                className="flex-1 border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-300 font-mono min-w-20" />
+                              <button
+                                type="button"
+                                onClick={() => setLotPicker({ open: true, itemIdx: idx })}
+                                className="flex-shrink-0 px-1.5 py-1 bg-blue-50 border border-blue-200 rounded text-[10px] text-blue-700 hover:bg-blue-100 whitespace-nowrap"
+                                title="작업지시서 LOT 선택">
+                                📋 LOT
+                              </button>
+                            </div>
+                            {item.lot_id && (
+                              <div className="text-[9px] text-green-600 mt-0.5">✔ LOT 연결됨 (ID:{item.lot_id})</div>
+                            )}
                           </td>
                           <td className="px-2 py-1.5">
                             <input type="number" value={item.unit_price} onChange={e => updateItem(idx, 'unit_price', e.target.value)}
@@ -604,9 +827,36 @@ function CreateShipmentModal({
           )}
         </div>
       </div>
+
+      {/* 작업지시서 LOT 선택 모달 */}
+      {lotPicker.open && (
+        <WoLotPickerModal
+          onSelect={(lot) => {
+            if (lotPicker.itemIdx === null) return;
+            const idx = lotPicker.itemIdx;
+            setItems(prev => prev.map((item, i) => {
+              if (i !== idx) return item;
+              return {
+                ...item,
+                lot_number: lot.lot_number,
+                lot_id: String(lot.lot_id),
+                // 품목명이 비어있으면 LOT에서 자동입력
+                item_name: item.item_name || lot.item_name || lot.structure_name || '',
+                spec: item.spec || lot.structure_code || '',
+                qty: item.qty || String(lot.remaining_qty),
+                unit: item.unit || lot.unit || 'EA',
+              };
+            }));
+            setLotPicker({ open: false, itemIdx: null });
+          }}
+          onClose={() => setLotPicker({ open: false, itemIdx: null })}
+        />
+      )}
     </div>
   );
 }
+
+
 
 // ─── 메인 페이지 ──────────────────────────────────────────────────────────────
 export default function ShipmentOrdersPage() {

@@ -71,6 +71,10 @@ import { ShipmentReadyPage } from '@/pages/shipment/ShipmentReadyPage';
 import { SocketOrderWaitPage } from '@/pages/orders/SocketOrderWaitPage';
 import SocketIncomingDetailPage from '@/pages/quality/SocketIncomingDetailPage';
 import { FqcInspectionPage } from '@/pages/quality/FqcInspectionPage';
+import { AnnouncementsPage } from '@/pages/announcements/AnnouncementsPage';
+import { LoginLogsPage } from '@/pages/settings/LoginLogsPage';
+import InventoryLedgerPage from '@/pages/inventory/InventoryLedgerPage';
+
 
 // ─── 라우트 에러 바운더리 ───
 function RouteErrorBoundary() {
@@ -121,6 +125,8 @@ export const router = createBrowserRouter([
       { path: 'inventory/import', element: <InventoryImportPage /> },
       { path: 'inventory/socket-stock', element: <SocketStockPage /> },
       { path: 'inventory/fn-tech-stock', element: <FnTechStockPage /> },
+      { path: 'inventory/ledger', element: <InventoryLedgerPage /> },
+
       // 품질관리
       { path: 'quality/incoming', element: <IncomingInspectionPage /> },
       { path: 'quality/process-inspection', element: <ProcessInspectionPage /> },
@@ -175,6 +181,10 @@ export const router = createBrowserRouter([
       { path: 'settings/departments',  element: <DepartmentsPage /> },
       { path: 'settings/permissions',  element: <PermissionsPage /> },
       { path: 'settings/ecount',       element: <EcountSyncPage /> },
+      { path: 'settings/login-logs',   element: <LoginLogsPage /> },
+      // 공지/쪽지함
+      { path: 'announcements',         element: <AnnouncementsPage /> },
+      { path: 'announcements/:id',     element: <AnnouncementsPage /> },
       // catch-all: unknown paths redirect to dashboard
       { path: '*', element: <Navigate to="/dashboard" replace /> },
     ],

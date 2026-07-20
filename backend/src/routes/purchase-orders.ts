@@ -888,6 +888,106 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── GET /api/purchase-orders/:id/items-for-order ── 발주서 품목 → 수주 품목 변환
+  // 발주서의 소켓 명세를 cert_id 자동 매핑하여 수주 등록 폼에 바로 활용 가능한 형태로 반환
+  app.get('/api/purchase-orders/:id/items-for-order', { preHandler: requireAuth }, async (req, reply) => {
+    const poId = parseInt((req.params as any).id);
+
+    const poRes = await pool.query(`SELECT * FROM purchase_order WHERE po_id = $1`, [poId]);
+    if (!poRes.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    const po = poRes.rows[0];
+
+    // 발주서 소켓 품목 조회 (item_type='socket')
+    const itemsRes = await pool.query(
+      `SELECT * FROM purchase_order_item WHERE po_id = $1 AND item_type = 'socket' ORDER BY sheet_name, seq_no`,
+      [poId]
+    );
+
+    // 인정구조 목록 조회 (cert_id 매핑용)
+    const certsRes = await pool.query(
+      `SELECT cert_id, structure_code, structure_name, install_position,
+              opening_w_mm, opening_h_mm, penetration_w_mm, penetration_h_mm,
+              install_qty, cert_version, socket_name
+       FROM certification_master WHERE is_active = true ORDER BY cert_id`
+    );
+    const certs = certsRes.rows;
+
+    // 발주서 구조 문자열 → cert_id 자동 매핑
+    function mapToCertId(item: any): number | null {
+      const struct = (item.structure || '').toLowerCase();
+      const mat = (item.material || '').toLowerCase();
+
+      // 바닥(수평): HTG 계열
+      if (struct.includes('바닥') || struct.includes('floor') || struct.includes('수평')) {
+        const c = certs.find(c => c.install_position === '수평바닥');
+        return c?.cert_id ?? null;
+      }
+      // 벽체 단면: HAG 계열
+      if (struct.includes('단면')) {
+        const c = certs.find(c =>
+          c.install_position === '수직벽체' &&
+          (c.structure_code.startsWith('HAG') || c.structure_code.includes('단면'))
+        );
+        return c?.cert_id ?? null;
+      }
+      // 벽체 양면 (기본): VAG 계열
+      // 재질로 알루미늄 판별
+      if (mat.includes('알루') || mat.includes('al ') || mat.includes('알루미늄')) {
+        const c = certs.find(c => c.structure_code.includes('VAG-A') || c.structure_code.includes('AL'));
+        return c?.cert_id ?? null;
+      }
+      // 벽체 양면 기본 (아연도금강판 등)
+      const c = certs.find(c =>
+        c.install_position === '수직벽체' &&
+        (c.structure_code.startsWith('VAG') || c.structure_code.includes('양면'))
+      );
+      return c?.cert_id ?? null;
+    }
+
+    const mappedItems = itemsRes.rows.map(item => {
+      const certId = mapToCertId(item);
+      const cert = certs.find(c => c.cert_id === certId);
+      return {
+        po_item_id: item.po_item_id,
+        cert_id: certId,
+        structure_code: cert?.structure_code ?? null,
+        structure_name: cert?.structure_name ?? null,
+        socket_name: cert?.socket_name ?? null,
+        qty: item.qty || 1,
+        // 치수: 발주서 값 우선, 없으면 인정구조 기본값
+        opening_w_mm: item.opening_width_mm || cert?.opening_w_mm || null,
+        opening_h_mm: item.opening_height_mm || cert?.opening_h_mm || null,
+        penetration_w_mm: item.pipe_width_mm || cert?.penetration_w_mm || null,
+        penetration_h_mm: item.pipe_height_mm || cert?.penetration_h_mm || null,
+        install_qty: cert?.install_qty || 1,
+        material: item.material,
+        structure: item.structure,
+        sheet_name: item.sheet_name,
+        construction_type: item.construction_type || 'DOUBLE',
+        mapped: !!certId,
+      };
+    });
+
+    return {
+      data: {
+        po: {
+          po_id: po.po_id,
+          project_name: po.project_name,
+          order_date: po.order_date,
+          delivery_date: po.delivery_date,
+          biz_name: po.biz_name,
+          contractor: po.contractor,
+        },
+        items: mappedItems,
+        summary: {
+          total: mappedItems.length,
+          mapped: mappedItems.filter(i => i.mapped).length,
+          unmapped: mappedItems.filter(i => !i.mapped).length,
+        },
+      },
+    };
+  });
+
   // ── GET /api/purchase-orders ── 발주서 목록 (발주서가 없는 프로젝트도 포함)
   app.get('/api/purchase-orders', { preHandler: requireAuth }, async (req) => {
     const { search, project_id, has_socket_inspected } = req.query as { search?: string; project_id?: string; has_socket_inspected?: string };
@@ -1004,6 +1104,42 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
   });
 
 
+  // ── GET /api/purchase-orders/deleted ── 삭제된 발주서 + 프로젝트 목록
+  app.get('/api/purchase-orders/deleted', { preHandler: requireAuth }, async (_req, _reply) => {
+    const deletedPoQuery = `
+      SELECT
+        po.po_id,
+        po.project_id,
+        pm.project_code,
+        COALESCE(po.project_name, pm.project_name) AS project_name,
+        po.file_name,
+        po.delivery_date,
+        po.contractor,
+        po.created_at,
+        'PO' AS source_type
+      FROM purchase_order po
+      LEFT JOIN project_master pm ON po.project_id = pm.project_id
+      WHERE po.status = 'DELETED'
+    `;
+    const deletedProjectQuery = `
+      SELECT
+        NULL::int AS po_id,
+        pm.project_id,
+        pm.project_code,
+        pm.project_name,
+        '(발주서 미첨부)' AS file_name,
+        pm.delivery_date::text AS delivery_date,
+        pm.customer_name AS contractor,
+        pm.created_at,
+        'PROJECT_ONLY' AS source_type
+      FROM project_master pm
+      WHERE pm.status = 'DELETED'
+    `;
+    const combined = `(${deletedPoQuery}) UNION ALL (${deletedProjectQuery}) ORDER BY created_at DESC`;
+    const { rows } = await pool.query(combined);
+    return { data: rows };
+  });
+
   // ── GET /api/purchase-orders/:id ── 발주서 상세
   app.get<{ Params: { id: string } }>('/api/purchase-orders/:id', { preHandler: requireAuth }, async (req, reply) => {
     const id = parseInt(req.params.id, 10);
@@ -1085,6 +1221,17 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
         message: err?.message ?? '삭제 중 오류가 발생했습니다.',
       });
     }
+  });
+
+  // ── PATCH /api/purchase-orders/:id/restore ── 발주서 복원
+  app.patch<{ Params: { id: string } }>('/api/purchase-orders/:id/restore', { preHandler: requireAuth }, async (req, reply) => {
+    const id = parseInt(req.params.id, 10);
+    const { rows } = await pool.query(
+      `UPDATE purchase_order SET status = 'ACTIVE' WHERE po_id = $1 AND status = 'DELETED' RETURNING *`,
+      [id]
+    );
+    if (!rows[0]) return reply.code(404).send({ error: 'not_found', message: '삭제된 발주서를 찾을 수 없습니다.' });
+    return { data: rows[0], message: '발주서가 복원되었습니다.' };
   });
 
   // ── PATCH /api/purchase-orders/items/:po_item_id/construction-type ── 단면/양면 수동 변경

@@ -4,7 +4,7 @@ import {
   Truck, Settings, ChevronLeft, ChevronRight, Factory, Database,
   Wrench, FlaskConical, Scissors, Box, Layers,
   ArrowRightLeft, Monitor, HardHat,
-  ChevronDown, Hammer, Inbox, FileText, ShoppingCart,
+  ChevronDown, Hammer, Inbox, FileText, ShoppingCart, Megaphone,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
@@ -55,6 +55,11 @@ const shopNavItems: NavSection[] = [
     path: '/approval/inbox',
   },
   {
+    label: '공지 / 쪽지함',
+    icon: Megaphone,
+    path: '/announcements',
+  },
+  {
     label: '자재발주대기',
     icon: Package,
     path: '/orders/socket-order-wait',
@@ -86,10 +91,12 @@ const shopNavItems: NavSection[] = [
     children: [
       { label: '인수검사', path: '/quality/incoming' },
       { label: '재고 현황', path: '/inventory/dashboard' },
+      { label: '재고 수불대장', path: '/inventory/ledger' },
       { label: '초기 재고 설정', path: '/inventory/initialize' },
       { label: '수불대장 엑셀 연동', path: '/inventory/import' },
       { label: '소켓/평철 재고 관리', path: '/inventory/socket-stock' },
       { label: '에프엔테크 재고현황', path: '/inventory/fn-tech-stock' },
+
     ],
   },
   {
@@ -253,10 +260,12 @@ const adminNavItems: NavSection[] = [
     icon: ArrowRightLeft,
     children: [
       { label: '재고 현황', path: '/inventory/dashboard' },
+      { label: '재고 수불대장', path: '/inventory/ledger' },
       { label: '수불대장 엑셀 연동', path: '/inventory/import' },
       { label: '월말 실사/마감', path: '/inventory/closing' },
       { label: '소켓/평철 재고 관리', path: '/inventory/socket-stock' },
       { label: '에프엔테크 재고현황', path: '/inventory/fn-tech-stock' },
+
       { label: '로케이션 관리', path: '/inventory/location' },
       { label: 'LOT 라벨 재출력', path: '/inventory/label-reprint' },
       { label: '출하대기현황', path: '/shipment/ready' },
@@ -293,6 +302,7 @@ const adminNavItems: NavSection[] = [
       { label: '사용자 관리',       path: '/settings/users' },
       { label: '부서 관리',         path: '/settings/departments' },
       { label: '권한 관리',         path: '/settings/permissions' },
+      { label: '로그인 기록',        path: '/settings/login-logs' },
       { label: '이카운트 ERP 연동', path: '/settings/ecount' },
       { label: '백업 / 초기화',     path: '/settings/backup' },
     ],
@@ -300,7 +310,7 @@ const adminNavItems: NavSection[] = [
 
 ];
 
-export function Sidebar() {
+export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mode, _setMode] = useState<SidebarMode>(() => (localStorage.getItem('sidebar_mode') as SidebarMode) || 'shop');
   const setMode = (m: SidebarMode) => { _setMode(m); localStorage.setItem('sidebar_mode', m); };
@@ -445,6 +455,15 @@ export function Sidebar() {
         >
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </button>
+        {/* 모바일 닫기 버튼 */}
+        {onMobileClose && (
+          <button
+            onClick={onMobileClose}
+            className={cn('lg:hidden rounded-md p-1.5 transition-colors', theme.collapseBtn)}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {/* Mode Toggle */}

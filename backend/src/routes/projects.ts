@@ -65,9 +65,13 @@ export async function projectRoutes(app: FastifyInstance) {
     }
 
     if (status) {
+      // 'DELETED' 명시 지정 시 그것만, 그 외에는 DELETED 제외
       sql += ` AND p.status = $${paramIndex}`;
       params.push(status);
       paramIndex++;
+    } else {
+      // 기본: 삭제된 항목 제외
+      sql += ` AND p.status != 'DELETED'`;
     }
 
     sql += ` ORDER BY p.order_date DESC, p.project_id DESC`;
@@ -241,15 +245,26 @@ export async function projectRoutes(app: FastifyInstance) {
     }
   });
 
-  // DELETE /api/projects/:id - 프로젝트 삭제
+  // DELETE /api/projects/:id - 프로젝트 soft delete (복구 가능)
   app.delete<{ Params: { id: string } }>('/api/projects/:id', { preHandler: requireAuth }, async (req, reply) => {
     const id = parseInt(req.params.id, 10);
     const { rows } = await pool.query(
-      `DELETE FROM project_master WHERE project_id = $1 RETURNING *`,
+      `UPDATE project_master SET status = 'DELETED' WHERE project_id = $1 AND status != 'DELETED' RETURNING *`,
       [id]
     );
-    if (!rows[0]) return reply.code(404).send({ error: 'not_found', message: '프로젝트를 찾을 수 없습니다.' });
+    if (!rows[0]) return reply.code(404).send({ error: 'not_found', message: '프로젝트를 찾을 수 없거나 이미 삭제된 상태입니다.' });
     return { data: rows[0], success: true };
+  });
+
+  // PATCH /api/projects/:id/restore - 프로젝트 복원
+  app.patch<{ Params: { id: string } }>('/api/projects/:id/restore', { preHandler: requireAuth }, async (req, reply) => {
+    const id = parseInt(req.params.id, 10);
+    const { rows } = await pool.query(
+      `UPDATE project_master SET status = 'ACTIVE' WHERE project_id = $1 AND status = 'DELETED' RETURNING *`,
+      [id]
+    );
+    if (!rows[0]) return reply.code(404).send({ error: 'not_found', message: '삭제된 프로젝트를 찾을 수 없습니다.' });
+    return { data: rows[0], message: '프로젝트가 복원되었습니다.' };
   });
 
   // ─── [GET] /api/projects/:id/work-order-sheets ───
