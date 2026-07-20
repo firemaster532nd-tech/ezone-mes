@@ -1,7 +1,36 @@
-﻿# EZONE MES — 프로젝트 AI 코딩 규칙 (AGENTS.md)
+# EZONE MES — 프로젝트 AI 코딩 규칙 (AGENTS.md)
 
 > 출처: `upload/mes.html` — GDL-20260708-MES02_Rev1
 > (주)이지원 MES 개발 실행 및 정합성 검토 지침서
+
+---
+
+## 0. 배포 필수 규칙 ⚠️ (매 작업마다 예외 없이 실행)
+
+코드를 수정할 때마다 아래 순서를 **자동으로** 실행한다. 사용자가 별도로 요청하지 않아도 무조건 수행한다.
+
+```
+① 코드 수정 완료
+② git add → git commit → git push origin main
+③ npx vercel --prod --yes  (Vercel 프로덕션 배포)
+④ npx vercel alias set ezone-mes.vercel.app xn--sp5btl20d.kr
+   npx vercel alias set ezone-mes.vercel.app www.xn--sp5btl20d.kr
+   (이지원.kr 최종 반영)
+⑤ 배포 URL https://이지원.kr 확인 후 사용자에게 완료 보고
+```
+
+### 배포 관련 고정 정보
+- **Vercel 팀**: `ezone-s-projects`
+- **Vercel 프로젝트**: `ezone-mes`
+- **프로덕션 URL**: `https://ezone-mes.vercel.app`
+- **최종 도메인**: `https://이지원.kr` (퓨니코드: `xn--sp5btl20d.kr`)
+- **www 도메인**: `https://www.이지원.kr` (퓨니코드: `www.xn--sp5btl20d.kr`)
+- **git 브랜치**: `main`
+- **작업 디렉토리**: `c:\Users\edwar\OneDrive\ezone-mes`
+
+### 주의사항
+- `upload/` 폴더의 `.json` 시크릿 파일이 커밋에 포함되지 않도록 주의 (GitHub push protection)
+- push 실패 시 `git rm --cached <파일>` 후 `.gitignore` 추가하고 `git commit --amend --no-edit` 후 재시도
 
 ---
 
