@@ -295,16 +295,19 @@ function SocketOrderTabContent() {
     }
   }
 
-  const bracketAgg = new Map<string, { t: number; bw: number; l: number; qty: number; codes: string[] }>();
+  const bracketAgg = new Map<string, { t: number; bw: number; l: number; qty: number; source: string }>();
   for (const item of editedItems) {
     const c = (item.product_type || '').trim();
-    const rows = calcBrackets(c, item.pipe_width_mm || 0, item.pipe_height_mm || 0, item.qty || 1);
+    const w = item.pipe_width_mm || 0;
+    const h = item.pipe_height_mm || 0;
+    const rows = calcBrackets(c, w, h, item.qty || 1);
     for (const b of rows) {
-      const key = `${b.t}_${b.bw}_${b.l}`;
-      if (!bracketAgg.has(key)) bracketAgg.set(key, { t: b.t, bw: b.bw, l: b.l, qty: 0, codes: [] });
+      // 구조체+관통제 규격+평철규격을 key로 → 같은 구조체/같은 치수별 개별 행 유지
+      const key = `${c}_${w}_${h}_${b.t}_${b.bw}_${b.l}`;
+      const source = `${c} (${w}×${h})`;
+      if (!bracketAgg.has(key)) bracketAgg.set(key, { t: b.t, bw: b.bw, l: b.l, qty: 0, source });
       const e = bracketAgg.get(key)!;
       e.qty += b.qty;
-      if (!e.codes.includes(c)) e.codes.push(c);
     }
   }
   const bracketList = [...bracketAgg.values()].sort((a, b) => a.bw - b.bw || a.l - b.l);
@@ -579,32 +582,31 @@ function SocketOrderTabContent() {
                       <thead className="bg-orange-50/50">
                         <tr className="text-gray-500">
                           <th className="px-4 py-2 text-center w-8">순번</th>
+                          <th className="px-4 py-2 text-left text-purple-700 font-semibold">구조체 (관통제 규격)</th>
                           <th className="px-4 py-2 text-center">재질</th>
                           <th className="px-4 py-2 text-center text-orange-700">두께(T)</th>
                           <th className="px-4 py-2 text-center text-orange-700">폭(mm)</th>
                           <th className="px-4 py-2 text-center text-orange-700">길이(mm)</th>
                           <th className="px-4 py-2 text-right text-green-700 font-semibold">수량(개)</th>
-                          <th className="px-4 py-2 text-left text-gray-400">적용</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {bracketList.map((b, idx) => (
                           <tr key={idx} className={`hover:bg-orange-50/30 ${b.bw >= 200 ? 'bg-amber-50/40' : ''}`}>
                             <td className="px-4 py-2 text-center text-gray-400">{idx + 1}</td>
+                            <td className="px-4 py-2 text-left font-medium text-purple-700">{b.source}</td>
                             <td className="px-4 py-2 text-center text-gray-600">GI</td>
                             <td className="px-4 py-2 text-center font-mono text-orange-700">{b.t}</td>
                             <td className="px-4 py-2 text-center font-mono font-bold text-orange-700">{b.bw}</td>
                             <td className="px-4 py-2 text-center font-mono font-bold text-orange-700">{b.l}</td>
                             <td className="px-4 py-2 text-right font-mono font-bold text-green-700">{b.qty}</td>
-                            <td className="px-4 py-2 text-xs text-gray-400">{b.codes.join(', ')}</td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot className="bg-orange-100 border-t-2 border-orange-200">
                         <tr>
-                          <td colSpan={5} className="px-4 py-2.5 text-right font-bold text-orange-800">총 합계</td>
+                          <td colSpan={6} className="px-4 py-2.5 text-right font-bold text-orange-800">총 합계</td>
                           <td className="px-4 py-2.5 text-right font-bold text-green-700 text-sm">{bracketTotal}</td>
-                          <td />
                         </tr>
                       </tfoot>
                     </table>

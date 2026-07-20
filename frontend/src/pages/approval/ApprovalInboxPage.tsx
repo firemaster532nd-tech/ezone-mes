@@ -840,14 +840,18 @@ function SocketOrderPreview({ soId }: { soId: number }) {
     return rows;
   }
 
-  const bracketAgg = new Map<string, { t: number; bw: number; l: number; qty: number }>();
+  const bracketAgg = new Map<string, { t: number; bw: number; l: number; qty: number; source: string }>();
   for (const item of items) {
     const c = (item.product_type || '').trim();
-    for (const b of calcBrackets(c, item.pipe_width_mm||0, item.pipe_height_mm||0, item.qty||1)) {
-      const key = `${b.t}_${b.bw}_${b.l}`;
+    const w = item.pipe_width_mm || 0;
+    const h = item.pipe_height_mm || 0;
+    for (const b of calcBrackets(c, w, h, item.qty||1)) {
+      // 구조체+관통제 규격+평철규격을 key로 → 같은 구조체/같은 치수별 개별 행 유지
+      const key = `${c}_${w}_${h}_${b.t}_${b.bw}_${b.l}`;
+      const source = `${c} (${w}×${h})`;
       const e = bracketAgg.get(key);
       if (e) e.qty += b.qty;
-      else bracketAgg.set(key, { ...b });
+      else bracketAgg.set(key, { ...b, source });
     }
   }
   const bracketList = [...bracketAgg.values()].sort((a, b) => a.bw - b.bw || a.l - b.l);
@@ -946,6 +950,7 @@ function SocketOrderPreview({ soId }: { soId: number }) {
             <thead className="bg-orange-50/60">
               <tr className="text-gray-400 text-[10px]">
                 <th className="px-3 py-1.5 text-center w-7">No</th>
+                <th className="px-3 py-1.5 text-left text-purple-600 font-semibold">구조체 (관통제 규격)</th>
                 <th className="px-3 py-1.5 text-center">재질</th>
                 <th className="px-3 py-1.5 text-center text-orange-600 font-semibold">두께(T)</th>
                 <th className="px-3 py-1.5 text-center text-orange-600 font-semibold">폭(mm)</th>
@@ -957,6 +962,7 @@ function SocketOrderPreview({ soId }: { soId: number }) {
               {bracketList.map((b, idx) => (
                 <tr key={idx} className={`hover:bg-orange-50/30 ${b.bw >= 200 ? 'bg-amber-50/40' : ''}`}>
                   <td className="px-3 py-1.5 text-center text-gray-400">{idx+1}</td>
+                  <td className="px-3 py-1.5 text-left font-medium text-purple-700">{(b as any).source || '-'}</td>
                   <td className="px-3 py-1.5 text-center text-gray-600">GI</td>
                   <td className="px-3 py-1.5 text-center font-mono text-orange-600">{b.t}</td>
                   <td className="px-3 py-1.5 text-center font-mono font-bold text-orange-700">{b.bw}</td>
@@ -967,7 +973,7 @@ function SocketOrderPreview({ soId }: { soId: number }) {
             </tbody>
             <tfoot className="bg-orange-100 border-t-2 border-orange-200">
               <tr>
-                <td colSpan={5} className="px-3 py-2 text-right font-bold text-orange-800 text-xs">총 합계</td>
+                <td colSpan={6} className="px-3 py-2 text-right font-bold text-orange-800 text-xs">총 합계</td>
                 <td className="px-3 py-2 text-right font-bold text-green-700">{bracketTotal}</td>
               </tr>
             </tfoot>
