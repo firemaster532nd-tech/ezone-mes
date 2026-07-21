@@ -835,9 +835,9 @@ function SocketOrderPreview({ soId }: { soId: number }) {
         add(0.6, 60,  w - 5,  q * 2); add(0.6, 274, w - 5,  q * 2);
         add(1.6, 60,  h - 35, q * 4); add(1.6, 50,  h,      q * 3); break;
       case 'HTG-1.69':
-        add(0.6, 60,  sw,     q * 4); add(0.6, 274, sw,     q * 4);
-        add(0.6, 318, sw + 5, q * 8); add(0.6, 255, sw + 5, q * 8);
-        add(1.6, 60,  h - 35, q * 4); add(1.6, 50,  h,      q * 6); break;
+        add(0.6, 60,  w - 5, q * 2); add(0.6, 274, w - 5, q * 2);
+        add(0.6, 318, w,     q * 4); add(0.6, 255, w,     q * 4);
+        add(1.6, 60,  h,     q * 1); add(1.6, 50,  h,     q * 3); break;
     }
     return rows;
   }

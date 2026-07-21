@@ -757,12 +757,12 @@ function ManualPoModal({ onClose, onSaved, projects }: {
         ];
       case 'HTG-1.69':
         return [
-          { label: 'bracket-HA',  t: 0.6, bw: 60,  l: sw,     qty: q * 4 },
-          { label: 'bracket-HB',  t: 0.6, bw: 274, l: sw,     qty: q * 4 },
-          { label: 'support-C1',  t: 0.6, bw: 318, l: sw + 5, qty: q * 8 },
-          { label: 'support-C2',  t: 0.6, bw: 255, l: sw + 5, qty: q * 8 },
-          { label: 'bracket-V',   t: 1.6, bw: 60,  l: h - 35, qty: q * 4 },
-          { label: 'reinforce',   t: 1.6, bw: 50,  l: h,      qty: q * 6 },
+          { label: 'bracket-HA',  t: 0.6, bw: 60,  l: w - 5, qty: q * 2 },
+          { label: 'bracket-HB',  t: 0.6, bw: 274, l: w - 5, qty: q * 2 },
+          { label: 'support-C1',  t: 0.6, bw: 318, l: w,     qty: q * 4 },
+          { label: 'support-C2',  t: 0.6, bw: 255, l: w,     qty: q * 4 },
+          { label: 'bracket-V',   t: 1.6, bw: 60,  l: h,     qty: q * 1 },
+          { label: 'reinforce',   t: 1.6, bw: 50,  l: h,     qty: q * 3 },
         ];
       default: return [];
     }
