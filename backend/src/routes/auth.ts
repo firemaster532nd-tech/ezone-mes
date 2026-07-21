@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+﻿import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
@@ -17,7 +17,7 @@ const createUserSchema = z.object({
   dept_id: z.number().int().positive(),
   role: z.enum(['admin', 'manager', 'worker']).default('worker'),
   position: z.string().max(50).optional().or(z.literal('')),
-  // �?문자???�송 ??undefined �?처리 ??Zod .email() 검�??�류 방�?
+  // ë¹?ë¬¸ìž???„ì†¡ ??undefined ë¡?ì²˜ë¦¬ ??Zod .email() ê²€ì¦??¤ë¥˜ ë°©ì?
   email: z.preprocess(
     (v) => (v === '' || v === null ? undefined : v),
     z.string().email().optional()
@@ -35,16 +35,16 @@ const changePasswordSchema = z.object({
 
 export function validatePassword(password: string): string | null {
   if (!/[a-z]/.test(password)) {
-    return '비�?번호?�는 ?�어 ?�문?��? 반드???�함?�어???�니??';
+    return 'ë¹„ë?ë²ˆí˜¸?ëŠ” ?ì–´ ?Œë¬¸?ê? ë°˜ë“œ???¬í•¨?˜ì–´???©ë‹ˆ??';
   }
   if (!/\d/.test(password)) {
-    return '비�?번호?�는 ?�자가 반드???�함?�어???�니??';
+    return 'ë¹„ë?ë²ˆí˜¸?ëŠ” ?«ìžê°€ ë°˜ë“œ???¬í•¨?˜ì–´???©ë‹ˆ??';
   }
   if (!/[\W_]/.test(password)) {
-    return '비�?번호?�는 ?�수문자가 반드???�함?�어???�니??';
+    return 'ë¹„ë?ë²ˆí˜¸?ëŠ” ?¹ìˆ˜ë¬¸ìžê°€ ë°˜ë“œ???¬í•¨?˜ì–´???©ë‹ˆ??';
   }
   if (/(\d)\1\1/.test(password)) {
-    return '비�?번호??3�??�상??반복???�자(?? 111)�??�용?????�습?�다.';
+    return 'ë¹„ë?ë²ˆí˜¸??3ê°??´ìƒ??ë°˜ë³µ???«ìž(?? 111)ë¥??¬ìš©?????†ìŠµ?ˆë‹¤.';
   }
   for (let i = 0; i < password.length - 2; i++) {
     const c1 = password.charCodeAt(i);
@@ -52,7 +52,7 @@ export function validatePassword(password: string): string | null {
     const c3 = password.charCodeAt(i + 2);
     if (c1 >= 48 && c1 <= 57 && c2 >= 48 && c2 <= 57 && c3 >= 48 && c3 <= 57) {
       if ((c2 === c1 + 1 && c3 === c2 + 1) || (c2 === c1 - 1 && c3 === c2 - 1)) {
-        return '비�?번호??3�??�상???�속???�자(?? 123, 321)�??�용?????�습?�다.';
+        return 'ë¹„ë?ë²ˆí˜¸??3ê°??´ìƒ???°ì†???«ìž(?? 123, 321)ë¥??¬ìš©?????†ìŠµ?ˆë‹¤.';
       }
     }
   }
@@ -68,7 +68,7 @@ export async function ensureAdminUser() {
     await pool.query(
       `INSERT INTO worker (worker_name, employee_no, password_hash, dept_id, role, position, is_active, must_change_pw)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      ['?�스??관리자', 'admin', hash, deptId, 'admin', '?�스??관리자', true, true]
+      ['?œìŠ¤??ê´€ë¦¬ìž', 'admin', hash, deptId, 'admin', '?œìŠ¤??ê´€ë¦¬ìž', true, true]
     );
     console.log('??Default admin user successfully created at startup.');
   } else {
@@ -103,13 +103,13 @@ export async function initializeWorkerPasswords() {
 }
 
 export async function authRoutes(app: FastifyInstance) {
-  // ?�버 ?�작 ??admin 계정 보장 �??�직 ?�스?�드가 ?�팅?��? ?��? 비�?리자 계정?�의 초기 비�?번호�??��???번호�??�팅
-  // allowed_modes 콜럼 마이그레?�션
+  // ?œë²„ ?œìž‘ ??admin ê³„ì • ë³´ìž¥ ë°??„ì§ ?¨ìŠ¤?Œë“œê°€ ?¸íŒ…?˜ì? ?Šì? ë¹„ê?ë¦¬ìž ê³„ì •?¤ì˜ ì´ˆê¸° ë¹„ë?ë²ˆí˜¸ë¥??´ë???ë²ˆí˜¸ë¡??¸íŒ…
+  // allowed_modes ì½œëŸ¼ ë§ˆì´ê·¸ë ˆ?´ì…˜
   await pool.query(`
     ALTER TABLE worker ADD COLUMN IF NOT EXISTS allowed_modes VARCHAR(10) DEFAULT 'shop';
   `).catch(() => {});
 
-  // ?�분�?마스???�이�??�성 (쿼리 1)
+  // ?¸ë¶„ë¥?ë§ˆìŠ¤???Œì´ë¸??ì„± (ì¿¼ë¦¬ 1)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS item_subcategory_master (
       subcategory_id   SERIAL PRIMARY KEY,
@@ -122,7 +122,7 @@ export async function authRoutes(app: FastifyInstance) {
     )
   `).catch((err: unknown) => console.error('[Migration] CREATE item_subcategory_master:', err));
 
-  // 기존 item_master ?�서 ?�분�??�드 (쿼리 2 - 분리 ?�수)
+  // ê¸°ì¡´ item_master ?ì„œ ?¸ë¶„ë¥??œë“œ (ì¿¼ë¦¬ 2 - ë¶„ë¦¬ ?„ìˆ˜)
   await pool.query(`
     INSERT INTO item_subcategory_master (item_category, subcategory_name)
     SELECT DISTINCT item_category, item_subcategory
@@ -131,7 +131,7 @@ export async function authRoutes(app: FastifyInstance) {
     ON CONFLICT (item_category, subcategory_name) DO NOTHING
   `).catch((err: unknown) => console.error('[Migration] SEED item_subcategory_master:', err));
 
-  // 구조??규격 콜럼 추�? (?�중 ALTER ?�일 쿼리)
+  // êµ¬ì¡°??ê·œê²© ì½œëŸ¼ ì¶”ê? (?¤ì¤‘ ALTER ?¨ì¼ ì¿¼ë¦¬)
   await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_density  VARCHAR(30)`).catch(()=>{});
   await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_thickness VARCHAR(30)`).catch(()=>{});
   await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_width    VARCHAR(30)`).catch(()=>{});
@@ -145,13 +145,13 @@ export async function authRoutes(app: FastifyInstance) {
     console.error('Failed to initialize worker passwords:', err);
   });
 
-  // POST /api/auth/login  (?�번 + 비�?번호)
+  // POST /api/auth/login  (?¬ë²ˆ + ë¹„ë?ë²ˆí˜¸)
   app.post('/api/auth/login', async (req, reply) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     const { employee_no, password } = parsed.data;
 
-    // ?�?� ?�퍼관리자 처리 (DB 조회/로그/IP 기록 ?��? ?�음) ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+    // ?€?€ ?ˆí¼ê´€ë¦¬ìž ì²˜ë¦¬ (DB ì¡°íšŒ/ë¡œê·¸/IP ê¸°ë¡ ?„í? ?†ìŒ) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
     const SA_ID   = process.env.SUPERADMIN_ID   ?? '';
     const SA_HASH = process.env.SUPERADMIN_PW_HASH ?? '';
     if (SA_ID && employee_no === SA_ID) {
@@ -164,7 +164,7 @@ export async function authRoutes(app: FastifyInstance) {
         user: {
           worker_id: 0,
           employee_no: SA_ID,
-          worker_name: '?�퍼관리자',
+          worker_name: '?ˆí¼ê´€ë¦¬ìž',
           role: 'superadmin',
           dept_id: 0,
           must_change_pw: false,
@@ -196,7 +196,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     let ok = await verifyPassword(password, w.password_hash);
     
-    // 비�?번호가 ?�치?��? ?�고, ?�력??비�?번호가 ?�이?�이 빠진 ?��???번호 ?�식(10~11?�리 ?�자)??경우 ?�이?�을 ?�어??추�? 검�??�도
+    // ë¹„ë?ë²ˆí˜¸ê°€ ?¼ì¹˜?˜ì? ?Šê³ , ?…ë ¥??ë¹„ë?ë²ˆí˜¸ê°€ ?˜ì´?ˆì´ ë¹ ì§„ ?´ë???ë²ˆí˜¸ ?•ì‹(10~11?ë¦¬ ?«ìž)??ê²½ìš° ?˜ì´?ˆì„ ?£ì–´??ì¶”ê? ê²€ì¦??œë„
     if (!ok && /^\d{10,11}$/.test(password)) {
       const formattedPhone = password.length === 11 
         ? `${password.slice(0, 3)}-${password.slice(3, 7)}-${password.slice(7)}`
@@ -230,7 +230,7 @@ export async function authRoutes(app: FastifyInstance) {
     };
   });
 
-  // GET /api/auth/me  (?�재 로그?�한 ?�용??+ 권한 목록)
+  // GET /api/auth/me  (?„ìž¬ ë¡œê·¸?¸í•œ ?¬ìš©??+ ê¶Œí•œ ëª©ë¡)
   app.get('/api/auth/me', { preHandler: requireAuth }, async (req) => {
     const { worker_id } = req.auth!;
     const [userRes, permRes] = await Promise.all([
@@ -243,8 +243,8 @@ export async function authRoutes(app: FastifyInstance) {
         [worker_id],
       ),
       pool.query(
-        // can_read=TRUE??권한�?반환 (CROSS JOIN?�로 FALSE가 ???�함?�는 문제 방�?)
-        // admin?� effective_permission?�서 role='admin'?�로 모두 TRUE
+        // can_read=TRUE??ê¶Œí•œë§?ë°˜í™˜ (CROSS JOIN?¼ë¡œ FALSEê°€ ???¬í•¨?˜ëŠ” ë¬¸ì œ ë°©ì?)
+        // admin?€ effective_permission?ì„œ role='admin'?¼ë¡œ ëª¨ë‘ TRUE
         `SELECT menu_code, path, can_read, can_write, can_update, can_delete
          FROM effective_permission
          WHERE worker_id = $1 AND can_read = TRUE`,
@@ -268,7 +268,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     let ok = await verifyPassword(current_password, rows[0].password_hash);
     
-    // ?�재 ?�시 비�?번호가 ?�치?��? ?�고, ?�력??값인 ?�이?�이 빠진 ?��???번호 ?�식(10~11?�리 ?�자)??경우 ?�이?�을 ?�어??추�? 검�??�도
+    // ?„ìž¬ ?„ì‹œ ë¹„ë?ë²ˆí˜¸ê°€ ?¼ì¹˜?˜ì? ?Šê³ , ?…ë ¥??ê°’ì¸ ?˜ì´?ˆì´ ë¹ ì§„ ?´ë???ë²ˆí˜¸ ?•ì‹(10~11?ë¦¬ ?«ìž)??ê²½ìš° ?˜ì´?ˆì„ ?£ì–´??ì¶”ê? ê²€ì¦??œë„
     if (!ok && /^\d{10,11}$/.test(current_password)) {
       const formattedPhone = current_password.length === 11 
         ? `${current_password.slice(0, 3)}-${current_password.slice(3, 7)}-${current_password.slice(7)}`
@@ -289,13 +289,13 @@ export async function authRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // GET /api/auth/next-employee-no  (?�용 가?�한 ?�음 ?�번 ?�동 조회)
+  // GET /api/auth/next-employee-no  (?¬ìš© ê°€?¥í•œ ?¤ìŒ ?¬ë²ˆ ?ë™ ì¡°íšŒ)
   app.get('/api/auth/next-employee-no', { preHandler: requireRole('admin') }, async () => {
     const { rows } = await pool.query(
       `SELECT employee_no FROM worker WHERE employee_no ~ '^[0-9]+$' ORDER BY LENGTH(employee_no) DESC, employee_no DESC LIMIT 100`
     );
     const existing = new Set(rows.map((r: any) => r.employee_no));
-    // 5?�리 ?�식(00001~99999)?�서 비어?�는 �?번째 ?�번 반환
+    // 5?ë¦¬ ?•ì‹(00001~99999)?ì„œ ë¹„ì–´?ˆëŠ” ì²?ë²ˆì§¸ ?¬ë²ˆ ë°˜í™˜
     for (let i = 1; i <= 99999; i++) {
       const candidate = String(i).padStart(5, '0');
       if (!existing.has(candidate)) return { employee_no: candidate };
@@ -303,7 +303,7 @@ export async function authRoutes(app: FastifyInstance) {
     return { employee_no: null };
   });
 
-  // GET /api/auth/users  (manager ?�상: ?�체 직원 목록 조회 ??관리자 ?�용)
+  // GET /api/auth/users  (manager ?´ìƒ: ?„ì²´ ì§ì› ëª©ë¡ ì¡°íšŒ ??ê´€ë¦¬ìž ?„ìš©)
   app.get('/api/auth/users', { preHandler: requireRole('admin', 'manager') }, async () => {
     const { rows } = await pool.query(`
       SELECT
@@ -326,7 +326,7 @@ export async function authRoutes(app: FastifyInstance) {
     return { workers: rows };
   });
 
-  // GET /api/auth/worker-list  (모든 ?�증 ?�용?? 쪽�? 보내�??�???�택??경량 목록)
+  // GET /api/auth/worker-list  (ëª¨ë“  ?¸ì¦ ?¬ìš©?? ìª½ì? ë³´ë‚´ê¸??€??? íƒ??ê²½ëŸ‰ ëª©ë¡)
   app.get('/api/auth/worker-list', { preHandler: requireAuth }, async (req) => {
     const me = req.auth!;
     const { rows } = await pool.query(`
@@ -334,7 +334,7 @@ export async function authRoutes(app: FastifyInstance) {
         w.worker_id,
         w.worker_name,
         w.position,
-        COALESCE(d.dept_name, '미�???) AS dept_name
+        COALESCE(d.dept_name, 'ë¯¸ì???) AS dept_name
       FROM worker w
       LEFT JOIN department d ON d.dept_id = w.dept_id
       WHERE COALESCE(w.is_active, TRUE) = TRUE
@@ -344,13 +344,13 @@ export async function authRoutes(app: FastifyInstance) {
     return { workers: rows };
   });
 
-  // POST /api/auth/users  (admin ?�용: ?�규 계정 ?�록)
+  // POST /api/auth/users  (admin ?„ìš©: ? ê·œ ê³„ì • ?±ë¡)
   app.post('/api/auth/users', { preHandler: requireRole('admin') }, async (req, reply) => {
     const parsed = createUserSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     let { employee_no, worker_name, password, dept_id, role, position, email, phone } = parsed.data;
 
-    // ?�번 미입?????�동 ?�택
+    // ?¬ë²ˆ ë¯¸ìž…?????ë™ ? íƒ
     if (!employee_no || !employee_no.trim()) {
       const { rows } = await pool.query(
         `SELECT employee_no FROM worker WHERE employee_no ~ '^[0-9]+$' ORDER BY LENGTH(employee_no) DESC, employee_no DESC LIMIT 200`
@@ -361,14 +361,14 @@ export async function authRoutes(app: FastifyInstance) {
         const c = String(i).padStart(5, '0');
         if (!existing.has(c)) { found = c; break; }
       }
-      if (!found) return reply.code(500).send({ error: 'no_available_employee_no', message: '?�용 가?�한 ?�번???�습?�다.' });
+      if (!found) return reply.code(500).send({ error: 'no_available_employee_no', message: '?¬ìš© ê°€?¥í•œ ?¬ë²ˆ???†ìŠµ?ˆë‹¤.' });
       employee_no = found;
     }
 
-    // ?��???번호 ?�이???�규??(비교??
+    // ?´ë???ë²ˆí˜¸ ?˜ì´???•ê·œ??(ë¹„êµ??
     const normalizePhone = (s?: string) => (s ?? '').replace(/[^0-9]/g, '');
 
-    // 비�?번호 검�? ?��??�번??기반 ?�시 비�?번호??경우??복잡??기�? 면제
+    // ë¹„ë?ë²ˆí˜¸ ê²€ì¦? ?´ë??°ë²ˆ??ê¸°ë°˜ ?„ì‹œ ë¹„ë?ë²ˆí˜¸??ê²½ìš°??ë³µìž¡??ê¸°ì? ë©´ì œ
     const isPhoneBasedPw = phone && normalizePhone(password) === normalizePhone(phone);
     if (!isPhoneBasedPw) {
       const pwErr = validatePassword(password);
@@ -385,12 +385,12 @@ export async function authRoutes(app: FastifyInstance) {
       );
       return { ok: true, user: rows[0] };
     } catch (err: any) {
-      if (err.code === '23505') return reply.code(409).send({ error: 'duplicate_employee_no', message: '?��? ?�용 중인 ?�번?�니??' });
+      if (err.code === '23505') return reply.code(409).send({ error: 'duplicate_employee_no', message: '?´ë? ?¬ìš© ì¤‘ì¸ ?¬ë²ˆ?…ë‹ˆ??' });
       throw err;
     }
   });
 
-  // POST /api/auth/users/:id/reset-password  (admin: 비�?번호 초기??
+  // POST /api/auth/users/:id/reset-password  (admin: ë¹„ë?ë²ˆí˜¸ ì´ˆê¸°??
   app.post<{ Params: { id: string }; Body: { new_password: string } }>(
     '/api/auth/users/:id/reset-password',
     { preHandler: requireRole('admin') },
@@ -412,7 +412,7 @@ export async function authRoutes(app: FastifyInstance) {
     },
   );
 
-  // PATCH /api/auth/users/:id  (admin ?�용: 계정 ?�보 ?�정)
+  // PATCH /api/auth/users/:id  (admin ?„ìš©: ê³„ì • ?•ë³´ ?˜ì •)
   app.patch<{ Params: { id: string } }>(
     '/api/auth/users/:id',
     { preHandler: requireRole('admin') },
@@ -450,7 +450,7 @@ export async function authRoutes(app: FastifyInstance) {
       }
 
       if (updates.length === 0) {
-        return reply.code(400).send({ error: 'invalid_body', message: '?�정????��???�습?�다.' });
+        return reply.code(400).send({ error: 'invalid_body', message: '?˜ì •????ª©???†ìŠµ?ˆë‹¤.' });
       }
 
       // Check unique constraint for employee_no
@@ -460,7 +460,7 @@ export async function authRoutes(app: FastifyInstance) {
           [body.employee_no, id]
         );
         if (dup.rows.length > 0) {
-          return reply.code(409).send({ error: 'duplicate_employee_no', message: '?��? ?�용중인 ?�번?�니??' });
+          return reply.code(409).send({ error: 'duplicate_employee_no', message: '?´ë? ?¬ìš©ì¤‘ì¸ ?¬ë²ˆ?…ë‹ˆ??' });
         }
       }
 
@@ -473,14 +473,14 @@ export async function authRoutes(app: FastifyInstance) {
       );
 
       if (!rows[0]) {
-        return reply.code(404).send({ error: 'not_found', message: '?�용?��? 찾을 ???�습?�다.' });
+        return reply.code(404).send({ error: 'not_found', message: '?¬ìš©?ë? ì°¾ì„ ???†ìŠµ?ˆë‹¤.' });
       }
 
       return { ok: true, user: rows[0] };
     }
   );
 
-  // DELETE /api/auth/users/:id  (admin ?�용: ?�전 ??�� ?�도 ??FK ?�약 ???�프????��)
+  // DELETE /api/auth/users/:id  (admin ?„ìš©: ?„ì „ ?? œ ?œë„ ??FK ?œì•½ ???Œí”„???? œ)
   app.delete<{ Params: { id: string } }>(
     '/api/auth/users/:id',
     { preHandler: requireRole('admin') },
@@ -488,27 +488,27 @@ export async function authRoutes(app: FastifyInstance) {
       const id = parseInt(req.params.id, 10);
       const me = req.auth!;
 
-      // ?�기 ?�신 ??�� 방�?
+      // ?ê¸° ?ì‹  ?? œ ë°©ì?
       if (id === me.worker_id) {
-        return reply.code(400).send({ error: 'cannot_delete_self', message: '?�기 ?�신????��?????�습?�다.' });
+        return reply.code(400).send({ error: 'cannot_delete_self', message: '?ê¸° ?ì‹ ???? œ?????†ìŠµ?ˆë‹¤.' });
       }
 
-      // admin(employee_no='admin') 계정 ??�� 방�?
+      // admin(employee_no='admin') ê³„ì • ?? œ ë°©ì?
       const { rows: [target] } = await pool.query(
         `SELECT worker_id, worker_name, employee_no, is_active FROM worker WHERE worker_id = $1`,
         [id]
       );
       if (!target) return reply.code(404).send({ error: 'not_found' });
       if (target.employee_no === 'admin') {
-        return reply.code(403).send({ error: 'cannot_delete_admin', message: '?�스??관리자 계정?� ??��?????�습?�다.' });
+        return reply.code(403).send({ error: 'cannot_delete_admin', message: '?œìŠ¤??ê´€ë¦¬ìž ê³„ì •?€ ?? œ?????†ìŠµ?ˆë‹¤.' });
       }
 
-      // ???�전 ??�� ?�도 (FK ?�약 ?�으�??�공)
+      // ???„ì „ ?? œ ?œë„ (FK ?œì•½ ?†ìœ¼ë©??±ê³µ)
       try {
         await pool.query(`DELETE FROM worker WHERE worker_id = $1`, [id]);
         return { ok: true, delete_type: 'hard', worker_name: target.worker_name };
       } catch (e: any) {
-        // FK ?�약 ?�반 ???�프????���??�백
+        // FK ?œì•½ ?„ë°˜ ???Œí”„???? œë¡??´ë°±
         if (e.code === '23503') {
           await pool.query(
             `UPDATE worker SET is_active = FALSE, updated_at = NOW() WHERE worker_id = $1`,
@@ -518,7 +518,7 @@ export async function authRoutes(app: FastifyInstance) {
             ok: true,
             delete_type: 'soft',
             worker_name: target.worker_name,
-            message: '?�결???�무 ?�이?��? ?�어 계정??비활?�화 처리?�었?�니??',
+            message: '?°ê²°???…ë¬´ ?°ì´?°ê? ?ˆì–´ ê³„ì •??ë¹„í™œ?±í™” ì²˜ë¦¬?˜ì—ˆ?µë‹ˆ??',
           };
         }
         throw e;
@@ -526,7 +526,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
   );
 
-  // ?�?� 로그??기록 조회 (admin only) ?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�?�
+  // ?€?€ ë¡œê·¸??ê¸°ë¡ ì¡°íšŒ (admin only) ?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€?€
   app.get('/api/auth/login-logs', { preHandler: requireRole('admin') }, async (req) => {
     const { from, to, success, q } = req.query as {
       from?: string; to?: string; success?: string; q?: string;
