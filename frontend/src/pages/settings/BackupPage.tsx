@@ -100,7 +100,7 @@ const COLOR_MAP: Record<string, { border: string; bg: string; badge: string; tex
 };
 
 export function BackupPage() {
-  const { isAdmin, isSuperAdmin } = useAuth();
+  const { isAdmin, isSuperAdmin, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   // ── 내보내기/가져오기 상태 ──
@@ -137,7 +137,10 @@ export function BackupPage() {
 
   useEffect(() => { fetchStats(); }, []);
 
-  if (!isAdmin) {
+  if (authLoading) {
+    return <div className="p-8 text-center text-gray-400">로딩 중...</div>;
+  }
+  if (!isAdmin && !isSuperAdmin) {
     return <div className="p-8 text-center text-gray-500">관리자만 접근 가능합니다.</div>;
   }
 

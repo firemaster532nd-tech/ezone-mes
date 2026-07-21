@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Factory, ShieldAlert } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 
 export function LoginPage() {
@@ -77,10 +77,8 @@ export function LoginPage() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600">
-            <Factory className="h-9 w-9 text-white" />
-          </div>
-          <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <img src="/ezone-logo.jpg" alt="EZONE MES" className="mx-auto mb-4 h-16 object-contain" />
+          <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-sm text-gray-500">세션 확인 중...</p>
         </div>
       </div>
@@ -91,9 +89,7 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600">
-            <Factory className="h-9 w-9 text-white" />
-          </div>
+          <img src="/ezone-logo.jpg" alt="EZONE MES" className="mx-auto mb-4 h-16 object-contain" />
           <h1 className="text-2xl font-bold text-gray-900">EZONE MES</h1>
           <p className="mt-1 text-sm text-gray-500">방화구획 관통부 MES</p>
         </div>

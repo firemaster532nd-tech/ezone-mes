@@ -450,8 +450,7 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
       <div className={cn('flex h-16 items-center justify-between border-b px-4', theme.logo)}>
         {!collapsed && (
           <div className="flex items-center gap-2">
-            <Factory className={cn('h-6 w-6', theme.logoIcon)} />
-            <span className={cn('font-bold text-shop-lg', theme.logoText)}>EZONE MES</span>
+            <img src="/ezone-logo.jpg" alt="EZONE MES" className="h-8 object-contain" />
           </div>
         )}
         <button

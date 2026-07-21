@@ -15,7 +15,7 @@ interface Dept {
 }
 
 export function DepartmentsPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, loading: authLoading } = useAuth();
   const [depts, setDepts] = useState<Dept[]>([]);
   const [editing, setEditing] = useState<Dept | null>(null);
   const [form, setForm] = useState({ dept_code: '', dept_name: '', sort_order: 0, parent_dept_id: null as number | null });
@@ -89,6 +89,7 @@ export function DepartmentsPage() {
     }
   });
 
+  if (authLoading) return <div className="p-8 text-center text-gray-400">로딩 중...</div>;
   if (!isAdmin) return <div className="p-8 text-center text-gray-500">관리자만 접근 가능합니다.</div>;
 
   return (
