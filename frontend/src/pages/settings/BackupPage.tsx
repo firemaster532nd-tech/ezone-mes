@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
   Download, Upload, AlertTriangle, Database, RefreshCw,
   Trash2, Shield, HardDrive, Lock, CheckCircle2, XCircle,
-  RotateCcw, Eye, EyeOff, ChevronDown, ChevronRight,
+  RotateCcw, Eye, EyeOff, ChevronDown, ChevronRight, ShieldAlert,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
@@ -99,7 +100,8 @@ const COLOR_MAP: Record<string, { border: string; bg: string; badge: string; tex
 };
 
 export function BackupPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isSuperAdmin } = useAuth();
+  const navigate = useNavigate();
 
   // ── 내보내기/가져오기 상태 ──
   const [exporting, setExporting] = useState(false);
@@ -253,7 +255,32 @@ export function BackupPage() {
     <div>
       <PageHeader title="데이터 관리" description="데이터 백업, 복원 및 초기화" />
 
-      {/* ════════ DB 현황 ════════ */}
+      {/* ════════ 슈퍼관리자 전용: 전체 시스템 초기화 ════════ */}
+      {isSuperAdmin && (
+        <div className="bg-red-950 border-2 border-red-700 rounded-card p-5 mb-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-lg bg-red-700 flex items-center justify-center">
+              <ShieldAlert size={20} className="text-white" />
+            </div>
+            <div>
+              <h2 className="text-white font-bold text-base">전체 시스템 초기화</h2>
+              <p className="text-red-400 text-xs">슈퍼관리자 전용 — 모든 데이터를 원점으로 초기화합니다</p>
+            </div>
+          </div>
+          <p className="text-red-300 text-sm mb-4">
+            Supabase에 등록된 <span className="font-bold text-white">모든 업무 데이터</span>를 삭제하고 시스템을 초기 상태로 되돌립니다.
+            초기화 전 반드시 백업을 먼저 다운로드하세요.
+          </p>
+          <button
+            onClick={() => navigate('/superadmin/reset')}
+            className="flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white font-bold rounded-lg text-sm transition-colors"
+          >
+            <ShieldAlert size={16} />
+            전체 초기화 메뉴로 이동
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-card border p-5 mb-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
