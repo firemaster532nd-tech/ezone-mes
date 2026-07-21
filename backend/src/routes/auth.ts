@@ -1,4 +1,4 @@
-﻿import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { hashPassword, verifyPassword } from '../lib/password.js';
@@ -196,7 +196,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     let ok = await verifyPassword(password, w.password_hash);
     
-    // ë¹„ë?ë²ˆí˜¸ê°€ ?¼ì¹˜?˜ì? ?Šê³ , ?…ë ¥??ë¹„ë?ë²ˆí˜¸ê°€ ?˜ì´?ˆì´ ë¹ ì§„ ?´ë???ë²ˆí˜¸ ?•ì‹(10~11?ë¦¬ ?«ìž)??ê²½ìš° ?˜ì´?ˆì„ ?£ì–´??ì¶”ê? ê²€ì¦??œë„
+    // ë¹„ë?ë²ˆí˜¸ê°€ ?¼ì¹˜?˜ì? ?Šê³ , ?…ë ¥??ë¹„ë?ë²ˆí˜¸ê°€ ?˜ì ´?ˆì ´ ë¹ ì§„ ?´ë???ë²ˆí˜¸ ?•ì‹ (10~11? ë¦¬ ?«ìž )??ê²½ìš° ?˜ì ´?ˆì „ ?£ì–´??ì¶”ê? ê²€ì¦??œë „
     if (!ok && /^\d{10,11}$/.test(password)) {
       const formattedPhone = password.length === 11 
         ? `${password.slice(0, 3)}-${password.slice(3, 7)}-${password.slice(7)}`
@@ -230,9 +230,30 @@ export async function authRoutes(app: FastifyInstance) {
     };
   });
 
-  // GET /api/auth/me  (?„ìž¬ ë¡œê·¸?¸í•œ ?¬ìš©??+ ê¶Œí•œ ëª©ë¡)
+  // GET /api/auth/me  (?„ìž¬ ë¡œê·¸?¸í•œ ?¬ìš©??+ ê¶Œí•œ ëª©ë¡ )
   app.get('/api/auth/me', { preHandler: requireAuth }, async (req) => {
-    const { worker_id } = req.auth!;
+    const { worker_id, employee_no, role } = req.auth!;
+
+    // 슈퍼관리자는 DB에 존재하지 않으므로 즉시 반환
+    if (role === 'superadmin' || worker_id === 0) {
+      return {
+        user: {
+          worker_id: 0,
+          employee_no,
+          worker_name: '슈퍼관리자',
+          role: 'superadmin',
+          dept_id: null,
+          dept_code: null,
+          dept_name: null,
+          position: null,
+          email: null,
+          must_change_pw: false,
+          allowed_modes: 'both',
+        },
+        permissions: [],
+      };
+    }
+
     const [userRes, permRes] = await Promise.all([
       pool.query(
         `SELECT w.worker_id, w.employee_no, w.worker_name, w.role, w.dept_id, w.position, w.email,
@@ -244,7 +265,7 @@ export async function authRoutes(app: FastifyInstance) {
       ),
       pool.query(
         // can_read=TRUE??ê¶Œí•œë§?ë°˜í™˜ (CROSS JOIN?¼ë¡œ FALSEê°€ ???¬í•¨?˜ëŠ” ë¬¸ì œ ë°©ì?)
-        // admin?€ effective_permission?ì„œ role='admin'?¼ë¡œ ëª¨ë‘ TRUE
+        // admin?€ effective_permission? ì„œ role='admin'?¼ë¡œ ëª¨ë‘  TRUE
         `SELECT menu_code, path, can_read, can_write, can_update, can_delete
          FROM effective_permission
          WHERE worker_id = $1 AND can_read = TRUE`,
