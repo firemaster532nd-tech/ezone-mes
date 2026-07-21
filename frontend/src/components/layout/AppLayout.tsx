@@ -257,7 +257,7 @@ export function AppLayout() {
                     <div className="flex justify-between items-center">
                       <span className="text-slate-400">시스템 권한</span>
                       <span className="font-black text-blue-700 bg-blue-50/80 border border-blue-100 px-2 py-0.5 rounded-full text-[9px]">
-                        {user?.role === 'admin' ? '최고 관리자' : user?.role === 'manager' ? '부서 책임자' : '일반 작업자'}
+                        {user?.role === 'superadmin' ? '슈퍼관리자' : user?.role === 'admin' ? '최고 관리자' : user?.role === 'manager' ? '부서 책임자' : '일반 작업자'}
                       </span>
                     </div>
                   </div>

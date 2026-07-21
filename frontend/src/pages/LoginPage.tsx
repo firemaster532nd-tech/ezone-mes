@@ -13,8 +13,8 @@ export function LoginPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated) navigate('/dashboard', { replace: true });
-  }, [isAuthenticated, authLoading, navigate]);
+    if (!authLoading && isAuthenticated && !showSuperWelcome) navigate('/dashboard', { replace: true });
+  }, [isAuthenticated, authLoading, navigate, showSuperWelcome]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
