@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-const inputPath = path.join(__dirname, 'frontend/public/ezone-logo-v3.png');
+const inputPath = path.join(__dirname, 'frontend/public/ezone-logo-src.png');
 const outputPath = path.join(__dirname, 'frontend/public/ezone-logo-v4.png');
 
 // PNG 파일 읽기
@@ -88,20 +88,32 @@ for (let y = 0; y < height; y++) {
   }
 }
 
-// 흰색 배경 픽셀 투명화 (임계값 기반)
-const THRESHOLD = 240; // 이 값 이상이면 흰색으로 간주
-let removedCount = 0;
+// 플러드필 방식으로 배경 제거 (4방향 BFS)
+const THRESHOLD = 200;
+const visited = new Uint8Array(width * height);
 
-for (let i = 0; i < pixels.length; i += 4) {
-  const r = pixels[i];
-  const g = pixels[i + 1];
-  const b = pixels[i + 2];
-  // 흰색/밝은 회색 픽셀 → 투명화
-  if (r >= THRESHOLD && g >= THRESHOLD && b >= THRESHOLD) {
-    pixels[i + 3] = 0; // alpha = 0 (투명)
-    removedCount++;
+function isBackground(idx) {
+  const base = idx * 4;
+  return pixels[base] >= THRESHOLD && pixels[base+1] >= THRESHOLD && pixels[base+2] >= THRESHOLD;
+}
+
+const queue = [];
+const corners = [0, width-1, (height-1)*width, height*width-1];
+for (const idx of corners) {
+  if (!visited[idx] && isBackground(idx)) { queue.push(idx); visited[idx] = 1; }
+}
+
+let removedCount = 0;
+while (queue.length > 0) {
+  const idx = queue.pop();
+  pixels[idx * 4 + 3] = 0;
+  removedCount++;
+  const x = idx % width, y = Math.floor(idx / width);
+  for (const n of [x>0?idx-1:-1, x<width-1?idx+1:-1, y>0?idx-width:-1, y<height-1?idx+width:-1]) {
+    if (n >= 0 && !visited[n] && isBackground(n)) { visited[n] = 1; queue.push(n); }
   }
 }
+
 
 console.log(`투명화된 픽셀: ${removedCount} / ${width * height}`);
 
