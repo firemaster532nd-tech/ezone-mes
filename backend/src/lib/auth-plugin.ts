@@ -19,7 +19,7 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
   }
 }
 
-export function requireRole(...roles: Array<'admin' | 'manager' | 'worker'>) {
+export function requireRole(...roles: Array<'admin' | 'manager' | 'worker' | 'superadmin'>) {
   return async (req: FastifyRequest, reply: FastifyReply) => {
     await requireAuth(req, reply);
     if (reply.sent) return;

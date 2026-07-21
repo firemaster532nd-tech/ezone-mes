@@ -30,7 +30,7 @@ export async function departmentRoutes(app: FastifyInstance) {
     const id = parseInt(req.params.id, 10);
     const { rows } = await pool.query(
       `SELECT worker_id, employee_no, worker_name, role, position, email, phone, dept_id, is_active
-       FROM worker WHERE dept_id = $1 AND COALESCE(is_active, TRUE) = TRUE ORDER BY worker_name`,
+       FROM worker WHERE dept_id = $1 AND COALESCE(is_active, TRUE) = TRUE AND role <> 'superadmin' ORDER BY worker_name`,
       [id],
     );
     return { data: rows };
@@ -154,6 +154,7 @@ export async function departmentRoutes(app: FastifyInstance) {
         FROM worker w
         LEFT JOIN department d ON d.dept_id = w.dept_id
         WHERE COALESCE(w.is_active, TRUE) = TRUE
+          AND w.role <> 'superadmin'
         ORDER BY
           LOWER(TRIM(w.worker_name)) ASC,   -- DISTINCT ON 키
           (w.dept_id IS NOT NULL) DESC,      -- dept_id 있는 신버전 우선

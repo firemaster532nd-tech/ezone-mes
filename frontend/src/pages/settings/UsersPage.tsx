@@ -154,7 +154,8 @@ export function UsersPage() {
     setLoading(true);
     try {
       const res = await api.get<{ data: UserRow[] }>(`/departments/${dept_id}/members`);
-      setUsers(res.data);
+      // 슈퍼관리자는 목록에서 제외
+      setUsers(res.data.filter((u: any) => u.role !== 'superadmin'));
     } catch {
       toast.error('직원 목록을 불러올 수 없습니다.');
     } finally { setLoading(false); }

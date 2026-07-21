@@ -4,7 +4,7 @@ import { env } from '../config/env.js';
 export interface JwtPayload {
   worker_id: number;
   employee_no: string;
-  role: 'admin' | 'manager' | 'worker';
+  role: 'admin' | 'manager' | 'worker' | 'superadmin';
   dept_id: number | null;
 }
 
