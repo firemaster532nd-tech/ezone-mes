@@ -74,6 +74,7 @@ import { FqcInspectionPage } from '@/pages/quality/FqcInspectionPage';
 import { AnnouncementsPage } from '@/pages/announcements/AnnouncementsPage';
 import { LoginLogsPage } from '@/pages/settings/LoginLogsPage';
 import InventoryLedgerPage from '@/pages/inventory/InventoryLedgerPage';
+import { SuperAdminResetPage } from '@/pages/settings/SuperAdminResetPage';
 
 
 // ─── 라우트 에러 바운더리 ───
@@ -185,6 +186,8 @@ export const router = createBrowserRouter([
       // 공지/쪽지함
       { path: 'announcements',         element: <AnnouncementsPage /> },
       { path: 'announcements/:id',     element: <AnnouncementsPage /> },
+      // 슈퍼관리자 전용
+      { path: 'superadmin/reset', element: <SuperAdminResetPage /> },
       // catch-all: unknown paths redirect to dashboard
       { path: '*', element: <Navigate to="/dashboard" replace /> },
     ],

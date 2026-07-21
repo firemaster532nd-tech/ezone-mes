@@ -6,14 +6,14 @@ export interface User {
   worker_id: number;
   employee_no: string;
   worker_name: string;
-  role: 'admin' | 'manager' | 'worker';
+  role: 'admin' | 'manager' | 'worker' | 'superadmin';
   dept_id: number | null;
   dept_code?: string | null;
   dept_name?: string | null;
   position?: string | null;
   email?: string | null;
   must_change_pw?: boolean;
-  allowed_modes?: 'shop' | 'both'; // 'shop'=실무만, 'both'=실무+관리 모두
+  allowed_modes?: 'shop' | 'both';
 }
 
 interface AuthContextType {
@@ -22,13 +22,14 @@ interface AuthContextType {
   permissions: Permission[];
   permMap: Map<string, Permission>;
   loading: boolean;
-  login: (employee_no: string, password: string) => Promise<{ ok: boolean; error?: string }>;
+  login: (employee_no: string, password: string) => Promise<{ ok: boolean; error?: string; isSuperAdmin?: boolean }>;
   logout: () => void;
   refreshMe: () => Promise<void>;
   can: (menu_code: string, action: Action) => boolean;
   isAuthenticated: boolean;
   isAdmin: boolean;
   isManager: boolean;
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -65,10 +66,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(TOKEN_KEY, res.token);
       setToken(res.token);
       setUser(res.user);
-      // refresh fetches permissions
-      return { ok: true };
+      const isSuperAdmin = res.user.role === 'superadmin';
+      return { ok: true, isSuperAdmin };
     } catch (e: any) {
-      // ApiError carries the server response body; extract the error code from it
       const serverError = e?.body?.error ?? e?.message ?? 'login_failed';
       console.error('[Auth] Login failed:', serverError, e);
       return { ok: false, error: String(serverError) };
@@ -83,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const canFn = useCallback(
     (menu_code: string, action: Action) => {
+      if (user?.role === 'superadmin') return true;
       if (user?.role === 'admin') return true;
       const p = permMap.get(menu_code);
       return !!(p && p[`can_${action}` as const]);
@@ -95,8 +96,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     login, logout, refreshMe,
     can: canFn,
     isAuthenticated: !!user,
-    isAdmin: user?.role === 'admin',
-    isManager: user?.role === 'admin' || user?.role === 'manager',
+    isAdmin: user?.role === 'admin' || user?.role === 'superadmin',
+    isManager: user?.role === 'admin' || user?.role === 'manager' || user?.role === 'superadmin',
+    isSuperAdmin: user?.role === 'superadmin',
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

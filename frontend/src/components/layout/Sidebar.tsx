@@ -4,7 +4,7 @@ import {
   Truck, Settings, ChevronLeft, ChevronRight, Factory, Database,
   Wrench, FlaskConical, Scissors, Box, Layers,
   ArrowRightLeft, Monitor, HardHat,
-  ChevronDown, Hammer, Inbox, FileText, ShoppingCart, Megaphone,
+  ChevronDown, Hammer, Inbox, FileText, ShoppingCart, Megaphone, ShieldAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
@@ -318,7 +318,7 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
   const [approvalCount, setApprovalCount] = useState(0);
   const [socketWaitCount, setSocketWaitCount] = useState(0);
   const location = useLocation();
-  const { user, permissions, isAdmin } = useAuth();
+  const { user, permissions, isAdmin, isSuperAdmin } = useAuth();
   // 관리모드 접근 가능: admin 또는 allowed_modes='both' 이면 모드 토글 표시
   const canSwitchMode = isAdmin || user?.allowed_modes === 'both';
   const currentMode = canSwitchMode ? mode : 'shop';
@@ -374,6 +374,11 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
   }, [user]);
 
   const navItems = filterNav(currentMode === 'shop' ? shopNavItems : adminNavItems);
+
+  // 슈퍼관리자 전용 메뉴
+  const superAdminNav = isSuperAdmin ? [
+    { label: '시스템 초기화', path: '/superadmin/reset' },
+  ] : [];
 
   const toggleSection = (label: string) => {
     setOpenSections((prev) => {
@@ -532,6 +537,31 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
             )}
           </div>
         ))}
+
+        {/* 슈퍼관리자 전용 메뉴 */}
+        {isSuperAdmin && (
+          <>
+            <div className="my-2 border-t border-red-700" />
+            {!collapsed && (
+              <div className="px-3 py-1 flex items-center gap-1.5">
+                <ShieldAlert className="h-3.5 w-3.5 text-red-400" />
+                <span className="text-[10px] font-bold text-red-400 tracking-widest uppercase">Super Admin</span>
+              </div>
+            )}
+            <NavLink
+              to="/superadmin/reset"
+              className={({ isActive }) => cn(
+                'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors mb-0.5',
+                isActive ? 'bg-red-600 text-white' : 'text-red-400 hover:bg-red-900/50 hover:text-red-300',
+                collapsed && 'justify-center'
+              )}
+              title={collapsed ? '시스템 초기화' : undefined}
+            >
+              <ShieldAlert className="h-4 w-4 flex-shrink-0" />
+              {!collapsed && <span>시스템 초기화</span>}
+            </NavLink>
+          </>
+        )}
       </nav>
     </aside>
   );

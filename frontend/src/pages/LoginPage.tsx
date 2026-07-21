@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Factory } from 'lucide-react';
+import { Factory, ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 
 export function LoginPage() {
@@ -8,6 +8,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showSuperWelcome, setShowSuperWelcome] = useState(false);
   const { login, refreshMe, isAuthenticated, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -39,9 +40,37 @@ export function LoginPage() {
       setLoading(false);
       return;
     }
+
+    // 슈퍼관리자 로그인 시 환영 메시지 표시
+    if (res.isSuperAdmin) {
+      setShowSuperWelcome(true);
+      await refreshMe();
+      setTimeout(() => {
+        setShowSuperWelcome(false);
+        navigate('/dashboard', { replace: true });
+      }, 2500);
+      return;
+    }
+
     await refreshMe();
     navigate('/dashboard', { replace: true });
   };
+
+  // 슈퍼관리자 환영 화면
+  if (showSuperWelcome) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-950">
+        <div className="text-center animate-pulse">
+          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-red-600 shadow-lg shadow-red-900">
+            <ShieldAlert className="h-11 w-11 text-white" />
+          </div>
+          <p className="text-3xl font-bold text-white mb-2">환영합니다</p>
+          <p className="text-2xl font-semibold text-red-400">슈퍼관리자님</p>
+          <p className="mt-4 text-sm text-gray-500">시스템에 접속하는 중...</p>
+        </div>
+      </div>
+    );
+  }
 
   // 저장된 토큰 유효성 확인 중 → 스피너 표시
   if (authLoading) {
