@@ -274,22 +274,26 @@ function SocketOrderTabContent() {
         ];
       case 'VAG-1.69':
         return [
-          { ...base, label: 'bracket-HA', t: 1.6, bw: 60,  l: sw - 5, qty: q * 4 },
-          { ...base, label: 'bracket-HB', t: 1.6, bw: 204, l: sw - 5, qty: q * 4 },
+          { ...base, label: 'bracket-HA',  t: 0.6, bw: 60,  l: sw - 5, qty: q * 4 },
+          { ...base, label: 'bracket-HB',  t: 0.6, bw: 204, l: sw - 5, qty: q * 4 },
+          { ...base, label: 'support-C1',  t: 0.6, bw: 235, l: sw,     qty: q * 2 },
+          { ...base, label: 'support-C2',  t: 0.6, bw: 190, l: sw,     qty: q * 2 },
         ];
       case 'HTG-064': case 'HTG-064DC':
         return [
-          { ...base, label: 'bracket-HA', t: 1.6, bw: 60,  l: w - 5,  qty: q * 2 },
-          { ...base, label: 'bracket-HB', t: 1.6, bw: 274, l: w - 5,  qty: q * 2 },
+          { ...base, label: 'bracket-HA', t: 0.6, bw: 60,  l: w - 5,  qty: q * 2 },
+          { ...base, label: 'bracket-HB', t: 0.6, bw: 274, l: w - 5,  qty: q * 2 },
           { ...base, label: 'bracket-V',  t: 1.6, bw: 60,  l: h - 35, qty: q * 4 },
           { ...base, label: 'reinforce',  t: 1.6, bw: 50,  l: h,      qty: q * 3 },
         ];
       case 'HTG-1.69':
         return [
-          { ...base, label: 'bracket-HA', t: 1.6, bw: 60,  l: sw - 5, qty: q * 4 },
-          { ...base, label: 'bracket-HB', t: 1.6, bw: 274, l: sw - 5, qty: q * 4 },
-          { ...base, label: 'bracket-V',  t: 1.6, bw: 60,  l: h - 35, qty: q * 4 },
-          { ...base, label: 'reinforce',  t: 1.6, bw: 50,  l: h,      qty: q * 6 },
+          { ...base, label: 'bracket-HA',  t: 0.6, bw: 60,  l: sw,     qty: q * 4 },
+          { ...base, label: 'bracket-HB',  t: 0.6, bw: 274, l: sw,     qty: q * 4 },
+          { ...base, label: 'support-C1',  t: 0.6, bw: 318, l: sw + 5, qty: q * 8 },
+          { ...base, label: 'support-C2',  t: 0.6, bw: 255, l: sw + 5, qty: q * 8 },
+          { ...base, label: 'bracket-V',   t: 1.6, bw: 60,  l: h - 35, qty: q * 4 },
+          { ...base, label: 'reinforce',   t: 1.6, bw: 50,  l: h,      qty: q * 6 },
         ];
       default: return [];
     }

@@ -157,20 +157,24 @@ function OrderCard({ order, onRefresh, vendors = [] }: { order: SocketOrder; onR
             add(1.6, 237, h - 1,                  q * 4);
             break;
           case 'VAG-1.69':
-            add(1.6, 60,  sw - 1,  q * 4);
-            add(1.6, 60,  h - 30,  q * 4);
+            add(0.6, 60,  sw - 5, q * 4);
+            add(0.6, 204, sw - 5, q * 4);
+            add(0.6, 235, sw,     q * 2);
+            add(0.6, 190, sw,     q * 2);
             break;
           case 'HTG-064': case 'HTG-064DC':
-            add(1.6, 60,  w - 5,  q * 2);
-            add(1.6, 274, w - 5,  q * 2);
+            add(0.6, 60,  w - 5,  q * 2);
+            add(0.6, 274, w - 5,  q * 2);
             add(1.6, 60,  h - 35, q * 4);
             add(1.6, 50,  h,      q * 3);
             break;
           case 'HTG-1.69':
-            add(1.6, 60,  sw - 5,  q * 4);
-            add(1.6, 274, sw - 5,  q * 4);
-            add(1.6, 60,  h - 35,  q * 4);
-            add(1.6, 50,  h,       q * 6);
+            add(0.6, 60,  sw,     q * 4);
+            add(0.6, 274, sw,     q * 4);
+            add(0.6, 318, sw + 5, q * 8);
+            add(0.6, 255, sw + 5, q * 8);
+            add(1.6, 60,  h - 35, q * 4);
+            add(1.6, 50,  h,      q * 6);
             break;
         }
         return rows;
