@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
@@ -19,29 +19,29 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!employeeNo.trim()) { setError('사번을 입력해주세요.'); return; }
-    if (!password) { setError('비밀번호를 입력해주세요.'); return; }
+    if (!employeeNo.trim()) { setError('?щ쾲???낅젰?댁＜?몄슂.'); return; }
+    if (!password) { setError('鍮꾨?踰덊샇瑜??낅젰?댁＜?몄슂.'); return; }
 
     setLoading(true);
     const res = await login(employeeNo.trim(), password);
     if (!res.ok) {
       const errCode = res.error || '';
       if (errCode === 'invalid_credentials' || errCode.includes('401')) {
-        setError('사번 또는 비밀번호가 올바르지 않습니다.');
+        setError('?щ쾲 ?먮뒗 鍮꾨?踰덊샇媛 ?щ컮瑜댁? ?딆뒿?덈떎.');
       } else if (errCode === 'account_disabled') {
-        setError('비활성화된 계정입니다. 관리자에게 문의하세요.');
+        setError('鍮꾪솢?깊솕??怨꾩젙?낅땲?? 愿由ъ옄?먭쾶 臾몄쓽?섏꽭??');
       } else if (errCode === 'password_not_set') {
-        setError('비밀번호가 설정되지 않았습니다. 관리자에게 문의하세요.');
+        setError('鍮꾨?踰덊샇媛 ?ㅼ젙?섏? ?딆븯?듬땲?? 愿由ъ옄?먭쾶 臾몄쓽?섏꽭??');
       } else if (errCode.includes('Failed to fetch') || errCode.includes('NetworkError')) {
-        setError('서버에 연결할 수 없습니다. 네트워크 상태를 확인해 주세요.');
+        setError('?쒕쾭???곌껐?????놁뒿?덈떎. ?ㅽ듃?뚰겕 ?곹깭瑜??뺤씤??二쇱꽭??');
       } else {
-        setError(`로그인 중 오류가 발생했습니다. (${errCode})`);
+        setError(`濡쒓렇??以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎. (${errCode})`);
       }
       setLoading(false);
       return;
     }
 
-    // 슈퍼관리자 로그인 시 환영 메시지 표시
+    // ?덊띁愿由ъ옄 濡쒓렇?????섏쁺 硫붿떆吏 ?쒖떆
     if (res.isSuperAdmin) {
       setShowSuperWelcome(true);
       await refreshMe();
@@ -56,7 +56,7 @@ export function LoginPage() {
     navigate('/dashboard', { replace: true });
   };
 
-  // 슈퍼관리자 환영 화면
+  // ?덊띁愿由ъ옄 ?섏쁺 ?붾㈃
   if (showSuperWelcome) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-950">
@@ -64,22 +64,22 @@ export function LoginPage() {
           <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-red-600 shadow-lg shadow-red-900">
             <ShieldAlert className="h-11 w-11 text-white" />
           </div>
-          <p className="text-3xl font-bold text-white mb-2">환영합니다</p>
-          <p className="text-2xl font-semibold text-red-400">슈퍼관리자님</p>
-          <p className="mt-4 text-sm text-gray-500">시스템에 접속하는 중...</p>
+          <p className="text-3xl font-bold text-white mb-2">?섏쁺?⑸땲??/p>
+          <p className="text-2xl font-semibold text-red-400">?덊띁愿由ъ옄??/p>
+          <p className="mt-4 text-sm text-gray-500">?쒖뒪?쒖뿉 ?묒냽?섎뒗 以?..</p>
         </div>
       </div>
     );
   }
 
-  // 저장된 토큰 유효성 확인 중 → 스피너 표시
+  // ??λ맂 ?좏겙 ?좏슚???뺤씤 以????ㅽ뵾???쒖떆
   if (authLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-50">
         <div className="text-center">
-          <img src="/ezone-logo.png" alt="EZONE MES" className="mx-auto mb-4 h-14 object-contain" />
+          <img src="/ezone-logo-v3.png" alt="EZONE MES" className="mx-auto mb-4 h-14 object-contain" />
           <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-gray-500">세션 확인 중...</p>
+          <p className="text-sm text-gray-500">?몄뀡 ?뺤씤 以?..</p>
         </div>
       </div>
     );
@@ -89,33 +89,33 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <img src="/ezone-logo.png" alt="EZONE MES" className="mx-auto mb-4 h-14 object-contain" />
+          <img src="/ezone-logo-v3.png" alt="EZONE MES" className="mx-auto mb-4 h-14 object-contain" />
           <h1 className="text-2xl font-bold text-gray-900">EZONE MES</h1>
-          <p className="mt-1 text-sm text-gray-500">방화구획 관통부 MES</p>
+          <p className="mt-1 text-sm text-gray-500">諛⑺솕援ы쉷 愿?듬? MES</p>
         </div>
 
         <form onSubmit={handleSubmit} className="rounded-xl border bg-white p-6 shadow-sm">
-          <h2 className="mb-6 text-center text-lg font-semibold text-gray-900">로그인</h2>
+          <h2 className="mb-6 text-center text-lg font-semibold text-gray-900">濡쒓렇??/h2>
           <div className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">사번</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">?щ쾲</label>
               <input
                 type="text"
                 value={employeeNo}
                 onChange={(e) => setEmployeeNo(e.target.value)}
-                placeholder="사번을 입력하세요"
+                placeholder="?щ쾲???낅젰?섏꽭??
                 className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 autoFocus
                 autoComplete="username"
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">비밀번호</label>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">鍮꾨?踰덊샇</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="비밀번호"
+                placeholder="鍮꾨?踰덊샇"
                 className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                 autoComplete="current-password"
               />
@@ -127,10 +127,10 @@ export function LoginPage() {
             disabled={loading}
             className="mt-6 w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-blue-300"
           >
-            {loading ? '로그인 중...' : '로그인'}
+            {loading ? '濡쒓렇??以?..' : '濡쒓렇??}
           </button>
           <p className="mt-4 text-center text-xs text-gray-400">
-            등록된 사용자만 로그인 가능합니다. 계정 문의: 관리자
+            ?깅줉???ъ슜?먮쭔 濡쒓렇??媛?ν빀?덈떎. 怨꾩젙 臾몄쓽: 愿由ъ옄
           </p>
         </form>
       </div>

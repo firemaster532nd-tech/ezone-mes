@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+﻿import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, Package, ShieldCheck,
   Truck, Settings, ChevronLeft, ChevronRight, Factory, Database,
@@ -22,289 +22,288 @@ interface NavChild {
 interface NavSection {
   label: string;
   icon: React.ElementType;
-  step?: string;          // 실무모드 단계 번호 (e.g. "①")
-  path?: string;          // 단일 링크
+  step?: string;          // ?ㅻТ紐⑤뱶 ?④퀎 踰덊샇 (e.g. "??)
+  path?: string;          // ?⑥씪 留곹겕
   children?: NavChild[];
-  dividerAfter?: boolean; // 구분선
-}
+  dividerAfter?: boolean; // 援щ텇??}
 
-// ─── 실무 모드: 업무 흐름 순서 (수주→발주→생산→출하) ───
+// ??? ?ㅻТ 紐⑤뱶: ?낅Т ?먮쫫 ?쒖꽌 (?섏＜?믩컻二쇄넂?앹궛?믪텧?? ???
 const shopNavItems: NavSection[] = [
   {
-    label: '오늘의 작업',
+    label: '?ㅻ뒛???묒뾽',
     icon: LayoutDashboard,
     path: '/dashboard',
   },
-  // ── 수주/발주 (업무의 시작점) ──
+  // ?? ?섏＜/諛쒖＜ (?낅Т???쒖옉?? ??
   {
-    label: '수주/발주',
+    label: '?섏＜/諛쒖＜',
     icon: ShoppingCart,
     children: [
-      { label: '현장별 프로젝트', path: '/orders/projects' },
-      { label: '발주서 관리', path: '/orders/purchase-orders' },
-      { label: '견적서 등록/관리', path: '/orders/quotations' },
-      { label: '미주문현황 조회', path: '/orders/unordered' },
-      { label: '수주 관리 / BOM', path: '/orders' },
-      { label: '자재 발주서', path: '/orders/purchase-requests' },
-      { label: '주문내역 → 입고신청', path: '/orders/material-orders' },
+      { label: '?꾩옣蹂??꾨줈?앺듃', path: '/orders/projects' },
+      { label: '諛쒖＜??愿由?, path: '/orders/purchase-orders' },
+      { label: '寃ъ쟻???깅줉/愿由?, path: '/orders/quotations' },
+      { label: '誘몄＜臾명쁽??議고쉶', path: '/orders/unordered' },
+      { label: '?섏＜ 愿由?/ BOM', path: '/orders' },
+      { label: '?먯옱 諛쒖＜??, path: '/orders/purchase-requests' },
+      { label: '二쇰Ц?댁뿭 ???낃퀬?좎껌', path: '/orders/material-orders' },
     ],
   },
   {
-    label: '결재함',
+    label: '寃곗옱??,
     icon: Inbox,
     path: '/approval/inbox',
   },
   {
-    label: '공지 / 쪽지함',
+    label: '怨듭? / 履쎌???,
     icon: Megaphone,
     path: '/announcements',
   },
   {
-    label: '자재발주대기',
+    label: '?먯옱諛쒖＜?湲?,
     icon: Package,
     path: '/orders/socket-order-wait',
     dividerAfter: true,
   },
   {
-    label: 'TBM 안전회의',
+    label: 'TBM ?덉쟾?뚯쓽',
     icon: HardHat,
     path: '/production/tbm',
   },
   {
-    label: '작업지시',
+    label: '?묒뾽吏??,
     icon: ClipboardList,
     children: [
-      { label: '일반 작업지시',      path: '/production/work-orders' },
-      { label: '현장별 작업지시',     path: '/production/project-work-orders' },
-      { label: '비인정제품 작업지시',   path: '/production/socket-work-orders' },
-      { label: '구조체 작업지시',     path: '/production/struct-work-orders' },
-      { label: '부자재별 작업지시', path: '/production/sub-work-orders' },
-      { label: '에프엔테크 작업지시', path: '/production/fn-work-orders' },
+      { label: '?쇰컲 ?묒뾽吏??,      path: '/production/work-orders' },
+      { label: '?꾩옣蹂??묒뾽吏??,     path: '/production/project-work-orders' },
+      { label: '鍮꾩씤?뺤젣???묒뾽吏??,   path: '/production/socket-work-orders' },
+      { label: '援ъ“泥??묒뾽吏??,     path: '/production/struct-work-orders' },
+      { label: '遺?먯옱蹂??묒뾽吏??, path: '/production/sub-work-orders' },
+      { label: '?먰봽?뷀뀒???묒뾽吏??, path: '/production/fn-work-orders' },
     ],
     dividerAfter: true,
   },
-  // ── 생산 흐름 ──
+  // ?? ?앹궛 ?먮쫫 ??
   {
-    label: '원재료 입고/검사',
+    label: '?먯옱猷??낃퀬/寃??,
     icon: Package,
-    step: '①',
+    step: '??,
     children: [
-      { label: '인수검사', path: '/quality/incoming' },
-      { label: '재고 현황', path: '/inventory/dashboard' },
-      { label: '재고 수불대장', path: '/inventory/ledger' },
-      { label: '초기 재고 설정', path: '/inventory/initialize' },
-      { label: '수불대장 엑셀 연동', path: '/inventory/import' },
-      { label: '소켓/평철 재고 관리', path: '/inventory/socket-stock' },
-      { label: '에프엔테크 재고현황', path: '/inventory/fn-tech-stock' },
+      { label: '?몄닔寃??, path: '/quality/incoming' },
+      { label: '?ш퀬 ?꾪솴', path: '/inventory/dashboard' },
+      { label: '?ш퀬 ?섎텋???, path: '/inventory/ledger' },
+      { label: '珥덇린 ?ш퀬 ?ㅼ젙', path: '/inventory/initialize' },
+      { label: '?섎텋????묒? ?곕룞', path: '/inventory/import' },
+      { label: '?뚯폆/?됱쿋 ?ш퀬 愿由?, path: '/inventory/socket-stock' },
+      { label: '?먰봽?뷀뀒???ш퀬?꾪솴', path: '/inventory/fn-tech-stock' },
 
     ],
   },
   {
-    label: '배합',
+    label: '諛고빀',
     icon: FlaskConical,
-    step: '②',
+    step: '??,
     children: [
-      { label: '공정 실행', path: '/production/process-execution' },
-      { label: '자주검사', path: '/quality/self-inspection' },
+      { label: '怨듭젙 ?ㅽ뻾', path: '/production/process-execution' },
+      { label: '?먯＜寃??, path: '/quality/self-inspection' },
     ],
   },
   {
-    label: '압출',
+    label: '?뺤텧',
     icon: Layers,
-    step: '③',
+    step: '??,
     children: [
-      { label: '공정 실행', path: '/production/process-execution' },
-      { label: '자주검사', path: '/quality/self-inspection' },
+      { label: '怨듭젙 ?ㅽ뻾', path: '/production/process-execution' },
+      { label: '?먯＜寃??, path: '/quality/self-inspection' },
     ],
   },
   {
-    label: '재단',
+    label: '?щ떒',
     icon: Scissors,
-    step: '④',
+    step: '??,
     children: [
-      { label: '공정 실행', path: '/production/process-execution' },
-      { label: '자주검사', path: '/quality/self-inspection' },
+      { label: '怨듭젙 ?ㅽ뻾', path: '/production/process-execution' },
+      { label: '?먯＜寃??, path: '/quality/self-inspection' },
     ],
   },
   {
-    label: '부자재 입고/검사',
+    label: '遺?먯옱 ?낃퀬/寃??,
     icon: Box,
-    step: '⑤',
+    step: '??,
     children: [
-      { label: '인수검사', path: '/quality/incoming' },
-      { label: '재고 현황', path: '/inventory/dashboard' },
-      { label: '로케이션 관리', path: '/inventory/location' },
-      { label: 'LOT 라벨 재출력', path: '/inventory/label-reprint' },
+      { label: '?몄닔寃??, path: '/quality/incoming' },
+      { label: '?ш퀬 ?꾪솴', path: '/inventory/dashboard' },
+      { label: '濡쒖??댁뀡 愿由?, path: '/inventory/location' },
+      { label: 'LOT ?쇰꺼 ?ъ텧??, path: '/inventory/label-reprint' },
     ],
   },
   {
-    label: '조립',
+    label: '議곕┰',
     icon: Hammer,
-    step: '⑥',
+    step: '??,
     children: [
-      { label: '공정 실행', path: '/production/process-execution' },
-      { label: '중간검사 (C-701)', path: '/quality/process-inspection' },
-      { label: '자주검사', path: '/quality/self-inspection' },
+      { label: '怨듭젙 ?ㅽ뻾', path: '/production/process-execution' },
+      { label: '以묎컙寃??(C-701)', path: '/quality/process-inspection' },
+      { label: '?먯＜寃??, path: '/quality/self-inspection' },
     ],
     dividerAfter: true,
   },
-  // ── 출하 ──
+  // ?? 異쒗븯 ??
   {
-    label: '출하',
+    label: '異쒗븯',
     icon: Truck,
-    step: '⑦',
+    step: '??,
     children: [
-      { label: '출하대기현황',       path: '/shipment/ready' },
-      { label: '출하조회',           path: '/shipment/orders' },
-      { label: '출하입력',           path: '/shipment/input' },
-      { label: '출하현황',           path: '/shipment/pending' },
-      { label: '포장·출하 스캔',    path: '/shipment/staging' },
-      { label: '거래명세서 관리',   path: '/shipment/statements' },
-      { label: '반품입고',          path: '/shipment/returns' },
+      { label: '異쒗븯?湲고쁽??,       path: '/shipment/ready' },
+      { label: '異쒗븯議고쉶',           path: '/shipment/orders' },
+      { label: '異쒗븯?낅젰',           path: '/shipment/input' },
+      { label: '異쒗븯?꾪솴',           path: '/shipment/pending' },
+      { label: '?ъ옣쨌異쒗븯 ?ㅼ틪',    path: '/shipment/staging' },
+      { label: '嫄곕옒紐낆꽭??愿由?,   path: '/shipment/statements' },
+      { label: '諛섑뭹?낃퀬',          path: '/shipment/returns' },
     ],
     dividerAfter: true,
   },
-  // ── 현황/추적 ──
+  // ?? ?꾪솴/異붿쟻 ??
   {
-    label: '현황판',
+    label: '?꾪솴??,
     icon: Monitor,
     children: [
-      { label: '생산 현황', path: '/production/production-dashboard' },
-      { label: 'LOT 추적', path: '/quality/lot-trace' },
-      { label: '통합 LOT Matrix', path: '/quality/project-lot-matrix' },
-      { label: '인정기준 검증', path: '/quality/cert-check' },
-      { label: '불량/폐기', path: '/quality/defects' },
-      { label: '로스 분석', path: '/reports/loss' },
-      { label: '월말 실사/마감', path: '/inventory/closing' },
-      { label: '미비사항 점검', path: '/quality/compliance' },
+      { label: '?앹궛 ?꾪솴', path: '/production/production-dashboard' },
+      { label: 'LOT 異붿쟻', path: '/quality/lot-trace' },
+      { label: '?듯빀 LOT Matrix', path: '/quality/project-lot-matrix' },
+      { label: '?몄젙湲곗? 寃利?, path: '/quality/cert-check' },
+      { label: '遺덈웾/?먭린', path: '/quality/defects' },
+      { label: '濡쒖뒪 遺꾩꽍', path: '/reports/loss' },
+      { label: '?붾쭚 ?ㅼ궗/留덇컧', path: '/inventory/closing' },
+      { label: '誘몃퉬?ы빆 ?먭?', path: '/quality/compliance' },
     ],
     dividerAfter: true,
   },
-  // ── 기초등록 ──
+  // ?? 湲곗큹?깅줉 ??
   {
-    label: '기초등록',
+    label: '湲곗큹?깅줉',
     icon: Database,
     children: [
-      { label: '품목 등록/관리', path: '/master/items' },
-      { label: '거래처 관리', path: '/master/companies' },
-      { label: '인정구조 관리', path: '/master/certifications' },
-      { label: 'BOM 관리', path: '/master/bom' },
+      { label: '?덈ぉ ?깅줉/愿由?, path: '/master/items' },
+      { label: '嫄곕옒泥?愿由?, path: '/master/companies' },
+      { label: '?몄젙援ъ“ 愿由?, path: '/master/certifications' },
+      { label: 'BOM 愿由?, path: '/master/bom' },
     ],
   },
 
 ];
 
-// ─── 관리 모드: 업무 흐름 순서 (수주→발주→생산→품질→출하) ───
+// ??? 愿由?紐⑤뱶: ?낅Т ?먮쫫 ?쒖꽌 (?섏＜?믩컻二쇄넂?앹궛?믫뭹吏댿넂異쒗븯) ???
 const adminNavItems: NavSection[] = [
-  { label: '대시보드', icon: LayoutDashboard, path: '/dashboard' },
+  { label: '??쒕낫??, icon: LayoutDashboard, path: '/dashboard' },
   {
-    label: '수주/구매',
+    label: '?섏＜/援щℓ',
     icon: ShoppingCart,
     children: [
-      { label: '현장별 프로젝트', path: '/orders/projects' },
-      { label: '발주서 관리', path: '/orders/purchase-orders' },
-      { label: '견적서 등록/관리', path: '/orders/quotations' },
-      { label: '미주문현황 조회', path: '/orders/unordered' },
-      { label: '수주 관리 / BOM', path: '/orders' },
-      { label: '자재 발주서', path: '/orders/purchase-requests' },
-      { label: '주문내역 → 입고신청', path: '/orders/material-orders' },
+      { label: '?꾩옣蹂??꾨줈?앺듃', path: '/orders/projects' },
+      { label: '諛쒖＜??愿由?, path: '/orders/purchase-orders' },
+      { label: '寃ъ쟻???깅줉/愿由?, path: '/orders/quotations' },
+      { label: '誘몄＜臾명쁽??議고쉶', path: '/orders/unordered' },
+      { label: '?섏＜ 愿由?/ BOM', path: '/orders' },
+      { label: '?먯옱 諛쒖＜??, path: '/orders/purchase-requests' },
+      { label: '二쇰Ц?댁뿭 ???낃퀬?좎껌', path: '/orders/material-orders' },
     ],
   },
   {
-    label: '결재 관리',
+    label: '寃곗옱 愿由?,
     icon: Inbox,
     children: [
-      { label: '결재함', path: '/approval/inbox' },
-      { label: '결재 라인 설정', path: '/approval/lines' },
+      { label: '寃곗옱??, path: '/approval/inbox' },
+      { label: '寃곗옱 ?쇱씤 ?ㅼ젙', path: '/approval/lines' },
     ],
   },
   {
-    label: '자재발주대기',
+    label: '?먯옱諛쒖＜?湲?,
     icon: Package,
     path: '/orders/socket-order-wait',
     dividerAfter: true,
   },
   {
-    label: '생산관리',
+    label: '?앹궛愿由?,
     icon: ClipboardList,
     children: [
-      { label: '작업지시 목록',       path: '/production/work-orders' },
-      { label: '현장별 작업지시',      path: '/production/project-work-orders' },
-      { label: '비인정제품 작업지시',   path: '/production/socket-work-orders' },
-      { label: '구조체 작업지시',      path: '/production/struct-work-orders' },
-      { label: '부자재별 작업지시',  path: '/production/sub-work-orders' },
-      { label: '에프엔테크 작업지시', path: '/production/fn-work-orders' },
-      { label: '공정 실행',           path: '/production/process-execution' },
-      { label: '생산 현황',           path: '/production/production-dashboard' },
-      { label: '공정일지',            path: '/production/daily-log' },
-      { label: 'TBM 안전회의',        path: '/production/tbm' },
+      { label: '?묒뾽吏??紐⑸줉',       path: '/production/work-orders' },
+      { label: '?꾩옣蹂??묒뾽吏??,      path: '/production/project-work-orders' },
+      { label: '鍮꾩씤?뺤젣???묒뾽吏??,   path: '/production/socket-work-orders' },
+      { label: '援ъ“泥??묒뾽吏??,      path: '/production/struct-work-orders' },
+      { label: '遺?먯옱蹂??묒뾽吏??,  path: '/production/sub-work-orders' },
+      { label: '?먰봽?뷀뀒???묒뾽吏??, path: '/production/fn-work-orders' },
+      { label: '怨듭젙 ?ㅽ뻾',           path: '/production/process-execution' },
+      { label: '?앹궛 ?꾪솴',           path: '/production/production-dashboard' },
+      { label: '怨듭젙?쇱?',            path: '/production/daily-log' },
+      { label: 'TBM ?덉쟾?뚯쓽',        path: '/production/tbm' },
     ],
   },
   {
-    label: '품질관리',
+    label: '?덉쭏愿由?,
     icon: ShieldCheck,
     children: [
-      { label: '인수검사', path: '/quality/incoming' },
-      { label: '중간검사 (C-701)', path: '/quality/process-inspection' },
-      { label: '자주검사', path: '/quality/self-inspection' },
-      { label: '완제품검사 (C-901)', path: '/quality/fqc-inspection' },
-      { label: 'LOT 추적', path: '/quality/lot-trace' },
-      { label: '통합 LOT Matrix', path: '/quality/project-lot-matrix' },
-      { label: '인정기준 검증', path: '/quality/cert-check' },
-      { label: '불량/폐기', path: '/quality/defects' },
-      { label: '미비사항 점검', path: '/quality/compliance' },
+      { label: '?몄닔寃??, path: '/quality/incoming' },
+      { label: '以묎컙寃??(C-701)', path: '/quality/process-inspection' },
+      { label: '?먯＜寃??, path: '/quality/self-inspection' },
+      { label: '?꾩젣?덇???(C-901)', path: '/quality/fqc-inspection' },
+      { label: 'LOT 異붿쟻', path: '/quality/lot-trace' },
+      { label: '?듯빀 LOT Matrix', path: '/quality/project-lot-matrix' },
+      { label: '?몄젙湲곗? 寃利?, path: '/quality/cert-check' },
+      { label: '遺덈웾/?먭린', path: '/quality/defects' },
+      { label: '誘몃퉬?ы빆 ?먭?', path: '/quality/compliance' },
     ],
   },
   {
-    label: '재고/출하',
+    label: '?ш퀬/異쒗븯',
     icon: ArrowRightLeft,
     children: [
-      { label: '재고 현황', path: '/inventory/dashboard' },
-      { label: '재고 수불대장', path: '/inventory/ledger' },
-      { label: '수불대장 엑셀 연동', path: '/inventory/import' },
-      { label: '월말 실사/마감', path: '/inventory/closing' },
-      { label: '소켓/평철 재고 관리', path: '/inventory/socket-stock' },
-      { label: '에프엔테크 재고현황', path: '/inventory/fn-tech-stock' },
+      { label: '?ш퀬 ?꾪솴', path: '/inventory/dashboard' },
+      { label: '?ш퀬 ?섎텋???, path: '/inventory/ledger' },
+      { label: '?섎텋????묒? ?곕룞', path: '/inventory/import' },
+      { label: '?붾쭚 ?ㅼ궗/留덇컧', path: '/inventory/closing' },
+      { label: '?뚯폆/?됱쿋 ?ш퀬 愿由?, path: '/inventory/socket-stock' },
+      { label: '?먰봽?뷀뀒???ш퀬?꾪솴', path: '/inventory/fn-tech-stock' },
 
-      { label: '로케이션 관리', path: '/inventory/location' },
-      { label: 'LOT 라벨 재출력', path: '/inventory/label-reprint' },
-      { label: '출하대기현황', path: '/shipment/ready' },
-      { label: '출하조회', path: '/shipment/orders' },
-      { label: '출하입력', path: '/shipment/input' },
-      { label: '출하현황', path: '/shipment/pending' },
-      { label: '포장·출하 스캔', path: '/shipment/staging' },
-      { label: '거래명세서 관리', path: '/shipment/statements' },
-      { label: '반품입고', path: '/shipment/returns' },
+      { label: '濡쒖??댁뀡 愿由?, path: '/inventory/location' },
+      { label: 'LOT ?쇰꺼 ?ъ텧??, path: '/inventory/label-reprint' },
+      { label: '異쒗븯?湲고쁽??, path: '/shipment/ready' },
+      { label: '異쒗븯議고쉶', path: '/shipment/orders' },
+      { label: '異쒗븯?낅젰', path: '/shipment/input' },
+      { label: '異쒗븯?꾪솴', path: '/shipment/pending' },
+      { label: '?ъ옣쨌異쒗븯 ?ㅼ틪', path: '/shipment/staging' },
+      { label: '嫄곕옒紐낆꽭??愿由?, path: '/shipment/statements' },
+      { label: '諛섑뭹?낃퀬', path: '/shipment/returns' },
     ],
   },
   {
-    label: '보고서',
+    label: '蹂닿퀬??,
     icon: FileText,
     children: [
-      { label: '일일/주간/월간', path: '/reports' },
-      { label: '로스 분석', path: '/reports/loss' },
+      { label: '?쇱씪/二쇨컙/?붽컙', path: '/reports' },
+      { label: '濡쒖뒪 遺꾩꽍', path: '/reports/loss' },
     ],
   },
   {
-    label: '기초등록',
+    label: '湲곗큹?깅줉',
     icon: Database,
     children: [
-      { label: '품목 등록/관리', path: '/master/items' },
-      { label: '거래처 관리', path: '/master/companies' },
-      { label: '인정구조 관리', path: '/master/certifications' },
-      { label: 'BOM 관리', path: '/master/bom' },
+      { label: '?덈ぉ ?깅줉/愿由?, path: '/master/items' },
+      { label: '嫄곕옒泥?愿由?, path: '/master/companies' },
+      { label: '?몄젙援ъ“ 愿由?, path: '/master/certifications' },
+      { label: 'BOM 愿由?, path: '/master/bom' },
     ],
   },
   {
-    label: '설정',
+    label: '?ㅼ젙',
     icon: Settings,
     children: [
-      { label: '사용자 관리',       path: '/settings/users' },
-      { label: '부서 관리',         path: '/settings/departments' },
-      { label: '권한 관리',         path: '/settings/permissions' },
-      { label: '로그인 기록',        path: '/settings/login-logs' },
-      { label: '이카운트 ERP 연동', path: '/settings/ecount' },
-      { label: '백업 / 초기화',     path: '/settings/backup' },
+      { label: '?ъ슜??愿由?,       path: '/settings/users' },
+      { label: '遺??愿由?,         path: '/settings/departments' },
+      { label: '沅뚰븳 愿由?,         path: '/settings/permissions' },
+      { label: '濡쒓렇??湲곕줉',        path: '/settings/login-logs' },
+      { label: '?댁뭅?댄듃 ERP ?곕룞', path: '/settings/ecount' },
+      { label: '諛깆뾽 / 珥덇린??,     path: '/settings/backup' },
     ],
   },
 
@@ -319,21 +318,21 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
   const [socketWaitCount, setSocketWaitCount] = useState(0);
   const location = useLocation();
   const { user, permissions, isAdmin, isSuperAdmin } = useAuth();
-  // 관리모드 접근 가능: admin 또는 allowed_modes='both' 이면 모드 토글 표시
+  // 愿由щえ???묎렐 媛?? admin ?먮뒗 allowed_modes='both' ?대㈃ 紐⑤뱶 ?좉? ?쒖떆
   const canSwitchMode = isAdmin || user?.allowed_modes === 'both';
   const currentMode = canSwitchMode ? mode : 'shop';
 
-  // path → can_read 룩업 (admin은 항상 true, 권한 DB에 없는 경로는 기본 허용)
+  // path ??can_read 猷⑹뾽 (admin? ??긽 true, 沅뚰븳 DB???녿뒗 寃쎈줈??湲곕낯 ?덉슜)
   const pathReadable = (path?: string) => {
     if (!path) return true;
     if (isAdmin) return true;
-    // 권한 DB에 해당 path 레코드 자체가 없으면 → 기본 허용 (신규 메뉴 자동 노출)
+    // 沅뚰븳 DB???대떦 path ?덉퐫???먯껜媛 ?놁쑝硫???湲곕낯 ?덉슜 (?좉퇋 硫붾돱 ?먮룞 ?몄텧)
     const found = permissions.find((p: { path: string | null; can_read: boolean }) => p.path === path);
     if (!found) return true;
     return found.can_read;
   };
 
-  // 섹션/링크를 권한으로 필터링: 그룹 노드는 자식 1개 이상이 보일 때만 노출
+  // ?뱀뀡/留곹겕瑜?沅뚰븳?쇰줈 ?꾪꽣留? 洹몃９ ?몃뱶???먯떇 1媛??댁긽??蹂댁씪 ?뚮쭔 ?몄텧
   const filterNav = (items: NavSection[]): NavSection[] => {
     return items
       .map((s) => {
@@ -347,7 +346,7 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
       .filter((s): s is NavSection => s !== null);
   };
 
-  // 결재 대기 건수 폴링
+  // 寃곗옱 ?湲?嫄댁닔 ?대쭅
   useEffect(() => {
     if (!user) return;
     const fetchCount = () => {
@@ -356,11 +355,10 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
         .catch(() => {});
     };
     fetchCount();
-    const interval = setInterval(fetchCount, 60000); // 1분마다
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchCount, 60000); // 1遺꾨쭏??    return () => clearInterval(interval);
   }, [user]);
 
-  // 자재발주대기 건수 폴링 (APPROVED 상태)
+  // ?먯옱諛쒖＜?湲?嫄댁닔 ?대쭅 (APPROVED ?곹깭)
   useEffect(() => {
     if (!user) return;
     const fetchWaitCount = () => {
@@ -375,9 +373,9 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
 
   const navItems = filterNav(currentMode === 'shop' ? shopNavItems : adminNavItems);
 
-  // 슈퍼관리자 전용 메뉴
+  // ?덊띁愿由ъ옄 ?꾩슜 硫붾돱
   const superAdminNav = isSuperAdmin ? [
-    { label: '시스템 초기화', path: '/superadmin/reset' },
+    { label: '?쒖뒪??珥덇린??, path: '/superadmin/reset' },
   ] : [];
 
   const toggleSection = (label: string) => {
@@ -389,7 +387,7 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
     });
   };
 
-  // 모드별 색상 테마
+  // 紐⑤뱶蹂??됱긽 ?뚮쭏
   const theme = currentMode === 'shop'
     ? {
         aside:       'bg-slate-800 border-slate-700',
@@ -410,7 +408,7 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
         sectionActive:'text-teal-300 font-semibold',
         sectionHover: 'text-slate-300 hover:bg-slate-700',
         stepColor:   'text-teal-400',
-        label:       '🔧 실무',
+        label:       '?뵩 ?ㅻТ',
       }
     : {
         aside:       'bg-violet-950 border-violet-800',
@@ -431,7 +429,7 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
         sectionActive:'text-violet-300 font-semibold',
         sectionHover: 'text-violet-300 hover:bg-violet-900',
         stepColor:   'text-violet-400',
-        label:       '⚙️ 관리',
+        label:       '?숋툘 愿由?,
       };
 
   // Auto-open section containing active route
@@ -450,7 +448,7 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
       <div className={cn('flex h-16 items-center justify-between border-b px-4', theme.logo)}>
         {!collapsed && (
           <div className="flex items-center gap-2">
-            <img src="/ezone-logo.png" alt="EZONE" className="h-7 w-auto object-contain" />
+            <img src="/ezone-logo-v3.png" alt="EZONE" className="h-7 w-auto object-contain" />
             <span className={cn('font-bold text-sm tracking-wide', theme.logoText)}>EZONE MES</span>
           </div>
         )}
@@ -460,7 +458,7 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
         >
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </button>
-        {/* 모바일 닫기 버튼 */}
+        {/* 紐⑤컮???リ린 踰꾪듉 */}
         {onMobileClose && (
           <button
             onClick={onMobileClose}
@@ -483,7 +481,7 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
           >
             <span className="flex items-center justify-center gap-1">
               <Wrench className="h-3.5 w-3.5" />
-              실무
+              ?ㅻТ
             </span>
           </button>
           <button
@@ -495,8 +493,7 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
           >
             <span className="flex items-center justify-center gap-1">
               <Settings className="h-3.5 w-3.5" />
-              관리
-            </span>
+              愿由?            </span>
           </button>
         </div>
       )}
@@ -506,7 +503,7 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
         {navItems.map((section) => (
           <div key={`${mode}-${section.label}`}>
             {section.path ? (
-              /* 단일 링크 */
+              /* ?⑥씪 留곹겕 */
               <SidebarLink
                 item={{ label: section.label, icon: section.icon, path: section.path }}
                 collapsed={collapsed}
@@ -519,7 +516,7 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
                 }
               />
             ) : (
-              /* 접이식 섹션 */
+              /* ?묒씠???뱀뀡 */
               <SidebarSection
                 section={section}
                 collapsed={collapsed}
@@ -538,7 +535,7 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
           </div>
         ))}
 
-        {/* 슈퍼관리자 전용 메뉴 */}
+        {/* ?덊띁愿由ъ옄 ?꾩슜 硫붾돱 */}
         {isSuperAdmin && (
           <>
             <div className="my-2 border-t border-red-700" />
@@ -555,10 +552,10 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
                 isActive ? 'bg-red-600 text-white' : 'text-red-400 hover:bg-red-900/50 hover:text-red-300',
                 collapsed && 'justify-center'
               )}
-              title={collapsed ? '시스템 초기화' : undefined}
+              title={collapsed ? '?쒖뒪??珥덇린?? : undefined}
             >
               <ShieldAlert className="h-4 w-4 flex-shrink-0" />
-              {!collapsed && <span>시스템 초기화</span>}
+              {!collapsed && <span>?쒖뒪??珥덇린??/span>}
             </NavLink>
           </>
         )}
