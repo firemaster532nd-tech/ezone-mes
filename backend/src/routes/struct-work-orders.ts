@@ -179,7 +179,7 @@ async function genWoNumber(type: string): Promise<string> {
     INSPECT: 'INS', CUT_VM: 'CVM', CUT_VT: 'CVT',
     CUT_HTG: 'CHT', BEND_HTG: 'BHT',
     CUT_THERMAL: 'CTH', BEND_VM: 'BVM', BEND_VT: 'BVT',
-    BEND_VT_RE: 'BRE', THERMAL_OUTER: 'THO', PACKING: 'PKG', LABEL: 'LBL',
+    BEND_VT_RE: 'BRE', THERMAL_OUTER: 'THO', ASM: 'ASM', PACKING: 'PKG', LABEL: 'LBL',
   }[type] || 'WO';
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const r = await pool.query(
@@ -187,6 +187,24 @@ async function genWoNumber(type: string): Promise<string> {
     [`${prefix}-${today}-%`]
   );
   return `${prefix}-${today}-${String(r.rows[0].n).padStart(3, '0')}`;
+}
+
+function getWoSequence(type: string): number {
+  switch (type) {
+    case 'INSPECT':       return 1;
+    case 'CUT_VM':
+    case 'CUT_VT':
+    case 'CUT_HTG':       return 2;
+    case 'CUT_THERMAL':   return 3;
+    case 'BEND_VM':
+    case 'BEND_VT':
+    case 'BEND_VT_RE':
+    case 'BEND_HTG':      return 4;
+    case 'THERMAL_OUTER': return 5;
+    case 'ASM':           return 6;
+    case 'LABEL':         return 7;
+    default:              return 99;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -238,14 +256,15 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
     if (!items?.length) return reply.code(400).send({ error: '항목이 없습니다.' });
 
     const wo_number = await genWoNumber(wo_type);
+    const seq = getWoSequence(wo_type);
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       const wo = await client.query(`
         INSERT INTO struct_work_order
-          (wo_number,wo_type,po_id,project_id,project_name,wo_date,delivery_date,worker_name,remarks,created_by)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
-      `, [wo_number, wo_type, po_id||null, project_id||null, project_name||null,
+          (wo_number,wo_type,wo_sequence,po_id,project_id,project_name,wo_date,delivery_date,worker_name,remarks,created_by)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *
+      `, [wo_number, wo_type, seq, po_id||null, project_id||null, project_name||null,
           wo_date||null, delivery_date||null, worker_name||null, remarks||null, created_by||null]);
 
       const woId = wo.rows[0].wo_id;
@@ -342,6 +361,7 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
       woTypesSet.add('BEND_HTG');     // 브라켓/평철 절곱
       woTypesSet.add('THERMAL_OUTER'); // 외부 차열재
     }
+    woTypesSet.add('ASM');   // 조립 (공통)
     woTypesSet.add('LABEL'); // 항상 생성
     const woTypesToCreate = [...woTypesSet];
 
@@ -366,6 +386,7 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
         case 'CUT_HTG':
         case 'BEND_HTG':
           return poItems.filter((r: any) => HTG_TYPES.has(r.product_type));
+        case 'ASM':
         case 'LABEL':
           return poItems;
         default:
@@ -386,12 +407,13 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
         if (!typeItems.length) continue;
 
         const wo_number = await genWoNumber(woType);
+        const seq = getWoSequence(woType);
         const wo = await client.query(`
           INSERT INTO struct_work_order
-            (wo_number,wo_type,po_id,project_id,project_name,
+            (wo_number,wo_type,wo_sequence,po_id,project_id,project_name,
              wo_date,delivery_date,worker_name,remarks,created_by)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
-        `, [wo_number, woType, po_id, projId, projName,
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *
+        `, [wo_number, woType, seq, po_id, projId, projName,
             wo_date||null, delivery_date||null, worker_name||null,
             remarks||null, created_by||null]);
 
@@ -491,38 +513,137 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
     return { data: r.rows[0] };
   });
 
+  // J-LOT 자동채번 함수 (형식: YYMMDD-구조체코드-WxH-seq)
+  async function generateJLot(productType: string, width: number, height: number): Promise<string> {
+    const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+    const cleanType = (productType || 'STRUCT').replace(/[^a-zA-Z0-9.-]/g, '');
+    const baseKey = `JLOT-${dateStr}-${cleanType}-${width}X${height}`;
+    
+    // lot_number_sequence 시퀀스 테이블 사용
+    await pool.query(`
+      INSERT INTO lot_number_sequence (base_lot, last_serial) VALUES ($1, 0)
+      ON CONFLICT (base_lot) DO NOTHING
+    `, [baseKey]);
+    
+    const seqRes = await pool.query(`
+      UPDATE lot_number_sequence SET last_serial = last_serial + 1, updated_at = NOW()
+      WHERE base_lot = $1 RETURNING last_serial
+    `, [baseKey]);
+    const serial = seqRes.rows[0]?.last_serial || 1;
+    const seqStr = String(serial).padStart(3, '0');
+    return `${dateStr}-${cleanType}-${width}X${height}-${seqStr}`;
+  }
+
   // ── PATCH /api/struct-work-orders/:id/start ────────────────────────────
+  // soft-gate 적용: 선행 공정이 미완료된 건이 있으면 warning 반환 (작업 시작 자체는 허용)
   app.patch('/api/struct-work-orders/:id/start', { preHandler: requireAuth }, async (req, reply) => {
     const id = parseInt((req.params as any).id);
+    const woRes = await pool.query('SELECT * FROM struct_work_order WHERE wo_id=$1', [id]);
+    if (!woRes.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    const wo = woRes.rows[0];
+
+    if (wo.status === 'COMPLETED') {
+      return reply.code(400).send({ error: '이미 완료된 작업입니다.' });
+    }
+
+    let warning: string | null = null;
+    if (wo.po_id && wo.wo_sequence > 1) {
+      // 선행 공정(wo_sequence < wo.wo_sequence) 중 미완료(COMPLETED가 아닌) 건 확인
+      const prevUncompleted = await pool.query(`
+        SELECT wo_number, wo_type, wo_sequence, status 
+        FROM struct_work_order 
+        WHERE po_id = $1 AND wo_sequence < $2 AND status != 'COMPLETED'
+        ORDER BY wo_sequence ASC
+      `, [wo.po_id, wo.wo_sequence]);
+
+      if (prevUncompleted.rows.length > 0) {
+        const prevList = prevUncompleted.rows.map((r: any) => `[${r.wo_type}](상태:${r.status})`).join(', ');
+        warning = `선행 공정 ${prevList}가 아직 완료되지 않았습니다. (Soft-gate 경고)`;
+      }
+    }
+
     const r = await pool.query(
-      `UPDATE struct_work_order SET status='IN_PROGRESS' WHERE wo_id=$1 AND status='PLANNED' RETURNING *`,
+      `UPDATE struct_work_order SET status='IN_PROGRESS' WHERE wo_id=$1 RETURNING *`,
       [id]
     );
-    if (!r.rowCount) return reply.code(400).send({ error: '시작할 수 없는 상태입니다.' });
+    return { data: r.rows[0], warning };
+  });
+
+  // ── PATCH /api/struct-work-orders/items/:item_id/lot ────────────────────
+  // 각 아이템에 투입 자재 LOT 지정
+  app.patch('/api/struct-work-orders/items/:item_id/lot', { preHandler: requireAuth }, async (req, reply) => {
+    const itemId = parseInt((req.params as any).item_id);
+    const { input_lot_id, input_lot_no } = req.body as any;
+
+    const r = await pool.query(`
+      UPDATE struct_work_order_item
+      SET input_lot_id = $1, input_lot_no = $2
+      WHERE item_id = $3
+      RETURNING *
+    `, [input_lot_id || null, input_lot_no || null, itemId]);
+
+    if (!r.rows[0]) return reply.code(404).send({ error: 'not_found' });
     return { data: r.rows[0] };
   });
 
   // ── POST /api/struct-work-orders/:id/complete ──────────────────────────
-  // 완료 처리 + 재고 차감
+  // 완료 처리 + 재고 차감 + ASM 조립 공정 시 J-LOT 자동채번
   app.post('/api/struct-work-orders/:id/complete', { preHandler: requireAuth }, async (req, reply) => {
     const woId = parseInt((req.params as any).id);
     const { completed_items, worker_id } = req.body as any;
 
-    const wo = await pool.query('SELECT * FROM struct_work_order WHERE wo_id=$1', [woId]);
-    if (!wo.rows[0]) return reply.code(404).send({ error: 'not_found' });
-    if (wo.rows[0].status === 'COMPLETED') return reply.code(400).send({ error: '이미 완료된 작업입니다.' });
+    const woRes = await pool.query('SELECT * FROM struct_work_order WHERE wo_id=$1', [woId]);
+    if (!woRes.rows[0]) return reply.code(404).send({ error: 'not_found' });
+    const wo = woRes.rows[0];
+    if (wo.status === 'COMPLETED') return reply.code(400).send({ error: '이미 완료된 작업입니다.' });
 
     const client = await pool.connect();
+    let generatedJLots: string[] = [];
     try {
       await client.query('BEGIN');
 
+      const itemsRes = await client.query('SELECT * FROM struct_work_order_item WHERE wo_id=$1 ORDER BY seq_no', [woId]);
+      const currentItems = itemsRes.rows;
+
       for (const ci of (completed_items || [])) {
-        const { item_id, completed_qty, stock_type, stock_id, deduct_qty } = ci;
-        // 완료수량 업데이트
-        await client.query(
-          `UPDATE struct_work_order_item SET completed_qty=$1, deducted=true WHERE item_id=$2`,
-          [completed_qty || 0, item_id]
-        );
+        const { item_id, completed_qty, stock_type, stock_id, deduct_qty, input_lot_id, input_lot_no } = ci;
+        const itemRow = currentItems.find((r: any) => r.item_id === item_id);
+
+        let jlotNum: string | null = itemRow?.jlot_number || null;
+
+        // ASM(조립) 공정일 경우 J-LOT 자동채번 (아직 없는 경우)
+        if (wo.wo_type === 'ASM' && !jlotNum && itemRow) {
+          jlotNum = await generateJLot(itemRow.product_type, itemRow.width_mm, itemRow.height_mm);
+          generatedJLots.push(jlotNum);
+
+          // lot_transaction 테이블에 완제품 J-LOT 기록
+          await client.query(`
+            INSERT INTO lot_transaction (lot_number, item_name, spec, transaction_type, qty, remark, created_by)
+            VALUES ($1, $2, $3, 'PRODUCTION', $4, $5, $6)
+            ON CONFLICT (lot_number) DO NOTHING
+          `, [
+            jlotNum,
+            itemRow.product_type,
+            `${itemRow.width_mm}X${itemRow.height_mm}`,
+            completed_qty || 1,
+            `ASM 조립완료 (WO: ${wo.wo_number})`,
+            worker_id || null
+          ]);
+        }
+
+        // 완료수량, 투입 LOT, J-LOT 정보 업데이트
+        await client.query(`
+          UPDATE struct_work_order_item 
+          SET completed_qty = $1, 
+              deducted = true,
+              input_lot_id = COALESCE($2, input_lot_id),
+              input_lot_no = COALESCE($3, input_lot_no),
+              jlot_number = COALESCE($4, jlot_number),
+              asm_worker_id = CASE WHEN $5::int IS NOT NULL THEN $5::int ELSE asm_worker_id END,
+              asm_completed_at = CASE WHEN $5::int IS NOT NULL THEN NOW() ELSE asm_completed_at END
+          WHERE item_id = $6
+        `, [completed_qty || 0, input_lot_id || null, input_lot_no || null, jlotNum || null, worker_id || null, item_id]);
+
         // 재고 차감
         if (stock_id && deduct_qty > 0) {
           if (stock_type === 'BRACKET') {
@@ -557,11 +678,11 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
       }
 
       await client.query(
-        `UPDATE struct_work_order SET status='COMPLETED', completed_at=NOW() WHERE wo_id=$1`,
-        [woId]
+        `UPDATE struct_work_order SET status='COMPLETED', completed_at=NOW(), jlot_count=$2 WHERE wo_id=$1`,
+        [woId, generatedJLots.length]
       );
       await client.query('COMMIT');
-      return { data: { success: true } };
+      return { data: { success: true, generated_jlots: generatedJLots } };
     } catch (e) { await client.query('ROLLBACK'); throw e; }
     finally { client.release(); }
   });

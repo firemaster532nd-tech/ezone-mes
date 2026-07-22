@@ -12,7 +12,7 @@ import {
 // ────────────────────────────────────────────────────────────────────────────
 // 타입
 // ────────────────────────────────────────────────────────────────────────────
-type WoType = 'INSPECT' | 'CUT_VM' | 'CUT_VT' | 'CUT_HTG' | 'CUT_THERMAL' | 'BEND_VM' | 'BEND_VT' | 'BEND_VT_RE' | 'BEND_HTG' | 'THERMAL_OUTER' | 'PACKING' | 'LABEL';
+type WoType = 'INSPECT' | 'CUT_VM' | 'CUT_VT' | 'CUT_HTG' | 'CUT_THERMAL' | 'BEND_VM' | 'BEND_VT' | 'BEND_VT_RE' | 'BEND_HTG' | 'THERMAL_OUTER' | 'ASM' | 'PACKING' | 'LABEL';
 type WoStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED';
 
 interface Project {
@@ -83,6 +83,7 @@ const WO_TABS: { type: WoType; label: string; color: string; accent: string; ico
   { type: 'BEND_VT_RE',    label: '🔨 절곡-VT보강대',      color: 'border-amber-500',   accent: 'bg-amber-500',   iconColor: 'text-amber-600' },
   { type: 'BEND_HTG',      label: '🔨 절곡-HTG평철',       color: 'border-yellow-500',  accent: 'bg-yellow-500',  iconColor: 'text-yellow-600' },
   { type: 'THERMAL_OUTER', label: '🔥 외부차열재 작업',    color: 'border-rose-500',    accent: 'bg-rose-500',    iconColor: 'text-rose-600' },
+  { type: 'ASM',           label: '⚙️ 조립(ASM)',          color: 'border-indigo-500',  accent: 'bg-indigo-500',  iconColor: 'text-indigo-600' },
   { type: 'PACKING',       label: '📦 포장 작업',           color: 'border-violet-500',  accent: 'bg-violet-500',  iconColor: 'text-violet-600' },
   { type: 'LABEL',         label: '🏷 라벨 소요량',         color: 'border-purple-500',  accent: 'bg-purple-500',  iconColor: 'text-purple-600' },
 ];
@@ -98,6 +99,7 @@ const TAB_ACCENT_TEXT: Record<WoType, string> = {
   BEND_VT_RE:    'text-amber-700',
   BEND_HTG:      'text-yellow-700',
   THERMAL_OUTER: 'text-rose-700',
+  ASM:           'text-indigo-700',
   PACKING:       'text-violet-700',
   LABEL:         'text-purple-700',
 };
@@ -113,6 +115,7 @@ const TAB_ACCENT_BG: Record<WoType, string> = {
   BEND_VT_RE:    'bg-amber-50',
   BEND_HTG:      'bg-yellow-50',
   THERMAL_OUTER: 'bg-rose-50',
+  ASM:           'bg-indigo-50',
   PACKING:       'bg-violet-50',
   LABEL:         'bg-purple-50',
 };
@@ -128,6 +131,7 @@ const TAB_ACCENT_RING: Record<WoType, string> = {
   BEND_VT_RE:    'ring-amber-400',
   BEND_HTG:      'ring-yellow-400',
   THERMAL_OUTER: 'ring-rose-400',
+  ASM:           'ring-indigo-400',
   PACKING:       'ring-violet-400',
   LABEL:         'ring-purple-400',
 };
