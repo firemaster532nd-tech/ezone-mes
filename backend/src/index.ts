@@ -59,8 +59,8 @@ import { shipmentReadyRoutes } from './routes/shipment-ready.js';
 import { returnRoutes } from './routes/returns.js';
 import { socketIncomingRoutes } from './routes/socket-incoming.js';
 import { announcementRoutes, ensureAnnouncementTables } from './routes/announcements.js';
-import { superadminRoutes } from './routes/superadmin.js';
 import { materialLotsRoutes } from './routes/material-lots.js';
+import { lotLineageRoutes } from './routes/lot-lineage.js';
 
 
 let appInstance: any = null;
@@ -132,6 +132,7 @@ export const initApp = async () => {
   await app.register(announcementRoutes);
   await app.register(superadminRoutes);
   await app.register(materialLotsRoutes);
+  await app.register(lotLineageRoutes);
 
 
   // Health check

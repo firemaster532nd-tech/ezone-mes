@@ -316,6 +316,16 @@ export function StructWorkOrderPage() {
       .catch(() => {});
   }, []);
 
+  const [processStatus, setProcessStatus] = useState<any>(null);
+
+  // 프로젝트별 6단계 실시간 공정 상태 조회
+  useEffect(() => {
+    if (!selectedProjectId) { setProcessStatus(null); return; }
+    api.get<{ data: any }>(`/projects/${selectedProjectId}/process-status`)
+      .then(r => setProcessStatus(r.data ?? null))
+      .catch(() => setProcessStatus(null));
+  }, [selectedProjectId, orders]);
+
   // 발주서 목록
   useEffect(() => {
     setSelectedPoId('');
@@ -446,6 +456,51 @@ export function StructWorkOrderPage() {
       </div>
 
       <div className="px-6 py-4">
+        {/* 프로젝트 6단계 실시간 공정 타임라인 Tracker */}
+        {selectedProjectId && processStatus && (
+          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm mb-4 animate-in fade-in duration-200">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-800 text-sm">📍 [{processStatus.project_name}] 6단계 공정 진행 현황</span>
+                <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-0.5 rounded-full">
+                  전체 달성률 {processStatus.overall_progress}%
+                </span>
+              </div>
+              <span className="text-xs text-slate-400">실시간 공정 위치 트래킹</span>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+              {processStatus.stages?.map((st: any) => (
+                <div key={st.code} className="border border-slate-200/80 rounded-lg p-2.5 bg-slate-50/50 flex flex-col justify-between">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="text-xs font-bold text-slate-700">{st.name}</span>
+                    <span className={cn(
+                      "text-[10px] font-bold px-1.5 py-0.2 rounded",
+                      st.status === 'COMPLETED' ? "bg-emerald-100 text-emerald-700" :
+                      st.status === 'IN_PROGRESS' ? "bg-amber-100 text-amber-700 animate-pulse" : "bg-slate-200 text-slate-500"
+                    )}>
+                      {st.status === 'COMPLETED' ? '완료' : st.status === 'IN_PROGRESS' ? '진행중' : '대기'}
+                    </span>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-1.5 my-1.5 overflow-hidden">
+                    <div 
+                      className={cn(
+                        "h-1.5 rounded-full transition-all duration-500",
+                        st.status === 'COMPLETED' ? "bg-emerald-500" : "bg-blue-500"
+                      )} 
+                      style={{ width: `${st.progress_percent}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[11px] text-slate-500 font-mono">
+                    <span>{st.completed_wo}/{st.total_wo}건</span>
+                    <span className="font-bold text-slate-700">{st.progress_percent}%</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 요약 카드 */}
         <div className="grid grid-cols-3 gap-3 mb-4">
           {[
