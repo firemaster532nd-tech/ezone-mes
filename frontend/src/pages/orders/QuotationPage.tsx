@@ -370,6 +370,10 @@ function QuotationFormModal({
   const [showItemSelectModal, setShowItemSelectModal] = useState<number | null>(null); // 품목 선택 대기 중인 row index
   const [itemSearch, setItemSearch] = useState('');
 
+  // 거래처 검색 드롭다운 전용 상태
+  const [companySearch, setCompanySearch] = useState('');
+  const [isCompanyDropdownOpen, setIsCompanyDropdownOpen] = useState(false);
+
   // 폼 마스터 데이터
   const [master, setMaster] = useState({
     quotation_number: '',
@@ -571,6 +575,13 @@ function QuotationFormModal({
     }
   };
 
+  // 거래처 검색 필터링 & 선택된 거래처
+  const selectedCompany = companies.find(c => c.company_id === Number(master.customer_id));
+  const filteredCompanies = companies.filter(
+    c => c.company_name.toLowerCase().includes(companySearch.toLowerCase()) || 
+         c.company_code.toLowerCase().includes(companySearch.toLowerCase())
+  );
+
   // 품목 검색 필터링
   const filteredItems = itemsMaster.filter(
     it => it.item_code.toLowerCase().includes(itemSearch.toLowerCase()) || 
@@ -617,18 +628,69 @@ function QuotationFormModal({
                 className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-700"
               />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-500 mb-1">거래처 *</label>
-              <select
-                value={master.customer_id}
-                onChange={(e) => updateMaster('customer_id', Number(e.target.value))}
-                className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-700"
+            <div className="relative">
+              <label className="block text-xs font-semibold text-slate-500 mb-1">거래처 * (검색가능)</label>
+              <div 
+                onClick={() => setIsCompanyDropdownOpen(!isCompanyDropdownOpen)}
+                className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white cursor-pointer flex items-center justify-between focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-slate-700 hover:border-slate-300 transition-colors"
               >
-                <option value={0}>-- 거래처 선택 --</option>
-                {companies.map(c => (
-                  <option key={c.company_id} value={c.company_id}>{c.company_name} ({c.company_code})</option>
-                ))}
-              </select>
+                <span className={selectedCompany ? 'font-medium text-slate-800' : 'text-slate-400'}>
+                  {selectedCompany ? `${selectedCompany.company_name} (${selectedCompany.company_code})` : '-- 거래처 검색 선택 --'}
+                </span>
+                <Search className="h-4 w-4 text-slate-400" />
+              </div>
+
+              {isCompanyDropdownOpen && (
+                <div 
+                  className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2 space-y-2 animate-in fade-in duration-150"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="relative">
+                    <Search className="h-4 w-4 absolute left-2.5 top-2.5 text-slate-400" />
+                    <input 
+                      type="text"
+                      value={companySearch}
+                      onChange={(e) => setCompanySearch(e.target.value)}
+                      placeholder="거래처명 또는 코드 입력..."
+                      className="w-full pl-8 pr-7 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-blue-500 text-slate-700"
+                      autoFocus
+                    />
+                    {companySearch && (
+                      <button 
+                        type="button"
+                        onClick={() => setCompanySearch('')}
+                        className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-100 bg-slate-50/50">
+                    {filteredCompanies.length === 0 ? (
+                      <div className="p-3 text-xs text-slate-400 text-center">검색 결과가 없습니다.</div>
+                    ) : (
+                      filteredCompanies.map(c => (
+                        <div
+                          key={c.company_id}
+                          onClick={() => {
+                            updateMaster('customer_id', c.company_id);
+                            setIsCompanyDropdownOpen(false);
+                            setCompanySearch('');
+                          }}
+                          className={cn(
+                            "p-2 text-xs cursor-pointer hover:bg-blue-50 transition-colors flex items-center justify-between",
+                            master.customer_id === c.company_id ? "bg-blue-50/80 font-bold text-blue-600" : "text-slate-700"
+                          )}
+                        >
+                          <span className="font-semibold">{c.company_name}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">({c.company_code})</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 mb-1">현장명/프로젝트코드</label>
