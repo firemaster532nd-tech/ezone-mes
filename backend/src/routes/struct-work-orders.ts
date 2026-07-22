@@ -241,7 +241,166 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
     finally { client.release(); }
   });
 
-  // ── PATCH /api/struct-work-orders/:id ────────────────────────────────────
+  // ── POST /api/struct-work-orders/batch ─────────────────────────────────
+  // 구조체 작업지시 일괄 자동 생성
+  // PO의 소켓 구조체 유형에 따라 필요한 모든 공정 작업지시를 한 번에 생성
+  app.post('/api/struct-work-orders/batch', { preHandler: requireAuth }, async (req, reply) => {
+    const {
+      po_id, project_id, project_name,
+      wo_date, delivery_date, worker_name, created_by, remarks,
+    } = req.body as any;
+    if (!po_id) return reply.code(400).send({ error: 'po_id 필요' });
+
+    // 1. PO 항목 전체 조회
+    const poItemsRes = await pool.query(`
+      SELECT poi.po_item_id, poi.seq_no, poi.product_type,
+             poi.pipe_width_mm  AS width_mm,
+             poi.pipe_height_mm AS height_mm,
+             poi.qty, poi.remark,
+             COALESCE(poi.construction_type, 'DOUBLE') AS construction_type,
+             po.project_name AS po_project_name,
+             po.project_id   AS po_project_id
+      FROM purchase_order_item poi
+      JOIN purchase_order po ON po.po_id = poi.po_id
+      WHERE poi.po_id = $1 AND poi.item_type = 'socket'
+      ORDER BY poi.seq_no
+    `, [parseInt(po_id)]);
+
+    const poItems = poItemsRes.rows;
+    if (!poItems.length) return reply.code(400).send({ error: 'PO에 소켓 항목이 없습니다.' });
+
+    // 2. 구조체 유형 분류
+    const hasVM  = poItems.some((r: any) => VM_TYPES.has(r.product_type));
+    const hasVT  = poItems.some((r: any) => VT_TYPES.has(r.product_type));
+    const hasVAG = poItems.some((r: any) => VAG_TYPES.has(r.product_type));
+    const hasHTG = poItems.some((r: any) => HTG_TYPES.has(r.product_type));
+
+    // 3. 공정별 생성 목록 결정
+    const woTypesToCreate: string[] = [];
+    if (hasVM || hasVAG) {
+      woTypesToCreate.push('CUT_VM');
+      if (hasVM) woTypesToCreate.push('BEND_VM');
+    }
+    if (hasVT) {
+      woTypesToCreate.push('CUT_VT');
+      woTypesToCreate.push('BEND_VT');
+      woTypesToCreate.push('BEND_VT_RE');
+    }
+    if (hasVM || hasVT || hasVAG) {
+      woTypesToCreate.push('CUT_THERMAL');
+      woTypesToCreate.push('THERMAL_OUTER');
+    }
+    if (hasHTG) woTypesToCreate.push('INSPECT');
+    woTypesToCreate.push('LABEL'); // 항상 생성
+
+    // 4. 공정별 항목 필터
+    function filterForType(type: string): any[] {
+      switch (type) {
+        case 'CUT_VM':
+        case 'BEND_VM':
+          return poItems.filter((r: any) => VM_TYPES.has(r.product_type) || VAG_TYPES.has(r.product_type));
+        case 'CUT_VT':
+        case 'BEND_VT':
+        case 'BEND_VT_RE':
+          return poItems.filter((r: any) => VT_TYPES.has(r.product_type));
+        case 'CUT_THERMAL':
+        case 'THERMAL_OUTER':
+          return poItems.filter((r: any) => VM_TYPES.has(r.product_type) || VT_TYPES.has(r.product_type) || VAG_TYPES.has(r.product_type));
+        case 'INSPECT':
+          return poItems.filter((r: any) => HTG_TYPES.has(r.product_type));
+        case 'LABEL':
+          return poItems;
+        default:
+          return poItems;
+      }
+    }
+
+    const client = await pool.connect();
+    const created: any[] = [];
+    try {
+      await client.query('BEGIN');
+
+      const projName = project_name || poItems[0]?.po_project_name || null;
+      const projId   = project_id   || poItems[0]?.po_project_id   || null;
+
+      for (const woType of woTypesToCreate) {
+        const typeItems = filterForType(woType);
+        if (!typeItems.length) continue;
+
+        const wo_number = await genWoNumber(woType);
+        const wo = await client.query(`
+          INSERT INTO struct_work_order
+            (wo_number,wo_type,po_id,project_id,project_name,
+             wo_date,delivery_date,worker_name,remarks,created_by)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *
+        `, [wo_number, woType, po_id, projId, projName,
+            wo_date||null, delivery_date||null, worker_name||null,
+            remarks||null, created_by||null]);
+
+        const woId = wo.rows[0].wo_id;
+
+        for (let i = 0; i < typeItems.length; i++) {
+          const it = typeItems[i];
+          const W  = it.width_mm  || 0;
+          const H  = it.height_mm || 0;
+          const Q  = it.qty       || 1;
+          const CT: 'SINGLE' | 'DOUBLE' = it.construction_type === 'SINGLE' ? 'SINGLE' : 'DOUBLE';
+
+          let calc_data: any = null;
+          if      (woType === 'CUT_VM')       calc_data = calcCutVM(W, H, Q, CT);
+          else if (woType === 'CUT_VT')       calc_data = calcCutVT(W, H, Q, CT);
+          else if (woType === 'CUT_THERMAL')  calc_data = calcCutThermal(W, H, Q, CT);
+          else if (woType === 'BEND_VM')      calc_data = { brackets: calcBracketVM(it.product_type, W, H, Q) };
+          else if (woType === 'BEND_VT')      calc_data = { brackets: calcBracketVT(W, H, Q) };
+          else if (woType === 'BEND_VT_RE')   calc_data = { brackets: calcBracketVTRe(W, H, Q) };
+          else if (woType === 'THERMAL_OUTER') calc_data = {
+            outer_top:     W + 60,
+            outer_top_qty: Math.round(Q * 2 * singleFactor(CT)),
+            outer_side:    H,
+            outer_side_qty: Math.round(Q * 2 * singleFactor(CT)),
+            construction_type: CT,
+          };
+          else if (woType === 'PACKING') calc_data = { packing_qty: Q };
+          else if (woType === 'LABEL') {
+            const insulSides = CT === 'SINGLE' ? 1 : 2;
+            calc_data = {
+              flashing_label_qty:    Q,
+              glass_wool_label_qty:  Q * insulSides,
+              ceramic_wool_label_qty: Q * insulSides,
+              socket_label_qty:      Q,
+            };
+          }
+
+          await client.query(`
+            INSERT INTO struct_work_order_item
+              (wo_id,seq_no,po_item_id,product_type,width_mm,height_mm,
+               qty,construction_type,calc_data,remarks)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+          `, [woId, i+1, it.po_item_id||null, it.product_type||null,
+              W, H, Q, CT,
+              calc_data ? JSON.stringify(calc_data) : null,
+              it.remark||null]);
+        }
+
+        created.push({
+          wo_type:    woType,
+          wo_id:      woId,
+          wo_number,
+          item_count: typeItems.length,
+        });
+      }
+
+      await client.query('COMMIT');
+      return { data: { created, total: created.length } };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  });
+
+
   app.patch('/api/struct-work-orders/:id', { preHandler: requireAuth }, async (req, reply) => {
     const id = parseInt((req.params as any).id);
     const { worker_name, remarks, delivery_date } = req.body as any;

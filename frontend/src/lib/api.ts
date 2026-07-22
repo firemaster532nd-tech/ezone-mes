@@ -1,4 +1,5 @@
-const API_BASE = (import.meta as any).env?.VITE_API_BASE ?? '/api';
+const API_BASE = (import.meta as any).env?.VITE_API_BASE || '/api';
+
 const TOKEN_KEY = 'ezone_mes_token';
 
 class ApiError extends Error {

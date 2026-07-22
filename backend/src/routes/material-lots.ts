@@ -6,53 +6,59 @@ import { requireAuth } from '../lib/auth-plugin.js';
 // DB 마이그레이션 — material_lots + material_transactions
 // ─────────────────────────────────────────────────────────────────────────────
 async function migrateMaterialLots() {
-  await pool.query(`
-    -- LOT별 현재 재고 마스터
+  const run = async (sql: string, label: string) => {
+    try { await pool.query(sql); }
+    catch (e: any) { console.warn(`[migrate] ${label} 스킵:`, e?.message?.slice(0, 120)); }
+  };
+
+  await run(`
     CREATE TABLE IF NOT EXISTS material_lots (
       lot_id        SERIAL PRIMARY KEY,
       lot_number    VARCHAR(60)  NOT NULL,
       category      VARCHAR(40)  NOT NULL DEFAULT '세라믹울',
-        -- 세라믹울 | 차열재 | 그라스울 | 그라스울보드 | 소켓 | 기타부자재
       item_name     VARCHAR(200),
-      density       NUMERIC(7,2),   -- K (밀도, kg/㎥)
-      thickness     NUMERIC(7,2),   -- T (두께, mm)
-      width_mm      NUMERIC(10,2),  -- W (폭, mm)
-      length_mm     NUMERIC(12,2),  -- L (길이, mm 또는 m)
-      depth_mm      NUMERIC(7,2),   -- D (소켓 깊이, mm)
+      density       NUMERIC(7,2),
+      thickness     NUMERIC(7,2),
+      width_mm      NUMERIC(10,2),
+      length_mm     NUMERIC(12,2),
+      depth_mm      NUMERIC(7,2),
       unit          VARCHAR(10)  DEFAULT 'EA',
       qty_current   NUMERIC(12,3) NOT NULL DEFAULT 0,
       location      VARCHAR(20)  DEFAULT '본재고',
-        -- 시험용 | 출하대기 | 본재고
       supplier_name VARCHAR(200),
-      supplier_lot  VARCHAR(100),   -- 밀시트 LOT
+      supplier_lot  VARCHAR(100),
       received_date DATE,
       notes         TEXT,
       is_active     BOOLEAN DEFAULT TRUE,
       created_at    TIMESTAMPTZ DEFAULT NOW(),
       updated_at    TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_material_lots_lot
-      ON material_lots(lot_number) WHERE is_active = TRUE;
-    CREATE INDEX IF NOT EXISTS idx_material_lots_cat
-      ON material_lots(category, location);
-  `);
+    )
+  `, 'material_lots 테이블');
 
-  await pool.query(`
-    -- 수불 이력 원장
+  await run(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_material_lots_lot
+       ON material_lots(lot_number) WHERE (is_active = TRUE)`,
+    'idx_material_lots_lot'
+  );
+
+  await run(
+    `CREATE INDEX IF NOT EXISTS idx_material_lots_cat
+       ON material_lots(category, location)`,
+    'idx_material_lots_cat'
+  );
+
+  await run(`
     CREATE TABLE IF NOT EXISTS material_transactions (
       txn_id         SERIAL PRIMARY KEY,
       txn_date       DATE        NOT NULL DEFAULT CURRENT_DATE,
       lot_id         INTEGER     NOT NULL REFERENCES material_lots(lot_id),
-      lot_number     VARCHAR(60),   -- 빠른 조회용 비정규화
+      lot_number     VARCHAR(60),
       category       VARCHAR(40),
       txn_type       VARCHAR(10) NOT NULL,
-        -- IN | OUT | MOVE | ADJ
       qty            NUMERIC(12,3) NOT NULL,
-        -- IN/MOVE-IN: 양수  |  OUT/MOVE-OUT: 음수  |  ADJ: 부호 포함
       qty_before     NUMERIC(12,3),
       qty_after      NUMERIC(12,3),
       source_type    VARCHAR(30),
-        -- INCOMING_INSPECTION | BARCODE_SCAN | SHIPMENT | PRODUCTION | MANUAL
       source_id      INTEGER,
       location_from  VARCHAR(20),
       location_to    VARCHAR(20),
@@ -60,15 +66,24 @@ async function migrateMaterialLots() {
       operator_id    INTEGER,
       notes          TEXT,
       created_at     TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_material_txn_date
-      ON material_transactions(txn_date, category);
-    CREATE INDEX IF NOT EXISTS idx_material_txn_lot
-      ON material_transactions(lot_id);
-    CREATE INDEX IF NOT EXISTS idx_material_txn_lot_number
-      ON material_transactions(lot_number);
-  `);
+    )
+  `, 'material_transactions 테이블');
+
+  await run(
+    `CREATE INDEX IF NOT EXISTS idx_material_txn_date ON material_transactions(txn_date, category)`,
+    'idx_material_txn_date'
+  );
+  await run(
+    `CREATE INDEX IF NOT EXISTS idx_material_txn_lot ON material_transactions(lot_id)`,
+    'idx_material_txn_lot'
+  );
+  await run(
+    `CREATE INDEX IF NOT EXISTS idx_material_txn_lot_number ON material_transactions(lot_number)`,
+    'idx_material_txn_lot_number'
+  );
 }
+
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 헬퍼: 트랜잭션 삽입 + 현재고 업데이트
