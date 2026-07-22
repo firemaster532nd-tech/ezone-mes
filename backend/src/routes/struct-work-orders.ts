@@ -59,6 +59,15 @@ function calcBracketVM(code: string, w: number, h: number, qty: number) {
   ];
 }
 
+function calcBracketVAG(w: number, h: number, qty: number) {
+  // VAG-1.69 절곱 (sw=반폭-30 기준, 폭204 특수 평철)
+  const sw = Math.round(w / 2 - 30);
+  return [
+    { label: '상하평철1', t: 1.6, bw: 60,  l: sw - 5, qty: qty * 4 },
+    { label: '상하평철2', t: 1.6, bw: 204, l: sw - 5, qty: qty * 4 },
+  ];
+}
+
 function calcBracketVT(w: number, h: number, qty: number) {
   // VT-01 절곱 브라켓 — 다면/양면 무관
   return [
@@ -75,11 +84,43 @@ function calcBracketVTRe(w: number, h: number, qty: number) {
   ];
 }
 
+function calcCutHTG(w: number, h: number, qty: number) {
+  // HTG 입상형 — 세라믹울 재단
+  // 엑셀 작업지시서 시트1 기준: 세라믹울(가로)=W-5×6, 차열재(세로)=H-35×2
+  return {
+    ceramic_w: w - 5,   ceramic_w_qty: qty * 6,  // 세라믹울 가로 재단
+    thermal_h: h - 35,  thermal_h_qty: qty * 2,  // 내부 차열재 세로 재단
+  };
+}
+
+function calcBracketHTG064(w: number, h: number, qty: number) {
+  // HTG-064 / HTG-064DC 절곱
+  // 엑셀 시트2: 상하평철1(60폭)×2, 상하평철2(274폭)×2, 좌우(60폭)×4, 보강대(50폭)×3
+  return [
+    { label: '상하평철1',       t: 1.6, bw: 60,  l: w - 5,  qty: qty * 2 },
+    { label: '상하평철2',       t: 1.6, bw: 274, l: w - 5,  qty: qty * 2 },
+    { label: '좌우브라켓',      t: 1.6, bw: 60,  l: h - 35, qty: qty * 4 },
+    { label: '보강대(소켓하부)', t: 1.6, bw: 50,  l: h,      qty: qty * 3 },
+  ];
+}
+
+function calcBracketHTG169(w: number, h: number, qty: number) {
+  // HTG-1.69 절곱 (sw=반폭-30 기준)
+  // 엑셀 시트2: 상하평철1×4, 상하평철2(274폭)×4, 좌우×4, 보강대×6
+  const sw = Math.round(w / 2 - 30);
+  return [
+    { label: '상하평철1',       t: 1.6, bw: 60,  l: sw - 5, qty: qty * 4 },
+    { label: '상하평철2',       t: 1.6, bw: 274, l: sw - 5, qty: qty * 4 },
+    { label: '좌우브라켓',      t: 1.6, bw: 60,  l: h - 35, qty: qty * 4 },
+    { label: '보강대(소켓하부)', t: 1.6, bw: 50,  l: h,      qty: qty * 6 },
+  ];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 어떤 공정에 어떤 구조체 코드가 해당되는지
 // ─────────────────────────────────────────────────────────────────────────────
-const VM_TYPES = new Set(['VA-064', 'VT-049', 'VT-064']);
-const VT_TYPES = new Set(['VT-01']);
+const VM_TYPES  = new Set(['VA-064', 'VT-049', 'VT-064']);
+const VT_TYPES  = new Set(['VT-01']);
 const HTG_TYPES = new Set(['HTG-064', 'HTG-064DC', 'HTG-1.69']);
 const VAG_TYPES = new Set(['VAG-1.69']);
 
@@ -136,6 +177,7 @@ async function migrateStructWO() {
 async function genWoNumber(type: string): Promise<string> {
   const prefix = {
     INSPECT: 'INS', CUT_VM: 'CVM', CUT_VT: 'CVT',
+    CUT_HTG: 'CHT', BEND_HTG: 'BHT',
     CUT_THERMAL: 'CTH', BEND_VM: 'BVM', BEND_VT: 'BVT',
     BEND_VT_RE: 'BRE', THERMAL_OUTER: 'THO', PACKING: 'PKG', LABEL: 'LBL',
   }[type] || 'WO';
@@ -275,23 +317,33 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
     const hasVAG = poItems.some((r: any) => VAG_TYPES.has(r.product_type));
     const hasHTG = poItems.some((r: any) => HTG_TYPES.has(r.product_type));
 
-    // 3. 공정별 생성 목록 결정
-    const woTypesToCreate: string[] = [];
+    // 3. 공정별 생성 목록 결정 (중복 방지 위해 Set 사용)
+    const woTypesSet = new Set<string>();
+    // 벽체형 (VM)
     if (hasVM || hasVAG) {
-      woTypesToCreate.push('CUT_VM');
-      if (hasVM) woTypesToCreate.push('BEND_VM');
+      woTypesSet.add('CUT_VM');
+      woTypesSet.add('BEND_VM');
     }
+    // 벽체형 VT-01
     if (hasVT) {
-      woTypesToCreate.push('CUT_VT');
-      woTypesToCreate.push('BEND_VT');
-      woTypesToCreate.push('BEND_VT_RE');
+      woTypesSet.add('CUT_VT');
+      woTypesSet.add('BEND_VT');
+      woTypesSet.add('BEND_VT_RE');
     }
+    // 벽체형 공통 차열재
     if (hasVM || hasVT || hasVAG) {
-      woTypesToCreate.push('CUT_THERMAL');
-      woTypesToCreate.push('THERMAL_OUTER');
+      woTypesSet.add('CUT_THERMAL');
+      woTypesSet.add('THERMAL_OUTER');
     }
-    if (hasHTG) woTypesToCreate.push('INSPECT');
-    woTypesToCreate.push('LABEL'); // 항상 생성
+    // 입상형 (HTG)
+    if (hasHTG) {
+      woTypesSet.add('INSPECT');
+      woTypesSet.add('CUT_HTG');      // 세라믹울/차열재 재단
+      woTypesSet.add('BEND_HTG');     // 브라켓/평철 절곱
+      woTypesSet.add('THERMAL_OUTER'); // 외부 차열재
+    }
+    woTypesSet.add('LABEL'); // 항상 생성
+    const woTypesToCreate = [...woTypesSet];
 
     // 4. 공정별 항목 필터
     function filterForType(type: string): any[] {
@@ -304,9 +356,15 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
         case 'BEND_VT_RE':
           return poItems.filter((r: any) => VT_TYPES.has(r.product_type));
         case 'CUT_THERMAL':
+          return poItems.filter((r: any) =>
+            VM_TYPES.has(r.product_type) || VT_TYPES.has(r.product_type) || VAG_TYPES.has(r.product_type));
         case 'THERMAL_OUTER':
-          return poItems.filter((r: any) => VM_TYPES.has(r.product_type) || VT_TYPES.has(r.product_type) || VAG_TYPES.has(r.product_type));
+          return poItems.filter((r: any) =>
+            VM_TYPES.has(r.product_type) || VT_TYPES.has(r.product_type) ||
+            VAG_TYPES.has(r.product_type) || HTG_TYPES.has(r.product_type));
         case 'INSPECT':
+        case 'CUT_HTG':
+        case 'BEND_HTG':
           return poItems.filter((r: any) => HTG_TYPES.has(r.product_type));
         case 'LABEL':
           return poItems;
@@ -350,9 +408,25 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
           if      (woType === 'CUT_VM')       calc_data = calcCutVM(W, H, Q, CT);
           else if (woType === 'CUT_VT')       calc_data = calcCutVT(W, H, Q, CT);
           else if (woType === 'CUT_THERMAL')  calc_data = calcCutThermal(W, H, Q, CT);
-          else if (woType === 'BEND_VM')      calc_data = { brackets: calcBracketVM(it.product_type, W, H, Q) };
+          else if (woType === 'CUT_HTG')      calc_data = calcCutHTG(W, H, Q);
+          else if (woType === 'BEND_VM') {
+            // VAG-1.69는 별도 브라켓 공식 적용
+            if (VAG_TYPES.has(it.product_type)) {
+              calc_data = { brackets: calcBracketVAG(W, H, Q) };
+            } else {
+              calc_data = { brackets: calcBracketVM(it.product_type, W, H, Q) };
+            }
+          }
           else if (woType === 'BEND_VT')      calc_data = { brackets: calcBracketVT(W, H, Q) };
           else if (woType === 'BEND_VT_RE')   calc_data = { brackets: calcBracketVTRe(W, H, Q) };
+          else if (woType === 'BEND_HTG') {
+            // HTG-1.69는 별도 브라켓 공식 (sw=반폭-30)
+            if (it.product_type === 'HTG-1.69') {
+              calc_data = { brackets: calcBracketHTG169(W, H, Q) };
+            } else {
+              calc_data = { brackets: calcBracketHTG064(W, H, Q) };
+            }
+          }
           else if (woType === 'THERMAL_OUTER') calc_data = {
             outer_top:     W + 60,
             outer_top_qty: Math.round(Q * 2 * singleFactor(CT)),
