@@ -1234,7 +1234,59 @@ export async function purchaseOrderRoutes(app: FastifyInstance) {
     return { data: rows[0], message: '발주서가 복원되었습니다.' };
   });
 
+  // ── POST /api/purchase-orders/:id/add-items ── 누락 품목 수동 추가
+  app.post<{
+    Params: { id: string };
+    Body: {
+      items: Array<{
+        product_type: string;
+        pipe_width_mm: number;
+        pipe_height_mm: number;
+        qty?: number;
+        construction_type?: string;
+        sheet_name?: string;
+        remark?: string;
+      }>;
+    };
+  }>('/api/purchase-orders/:id/add-items', { preHandler: requireAuth }, async (req, reply) => {
+    const poId = parseInt(req.params.id, 10);
+    const { items } = req.body;
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return reply.code(400).send({ error: 'items 배열이 필요합니다' });
+    }
+
+    // 현재 max seq_no 조회
+    const { rows: seqRows } = await pool.query(
+      `SELECT COALESCE(MAX(seq_no), 0) AS max_seq FROM purchase_order_item WHERE po_id = $1`,
+      [poId]
+    );
+    let seqNo = (seqRows[0]?.max_seq ?? 0) + 1;
+    const inserted: any[] = [];
+
+    for (const item of items) {
+      const qty = item.qty ?? 1;
+      const ct = item.construction_type || 'DOUBLE';
+      const sheetName = item.sheet_name || null;
+      // qty만큼 개별 행으로 분리 (소켓 1개=1행)
+      for (let i = 0; i < qty; i++) {
+        const { rows } = await pool.query(
+          `INSERT INTO purchase_order_item
+            (po_id, sheet_name, seq_no, item_type, pipe_width_mm, pipe_height_mm,
+             qty, product_type, remark, construction_type)
+           VALUES ($1,$2,$3,'socket',$4,$5,1,$6,$7,$8)
+           RETURNING po_item_id, product_type, pipe_width_mm, pipe_height_mm, qty, construction_type`,
+          [poId, sheetName, seqNo++, item.pipe_width_mm, item.pipe_height_mm,
+           item.product_type, item.remark || null, ct]
+        );
+        inserted.push(rows[0]);
+      }
+    }
+
+    return { data: inserted, inserted_count: inserted.length };
+  });
+
   // ── PATCH /api/purchase-orders/items/:po_item_id/construction-type ── 단면/양면 수동 변경
+
   app.patch<{ Params: { po_item_id: string }; Body: { construction_type: string } }>(
     '/api/purchase-orders/items/:po_item_id/construction-type',
     { preHandler: requireAuth },
