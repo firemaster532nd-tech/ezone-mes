@@ -103,13 +103,19 @@ export async function initializeWorkerPasswords() {
 }
 
 export async function authRoutes(app: FastifyInstance) {
-  // ?œë²„ ?œìž‘ ??admin ê³„ì • ë³´ìž¥ ë°??„ì§ ?¨ìŠ¤?Œë“œê°€ ?¸íŒ…?˜ì? ?Šì? ë¹„ê?ë¦¬ìž ê³„ì •?¤ì˜ ì´ˆê¸° ë¹„ë?ë²ˆí˜¸ë¥??´ë???ë²ˆí˜¸ë¡??¸íŒ…
-  // allowed_modes ì½œëŸ¼ ë§ˆì´ê·¸ë ˆ?´ì…˜
+  // Serverless 환경 부팅 속도 최적화: 마이그레이션 및 관리자 초기화는 넌블로킹 비동기로 실행
+  setImmediate(() => {
+    ensureAdminUser().catch((err) => console.error('Failed to ensure admin user:', err));
+    initializeWorkerPasswords().catch((err) => console.error('Failed to initialize worker passwords:', err));
+  });
+
+  // ?œë²„ ?œìž‘ ??admin ê³„ì • ë³´ìž¥ ë°??„ì§  ?¨ìŠ¤?Œë“œê°€ ?¸íŒ…?˜ì? ?Šì? ë¹„ê?ë¦¬ìž  ê³„ì •?¤ì ˜ ì´ˆê¸° ë¹„ë?ë²ˆí˜¸ë¥??´ë???ë²ˆí˜¸ë¡??¸íŒ…
+  // allowed_modes ì½œëŸ¼ ë§ˆì ´ê·¸ë ˆ?´ì…˜
   await pool.query(`
     ALTER TABLE worker ADD COLUMN IF NOT EXISTS allowed_modes VARCHAR(10) DEFAULT 'shop';
   `).catch(() => {});
 
-  // ?¸ë¶„ë¥?ë§ˆìŠ¤???Œì´ë¸??ì„± (ì¿¼ë¦¬ 1)
+  // ?¸ë¶„ë¥?ë§ˆìŠ¤???Œì ´ë¸?? ì„± (ì¿¼ë¦¬ 1)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS item_subcategory_master (
       subcategory_id   SERIAL PRIMARY KEY,
@@ -122,7 +128,7 @@ export async function authRoutes(app: FastifyInstance) {
     )
   `).catch((err: unknown) => console.error('[Migration] CREATE item_subcategory_master:', err));
 
-  // ê¸°ì¡´ item_master ?ì„œ ?¸ë¶„ë¥??œë“œ (ì¿¼ë¦¬ 2 - ë¶„ë¦¬ ?„ìˆ˜)
+  // ê¸°ì¡´ item_master ? ì„œ ?¸ë¶„ë¥??œë“œ (ì¿¼ë¦¬ 2 - ë¶„ë¦¬ ?„ìˆ˜)
   await pool.query(`
     INSERT INTO item_subcategory_master (item_category, subcategory_name)
     SELECT DISTINCT item_category, item_subcategory
@@ -131,21 +137,14 @@ export async function authRoutes(app: FastifyInstance) {
     ON CONFLICT (item_category, subcategory_name) DO NOTHING
   `).catch((err: unknown) => console.error('[Migration] SEED item_subcategory_master:', err));
 
-  // êµ¬ì¡°??ê·œê²© ì½œëŸ¼ ì¶”ê? (?¤ì¤‘ ALTER ?¨ì¼ ì¿¼ë¦¬)
+  // êµ¬ì¡°??ê·œê²© ì½œëŸ¼ ì¶”ê? (?¤ì¤‘ ALTER ?¨ì ¼ ì¿¼ë¦¬)
   await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_density  VARCHAR(30)`).catch(()=>{});
   await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_thickness VARCHAR(30)`).catch(()=>{});
   await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_width    VARCHAR(30)`).catch(()=>{});
   await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_length   VARCHAR(30)`).catch(()=>{});
   await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_height   VARCHAR(30)`).catch(()=>{});
 
-  await ensureAdminUser().catch((err) => {
-    console.error('Failed to ensure admin user:', err);
-  });
-  await initializeWorkerPasswords().catch((err) => {
-    console.error('Failed to initialize worker passwords:', err);
-  });
-
-  // POST /api/auth/login  (?¬ë²ˆ + ë¹„ë?ë²ˆí˜¸)
+  // POST /api/auth/login  (사번 + 비밀번호)
   app.post('/api/auth/login', async (req, reply) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: 'invalid_body', issues: parsed.error.issues });
