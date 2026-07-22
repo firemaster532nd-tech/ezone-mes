@@ -174,6 +174,7 @@ export const initApp = async () => {
         { menu_code: 'MATERIAL_LEDGER',      menu_name: '재고수불대장',    path: '/inventory/material-ledger',      parent_menu_id: inventoryParentId, sort_order: 72 },
         { menu_code: 'MATERIAL_TRANSACTION', menu_name: '입출고 입력',     path: '/inventory/material-transaction', parent_menu_id: inventoryParentId, sort_order: 73 },
         { menu_code: 'MATERIAL_INIT',        menu_name: '기초재고 등록',   path: '/inventory/material-init',        parent_menu_id: inventoryParentId, sort_order: 74 },
+        { menu_code: 'LABEL_PRINT',          menu_name: 'LOT 라벨 출력',   path: '/inventory/label-print',          parent_menu_id: inventoryParentId, sort_order: 75 },
 
       ];
 

@@ -79,6 +79,8 @@ import { MaterialStockPage } from '@/pages/inventory/MaterialStockPage';
 import { MaterialLedgerPage } from '@/pages/inventory/MaterialLedgerPage';
 import { MaterialTransactionPage } from '@/pages/inventory/MaterialTransactionPage';
 import { InitialMaterialPage } from '@/pages/inventory/InitialMaterialPage';
+import { LabelPrintPage } from '@/components/label/GodexLabelPrinter';
+
 
 
 
@@ -174,6 +176,8 @@ export const router = createBrowserRouter([
       { path: 'inventory/material-ledger',      element: <MaterialLedgerPage /> },
       { path: 'inventory/material-transaction', element: <MaterialTransactionPage /> },
       { path: 'inventory/material-init',        element: <InitialMaterialPage /> },
+      { path: 'inventory/label-print',          element: <LabelPrintPage /> },
+
 
       // 마스터관리
       { path: 'master/certifications', element: <CertificationsPage /> },
