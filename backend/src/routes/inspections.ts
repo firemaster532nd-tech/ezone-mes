@@ -14,76 +14,81 @@ async function createMaterialLotOnPass(
   overallResult: string
 ) {
   if (overallResult !== 'PASS' || !lotNumber) return;
-
-  // 이미 존재하면 건너뜀
-  const { rows: exist } = await client.query(
-    `SELECT lot_id FROM material_lots WHERE lot_number=$1 LIMIT 1`, [lotNumber]
-  );
-  if (exist.length > 0) return;
-
-  // 인수검사 + 관련 정보 조회
-  const { rows: [row] } = await client.query(`
-    SELECT
-      ins.insp_id, ins.insp_type, ins.lot_number, ins.item_name, ins.item_category,
-      ins.inspector, ins.inspected_at,
-      lt.qty, lt.supplier_lot, lt.unit,
-      im.item_name AS master_item_name,
-      im.thickness_mm, im.width_mm, im.length_mm, im.density
-    FROM inspection ins
-    LEFT JOIN lot_transaction lt ON lt.lot_id = ins.lot_id
-    LEFT JOIN item_master im ON im.item_id = lt.item_id
-    WHERE ins.insp_id = $1
-  `, [inspId]);
-
-  if (!row) return;
-  // 소켓 인수검사는 별도 관리
-  if (row.insp_type === 'SOCKET_IN') return;
-
-  // item_category → material_lots.category 매핑
-  const catMap: Record<string, string> = {
-    CW: '세라믹울', HS: '차열재', GW: '그라스울',
-    GWB: '그라스울보드', SK: '소켓',
-  };
-  const rawCat = (row.item_category || '').toUpperCase();
-  const category = catMap[rawCat]
-    ?? (lotNumber.includes('CW') ? '세라믹울'
-       : lotNumber.includes('GW') ? '그라스울'
-       : '기타부자재');
-
-  const qty = Number(row.qty) || 0;
-  await client.query(`
-    INSERT INTO material_lots
-      (lot_number, category, item_name, density, thickness, width_mm, length_mm,
-       unit, qty_current, location, supplier_lot, received_date, notes)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'본재고',$10,$11,'인수검사 자동등록')
-  `, [
-    lotNumber,
-    category,
-    row.master_item_name || row.item_name || '',
-    row.density || null,
-    row.thickness_mm || null,
-    row.width_mm || null,
-    row.length_mm || null,
-    row.unit || 'EA',
-    qty,
-    row.supplier_lot || null,
-    (row.inspected_at || new Date()).toString().slice(0,10),
-  ]);
-
-  if (qty > 0) {
-    const { rows: [lot] } = await client.query(
-      `SELECT lot_id FROM material_lots WHERE lot_number=$1`, [lotNumber]
+  try {
+    // 이미 존재하면 건너뜀
+    const { rows: exist } = await client.query(
+      `SELECT lot_id FROM material_lots WHERE lot_number=$1 LIMIT 1`, [lotNumber]
     );
-    if (lot) {
-      await client.query(`
-        INSERT INTO material_transactions
-          (txn_date, lot_id, lot_number, category, txn_type, qty, qty_before, qty_after,
-           source_type, source_id, notes)
-        VALUES (CURRENT_DATE,$1,$2,$3,'IN',$4,0,$4,'INCOMING_INSPECTION',$5,'인수검사 합격 자동 입고')
-      `, [lot.lot_id, lotNumber, category, qty, inspId]);
+    if (exist.length > 0) return;
+
+    // 인수검사 + 관련 정보 조회 (item_master 컬럼명: spec_density, spec_thickness, spec_width, spec_length)
+    const { rows: [row] } = await client.query(`
+      SELECT
+        ins.insp_id, ins.insp_type, ins.lot_number, ins.item_name, ins.item_category,
+        ins.inspector, ins.inspected_at,
+        lt.qty, lt.supplier_lot, lt.unit,
+        im.item_name AS master_item_name,
+        im.spec_thickness, im.spec_width, im.spec_length, im.spec_density
+      FROM inspection ins
+      LEFT JOIN lot_transaction lt ON lt.lot_id = ins.lot_id
+      LEFT JOIN item_master im ON im.item_id = lt.item_id
+      WHERE ins.insp_id = $1
+    `, [inspId]);
+
+    if (!row) return;
+    // 소켓 인수검사는 별도 관리
+    if (row.insp_type === 'SOCKET_IN') return;
+
+    // item_category → material_lots.category 매핑
+    const catMap: Record<string, string> = {
+      CW: '세라믹울', HS: '차열재', GW: '그라스울',
+      GWB: '그라스울보드', SK: '소켓',
+    };
+    const rawCat = (row.item_category || '').toUpperCase();
+    const category = catMap[rawCat]
+      ?? (lotNumber.includes('CW') ? '세라믹울'
+         : lotNumber.includes('GW') ? '그라스울'
+         : '기타부자재');
+
+    const qty = Number(row.qty) || 0;
+    await client.query(`
+      INSERT INTO material_lots
+        (lot_number, category, item_name, density, thickness, width_mm, length_mm,
+         unit, qty_current, location, supplier_lot, received_date, notes)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'본재고',$10,$11,'인수검사 자동등록')
+    `, [
+      lotNumber,
+      category,
+      row.master_item_name || row.item_name || '',
+      row.spec_density   ? parseFloat(row.spec_density)   : null,
+      row.spec_thickness ? parseFloat(row.spec_thickness) : null,
+      row.spec_width     ? parseFloat(row.spec_width)     : null,
+      row.spec_length    ? parseFloat(row.spec_length)    : null,
+      row.unit || 'EA',
+      qty,
+      row.supplier_lot || null,
+      (row.inspected_at || new Date()).toString().slice(0,10),
+    ]);
+
+    if (qty > 0) {
+      const { rows: [lot] } = await client.query(
+        `SELECT lot_id FROM material_lots WHERE lot_number=$1`, [lotNumber]
+      );
+      if (lot) {
+        await client.query(`
+          INSERT INTO material_transactions
+            (txn_date, lot_id, lot_number, category, txn_type, qty, qty_before, qty_after,
+             source_type, source_id, notes)
+          VALUES (CURRENT_DATE,$1,$2,$3,'IN',$4,0,$4,'INCOMING_INSPECTION',$5,'인수검사 합격 자동 입고')
+        `, [lot.lot_id, lotNumber, category, qty, inspId]);
+      }
     }
+  } catch (e) {
+    // material_lots 자동등록 실패 시 인수검사 트랜잭션은 계속 진행
+    console.warn('[createMaterialLotOnPass] 자동 LOT 생성 실패 (무시):', (e as any)?.message);
   }
 }
+
 
 /**
  * Auto-judge helper: determine PASS/FAIL for a single inspection detail item.
