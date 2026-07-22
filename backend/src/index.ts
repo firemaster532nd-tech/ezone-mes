@@ -60,6 +60,8 @@ import { returnRoutes } from './routes/returns.js';
 import { socketIncomingRoutes } from './routes/socket-incoming.js';
 import { announcementRoutes, ensureAnnouncementTables } from './routes/announcements.js';
 import { superadminRoutes } from './routes/superadmin.js';
+import { materialLotsRoutes } from './routes/material-lots.js';
+
 
 let appInstance: any = null;
 
@@ -129,6 +131,8 @@ export const initApp = async () => {
   await app.register(socketIncomingRoutes);
   await app.register(announcementRoutes);
   await app.register(superadminRoutes);
+  await app.register(materialLotsRoutes);
+
 
   // Health check
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
@@ -165,6 +169,12 @@ export const initApp = async () => {
         { menu_code: 'SOCKET_ORDER_WAIT', menu_name: '자재발주대기',      path: '/orders/socket-order-wait', parent_menu_id: null, sort_order: 25 },
         // ── 소켓 인수검사 ──
         { menu_code: 'SOCKET_INCOMING', menu_name: '소켓 인수검사', path: '/quality/socket-incoming', parent_menu_id: null, sort_order: 62 },
+        // ── 재고수불대장 ──
+        { menu_code: 'MATERIAL_STOCK',       menu_name: 'LOT 재고현황',   path: '/inventory/material-stock',       parent_menu_id: inventoryParentId, sort_order: 71 },
+        { menu_code: 'MATERIAL_LEDGER',      menu_name: '재고수불대장',    path: '/inventory/material-ledger',      parent_menu_id: inventoryParentId, sort_order: 72 },
+        { menu_code: 'MATERIAL_TRANSACTION', menu_name: '입출고 입력',     path: '/inventory/material-transaction', parent_menu_id: inventoryParentId, sort_order: 73 },
+        { menu_code: 'MATERIAL_INIT',        menu_name: '기초재고 등록',   path: '/inventory/material-init',        parent_menu_id: inventoryParentId, sort_order: 74 },
+
       ];
 
       for (const m of newMenus) {

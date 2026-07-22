@@ -75,6 +75,11 @@ import { AnnouncementsPage } from '@/pages/announcements/AnnouncementsPage';
 import { LoginLogsPage } from '@/pages/settings/LoginLogsPage';
 import InventoryLedgerPage from '@/pages/inventory/InventoryLedgerPage';
 import { SuperAdminResetPage } from '@/pages/settings/SuperAdminResetPage';
+import { MaterialStockPage } from '@/pages/inventory/MaterialStockPage';
+import { MaterialLedgerPage } from '@/pages/inventory/MaterialLedgerPage';
+import { MaterialTransactionPage } from '@/pages/inventory/MaterialTransactionPage';
+import { InitialMaterialPage } from '@/pages/inventory/InitialMaterialPage';
+
 
 
 // ─── 라우트 에러 바운더리 ───
@@ -164,6 +169,12 @@ export const router = createBrowserRouter([
       // 재고관리 - 로케이션
       { path: 'inventory/location', element: <LocationManagementPage /> },
       { path: 'inventory/label-reprint', element: <LabelReprintPage /> },
+      // 재고수불대장
+      { path: 'inventory/material-stock',       element: <MaterialStockPage /> },
+      { path: 'inventory/material-ledger',      element: <MaterialLedgerPage /> },
+      { path: 'inventory/material-transaction', element: <MaterialTransactionPage /> },
+      { path: 'inventory/material-init',        element: <InitialMaterialPage /> },
+
       // 마스터관리
       { path: 'master/certifications', element: <CertificationsPage /> },
       { path: 'master/certifications/:id', element: <CertificationDetail /> },
