@@ -92,12 +92,17 @@ function EzoneStamp({ size = 70 }: { size?: number }) {
   );
 }
 
+// ─── 컬럼 표시 모드 ──────────────────────────────────────
+type ColumnMode = 'qty-only' | 'with-price' | 'no-amount' | 'full' | 'no-price';
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  A4 전체 1장 — 거래명세서 (Type A: 일반기입형)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function PageTypeA({ data, copyLabel }: { data: StatementDetail; copyLabel: string }) {
+function PageTypeA({ data, copyLabel, columnMode }: { data: StatementDetail; copyLabel: string; columnMode: ColumnMode }) {
   const grandTotal = Number(data.total_amount) + Number(data.total_vat);
   const korean = numToKorean(grandTotal);
+  const showPrice  = columnMode !== 'qty-only' && columnMode !== 'no-price';
+  const showAmount = columnMode === 'full' || columnMode === 'no-price';
   const MIN_ROWS = 22;
   const padCount = Math.max(0, MIN_ROWS - data.items.length);
 
@@ -168,14 +173,16 @@ function PageTypeA({ data, copyLabel }: { data: StatementDetail; copyLabel: stri
         </tbody>
       </table>
 
-      {/* 합계금액 */}
-      <div className="border border-black border-t-0 px-3 py-1 flex items-center gap-3 text-[10px] font-bold bg-gray-50">
-        <span>합계금액:</span>
-        <span className="underline text-[9px]">개&nbsp;&nbsp;별&nbsp;&nbsp;단&nbsp;&nbsp;가</span>
-        <span className="flex-1 text-right">
-          (&nbsp;<span className="text-[14px]">{korean}&nbsp;원정</span>&nbsp;)&nbsp;&nbsp;VAT포함
-        </span>
-      </div>
+      {/* 합계금액 — 금액 컬럼이 있을 때만 표시 */}
+      {showAmount && (
+        <div className="border border-black border-t-0 px-3 py-1 flex items-center gap-3 text-[10px] font-bold bg-gray-50">
+          <span>합계금액:</span>
+          <span className="underline text-[9px]">개&nbsp;&nbsp;별&nbsp;&nbsp;단&nbsp;&nbsp;가</span>
+          <span className="flex-1 text-right">
+            (&nbsp;<span className="text-[14px]">{korean}&nbsp;원정</span>&nbsp;)&nbsp;&nbsp;VAT포함
+          </span>
+        </div>
+      )}
 
       {/* 명세 테이블 */}
       <table className="w-full border-collapse text-[10px]" style={{border:'1px solid black'}}>
@@ -186,6 +193,9 @@ function PageTypeA({ data, copyLabel }: { data: StatementDetail; copyLabel: stri
             <th className="border border-black py-1 text-left px-1 w-[110px]">규&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;격</th>
             <th className="border border-black py-1 w-[36px]">단위</th>
             <th className="border border-black py-1 w-[42px]">수량</th>
+            {showPrice  && <th className="border border-black py-1 w-[60px]">단가</th>}
+            {showAmount && <th className="border border-black py-1 w-[65px]">공급가액</th>}
+            {showAmount && <th className="border border-black py-1 w-[50px]">세액</th>}
             <th className="border border-black py-1">비&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;고</th>
           </tr>
         </thead>
@@ -199,17 +209,31 @@ function PageTypeA({ data, copyLabel }: { data: StatementDetail; copyLabel: stri
               <td className="border border-black py-1 text-right px-1 font-bold font-mono">
                 {item.qty ? fmt(item.qty) : ''}
               </td>
+              {showPrice  && <td className="border border-black py-1 text-right px-1 font-mono">{item.unit_price ? fmt(item.unit_price) : ''}</td>}
+              {showAmount && <td className="border border-black py-1 text-right px-1 font-mono">{item.amount ? fmt(item.amount) : ''}</td>}
+              {showAmount && <td className="border border-black py-1 text-right px-1 font-mono">{item.vat ? fmt(item.vat) : ''}</td>}
               <td className="border border-black py-1 px-1">{item.remarks || ''}</td>
             </tr>
           ))}
           {Array.from({ length: padCount }).map((_, i) => (
             <tr key={`pad-${i}`} style={{ height: '20px' }}>
-              {[0,1,2,3,4,5].map(c => <td key={c} className="border border-black" />)}
+              <td className="border border-black" /><td className="border border-black" />
+              <td className="border border-black" /><td className="border border-black" />
+              <td className="border border-black" />
+              {showPrice  && <td className="border border-black" />}
+              {showAmount && <td className="border border-black" />}
+              {showAmount && <td className="border border-black" />}
+              <td className="border border-black" />
             </tr>
           ))}
           {/* 인수서명 */}
           <tr style={{ height: '26px' }}>
-            {[0,1,2,3,4].map(c => <td key={c} className="border border-black" />)}
+            <td className="border border-black" /><td className="border border-black" />
+            <td className="border border-black" /><td className="border border-black" />
+            <td className="border border-black" />
+            {showPrice  && <td className="border border-black" />}
+            {showAmount && <td className="border border-black" />}
+            {showAmount && <td className="border border-black" />}
             <td className="border border-black px-2 text-right text-[10px] font-bold">인&nbsp;수&nbsp;서&nbsp;명</td>
           </tr>
           {/* 합계 */}
@@ -217,9 +241,11 @@ function PageTypeA({ data, copyLabel }: { data: StatementDetail; copyLabel: stri
             <td className="border border-black py-1.5 text-center" colSpan={3}>합&nbsp;&nbsp;&nbsp;계</td>
             <td className="border border-black py-1.5" />
             <td className="border border-black py-1.5 text-right px-1 font-mono">{fmt(data.total_qty)}</td>
+            {showPrice  && <td className="border border-black py-1.5" />}
+            {showAmount && <td className="border border-black py-1.5 text-right px-1 font-mono">{fmt(data.total_amount)}</td>}
+            {showAmount && <td className="border border-black py-1.5 text-right px-1 font-mono">{fmt(data.total_vat)}</td>}
             <td className="border border-black py-1.5 px-2 text-[10px]">
-              공급가: {fmt(data.total_amount)}&nbsp;&nbsp;VAT: {fmt(data.total_vat)}&nbsp;&nbsp;
-              <span className="font-black text-[11px]">합계: {fmt(grandTotal)}</span>
+              {!showAmount && <><span>공급가: {fmt(data.total_amount)}</span>&nbsp;&nbsp;<span>VAT: {fmt(data.total_vat)}</span>&nbsp;&nbsp;<span className="font-black text-[11px]">합계: {fmt(grandTotal)}</span></>}
             </td>
           </tr>
         </tbody>
@@ -263,9 +289,11 @@ function PageTypeA({ data, copyLabel }: { data: StatementDetail; copyLabel: stri
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  A4 전체 1장 — 거래명세서 (Type B: 자동연산형)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function PageTypeB({ data, copyLabel }: { data: StatementDetail; copyLabel: string }) {
+function PageTypeB({ data, copyLabel, columnMode }: { data: StatementDetail; copyLabel: string; columnMode: ColumnMode }) {
   const grandTotal = Number(data.total_amount) + Number(data.total_vat);
   const korean = numToKorean(grandTotal);
+  const showPrice  = columnMode !== 'qty-only' && columnMode !== 'no-price';
+  const showAmount = columnMode === 'full' || columnMode === 'no-price';
   const MIN_ROWS = 24;
   const items = data.items;
   const padCount = Math.max(0, MIN_ROWS - items.length);
@@ -335,12 +363,14 @@ function PageTypeB({ data, copyLabel }: { data: StatementDetail; copyLabel: stri
         </tbody>
       </table>
 
-      {/* 합계금액 */}
-      <div className="border border-black border-t-0 px-2 py-0.5 flex items-center gap-2 text-[9px] font-bold bg-gray-50">
-        <span>합계금액:</span>
-        <span className="underline text-[8px]">개&nbsp;별&nbsp;단&nbsp;가</span>
-        <span className="flex-1 text-right">(&nbsp;<span className="text-[12px]">{korean}&nbsp;원정</span>&nbsp;)&nbsp;VAT포함</span>
-      </div>
+      {/* 합계금액 — 금액 컬럼이 있을 때만 표시 */}
+      {showAmount && (
+        <div className="border border-black border-t-0 px-2 py-0.5 flex items-center gap-2 text-[9px] font-bold bg-gray-50">
+          <span>합계금액:</span>
+          <span className="underline text-[8px]">개&nbsp;별&nbsp;단&nbsp;가</span>
+          <span className="flex-1 text-right">(&nbsp;<span className="text-[12px]">{korean}&nbsp;원정</span>&nbsp;)&nbsp;VAT포함</span>
+        </div>
+      )}
 
       {/* 명세 테이블 (2단 헤더) */}
       <table className="w-full border-collapse text-[9px]" style={{border:'1px solid black'}}>
@@ -351,6 +381,9 @@ function PageTypeB({ data, copyLabel }: { data: StatementDetail; copyLabel: stri
             <th className="border border-black py-0.5" colSpan={4}>규&nbsp;&nbsp;&nbsp;&nbsp;격</th>
             <th className="border border-black py-0.5 w-[32px]" rowSpan={2}>단위</th>
             <th className="border border-black py-0.5 w-[36px]" rowSpan={2}>수량</th>
+            {showPrice  && <th className="border border-black py-0.5 w-[58px]" rowSpan={2}>단가</th>}
+            {showAmount && <th className="border border-black py-0.5 w-[62px]" rowSpan={2}>공급가액</th>}
+            {showAmount && <th className="border border-black py-0.5 w-[48px]" rowSpan={2}>세액</th>}
             <th className="border border-black py-0.5" rowSpan={2}>비&nbsp;고</th>
           </tr>
           <tr className="bg-gray-200 font-bold text-center text-[8px]">
@@ -374,6 +407,9 @@ function PageTypeB({ data, copyLabel }: { data: StatementDetail; copyLabel: stri
                 <td className="border border-black py-0.5 text-center font-mono">{item.length_mm || ''}</td>
                 <td className="border border-black py-0.5 text-center">{item.unit}</td>
                 <td className="border border-black py-0.5 text-right px-1 font-bold font-mono">{item.qty ? fmt(item.qty) : ''}</td>
+                {showPrice  && <td className="border border-black py-0.5 text-right px-1 font-mono">{item.unit_price ? fmt(item.unit_price) : ''}</td>}
+                {showAmount && <td className="border border-black py-0.5 text-right px-1 font-mono">{item.amount ? fmt(item.amount) : ''}</td>}
+                {showAmount && <td className="border border-black py-0.5 text-right px-1 font-mono">{item.vat ? fmt(item.vat) : ''}</td>}
                 <td className="border border-black py-0.5 px-1 text-[8px]">{item.remarks || ''}</td>
               </tr>
             );
@@ -387,25 +423,40 @@ function PageTypeB({ data, copyLabel }: { data: StatementDetail; copyLabel: stri
               <td className="border border-black py-0.5 text-center font-mono">{item.length_mm || ''}</td>
               <td className="border border-black py-0.5 text-center">{item.unit}</td>
               <td className="border border-black py-0.5 text-right px-1 font-bold font-mono">{item.qty ? fmt(item.qty) : ''}</td>
+              {showPrice  && <td className="border border-black py-0.5 text-right px-1 font-mono">{item.unit_price ? fmt(item.unit_price) : ''}</td>}
+              {showAmount && <td className="border border-black py-0.5 text-right px-1 font-mono">{item.amount ? fmt(item.amount) : ''}</td>}
+              {showAmount && <td className="border border-black py-0.5 text-right px-1 font-mono">{item.vat ? fmt(item.vat) : ''}</td>}
               <td className="border border-black py-0.5 px-1 text-[8px]">{item.remarks || ''}</td>
             </tr>
           ))}
           {Array.from({ length: padCount }).map((_, i) => (
             <tr key={`pad-${i}`} style={{ height: '17px' }}>
-              {[0,1,2,3,4,5,6,7,8].map(c => <td key={c} className="border border-black" />)}
+              <td className="border border-black" /><td className="border border-black" />
+              <td className="border border-black" /><td className="border border-black" />
+              <td className="border border-black" /><td className="border border-black" />
+              <td className="border border-black" /><td className="border border-black" />
+              {showPrice  && <td className="border border-black" />}
+              {showAmount && <td className="border border-black" />}
+              {showAmount && <td className="border border-black" />}
+              <td className="border border-black" />
             </tr>
           ))}
           <tr style={{ height: '22px' }}>
             <td className="border border-black" colSpan={8} />
+            {showPrice  && <td className="border border-black" />}
+            {showAmount && <td className="border border-black" />}
+            {showAmount && <td className="border border-black" />}
             <td className="border border-black px-1 text-right text-[8px] font-bold">인&nbsp;수&nbsp;서&nbsp;명</td>
           </tr>
           <tr className="bg-gray-100 font-bold">
             <td className="border border-black py-1.5 text-center" colSpan={6}>합&nbsp;&nbsp;&nbsp;계</td>
             <td className="border border-black py-1.5" />
             <td className="border border-black py-1.5 text-right px-1 font-mono">{fmt(data.total_qty)}</td>
+            {showPrice  && <td className="border border-black py-1.5" />}
+            {showAmount && <td className="border border-black py-1.5 text-right px-1 font-mono">{fmt(data.total_amount)}</td>}
+            {showAmount && <td className="border border-black py-1.5 text-right px-1 font-mono">{fmt(data.total_vat)}</td>}
             <td className="border border-black py-1.5 px-1 text-[8px]">
-              공급가: {fmt(data.total_amount)}&nbsp;VAT: {fmt(data.total_vat)}&nbsp;
-              <span className="font-black">합: {fmt(grandTotal)}</span>
+              {!showAmount && <><span>공급가: {fmt(data.total_amount)}</span>&nbsp;VAT: {fmt(data.total_vat)}&nbsp;<span className="font-black">합: {fmt(grandTotal)}</span></>}
             </td>
           </tr>
         </tbody>
@@ -458,6 +509,10 @@ export function StatementPrintPage() {
   const [loading, setLoading]     = useState(true);
   const [authError, setAuthError] = useState(false);
   const [printType, setPrintType] = useState<'A' | 'B'>(initialType);
+  const [columnMode, setColumnMode] = useState<ColumnMode>(
+    () => (localStorage.getItem('ezone_col_mode') as ColumnMode) ?? 'qty-only'
+  );
+  const handleColMode = (m: ColumnMode) => { setColumnMode(m); localStorage.setItem('ezone_col_mode', m); };
 
   useEffect(() => {
     if (!id) return;
@@ -540,6 +595,18 @@ export function StatementPrintPage() {
             </button>
           </div>
 
+          <select
+            value={columnMode}
+            onChange={e => handleColMode(e.target.value as ColumnMode)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-xs font-semibold bg-white text-gray-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-400"
+          >
+            <option value="qty-only">수량만 (기본)</option>
+            <option value="with-price">단가+수량</option>
+            <option value="no-amount">금액없는 양식 (단가만)</option>
+            <option value="no-price">단가없는 거래명세표 (금액만)</option>
+            <option value="full">전체 (단가+금액+VAT)</option>
+          </select>
+
           <span className="text-[11px] bg-blue-50 text-blue-700 px-2.5 py-1 rounded font-semibold">
             📄 인쇄 시 2장 출력 — 공급받는자 보관용 + 공급자 보관용
           </span>
@@ -561,12 +628,12 @@ export function StatementPrintPage() {
 
         {/* 1장: 공급받는자 보관용 */}
         <div className="shadow-2xl print:shadow-none">
-          <PageComponent data={data} copyLabel="공급받는자 보관용" />
+          <PageComponent data={data} copyLabel="공급받는자 보관용" columnMode={columnMode} />
         </div>
 
         {/* 2장: 공급자 보관용 */}
         <div className="shadow-2xl print:shadow-none">
-          <PageComponent data={data} copyLabel="공급자 보관용" />
+          <PageComponent data={data} copyLabel="공급자 보관용" columnMode={columnMode} />
         </div>
 
       </div>
