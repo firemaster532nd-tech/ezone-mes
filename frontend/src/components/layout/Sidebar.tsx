@@ -3,7 +3,7 @@ import {
   LayoutDashboard, ClipboardList, Package, ShieldCheck,
   Truck, Settings, ChevronLeft, ChevronRight, Factory, Database,
   Wrench, FlaskConical, Scissors, Box, Layers,
-  ArrowRightLeft, Monitor, HardHat,
+  ArrowRightLeft, Monitor, HardHat, Boxes, PackageCheck,
   ChevronDown, Hammer, Inbox, FileText, ShoppingCart, Megaphone, ShieldAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -83,6 +83,23 @@ const shopNavItems: NavSection[] = [
     ],
     dividerAfter: true,
   },
+  // ── 통합 재고 관리 ──
+  {
+    label: '통합 재고 관리',
+    icon: Boxes,
+    children: [
+      { label: '📊 전체 LOT 재고현황',  path: '/inventory/dashboard' },
+      { label: '📑 통합 재고수불대장',    path: '/inventory/ledger' },
+      { label: '⚙️ 기초/초기 재고 설정', path: '/inventory/initialize' },
+      { label: '🔄 수불대장 엑셀 연동',   path: '/inventory/import' },
+      { label: '🔌 소켓 / 평철 재고',    path: '/inventory/socket-stock' },
+      { label: '🏭 에프엔테크 재고현황',  path: '/inventory/fn-tech-stock' },
+      { label: '📍 로케이션 관리',       path: '/inventory/location' },
+      { label: '🏷️ LOT 라벨 재출력',     path: '/inventory/label-reprint' },
+      { label: '🗓️ 월말 실사/마감',       path: '/inventory/closing' },
+    ],
+    dividerAfter: true,
+  },
   // ── 생산 흐름 ──
   {
     label: '원재료 입고/검사',
@@ -90,13 +107,6 @@ const shopNavItems: NavSection[] = [
     step: '①',
     children: [
       { label: '인수검사', path: '/quality/incoming' },
-      { label: '재고 현황', path: '/inventory/dashboard' },
-      { label: '재고 수불대장', path: '/inventory/ledger' },
-      { label: '초기 재고 설정', path: '/inventory/initialize' },
-      { label: '수불대장 엑셀 연동', path: '/inventory/import' },
-      { label: '소켓/평철 재고 관리', path: '/inventory/socket-stock' },
-      { label: '에프엔테크 재고현황', path: '/inventory/fn-tech-stock' },
-
     ],
   },
   {
@@ -132,9 +142,7 @@ const shopNavItems: NavSection[] = [
     step: '⑤',
     children: [
       { label: '인수검사', path: '/quality/incoming' },
-      { label: '재고 현황', path: '/inventory/dashboard' },
-      { label: '로케이션 관리', path: '/inventory/location' },
-      { label: 'LOT 라벨 재출력', path: '/inventory/label-reprint' },
+      { label: '부자재 입출고 등록', path: '/inventory/material-tx' },
     ],
   },
   {
@@ -256,18 +264,24 @@ const adminNavItems: NavSection[] = [
     ],
   },
   {
-    label: '재고/출하',
-    icon: ArrowRightLeft,
+    label: '통합 재고 관리',
+    icon: Boxes,
     children: [
-      { label: '재고 현황', path: '/inventory/dashboard' },
-      { label: '재고 수불대장', path: '/inventory/ledger' },
+      { label: '전체 LOT 재고현황', path: '/inventory/dashboard' },
+      { label: '통합 재고수불대장', path: '/inventory/ledger' },
+      { label: '초기/기초 재고 설정', path: '/inventory/initialize' },
       { label: '수불대장 엑셀 연동', path: '/inventory/import' },
-      { label: '월말 실사/마감', path: '/inventory/closing' },
       { label: '소켓/평철 재고 관리', path: '/inventory/socket-stock' },
       { label: '에프엔테크 재고현황', path: '/inventory/fn-tech-stock' },
-
       { label: '로케이션 관리', path: '/inventory/location' },
       { label: 'LOT 라벨 재출력', path: '/inventory/label-reprint' },
+      { label: '월말 실사/마감', path: '/inventory/closing' },
+    ],
+  },
+  {
+    label: '출하 관리',
+    icon: Truck,
+    children: [
       { label: '출하대기현황', path: '/shipment/ready' },
       { label: '출하조회', path: '/shipment/orders' },
       { label: '출하입력', path: '/shipment/input' },
