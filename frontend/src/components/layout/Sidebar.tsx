@@ -75,7 +75,7 @@ const shopNavItems: NavSection[] = [
     icon: ClipboardList,
     children: [
       { label: '일반 작업지시',      path: '/production/work-orders' },
-      { label: '현장별 작업지시',     path: '/production/project-work-orders' },
+      // { label: '현장별 작업지시',     path: '/production/project-work-orders' },
       { label: '비인정제품 작업지시',   path: '/production/socket-work-orders' },
       { label: '구조체 작업지시',     path: '/production/struct-work-orders' },
       { label: '부자재별 작업지시', path: '/production/sub-work-orders' },
@@ -229,7 +229,7 @@ const adminNavItems: NavSection[] = [
     icon: ClipboardList,
     children: [
       { label: '작업지시 목록',       path: '/production/work-orders' },
-      { label: '현장별 작업지시',      path: '/production/project-work-orders' },
+      // { label: '현장별 작업지시',      path: '/production/project-work-orders' },
       { label: '비인정제품 작업지시',   path: '/production/socket-work-orders' },
       { label: '구조체 작업지시',      path: '/production/struct-work-orders' },
       { label: '부자재별 작업지시',  path: '/production/sub-work-orders' },
