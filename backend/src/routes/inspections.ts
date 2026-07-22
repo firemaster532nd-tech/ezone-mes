@@ -81,6 +81,16 @@ async function createMaterialLotOnPass(
              source_type, source_id, notes)
           VALUES (CURRENT_DATE,$1,$2,$3,'IN',$4,0,$4,'INCOMING_INSPECTION',$5,'인수검사 합격 자동 입고')
         `, [lot.lot_id, lotNumber, category, qty, inspId]);
+
+        // FN테크 슬리브/보호철판 부자재 합격 시 -> fn_material_stock (FN테크 원자재 재고) 동시 입고 연동!
+        const itemName = row.master_item_name || row.item_name || '';
+        if (itemName.includes('FN') || itemName.includes('슬리브') || itemName.includes('보호철판')) {
+          await client.query(`
+            INSERT INTO fn_material_stock (lot_number, item_name, spec, unit, current_stock, created_at)
+            VALUES ($1, $2, $3, $4, $5, NOW())
+            ON CONFLICT (lot_number) DO UPDATE SET current_stock = fn_material_stock.current_stock + $5
+          `, [lotNumber, itemName, row.spec_thickness ? `${row.spec_thickness}mm` : '기본', row.unit || 'EA', qty]).catch(() => {});
+        }
       }
     }
   } catch (e) {
@@ -491,6 +501,35 @@ export async function inspectionRoutes(app: FastifyInstance) {
     ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS length_mm BIGINT;
   `).catch((e: unknown) => console.error('[Migration] spec columns:', e));
 
+
+  // GET /api/inspection-criteria - 인수검사 마스터 검사기준 조회
+  app.get('/api/inspection-criteria', async (request) => {
+    const { category } = request.query as { category?: string };
+    let q = 'SELECT * FROM inspection_criteria WHERE is_active=true';
+    const params: any[] = [];
+    if (category) {
+      params.push(category);
+      q += ' AND category=$1';
+    }
+    q += ' ORDER BY criteria_id DESC';
+    const res = await pool.query(q, params);
+    return { data: res.rows };
+  });
+
+  // POST /api/inspection-criteria - 신규 검사기준 동적 등록 (비인정제품 등)
+  app.post('/api/inspection-criteria', async (request, reply) => {
+    const { category, item_name, spec, min_value, max_value, unit, tool_name } = request.body as any;
+    if (!category || !item_name) {
+      return reply.code(400).send({ error: 'category와 item_name은 필수입니다.' });
+    }
+    const res = await pool.query(`
+      INSERT INTO inspection_criteria (category, item_name, spec, min_value, max_value, unit, tool_name)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *
+    `, [category, item_name, spec||null, min_value||null, max_value||null, unit||'mm', tool_name||'버니어캘리퍼스']);
+
+    return { data: res.rows[0] };
+  });
 
   // GET /api/inspections/incoming-presets - 인수검사 양식 목록
   // category='RM': 기존 하드코딩 배열 사용 (원재료)

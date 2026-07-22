@@ -80,6 +80,10 @@ import { MaterialLedgerPage } from '@/pages/inventory/MaterialLedgerPage';
 import { MaterialTransactionPage } from '@/pages/inventory/MaterialTransactionPage';
 import { InitialMaterialPage } from '@/pages/inventory/InitialMaterialPage';
 import { LabelPrintPage } from '@/components/label/GodexLabelPrinter';
+import { RawMaterialInspectionPage } from '@/pages/quality/RawMaterialInspectionPage';
+import { SubMaterialInspectionPage } from '@/pages/quality/SubMaterialInspectionPage';
+import { SocketBracketInspectionPage } from '@/pages/quality/SocketBracketInspectionPage';
+import { NonCertifiedInspectionPage } from '@/pages/quality/NonCertifiedInspectionPage';
 
 
 
@@ -146,6 +150,10 @@ export const router = createBrowserRouter([
       { path: 'quality/defects', element: <DefectsPage /> },
       { path: 'quality/compliance', element: <ComplianceChecklistPage /> },
       { path: 'quality/project-lot-matrix', element: <ProjectLotMatrixPage /> },
+      { path: 'quality/incoming/raw', element: <RawMaterialInspectionPage /> },
+      { path: 'quality/incoming/sub', element: <SubMaterialInspectionPage /> },
+      { path: 'quality/incoming/socket', element: <SocketBracketInspectionPage /> },
+      { path: 'quality/incoming/non-certified', element: <NonCertifiedInspectionPage /> },
       // 수주/발주
       { path: 'orders', element: <OrderBomPage /> },
       { path: 'orders/purchase-requests', element: <PurchaseRequestPage /> },

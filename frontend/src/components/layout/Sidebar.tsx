@@ -100,13 +100,25 @@ const shopNavItems: NavSection[] = [
     ],
     dividerAfter: true,
   },
+  // ── 통합 인수검사 관리 ──
+  {
+    label: '인수검사 관리',
+    icon: CheckCircle2,
+    children: [
+      { label: '🧪 원재료 인수검사 (D101~D104)', path: '/quality/incoming/raw' },
+      { label: '📦 부자재 인수검사 (FN테크 연동)', path: '/quality/incoming/sub' },
+      { label: '🔌 소켓 / 브라켓류 인수검사',    path: '/quality/incoming/socket' },
+      { label: '❓ 비인정제품 인수검사 (기준등록)', path: '/quality/incoming/non-certified' },
+    ],
+    dividerAfter: true,
+  },
   // ── 생산 흐름 ──
   {
     label: '원재료 입고/검사',
     icon: Package,
     step: '①',
     children: [
-      { label: '인수검사', path: '/quality/incoming' },
+      { label: '🧪 원재료 인수검사', path: '/quality/incoming/raw' },
     ],
   },
   {
@@ -141,7 +153,9 @@ const shopNavItems: NavSection[] = [
     icon: Box,
     step: '⑤',
     children: [
-      { label: '인수검사', path: '/quality/incoming' },
+      { label: '📦 부자재 인수검사 (FN테크)', path: '/quality/incoming/sub' },
+      { label: '🔌 소켓/브라켓 인수검사', path: '/quality/incoming/socket' },
+      { label: '❓ 비인정제품 인수검사', path: '/quality/incoming/non-certified' },
       { label: '부자재 입출고 등록', path: '/inventory/material-tx' },
     ],
   },
