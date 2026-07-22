@@ -611,6 +611,7 @@ function CreateModal({
     remarks: '',
   });
   const [submitting, setSubmitting] = useState(false);
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
 
   // 발주서 목록 로드
   useEffect(() => {
@@ -720,7 +721,35 @@ function CreateModal({
     }
   };
 
-  const tabConfig = WO_TABS.find(t => t.type === woType)!;
+  // ── 전체 공정 일괄 생성 ────────────────────────────────────────────────
+  const handleBatchCreate = async () => {
+    if (!selectedPoId) return alert('발주서를 선택하세요.');
+    if (!confirm(`PO의 소켓 구조체 유형에 따라\n모든 공정 작업지시를 일괄 자동 생성합니다.\n\n계속하시겠습니까?`)) return;
+    setBatchSubmitting(true);
+    try {
+      const selectedPo = pos.find(p => p.po_id === selectedPoId);
+      const res = await api.post<{ data: { created: any[]; total: number } }>('/struct-work-orders/batch', {
+        po_id: selectedPoId,
+        project_id: selectedProjectId || null,
+        project_name: selectedPo?.project_name || null,
+        wo_date: form.wo_date || null,
+        delivery_date: form.delivery_date || null,
+        worker_name: form.worker_name || null,
+        created_by: null,
+        remarks: form.remarks || null,
+      });
+      const { created, total } = res.data;
+      const lines = created.map((c: any) => `• ${c.wo_number} (${c.item_count}건)`).join('\n');
+      alert(`✅ 총 ${total}개 작업지시 일괄 생성 완료\n\n${lines}`);
+      onCreated();
+    } catch (e: any) {
+      alert(e?.body?.error || '일괄 생성 실패');
+    } finally {
+      setBatchSubmitting(false);
+    }
+  };
+
+  const tabConfig = WO_TABS.find(t => t.type === woType)!
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-4 pb-4 px-4 overflow-y-auto">
@@ -1054,22 +1083,41 @@ function CreateModal({
         {/* 푸터 */}
         <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50 rounded-b-2xl">
           <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">취소</button>
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || !selectedPoId || poItems.length === 0}
-            className={cn(
-              'flex items-center gap-2 px-5 py-2 text-sm rounded-lg font-medium transition-all',
-              submitting || !selectedPoId || poItems.length === 0
-                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                : 'bg-slate-700 hover:bg-slate-900 text-white',
-            )}
-          >
-            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-            {submitting ? '저장 중...' : selectedSheet
-              ? `[${selectedSheet}] 작업지시 생성 (${visibleItems.length}건)`
-              : `전체 작업지시 생성 (${poItems.length}건)`
-            }
-          </button>
+          <div className="flex items-center gap-3">
+            {/* 전체 공정 일괄 생성 버튼 */}
+            <button
+              onClick={handleBatchCreate}
+              disabled={batchSubmitting || !selectedPoId}
+              title="구조체 유형에 맞는 재단·절곡·차열재·라벨 작업지시를 한 번에 자동 생성"
+              className={cn(
+                'flex items-center gap-2 px-5 py-2 text-sm rounded-lg font-medium transition-all border-2',
+                batchSubmitting || !selectedPoId
+                  ? 'border-gray-200 bg-white text-gray-400 cursor-not-allowed'
+                  : 'border-emerald-500 bg-emerald-50 hover:bg-emerald-500 hover:text-white text-emerald-700',
+              )}
+            >
+              {batchSubmitting
+                ? <><Loader2 className="h-4 w-4 animate-spin" />일괄생성 중...</>
+                : <>⚡ 전체 공정 일괄 생성</>}
+            </button>
+            {/* 단일 공정 생성 버튼 */}
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || !selectedPoId || poItems.length === 0}
+              className={cn(
+                'flex items-center gap-2 px-5 py-2 text-sm rounded-lg font-medium transition-all',
+                submitting || !selectedPoId || poItems.length === 0
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-slate-700 hover:bg-slate-900 text-white',
+              )}
+            >
+              {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {submitting ? '저장 중...' : selectedSheet
+                ? `[${selectedSheet}] ${WO_TABS.find(t=>t.type===woType)?.label ?? ''} 생성 (${visibleItems.length}건)`
+                : `${WO_TABS.find(t=>t.type===woType)?.label ?? ''} 생성 (${poItems.length}건)`
+              }
+            </button>
+          </div>
         </div>
       </div>
     </div>
