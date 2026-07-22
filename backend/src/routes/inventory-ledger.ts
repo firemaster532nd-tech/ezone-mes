@@ -17,8 +17,9 @@ export async function inventoryLedgerRoutes(app: FastifyInstance) {
     };
 
     // 오늘 날짜 및 금월 1일 기본값 설정
-    const today = new Date().toISOString().slice(0, 10);
-    const firstDayOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 2).toISOString().slice(0, 10);
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    const firstDayOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
 
     const fromDate = query.from || firstDayOfMonth;
     const toDate = query.to || today;
@@ -62,7 +63,7 @@ export async function inventoryLedgerRoutes(app: FastifyInstance) {
 
       // 2. 기간 내 입출고 거래 상세 리스트
       let detailsQuery = `
-        SELECT it.txn_id, it.txn_date, it.txn_type, it.qty, it.purpose, it.worker, it.created_at,
+        SELECT it.inv_id AS txn_id, it.txn_date, it.txn_type, it.qty, it.purpose, it.worker, it.created_at,
                im.item_id, im.item_code, im.item_name, im.spec, im.unit, im.item_category,
                lt.lot_id, lt.lot_number
         FROM inventory_transaction it
