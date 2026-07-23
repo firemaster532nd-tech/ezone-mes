@@ -4,7 +4,7 @@ import {
   Truck, Settings, ChevronLeft, ChevronRight, Factory, Database,
   Wrench, FlaskConical, Scissors, Box, Layers,
   ArrowRightLeft, Monitor, HardHat, Boxes, PackageCheck,
-  ChevronDown, Hammer, Inbox, FileText, ShoppingCart, Megaphone, ShieldAlert,
+  ChevronDown, Hammer, Inbox, FileText, ShoppingCart, Megaphone, ShieldAlert, CheckCircle2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
