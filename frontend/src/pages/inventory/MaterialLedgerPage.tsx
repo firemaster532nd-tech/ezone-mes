@@ -189,15 +189,17 @@ export function MaterialLedgerPage() {
                           </span>
                         </div>
 
-                        {/* 2개 파레트 항목 화면 동시 출력 */}
-                        <div className="space-y-0.5 text-[8px] font-mono leading-none">
-                          <div className={cn('p-0.5 rounded flex justify-between truncate', hasP1 ? 'bg-emerald-600 text-white font-bold' : 'bg-slate-100 text-slate-400')}>
-                            <span className="truncate max-w-[50px]">{hasP1 ? (p1.item_name || p1.lot_number?.slice(-5)) : 'P1공실'}</span>
-                            {hasP1 && <span>{Number(p1.qty||0).toLocaleString()}</span>}
+                        {/* 2개 파레트 좌(P1) / 우(P2) 화면 가로 동시 출력 */}
+                        <div className="grid grid-cols-2 gap-0.5 mt-0.5 text-[8px] font-mono leading-none h-full">
+                          <div className={cn('p-0.5 rounded flex flex-col justify-between truncate border', hasP1 ? 'bg-emerald-600 text-white font-bold border-emerald-700' : 'bg-slate-100 text-slate-400 border-dashed border-slate-300')}>
+                            <span className="text-[6px] opacity-85">P1(좌)</span>
+                            <span className="truncate text-[7.5px] font-bold" title={p1.item_name || ''}>{hasP1 ? (p1.item_name || p1.lot_number?.slice(-4)) : '공실'}</span>
+                            {hasP1 && <span className="text-[7px] text-right font-black">{Number(p1.qty||0).toLocaleString()}</span>}
                           </div>
-                          <div className={cn('p-0.5 rounded flex justify-between truncate', hasP2 ? 'bg-indigo-600 text-white font-bold' : 'bg-slate-100 text-slate-400')}>
-                            <span className="truncate max-w-[50px]">{hasP2 ? (p2.item_name || p2.lot_number?.slice(-5)) : 'P2공실'}</span>
-                            {hasP2 && <span>{Number(p2.qty||0).toLocaleString()}</span>}
+                          <div className={cn('p-0.5 rounded flex flex-col justify-between truncate border', hasP2 ? 'bg-indigo-600 text-white font-bold border-indigo-700' : 'bg-slate-100 text-slate-400 border-dashed border-slate-300')}>
+                            <span className="text-[6px] opacity-85">P2(우)</span>
+                            <span className="truncate text-[7.5px] font-bold" title={p2.item_name || ''}>{hasP2 ? (p2.item_name || p2.lot_number?.slice(-4)) : '공실'}</span>
+                            {hasP2 && <span className="text-[7px] text-right font-black">{Number(p2.qty||0).toLocaleString()}</span>}
                           </div>
                         </div>
                       </button>
