@@ -117,11 +117,20 @@ function calcBracketHTG169(w: number, h: number, qty: number) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 어떤 공정에 어떤 구조체 코드가 해당되는지
+// 어떤 공정에 어떤 구조체 코드가 해당되는지 (유연한 정규화 매칭)
 // ─────────────────────────────────────────────────────────────────────────────
-const VM_TYPES  = new Set(['VA-064', 'VT-049', 'VT-064']);
+function detectStructCategory(productType?: string | null, structure?: string | null): 'VM' | 'VT' | 'HTG' | 'VAG' {
+  const str = `${productType || ''} ${structure || ''}`.toUpperCase().replace(/\s+/g, '');
+  if (str.includes('VAG-1.69') || str.includes('VAG1.69') || str.includes('VAG')) return 'VAG';
+  if (str.includes('VT-01') || str.includes('VT01') || str.includes('VT1')) return 'VT';
+  if (str.includes('HTG') || str.includes('HAG') || str.includes('입상')) return 'HTG';
+  // 기본값 VM (VA-064, VT-049, VT-064, V-03, VS-01, VTI-064 등)
+  return 'VM';
+}
+
+const VM_TYPES  = new Set(['VA-064', 'VT-049', 'VT-064', 'V-03', 'VS-01', 'VTI-064']);
 const VT_TYPES  = new Set(['VT-01']);
-const HTG_TYPES = new Set(['HTG-064', 'HTG-064DC', 'HTG-1.69']);
+const HTG_TYPES = new Set(['HTG-064', 'HTG-064DC', 'HTG-1.69', 'HAG-1.69', 'HTG(DC)-064']);
 const VAG_TYPES = new Set(['VAG-1.69']);
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -277,9 +286,23 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
         if (wo_type === 'CUT_VM')            calc_data = calcCutVM(W, H, Q, CT);
         else if (wo_type === 'CUT_VT')       calc_data = calcCutVT(W, H, Q, CT);
         else if (wo_type === 'CUT_THERMAL')  calc_data = calcCutThermal(W, H, Q, CT);
-        else if (wo_type === 'BEND_VM')      calc_data = { brackets: calcBracketVM(it.product_type, W, H, Q) };
+        else if (wo_type === 'CUT_HTG')      calc_data = calcCutHTG(W, H, Q);
+        else if (wo_type === 'BEND_VM') {
+          if (`${it.product_type||''} ${it.structure||''}`.includes('VAG')) {
+            calc_data = { brackets: calcBracketVAG(W, H, Q) };
+          } else {
+            calc_data = { brackets: calcBracketVM(it.product_type, W, H, Q) };
+          }
+        }
         else if (wo_type === 'BEND_VT')      calc_data = { brackets: calcBracketVT(W, H, Q) };
         else if (wo_type === 'BEND_VT_RE')   calc_data = { brackets: calcBracketVTRe(W, H, Q) };
+        else if (wo_type === 'BEND_HTG') {
+          if (`${it.product_type||''} ${it.structure||''}`.includes('1.69')) {
+            calc_data = { brackets: calcBracketHTG169(W, H, Q) };
+          } else {
+            calc_data = { brackets: calcBracketHTG064(W, H, Q) };
+          }
+        }
         else if (wo_type === 'THERMAL_OUTER') calc_data = {
           outer_top: W + 60, outer_top_qty: Math.round(Q * 2 * singleFactor(CT)),
           outer_side: H,     outer_side_qty: Math.round(Q * 2 * singleFactor(CT)),
@@ -312,9 +335,9 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
     } = req.body as any;
     if (!po_id) return reply.code(400).send({ error: 'po_id 필요' });
 
-    // 1. PO 항목 전체 조회
+    // 1. PO 항목 전체 조회 (item_type 제한 없이 소켓/구조체 항목 전체 로드)
     const poItemsRes = await pool.query(`
-      SELECT poi.po_item_id, poi.seq_no, poi.product_type,
+      SELECT poi.po_item_id, poi.seq_no, poi.product_type, poi.structure,
              poi.pipe_width_mm  AS width_mm,
              poi.pipe_height_mm AS height_mm,
              poi.qty, poi.remark,
@@ -323,22 +346,27 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
              po.project_id   AS po_project_id
       FROM purchase_order_item poi
       JOIN purchase_order po ON po.po_id = poi.po_id
-      WHERE poi.po_id = $1 AND poi.item_type = 'socket'
+      WHERE poi.po_id = $1
       ORDER BY poi.seq_no
     `, [parseInt(po_id)]);
 
     const poItems = poItemsRes.rows;
-    if (!poItems.length) return reply.code(400).send({ error: 'PO에 소켓 항목이 없습니다.' });
+    if (!poItems.length) return reply.code(400).send({ error: '발주서에 항목이 없습니다.' });
 
-    // 2. 구조체 유형 분류
-    const hasVM  = poItems.some((r: any) => VM_TYPES.has(r.product_type));
-    const hasVT  = poItems.some((r: any) => VT_TYPES.has(r.product_type));
-    const hasVAG = poItems.some((r: any) => VAG_TYPES.has(r.product_type));
-    const hasHTG = poItems.some((r: any) => HTG_TYPES.has(r.product_type));
+    // 각 항목별 구조체 유형 (VM / VT / HTG / VAG) 매핑
+    poItems.forEach((r: any) => {
+      r._cat = detectStructCategory(r.product_type, r.structure);
+    });
+
+    // 2. 구조체 유형 존재 여부 판별
+    const hasVM  = poItems.some((r: any) => r._cat === 'VM');
+    const hasVT  = poItems.some((r: any) => r._cat === 'VT');
+    const hasVAG = poItems.some((r: any) => r._cat === 'VAG');
+    const hasHTG = poItems.some((r: any) => r._cat === 'HTG');
 
     // 3. 공정별 생성 목록 결정 (중복 방지 위해 Set 사용)
     const woTypesSet = new Set<string>();
-    // 벽체형 (VM)
+    // 벽체형 (VM, VAG)
     if (hasVM || hasVAG) {
       woTypesSet.add('CUT_VM');
       woTypesSet.add('BEND_VM');
@@ -358,7 +386,7 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
     if (hasHTG) {
       woTypesSet.add('INSPECT');
       woTypesSet.add('CUT_HTG');      // 세라믹울/차열재 재단
-      woTypesSet.add('BEND_HTG');     // 브라켓/평철 절곱
+      woTypesSet.add('BEND_HTG');     // 브라켓/평철 절곡
       woTypesSet.add('THERMAL_OUTER'); // 외부 차열재
     }
     woTypesSet.add('ASM');   // 조립 (공통)
@@ -370,22 +398,19 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
       switch (type) {
         case 'CUT_VM':
         case 'BEND_VM':
-          return poItems.filter((r: any) => VM_TYPES.has(r.product_type) || VAG_TYPES.has(r.product_type));
+          return poItems.filter((r: any) => r._cat === 'VM' || r._cat === 'VAG');
         case 'CUT_VT':
         case 'BEND_VT':
         case 'BEND_VT_RE':
-          return poItems.filter((r: any) => VT_TYPES.has(r.product_type));
+          return poItems.filter((r: any) => r._cat === 'VT');
         case 'CUT_THERMAL':
-          return poItems.filter((r: any) =>
-            VM_TYPES.has(r.product_type) || VT_TYPES.has(r.product_type) || VAG_TYPES.has(r.product_type));
+          return poItems.filter((r: any) => r._cat === 'VM' || r._cat === 'VT' || r._cat === 'VAG');
         case 'THERMAL_OUTER':
-          return poItems.filter((r: any) =>
-            VM_TYPES.has(r.product_type) || VT_TYPES.has(r.product_type) ||
-            VAG_TYPES.has(r.product_type) || HTG_TYPES.has(r.product_type));
+          return poItems.filter((r: any) => r._cat === 'VM' || r._cat === 'VT' || r._cat === 'VAG' || r._cat === 'HTG');
         case 'INSPECT':
         case 'CUT_HTG':
         case 'BEND_HTG':
-          return poItems.filter((r: any) => HTG_TYPES.has(r.product_type));
+          return poItems.filter((r: any) => r._cat === 'HTG');
         case 'ASM':
         case 'LABEL':
           return poItems;
@@ -433,7 +458,7 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
           else if (woType === 'CUT_HTG')      calc_data = calcCutHTG(W, H, Q);
           else if (woType === 'BEND_VM') {
             // VAG-1.69는 별도 브라켓 공식 적용
-            if (VAG_TYPES.has(it.product_type)) {
+            if (it._cat === 'VAG' || `${it.product_type||''} ${it.structure||''}`.includes('VAG')) {
               calc_data = { brackets: calcBracketVAG(W, H, Q) };
             } else {
               calc_data = { brackets: calcBracketVM(it.product_type, W, H, Q) };
@@ -443,7 +468,7 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
           else if (woType === 'BEND_VT_RE')   calc_data = { brackets: calcBracketVTRe(W, H, Q) };
           else if (woType === 'BEND_HTG') {
             // HTG-1.69는 별도 브라켓 공식 (sw=반폭-30)
-            if (it.product_type === 'HTG-1.69') {
+            if (`${it.product_type||''} ${it.structure||''}`.includes('1.69')) {
               calc_data = { brackets: calcBracketHTG169(W, H, Q) };
             } else {
               calc_data = { brackets: calcBracketHTG064(W, H, Q) };
