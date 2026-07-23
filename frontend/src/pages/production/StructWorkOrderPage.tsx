@@ -12,7 +12,7 @@ import {
 // ────────────────────────────────────────────────────────────────────────────
 // 타입
 // ────────────────────────────────────────────────────────────────────────────
-type WoType = 'INSPECT' | 'CUT_VM' | 'CUT_VT' | 'CUT_HTG' | 'CUT_THERMAL' | 'BEND_VM' | 'BEND_VT' | 'BEND_VT_RE' | 'BEND_HTG' | 'THERMAL_OUTER' | 'ASM' | 'PACKING' | 'LABEL';
+type WoType = 'INSPECT' | 'CUT_VM' | 'CUT_VT' | 'CUT_HTG' | 'CUT_THERMAL' | 'BEND_VM' | 'BEND_VT' | 'BEND_VT_RE' | 'BEND_HTG' | 'GAP_SHEET' | 'GAP_PLATE' | 'FLASH_Z' | 'THERMAL_OUTER' | 'ASM' | 'PACKING' | 'LABEL';
 type WoStatus = 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED';
 
 interface Project {
@@ -82,6 +82,9 @@ const WO_TABS: { type: WoType; label: string; color: string; accent: string; ico
   { type: 'BEND_VT',       label: '🔨 절곡-VT브라켓',      color: 'border-amber-500',   accent: 'bg-amber-500',   iconColor: 'text-amber-600' },
   { type: 'BEND_VT_RE',    label: '🔨 절곡-VT보강대',      color: 'border-amber-500',   accent: 'bg-amber-500',   iconColor: 'text-amber-600' },
   { type: 'BEND_HTG',      label: '🔨 절곡-HTG평철',       color: 'border-yellow-500',  accent: 'bg-yellow-500',  iconColor: 'text-yellow-600' },
+  { type: 'GAP_SHEET',     label: '📐 틈새시트(입상)',     color: 'border-sky-500',     accent: 'bg-sky-500',     iconColor: 'text-sky-600' },
+  { type: 'GAP_PLATE',     label: '🛡️ 틈새강판(입상)',     color: 'border-blue-600',    accent: 'bg-blue-600',    iconColor: 'text-blue-700' },
+  { type: 'FLASH_Z',       label: '⚡ Z형플래싱(입상)',    color: 'border-purple-500',  accent: 'bg-purple-500',  iconColor: 'text-purple-600' },
   { type: 'THERMAL_OUTER', label: '🔥 외부차열재 작업',    color: 'border-rose-500',    accent: 'bg-rose-500',    iconColor: 'text-rose-600' },
   { type: 'ASM',           label: '⚙️ 조립(ASM)',          color: 'border-indigo-500',  accent: 'bg-indigo-500',  iconColor: 'text-indigo-600' },
   { type: 'PACKING',       label: '📦 포장 작업',           color: 'border-violet-500',  accent: 'bg-violet-500',  iconColor: 'text-violet-600' },
@@ -98,6 +101,9 @@ const TAB_ACCENT_TEXT: Record<WoType, string> = {
   BEND_VT:       'text-amber-700',
   BEND_VT_RE:    'text-amber-700',
   BEND_HTG:      'text-yellow-700',
+  GAP_SHEET:     'text-sky-700',
+  GAP_PLATE:     'text-blue-800',
+  FLASH_Z:       'text-purple-700',
   THERMAL_OUTER: 'text-rose-700',
   ASM:           'text-indigo-700',
   PACKING:       'text-violet-700',
@@ -114,6 +120,9 @@ const TAB_ACCENT_BG: Record<WoType, string> = {
   BEND_VT:       'bg-amber-50',
   BEND_VT_RE:    'bg-amber-50',
   BEND_HTG:      'bg-yellow-50',
+  GAP_SHEET:     'bg-sky-50',
+  GAP_PLATE:     'bg-blue-50',
+  FLASH_Z:       'bg-purple-50',
   THERMAL_OUTER: 'bg-rose-50',
   ASM:           'bg-indigo-50',
   PACKING:       'bg-violet-50',
@@ -130,6 +139,9 @@ const TAB_ACCENT_RING: Record<WoType, string> = {
   BEND_VT:       'ring-amber-400',
   BEND_VT_RE:    'ring-amber-400',
   BEND_HTG:      'ring-yellow-400',
+  GAP_SHEET:     'ring-sky-400',
+  GAP_PLATE:     'ring-blue-500',
+  FLASH_Z:       'ring-purple-400',
   THERMAL_OUTER: 'ring-rose-400',
   ASM:           'ring-indigo-400',
   PACKING:       'ring-violet-400',

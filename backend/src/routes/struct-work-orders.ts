@@ -387,6 +387,9 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
       woTypesSet.add('INSPECT');
       woTypesSet.add('CUT_HTG');      // 세라믹울/차열재 재단
       woTypesSet.add('BEND_HTG');     // 브라켓/평철 절곡
+      woTypesSet.add('GAP_SHEET');    // 📐 틈새시트 (입상)
+      woTypesSet.add('GAP_PLATE');    // 🛡️ 틈새강판 (입상)
+      woTypesSet.add('FLASH_Z');      // ⚡ Z형 플래싱 (입상)
       woTypesSet.add('THERMAL_OUTER'); // 외부 차열재
     }
     woTypesSet.add('ASM');   // 조립 (공통)
@@ -410,6 +413,9 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
         case 'INSPECT':
         case 'CUT_HTG':
         case 'BEND_HTG':
+        case 'GAP_SHEET':
+        case 'GAP_PLATE':
+        case 'FLASH_Z':
           return poItems.filter((r: any) => r._cat === 'HTG');
         case 'ASM':
         case 'LABEL':
@@ -473,6 +479,30 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
             } else {
               calc_data = { brackets: calcBracketHTG064(W, H, Q) };
             }
+          }
+          else if (woType === 'GAP_SHEET') calc_data = {
+            item_name: '틈새복합시트(150H)',
+            spec: 't5.0 × W125',
+            qty: Q * 1,
+            unit: 'EA'
+          };
+          else if (woType === 'GAP_PLATE') calc_data = {
+            item_name: '아연도금 틈새강판',
+            spec: 'SGCC t0.5, W215×L1000',
+            qty: Q * 1,
+            unit: 'EA'
+          };
+          else if (woType === 'FLASH_Z') {
+            const perimeterMm = (W + H) * 2;
+            const meterPerSet = Math.ceil(perimeterMm / 1000);
+            calc_data = {
+              item_name: '방화플래싱(Z형)',
+              spec: 'W170×L1000 (t0.5)',
+              perimeter_mm: perimeterMm,
+              meter_per_set: meterPerSet,
+              qty: meterPerSet * 2 * Q, // 양면 시공 × 2
+              unit: 'EA'
+            };
           }
           else if (woType === 'THERMAL_OUTER') calc_data = {
             outer_top:     W + 60,
