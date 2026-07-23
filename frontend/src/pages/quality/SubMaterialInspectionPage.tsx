@@ -17,6 +17,7 @@ export function SubMaterialInspectionPage() {
   const [n1, setN1] = useState<number>(1.6);
   const [n2, setN2] = useState<number>(1.6);
   const [n3, setN3] = useState<number>(1.6);
+  const [targetLocation, setTargetLocation] = useState('P1');
   const [notes, setNotes] = useState('');
 
   const fetchData = async () => {
@@ -52,13 +53,14 @@ export function SubMaterialInspectionPage() {
         item_category: 'SM',
         inspector,
         supplier_lot: supplierLot,
+        location: targetLocation,
         qty,
         n1, n2, n3,
         min_value: crit.min_value,
         max_value: crit.max_value,
         notes
       });
-      alert('부자재 인수검사가 등록되었으며 합격 시 사규 LOT 채번 및 FN테크 재고(fn_material_stock)와 자동 연동됩니다!');
+      alert(`부자재 인수검사가 등록되었으며 합격 시 사규 LOT 채번 후 [${targetLocation} 랙 셀]로 자동 적재됩니다!`);
       setShowModal(false);
       fetchData();
     } catch {
@@ -194,6 +196,26 @@ export function SubMaterialInspectionPage() {
                     required
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">합격 시 입고 적재 랙 위치 (A1~U3)</label>
+                <select
+                  value={targetLocation}
+                  onChange={e => setTargetLocation(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm font-mono font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                >
+                  <optgroup label="1구역 (O1~A3 15칸 × 3층)">
+                    {['O','N','M','L','K','J','I','H','G','F','E','D','C','B','A'].flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
+                      <option key={c} value={c}>{c} 랙 셀</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="2구역 (U1~P3 6칸 × 3층)">
+                    {['U','T','S','R','Q','P'].flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
+                      <option key={c} value={c}>{c} 랙 셀</option>
+                    ))}
+                  </optgroup>
+                </select>
               </div>
 
               <div>

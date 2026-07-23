@@ -4,9 +4,9 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Package, MapPin, Filter, RefreshCw, CheckCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// ─── 랙 로케이션 마스터 (1구역 A1~O3 / 2구역 P1~U3) ──────────────────────
-const ZONE_1_COLS = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
-const ZONE_2_COLS = ['P','Q','R','S','T','U'];
+// ─── 랙 로케이션 마스터 (1구역 O1~A3 / 2구역 U1~P3 거꾸로 배치) ──────────────────────
+const ZONE_1_COLS = ['O','N','M','L','K','J','I','H','G','F','E','D','C','B','A'];
+const ZONE_2_COLS = ['U','T','S','R','Q','P'];
 const RACK_TIERS = [3, 2, 1]; // 3층, 2층, 1층
 
 interface LedgerEntry {

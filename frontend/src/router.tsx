@@ -84,6 +84,7 @@ import { RawMaterialInspectionPage } from '@/pages/quality/RawMaterialInspection
 import { SubMaterialInspectionPage } from '@/pages/quality/SubMaterialInspectionPage';
 import { SocketBracketInspectionPage } from '@/pages/quality/SocketBracketInspectionPage';
 import { NonCertifiedInspectionPage } from '@/pages/quality/NonCertifiedInspectionPage';
+import { NonCertifiedStockPage } from '@/pages/inventory/NonCertifiedStockPage';
 
 
 
@@ -182,6 +183,7 @@ export const router = createBrowserRouter([
       // 재고수불대장
       { path: 'inventory/material-stock',       element: <MaterialStockPage /> },
       { path: 'inventory/material-ledger',      element: <MaterialLedgerPage /> },
+      { path: 'inventory/non-certified-stock',  element: <NonCertifiedStockPage /> },
       { path: 'inventory/material-transaction', element: <MaterialTransactionPage /> },
       { path: 'inventory/material-init',        element: <InitialMaterialPage /> },
       { path: 'inventory/label-print',          element: <LabelPrintPage /> },

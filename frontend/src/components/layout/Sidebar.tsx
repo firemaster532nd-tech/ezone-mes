@@ -88,9 +88,10 @@ const shopNavItems: NavSection[] = [
     label: '통합 재고 관리',
     icon: Boxes,
     children: [
-      { label: '📊 전체 LOT 재고현황',  path: '/inventory/dashboard' },
-      { label: '📑 통합 재고수불대장',    path: '/inventory/ledger' },
-      { label: '⚙️ 기초/초기 재고 설정', path: '/inventory/initialize' },
+      { label: '📊 전체 LOT 재고현황',  path: '/inventory/material-stock' },
+      { label: '📑 통합 재고수불대장',    path: '/inventory/material-ledger' },
+      { label: '❓ 비인정 재고 관리',   path: '/inventory/non-certified-stock' },
+      { label: '⚙️ 기초/초기 재고 설정', path: '/inventory/material-init' },
       { label: '🔄 수불대장 엑셀 연동',   path: '/inventory/import' },
       { label: '🔌 소켓 / 평철 재고',    path: '/inventory/socket-stock' },
       { label: '🏭 에프엔테크 재고현황',  path: '/inventory/fn-tech-stock' },

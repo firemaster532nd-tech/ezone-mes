@@ -8,9 +8,9 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-// ─── 랙 로케이션 마스터 정의 (1구역 15칸×3층 A1~O3 / 2구역 6칸×3층 P1~U3) ─────────
-export const ZONE_1_COLS = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
-export const ZONE_2_COLS = ['P','Q','R','S','T','U'];
+// ─── 랙 로케이션 마스터 정의 (1구역 15칸×3층 O1~A3 거꾸로 배치 / 2구역 6칸×3층 U1~P3) ─────────
+export const ZONE_1_COLS = ['O','N','M','L','K','J','I','H','G','F','E','D','C','B','A'];
+export const ZONE_2_COLS = ['U','T','S','R','Q','P'];
 export const RACK_TIERS = [3, 2, 1]; // 3층, 2층, 1층
 
 // 전체 63개 랙 셀 코드 배열
