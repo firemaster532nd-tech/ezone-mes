@@ -225,6 +225,21 @@ function CreateFqcModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     if (selectedWo) {
       setSocketLot(selectedWo.lot_number || '');
 
+      // 최신 반제품 J-LOT 및 단열재 LOT 자동 패치
+      api.get('/api/material-lots').then((res: any) => {
+        const lotList = res.data || res || [];
+        const jSockets = lotList.filter((l: any) => l.lot_number?.includes('D') && l.category === '반제품');
+        const jFlashings = lotList.filter((l: any) => l.lot_number?.includes('F') && l.category === '반제품');
+        const ceramicWools = lotList.filter((l: any) => l.category === '세라믹울' || l.item_name?.includes('세라믹'));
+        const glassWools = lotList.filter((l: any) => l.category === '그라스울' || l.item_name?.includes('그라스'));
+
+        if (jSockets.length > 0) setSocketLot(jSockets[0].lot_number);
+        if (jFlashings.length > 0) setFlashingLot(jFlashings[0].lot_number);
+        if (ceramicWools.length > 0) setCeramicwoolLot(ceramicWools[0].lot_number);
+        if (ceramicWools.length > 1) setCeramicwoolShieldLot(ceramicWools[1].lot_number);
+        if (glassWools.length > 0) setGlasswoolLot(glassWools[0].lot_number);
+      }).catch(() => {});
+
       const struct = selectedWo.structure_code || '';
       if (struct.includes('BD')) {
         setSelectedFormCode('901-3');
@@ -238,6 +253,10 @@ function CreateFqcModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     } else {
       setSelectedFormCode('');
       setSocketLot('');
+      setFlashingLot('');
+      setGlasswoolLot('');
+      setCeramicwoolLot('');
+      setCeramicwoolShieldLot('');
     }
   }, [selectedWoId]);
 

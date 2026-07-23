@@ -75,12 +75,18 @@ interface TemplateDetail {
 }
 
 const formTabs = [
-  { key: '', label: '전체' },
-  { key: 'C01', label: '압출(C01)' },
-  { key: 'G01', label: '입상(G01)' },
-  { key: 'G02', label: '벽체(G02)' },
-  { key: 'G03', label: '부스덕트(G03)' },
-  { key: 'G04', label: '비금속(G04)' },
+  { key: '', label: '전체 (EZC-C-701)' },
+  { key: 'G01', label: 'G01: 입상 재단' },
+  { key: 'G02', label: 'G02: 입상 조립' },
+  { key: 'G03', label: 'G03: 벽체 재단' },
+  { key: 'G04', label: 'G04: 벽체 조립' },
+  { key: 'G05', label: 'G05: 버스덕트 재단' },
+  { key: 'G07', label: 'G07: 비금속 재단' },
+  { key: 'G08', label: 'G08: 비금속 조립' },
+  { key: 'G09', label: 'G09: 방화플래싱 재단' },
+  { key: 'G10', label: 'G10: 방화플래싱 조립' },
+  { key: 'G13', label: 'G13: 차열재 재단' },
+  { key: 'G14', label: 'G14: 틈새시트 재단' },
 ];
 
 const resultMap: Record<string, string> = {
