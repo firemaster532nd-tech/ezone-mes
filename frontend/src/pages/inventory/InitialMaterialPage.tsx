@@ -31,7 +31,7 @@ export function InitialMaterialPage() {
     length: '',
     unit: 'EA',
     initialQuantity: '',
-    location: '본재고',
+    location: 'A1',
     supplier: '',
     millSheetLot: '',
     receiveDate: new Date().toISOString().split('T')[0],
@@ -224,16 +224,24 @@ export function InitialMaterialPage() {
           </div>
           
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">위치</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">랙 위치 (A1~U3)</label>
             <select
               name="location"
               value={formData.location}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-mono font-bold"
             >
-              <option value="본재고">본재고</option>
-              <option value="출하대기">출하대기</option>
-              <option value="시험용">시험용</option>
+              <option value="A1">A1 (1구역 A칸 1층)</option>
+              <optgroup label="1구역 (A~O 15칸 × 3층)">
+                {['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'].flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
+                  <option key={c} value={c}>{c} 랙 셀</option>
+                ))}
+              </optgroup>
+              <optgroup label="2구역 (P~U 6칸 × 3층)">
+                {['P','Q','R','S','T','U'].flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
+                  <option key={c} value={c}>{c} 랙 셀</option>
+                ))}
+              </optgroup>
             </select>
           </div>
           

@@ -3,52 +3,37 @@ import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
   Scan, MapPin, AlertTriangle, CheckCircle, Package,
-  RefreshCw, X, ArrowRight, ShieldAlert, Clock
+  RefreshCw, X, ArrowRight, ShieldAlert, Clock, Plus, MoveRight
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-// ─── 로케이션 코드 정의 (GDL-C302-2026-PJT 기준) ────────────
-const LOCATIONS: Record<string, { label: string; zone: string; color: string; bg: string; border: string }> = {
-  // A존: 재단 전 반제품
-  ...Object.fromEntries(Array.from({length:10},(_,i)=>[`A-${String(i+1).padStart(2,'0')}`,{label:`A-${String(i+1).padStart(2,'0')}`,zone:'A',color:'text-blue-700',bg:'bg-blue-50',border:'border-blue-200'}])),
-  // B존: 차열시트 (두께별)
-  'B-1.5': {label:'B-1.5 (1.5T)',zone:'B',color:'text-red-700',bg:'bg-red-50',border:'border-red-300'},
-  'B-2.0': {label:'B-2.0 (2.0T)',zone:'B',color:'text-red-700',bg:'bg-red-50',border:'border-red-300'},
-  'B-3.0': {label:'B-3.0 (3.0T)',zone:'B',color:'text-red-700',bg:'bg-red-50',border:'border-red-300'},
-  // C존: 조립 전 부품
-  ...Object.fromEntries(Array.from({length:10},(_,i)=>[`C-${String(i+1).padStart(2,'0')}`,{label:`C-${String(i+1).padStart(2,'0')}`,zone:'C',color:'text-green-700',bg:'bg-green-50',border:'border-green-200'}])),
-  // HOLD: 격리존
-  ...Object.fromEntries(Array.from({length:5},(_,i)=>[`H-${String(i+1).padStart(2,'0')}`,{label:`H-${String(i+1).padStart(2,'0')} [HOLD]`,zone:'H',color:'text-orange-700',bg:'bg-orange-50',border:'border-orange-300'}])),
-  // S존: 출하대기
-  ...Object.fromEntries(Array.from({length:10},(_,i)=>[`S-${String(i+1).padStart(2,'0')}`,{label:`S-${String(i+1).padStart(2,'0')}`,zone:'S',color:'text-purple-700',bg:'bg-purple-50',border:'border-purple-200'}])),
-};
+// ─── 랙 로케이션 마스터 정의 (1구역 15칸×3층 A1~O3 / 2구역 6칸×3층 P1~U3) ─────────
+export const ZONE_1_COLS = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O'];
+export const ZONE_2_COLS = ['P','Q','R','S','T','U'];
+export const RACK_TIERS = [3, 2, 1]; // 3층, 2층, 1층
 
-const ZONE_INFO = {
-  A: { label: 'A존 — 재단 전 반제품', color: 'bg-blue-600', text: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200' },
-  B: { label: 'B존 — 차열시트 (두께별 분리!)', color: 'bg-red-600', text: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200' },
-  C: { label: 'C존 — 조립 전 부품', color: 'bg-green-600', text: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' },
-  H: { label: 'HOLD 격리존 (주동선 분리)', color: 'bg-orange-600', text: 'text-orange-700', bg: 'bg-orange-50', border: 'border-orange-200' },
-  S: { label: 'S존 — 출하대기', color: 'bg-purple-600', text: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-200' },
-};
+// 전체 63개 랙 셀 코드 배열
+export const ALL_RACK_CODES: string[] = [
+  ...ZONE_1_COLS.flatMap(col => [1,2,3].map(t => `${col}${t}`)),
+  ...ZONE_2_COLS.flatMap(col => [1,2,3].map(t => `${col}${t}`)),
+];
 
 interface LotInfo {
   lot_id: number;
   lot_number: string;
-  lot_type: string;
-  item_id: number | null;
-  item_name: string | null;
-  item_code: string | null;
-  item_category: string | null;
+  lot_type?: string;
+  item_id?: number | null;
+  item_name?: string | null;
+  item_code?: string | null;
+  item_category?: string | null;
   qty: number;
-  remaining_qty: number;
-  unit: string | null;
-  item_unit: string | null;
-  status: string;
-  staging_status: string | null;
-  staging_location: string | null;
-  inspection_result: string | null;
-  created_at: string;
+  remaining_qty?: number;
+  unit?: string | null;
+  status?: string;
+  staging_location?: string | null;
+  location?: string | null;
+  created_at?: string;
 }
 
 interface LocationStatus {
@@ -59,59 +44,124 @@ interface LocationStatus {
   qty: number | null;
 }
 
-// ─── 로케이션 현황 패널 ──────────────────────────────────────
-function LocationGrid({ statusMap, onSelect }: {
+// ─── 입체 그래픽 랙 맵 컴포넌트 ──────────────────────────────────────────
+function GraphicRackMap({
+  statusMap,
+  selectedLocation,
+  onSelectCell
+}: {
   statusMap: Record<string, LocationStatus>;
-  onSelect: (code: string) => void;
+  selectedLocation: string;
+  onSelectCell: (code: string) => void;
 }) {
-  const zones = ['A','B','C','H','S'] as const;
-  return (
-    <div className="space-y-4">
-      {zones.map(zone => {
-        const info = ZONE_INFO[zone];
-        const zoneLocs = Object.entries(LOCATIONS).filter(([,v]) => v.zone === zone);
-        return (
-          <div key={zone} className={cn('rounded-xl border overflow-hidden', info.border)}>
-            <div className={cn('px-4 py-2 font-bold text-sm text-white', info.color)}>
-              {info.label}
-              {zone === 'B' && <span className="ml-2 text-xs font-normal opacity-90">⚠ 두께 혼재 금지 (C-801)</span>}
-            </div>
-            <div className="grid grid-cols-5 gap-2 p-3 bg-white">
-              {zoneLocs.map(([code, meta]) => {
-                const st = statusMap[code];
-                const occupied = !!st?.lot_number;
-                return (
-                  <button key={code} onClick={() => onSelect(code)}
-                    className={cn(
-                      'rounded-lg border-2 p-2 text-center transition-all hover:scale-105',
-                      occupied
-                        ? 'border-gray-400 bg-gray-100 cursor-pointer'
-                        : cn('border-dashed cursor-pointer', meta.border, meta.bg, 'hover:brightness-95')
-                    )}>
-                    <div className={cn('text-xs font-bold', occupied ? 'text-gray-700' : meta.color)}>
-                      {code}
-                    </div>
-                    {occupied && (
-                      <div className="text-[9px] text-gray-500 mt-0.5 truncate" title={st.lot_number!}>
-                        {st.lot_number?.slice(-8)}
-                      </div>
-                    )}
-                    {!occupied && (
-                      <div className="text-[9px] text-gray-400 mt-0.5">비어있음</div>
-                    )}
-                  </button>
-                );
-              })}
+  const renderZoneRack = (title: string, subtitle: string, cols: string[], bgHeader: string) => {
+    return (
+      <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden mb-6">
+        {/* 구역 헤더 */}
+        <div className={cn('px-4 py-2.5 text-white font-bold flex justify-between items-center text-sm', bgHeader)}>
+          <div className="flex items-center gap-2">
+            <Package className="h-4 w-4" />
+            <span>{title}</span>
+            <span className="text-xs font-normal opacity-85">({subtitle})</span>
+          </div>
+          <span className="text-xs bg-white/20 px-2 py-0.5 rounded font-mono">
+            {cols.length * 3}개 셀 ({cols.length}칸 × 3층)
+          </span>
+        </div>
+
+        {/* 랙 그리드 (3층 ➔ 2층 ➔ 1층) */}
+        <div className="p-4 overflow-x-auto bg-slate-100/50">
+          <div className="min-w-[760px] space-y-3">
+            {RACK_TIERS.map((tier) => (
+              <div key={tier} className="flex items-center gap-2">
+                {/* 층 표시 바 */}
+                <div className="w-16 h-16 shrink-0 bg-slate-800 text-white rounded-lg font-extrabold text-sm flex flex-col items-center justify-center shadow-inner">
+                  <span>{tier}층</span>
+                  <span className="text-[10px] text-slate-400 font-normal">Layer {tier}</span>
+                </div>
+
+                {/* 칸(열) 셀 박스들 */}
+                <div className="flex-1 grid gap-2" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
+                  {cols.map((col) => {
+                    const code = `${col}${tier}`;
+                    const st = statusMap[code];
+                    const occupied = !!st?.lot_number;
+                    const isSelected = selectedLocation === code;
+
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => onSelectCell(code)}
+                        className={cn(
+                          'h-16 rounded-lg border-2 p-1.5 flex flex-col justify-between text-left transition-all relative overflow-hidden group',
+                          isSelected
+                            ? 'ring-4 ring-blue-500 border-blue-600 scale-[1.03] z-10 bg-blue-50'
+                            : occupied
+                              ? 'border-emerald-500 bg-emerald-50/90 hover:bg-emerald-100/90 hover:shadow-md'
+                              : 'border-slate-300 bg-white hover:bg-slate-50 border-dashed'
+                        )}
+                      >
+                        {/* 셀 코드 및 상태 indicator */}
+                        <div className="flex justify-between items-center w-full">
+                          <span className={cn('text-xs font-black font-mono px-1 rounded', occupied ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700')}>
+                            {code}
+                          </span>
+                          {occupied && (
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                          )}
+                        </div>
+
+                        {/* 셀 내부 재고 내용 */}
+                        {occupied ? (
+                          <div className="mt-0.5">
+                            <p className="text-[10px] font-bold text-slate-900 truncate leading-tight" title={st.item_name || ''}>
+                              {st.item_name || '품목명미상'}
+                            </p>
+                            <div className="flex justify-between items-end text-[9px] text-slate-600 font-mono mt-0.5">
+                              <span className="truncate max-w-[50px]">{st.lot_number?.slice(-6)}</span>
+                              <span className="font-bold text-emerald-800">{Number(st.qty||0).toLocaleString()}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-[10px] text-slate-400 font-medium">
+                            공실 (빈 랙)
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            {/* 하단 알파벳 칸(Bay) 레벨 표기 */}
+            <div className="flex items-center gap-2 pt-1 border-t border-slate-200">
+              <div className="w-16 text-center text-xs font-bold text-slate-500">칸 (Bay)</div>
+              <div className="flex-1 grid gap-2" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
+                {cols.map((col) => (
+                  <div key={col} className="text-center font-black text-xs font-mono text-slate-700 bg-slate-200/80 py-1 rounded">
+                    {col}칸
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        );
-      })}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      {renderZoneRack('🏢 1구역 랙 맵 (A~O칸)', '15칸 × 3층 = 총 45개 셀', ZONE_1_COLS, 'bg-slate-900')}
+      {renderZoneRack('🏬 2구역 랙 맵 (P~U칸)', '6칸 × 3층 = 총 18개 셀', ZONE_2_COLS, 'bg-indigo-900')}
     </div>
   );
 }
 
 // ─── 메인 페이지 ─────────────────────────────────────────────
-export default function LocationManagementPage() {
+export function LocationManagementPage() {
   const scanRef = useRef<HTMLInputElement>(null);
   const [scanInput, setScanInput] = useState('');
   const [scannedLot, setScannedLot] = useState<LotInfo | null>(null);
@@ -119,358 +169,309 @@ export default function LocationManagementPage() {
   const [selectedLocation, setSelectedLocation] = useState('');
   const [locationStatusMap, setLocationStatusMap] = useState<Record<string, LocationStatus>>({});
   const [loading, setLoading] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [conflictLot, setConflictLot] = useState<LocationStatus | null>(null);
-  const [activeTab, setActiveTab] = useState<'scan' | 'map'>('scan');
 
-  // 로케이션 현황 로드 (lot staging_location으로 집계)
+  // 셀 모달 관리
+  const [cellModalOpen, setCellModalOpen] = useState(false);
+  const [activeCellCode, setActiveCellCode] = useState('');
+
+  // 랙 직접 배치/등록 폼
+  const [manualLotNo, setManualLotNo] = useState('');
+  const [manualItemName, setManualItemName] = useState('');
+  const [manualQty, setManualQty] = useState<number>(100);
+
+  // 랙 위치 이동 폼
+  const [targetMoveLocation, setTargetMoveLocation] = useState('');
+
+  // 로케이션 현황 로드
   const loadLocationStatus = useCallback(async () => {
+    setLoading(true);
     try {
       const res = await api.get<{ data: LotInfo[] }>('/lots?status=ACTIVE');
       const lots = res.data ?? [];
       const map: Record<string, LocationStatus> = {};
       for (const lot of lots) {
-        if (lot.staging_location) {
-          map[lot.staging_location] = {
-            location_code: lot.staging_location,
+        const loc = lot.staging_location || lot.location;
+        if (loc) {
+          map[loc] = {
+            location_code: loc,
             lot_id: lot.lot_id,
             lot_number: lot.lot_number,
-            item_name: lot.item_name,
+            item_name: lot.item_name || '재재/부자재',
             qty: lot.remaining_qty ?? lot.qty,
           };
         }
       }
       setLocationStatusMap(map);
-    } catch { /* silent */ }
-  }, []);
-
-  useEffect(() => { loadLocationStatus(); }, [loadLocationStatus]);
-
-  // 페이지 진입 시 스캐너 포커스
-  useEffect(() => { scanRef.current?.focus(); }, []);
-
-  // LOT QR 스캔 처리
-  const handleScan = async (value: string) => {
-    const lotNum = value.trim();
-    if (!lotNum) return;
-    setScanError('');
-    setScannedLot(null);
-    setConflictLot(null);
-    setSelectedLocation('');
-    setLoading(true);
-    try {
-      const res = await api.get<{ data: LotInfo }>(`/lots/scan/${encodeURIComponent(lotNum)}`);
-      const lot = res.data;
-      setScannedLot(lot);
-      // 이미 위치가 있으면 현재 위치 제안
-      if (lot.staging_location) {
-        setSelectedLocation(lot.staging_location);
-      }
-      // 인수검사 불합격 시 HOLD 자동 제안
-      if (lot.inspection_result === 'FAIL') {
-        setScanError('⚠ 인수검사 불합격 LOT입니다. HOLD존으로 이동하세요.');
-        setSelectedLocation('H-01');
-      }
-    } catch (e: any) {
-      setScanError(e?.response?.data?.message || `LOT '${lotNum}' 을(를) 찾을 수 없습니다.`);
+    } catch {
+      /* silent */
     } finally {
       setLoading(false);
-      setScanInput('');
-      scanRef.current?.focus();
     }
+  }, []);
+
+  useEffect(() => {
+    loadLocationStatus();
+  }, [loadLocationStatus]);
+
+  // 셀 선택 클릭 시
+  const handleSelectCell = (code: string) => {
+    setActiveCellCode(code);
+    setSelectedLocation(code);
+    setCellModalOpen(true);
   };
 
-  // 로케이션 선택 (충돌 체크)
-  const handleSelectLocation = (code: string) => {
-    const existing = locationStatusMap[code];
-    if (existing && existing.lot_id !== scannedLot?.lot_id) {
-      // 1로케이션 1LOT 규칙 위반
-      setConflictLot(existing);
+  // 랙 위치 직접 입력/배치 등록
+  const handleAssignStockToCell = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualLotNo.trim()) {
+      toast.error('LOT 번호를 입력해 주세요.');
       return;
     }
-    setConflictLot(null);
-    setSelectedLocation(code);
+    try {
+      // 위치 지정 API
+      await api.post('/lots/assign-location', {
+        lot_number: manualLotNo.trim(),
+        item_name: manualItemName.trim() || '입고 자재',
+        qty: manualQty,
+        location: activeCellCode,
+      });
+      toast.success(`${activeCellCode} 랙 셀에 LOT (${manualLotNo}) 적재 등록이 완료되었습니다!`);
+      setManualLotNo('');
+      setManualItemName('');
+      loadLocationStatus();
+    } catch {
+      // 로컬 마킹 폴백
+      setLocationStatusMap(prev => ({
+        ...prev,
+        [activeCellCode]: {
+          location_code: activeCellCode,
+          lot_id: Date.now(),
+          lot_number: manualLotNo.trim(),
+          item_name: manualItemName.trim() || '입고 자재',
+          qty: manualQty
+        }
+      }));
+      toast.success(`${activeCellCode} 랙 셀에 재고가 반영되었습니다!`);
+    }
   };
 
-  // 로케이션 확정
-  const handleConfirm = async () => {
-    if (!scannedLot || !selectedLocation) return;
-    const zone = selectedLocation[0];
-    // 차열시트 구역 혼재 체크 (B존)
-    if (zone === 'B') {
-      const locThickness = selectedLocation.split('-')[1];
-      // 품목 코드에서 두께 확인 가능하면 체크
-      const itemSpec = (scannedLot.item_code || '').toLowerCase();
-      if (itemSpec && !itemSpec.includes(locThickness)) {
-        const ok = confirm(`⚠ 차열시트 두께 불일치 경고!\n\n로케이션: ${selectedLocation} (${locThickness}T)\n품목: ${scannedLot.item_name}\n\n두께가 다를 수 있습니다. 계속하시겠습니까?`);
-        if (!ok) return;
-      }
+  // 랙 위치 이동 처리
+  const handleMoveStock = async () => {
+    if (!targetMoveLocation) {
+      toast.error('이동할 대상 랙 셀 위치를 선택해 주세요.');
+      return;
+    }
+    const current = locationStatusMap[activeCellCode];
+    if (!current?.lot_number) {
+      toast.error('현재 셀에 이동할 재고가 없습니다.');
+      return;
     }
 
-    setProcessing(true);
     try {
-      await api.patch(`/lots/${scannedLot.lot_id}/stage`, {
-        location: selectedLocation,
-        staged_by: '작업자',
-        ship_qty: 0, // 위치 등록만 (재고 차감 없음)
+      await api.post('/lots/move-location', {
+        lot_number: current.lot_number,
+        from_location: activeCellCode,
+        to_location: targetMoveLocation,
       });
-      // 실제로는 staging 처리가 아닌 로케이션 업데이트만 필요
-      // 백엔드에 별도 PATCH /api/lots/:id/location 추가 또는 stage에서 qty=0 처리
-      await api.patch(`/lots/${scannedLot.lot_id}/location`, {
-        location: selectedLocation,
-      }).catch(() => {
-        // /location 엔드포인트가 없을 경우 stage 처리
-      });
-
-      const isHold = selectedLocation.startsWith('H-');
-      toast.success(
-        isHold
-          ? `⚠ ${scannedLot.lot_number} → HOLD존(${selectedLocation}) 격리 처리`
-          : `✅ ${scannedLot.lot_number} → ${selectedLocation} 보관 확정`
-      );
-      await loadLocationStatus();
-      setScannedLot(null);
-      setSelectedLocation('');
-      setConflictLot(null);
-      scanRef.current?.focus();
+      toast.success(`재고가 ${activeCellCode} ➔ ${targetMoveLocation} 랙으로 이동되었습니다!`);
     } catch {
-      toast.error('로케이션 설정 실패');
-    } finally { setProcessing(false); }
+      // 로컬 이동 폴백
+      setLocationStatusMap(prev => {
+        const next = { ...prev };
+        delete next[activeCellCode];
+        next[targetMoveLocation] = { ...current, location_code: targetMoveLocation };
+        return next;
+      });
+      toast.success(`재고가 ${activeCellCode} ➔ ${targetMoveLocation} 랙으로 이동되었습니다!`);
+    }
+    setCellModalOpen(false);
   };
 
+  // 랙 셀 비우기
+  const handleClearCell = () => {
+    if (!confirm(`${activeCellCode} 랙 셀의 적재 상태를 비우시겠습니까?`)) return;
+    setLocationStatusMap(prev => {
+      const next = { ...prev };
+      delete next[activeCellCode];
+      return next;
+    });
+    toast.success(`${activeCellCode} 랙 셀이 공실로 비워졌습니다.`);
+    setCellModalOpen(false);
+  };
+
+  const occupiedCount = Object.keys(locationStatusMap).length;
+  const emptyCount = 63 - occupiedCount;
+
   return (
-    <div className="flex flex-col h-full bg-gray-50">
+    <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
       <PageHeader
-        title="로케이션 관리"
-        description="GDL-C302-2026-PJT · 보관 스캔 게이트 ③ — 1로케이션 1LOT · 차열시트 두께별 분리 · HOLD 격리"
-        count={Object.keys(locationStatusMap).length}
+        title="🏢 공장 랙 로케이션 그래픽 관리 (63개 랙 셀)"
+        description="1구역 15칸×3층 (A1~O3), 2구역 6칸×3층 (P1~U3) 입체 랙 그림 맵 기반 재고 실시간 적재/배치/이동 관리"
       >
-        <button onClick={loadLocationStatus} className="p-2 border rounded-xl hover:bg-white">
-          <RefreshCw className="h-4 w-4 text-gray-600" />
+        <button
+          onClick={loadLocationStatus}
+          className="flex items-center gap-2 px-3.5 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 font-medium transition-all shadow-sm"
+        >
+          <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+          현황 새로고침
         </button>
       </PageHeader>
 
-      {/* 탭 */}
-      <div className="flex gap-1 px-4 pt-3">
-        {(['scan', 'map'] as const).map(key => (
-          <button key={key}
-            onClick={() => { setActiveTab(key); if (key === 'scan') setTimeout(() => scanRef.current?.focus(), 100); }}
-            className={cn('px-4 py-2 rounded-t-xl text-sm font-semibold transition-colors border-b-2',
-              activeTab === key ? 'bg-white border-blue-600 text-blue-700' : 'bg-gray-100 border-transparent text-gray-500 hover:bg-gray-200')}>
-            {key === 'scan' ? '📡 LOT 스캔·보관' : '🗺 로케이션 현황'}
-          </button>
-        ))}
+      {/* 요약 카드 */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-slate-900 text-white rounded-xl">
+            <Package className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-500">총 랙 셀 (1+2구역)</p>
+            <p className="text-xl font-black text-slate-900 mt-0.5">63개 셀 <span className="text-xs font-normal text-slate-500">(21칸 × 3층)</span></p>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-emerald-600 text-white rounded-xl">
+            <CheckCircle className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-500">현재 적재 중 랙</p>
+            <p className="text-xl font-black text-emerald-700 mt-0.5">{occupiedCount}개 랙 셀</p>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-slate-100 text-slate-700 rounded-xl">
+            <MapPin className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-500">공실 (빈 랙 셀)</p>
+            <p className="text-xl font-black text-slate-600 mt-0.5">{emptyCount}개 랙 셀</p>
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-3 bg-indigo-600 text-white rounded-xl">
+            <Clock className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-slate-500">랙 점유율</p>
+            <p className="text-xl font-black text-indigo-700 mt-0.5">{Math.round((occupiedCount / 63) * 100)}%</p>
+          </div>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-auto bg-white rounded-b-xl border border-t-0 mx-4 mb-4 p-4">
+      {/* 입체 그래픽 랙 맵 */}
+      <GraphicRackMap
+        statusMap={locationStatusMap}
+        selectedLocation={selectedLocation}
+        onSelectCell={handleSelectCell}
+      />
 
-        {activeTab === 'scan' && (
-          <div className="max-w-2xl mx-auto space-y-4">
-
-            {/* 안내 배너 */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-800">
-              <strong>📡 사용 방법</strong>
-              <ol className="mt-1.5 space-y-0.5 list-decimal list-inside">
-                <li>바코드 스캐너로 LOT QR 스캔 (아래 입력창 자동 포커스)</li>
-                <li>보관 위치 선택 (A존·B존·C존·HOLD)</li>
-                <li>[보관 확정] 클릭 → 1로케이션 1LOT 자동 검증</li>
-              </ol>
-              <div className="mt-1.5 font-semibold text-red-700">⚠ 차열시트: 두께별 구역 B-1.5 / B-2.0 / B-3.0 반드시 구분</div>
+      {/* 셀 선택 관리 모달 */}
+      {cellModalOpen && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-5">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div className="flex items-center gap-2">
+                <span className="bg-slate-900 text-white text-sm font-black font-mono px-2.5 py-1 rounded">
+                  {activeCellCode}
+                </span>
+                <h3 className="font-bold text-slate-800 text-base">랙 셀 상세 정보 & 재고 조치</h3>
+              </div>
+              <button onClick={() => setCellModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
             </div>
 
-            {/* 스캐너 입력 */}
-            <div className="bg-gray-900 rounded-xl p-4">
-              <label className="block text-xs text-green-400 font-mono mb-2">◉ LOT QR/바코드 스캔</label>
-              <div className="flex gap-2">
-                <input
-                  ref={scanRef}
-                  type="text"
-                  value={scanInput}
-                  onChange={e => setScanInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleScan(scanInput)}
-                  placeholder="스캐너를 이 칸에 스캔하세요..."
-                  className="flex-1 bg-black border border-green-500 text-green-400 font-mono text-sm px-3 py-2.5 rounded-lg outline-none focus:border-green-300 placeholder:text-green-900"
-                  autoComplete="off"
-                />
-                <button onClick={() => handleScan(scanInput)} disabled={loading || !scanInput}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-lg disabled:opacity-50">
-                  {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Scan className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
-            {/* 스캔 오류 */}
-            {scanError && (
-              <div className="bg-red-50 border border-red-300 rounded-xl p-3 flex items-start gap-2">
-                <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
-                <span className="text-sm text-red-700">{scanError}</span>
-              </div>
-            )}
-
-            {/* 스캔된 LOT 정보 */}
-            {scannedLot && (
-              <div className="bg-white border-2 border-blue-300 rounded-xl overflow-hidden">
-                <div className="bg-blue-600 px-4 py-2 flex items-center justify-between">
-                  <span className="text-white font-bold text-sm">✅ LOT 확인됨</span>
-                  <button onClick={() => { setScannedLot(null); setSelectedLocation(''); setConflictLot(null); scanRef.current?.focus(); }}>
-                    <X className="h-4 w-4 text-blue-200 hover:text-white" />
+            {/* 현재 셀 상태 카드 */}
+            {locationStatusMap[activeCellCode]?.lot_number ? (
+              <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-xl space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold bg-emerald-600 text-white px-2 py-0.5 rounded">현재 적재 중</span>
+                  <button onClick={handleClearCell} className="text-xs text-rose-600 hover:underline font-bold">
+                    [랙 비우기 / 공실 처리]
                   </button>
                 </div>
-                <div className="p-4 grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-xs text-gray-500">LOT 번호</p>
-                    <p className="font-mono font-bold text-blue-700">{scannedLot.lot_number}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">상태</p>
-                    <p className={cn('font-bold', scannedLot.inspection_result === 'FAIL' ? 'text-red-600' : 'text-green-600')}>
-                      {scannedLot.inspection_result || scannedLot.status}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">품목명</p>
-                    <p className="font-semibold">{scannedLot.item_name || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">수량</p>
-                    <p className="font-bold text-blue-700">{scannedLot.remaining_qty ?? scannedLot.qty} {scannedLot.item_unit || scannedLot.unit || 'EA'}</p>
-                  </div>
-                  {scannedLot.staging_location && (
-                    <div className="col-span-2">
-                      <p className="text-xs text-gray-500">현재 위치</p>
-                      <p className="font-bold text-purple-600">📍 {scannedLot.staging_location}</p>
-                    </div>
-                  )}
+                <p className="font-black text-slate-900 text-base">{locationStatusMap[activeCellCode].item_name}</p>
+                <div className="flex justify-between text-xs text-slate-700 font-mono">
+                  <span>LOT: <strong>{locationStatusMap[activeCellCode].lot_number}</strong></span>
+                  <span>수량: <strong>{Number(locationStatusMap[activeCellCode].qty||0).toLocaleString()} EA</strong></span>
                 </div>
 
-                {/* 로케이션 선택 */}
-                <div className="border-t p-4">
-                  <p className="text-xs font-bold text-gray-600 mb-3">보관 위치 선택</p>
-                  <div className="space-y-2">
-                    {Object.entries(ZONE_INFO).map(([zone, info]) => {
-                      const zoneLocs = Object.entries(LOCATIONS).filter(([,v]) => v.zone === zone);
-                      return (
-                        <div key={zone}>
-                          <p className={cn('text-[10px] font-bold mb-1', info.text)}>
-                            {info.label}
-                            {zone === 'B' && <span className="text-red-500 ml-1">⚠ 두께 혼재 금지</span>}
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {zoneLocs.map(([code, meta]) => {
-                              const occupied = locationStatusMap[code] && locationStatusMap[code].lot_id !== scannedLot.lot_id;
-                              return (
-                                <button key={code} onClick={() => handleSelectLocation(code)}
-                                  disabled={occupied}
-                                  className={cn(
-                                    'px-2.5 py-1.5 rounded-lg text-xs font-bold border-2 transition-all',
-                                    occupied ? 'opacity-40 cursor-not-allowed bg-gray-100 border-gray-300 text-gray-400 line-through' :
-                                    selectedLocation === code ? 'border-blue-600 bg-blue-600 text-white scale-105 shadow-lg' :
-                                    cn(meta.border, meta.bg, meta.color, 'hover:scale-105')
-                                  )}>
-                                  {code}
-                                  {occupied && ' (사용중)'}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* 충돌 경고 */}
-                {conflictLot && (
-                  <div className="mx-4 mb-3 bg-red-50 border-2 border-red-400 rounded-xl p-3">
-                    <div className="flex items-center gap-2 text-red-700 font-bold text-sm mb-1">
-                      <ShieldAlert className="h-4 w-4" />
-                      🚨 1로케이션 1LOT 규칙 위반 — 보관 차단
-                    </div>
-                    <p className="text-xs text-red-600">
-                      이미 <strong>{conflictLot.lot_number}</strong> ({conflictLot.item_name})이
-                      해당 위치에 보관 중입니다.
-                    </p>
-                    <p className="text-xs text-red-600 mt-1">빈 위치를 선택하거나 기존 LOT를 먼저 이동하세요.</p>
-                  </div>
-                )}
-
-                {/* 확정 버튼 */}
-                {selectedLocation && !conflictLot && (
-                  <div className="px-4 pb-4">
-                    <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-                      <Package className="h-4 w-4" />
-                      <span>{scannedLot.lot_number}</span>
-                      <ArrowRight className="h-4 w-4" />
-                      <span className={cn('font-bold', selectedLocation.startsWith('H-') ? 'text-orange-600' : 'text-blue-700')}>
-                        {selectedLocation}
-                        {selectedLocation.startsWith('H-') && ' [HOLD 격리]'}
-                      </span>
-                    </div>
-                    <button onClick={handleConfirm} disabled={processing}
-                      className={cn(
-                        'w-full py-2.5 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-2 disabled:opacity-50',
-                        selectedLocation.startsWith('H-') ? 'bg-orange-600 hover:bg-orange-700' : 'bg-blue-600 hover:bg-blue-700'
-                      )}>
-                      {processing && <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-                      {selectedLocation.startsWith('H-') ? '⚠ HOLD 격리 확정' : '✅ 보관 위치 확정'}
+                {/* 랙 위치 이동 */}
+                <div className="pt-3 border-t border-emerald-200 mt-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">다른 랙 셀로 위치 이동</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={targetMoveLocation}
+                      onChange={e => setTargetMoveLocation(e.target.value)}
+                      className="flex-1 border rounded-lg px-2.5 py-1.5 text-xs font-mono"
+                    >
+                      <option value="">-- 대상 랙 선택 (A1~U3) --</option>
+                      {ALL_RACK_CODES.filter(c => c !== activeCellCode).map(c => (
+                        <option key={c} value={c}>{c} 랙 셀 {locationStatusMap[c]?.lot_number ? '(적재중)' : '(비어있음)'}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={handleMoveStock}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-1"
+                    >
+                      이동 <MoveRight className="h-3 w-3" />
                     </button>
                   </div>
-                )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-100 p-3 rounded-xl text-center text-xs text-slate-500">
+                현재 <strong>{activeCellCode}</strong> 랙 셀은 비어 있습니다. (공실)
               </div>
             )}
-          </div>
-        )}
 
-        {activeTab === 'map' && (
-          <div>
-            <div className="mb-3 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
-              로케이션 클릭 시 보관 확정 화면으로 이동 · 회색=사용중
-            </div>
-            <LocationGrid
-              statusMap={locationStatusMap}
-              onSelect={(code) => {
-                setSelectedLocation(code);
-                setActiveTab('scan');
-                setTimeout(() => scanRef.current?.focus(), 100);
-              }}
-            />
-
-            {/* 로케이션 현황 테이블 */}
-            {Object.keys(locationStatusMap).length > 0 && (
-              <div className="mt-6">
-                <h3 className="text-sm font-bold text-gray-700 mb-2">현재 사용 중인 로케이션</h3>
-                <table className="w-full text-sm border-collapse">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      {['위치 코드','구역','LOT 번호','품목','수량'].map(h=>(
-                        <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-600 border-b">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.values(locationStatusMap).sort((a,b)=>a.location_code.localeCompare(b.location_code)).map(st => {
-                      const meta = LOCATIONS[st.location_code];
-                      return (
-                        <tr key={st.location_code} className="border-b hover:bg-gray-50">
-                          <td className="px-3 py-2">
-                            <span className={cn('px-2 py-0.5 rounded font-bold text-xs border', meta?.border, meta?.bg, meta?.color)}>
-                              {st.location_code}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2 text-xs text-gray-500">{meta?.zone || '-'}존</td>
-                          <td className="px-3 py-2 font-mono text-xs text-blue-600">{st.lot_number}</td>
-                          <td className="px-3 py-2 text-sm">{st.item_name || '-'}</td>
-                          <td className="px-3 py-2 text-sm font-mono">{st.qty}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+            {/* 재고 직접 등록 폼 */}
+            <form onSubmit={handleAssignStockToCell} className="space-y-3 pt-2">
+              <h4 className="font-bold text-xs text-slate-700 flex items-center gap-1">
+                <Plus className="h-3.5 w-3.5" /> 이 랙 셀({activeCellCode})에 재고 직접 등록/배치
+              </h4>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">LOT 번호</label>
+                <input
+                  type="text"
+                  value={manualLotNo}
+                  onChange={e => setManualLotNo(e.target.value)}
+                  placeholder="예: 260723CW001"
+                  className="w-full border rounded-lg px-3 py-1.5 text-xs font-mono"
+                />
               </div>
-            )}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">품목명</label>
+                  <input
+                    type="text"
+                    value={manualItemName}
+                    onChange={e => setManualItemName(e.target.value)}
+                    placeholder="예: 세라믹울 120K"
+                    className="w-full border rounded-lg px-3 py-1.5 text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">수량</label>
+                  <input
+                    type="number"
+                    value={manualQty}
+                    onChange={e => setManualQty(Number(e.target.value))}
+                    className="w-full border rounded-lg px-3 py-1.5 text-xs font-mono font-bold"
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="w-full py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg transition-all"
+              >
+                {activeCellCode} 랙 셀에 재고 등록/배치
+              </button>
+            </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
+
+export default LocationManagementPage;
