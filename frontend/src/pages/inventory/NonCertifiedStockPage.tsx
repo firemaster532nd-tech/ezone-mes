@@ -20,7 +20,7 @@ interface NonCertStockItem {
 }
 
 const ZONE_1_COLS = ['O','N','M','L','K','J','I','H','G','F','E','D','C','B','A'];
-const ZONE_2_COLS = ['U','T','S','R','Q','P'];
+const ZONE_2_COLS = ['P','Q','R'];
 const RACK_TIERS = [3, 2, 1];
 
 export function NonCertifiedStockPage() {
@@ -182,7 +182,7 @@ export function NonCertifiedStockPage() {
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex justify-between items-center mb-2">
           <h4 className="font-bold text-slate-800 text-xs flex items-center gap-2">
-            📍 비인정 재고 적재 랙 위치 필터 (2구역 U1~P3 / 1구역 O1~A3)
+            📍 비인정 재고 적재 랙 위치 필터 (2구역 P1~R3 / 1구역 O1~A3)
           </h4>
           {locationFilter && (
             <button onClick={() => setLocationFilter('')} className="text-xs text-purple-700 font-bold hover:underline">
@@ -191,7 +191,7 @@ export function NonCertifiedStockPage() {
           )}
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {['U1','U2','U3','T1','T2','T3','S1','S2','S3','P1','P2','P3','O1','A1'].map(loc => (
+          {['P1','P2','P3','Q1','Q2','Q3','R1','R2','R3','O1','A1'].map(loc => (
             <button
               key={loc}
               onClick={() => setLocationFilter(locationFilter === loc ? '' : loc)}
@@ -343,13 +343,13 @@ export function NonCertifiedStockPage() {
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">적재 랙 위치 (A1~U3)</label>
+                <label className="block font-medium text-slate-700 mb-1">적재 랙 위치 (A1~R3)</label>
                 <select
                   value={location}
                   onChange={e => setLocation(e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 text-sm font-mono font-bold focus:ring-2 focus:ring-purple-500"
                 >
-                  <optgroup label="2구역 (U1~P3 6칸 × 3층)">
+                  <optgroup label="2구역 (P1~R3 3칸 × 3층)">
                     {ZONE_2_COLS.flatMap(col => RACK_TIERS.map(t => `${col}${t}`)).map(c => (
                       <option key={c} value={c}>{c} 랙 셀</option>
                     ))}

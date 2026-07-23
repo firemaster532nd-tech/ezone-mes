@@ -4,9 +4,9 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Package, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// ─── 랙 로케이션 마스터 (1구역 O1~A3 / 2구역 U1~P3) ──────────────────────
+// ─── 랙 로케이션 마스터 (1구역 O1~A3 / 2구역 P1~R3) ──────────────────────
 const ZONE_1_COLS = ['O','N','M','L','K','J','I','H','G','F','E','D','C','B','A'];
-const ZONE_2_COLS = ['U','T','S','R','Q','P'];
+const ZONE_2_COLS = ['P','Q','R'];
 const RACK_TIERS = [3, 2, 1]; // 3층, 2층, 1층
 
 interface LedgerEntry {
@@ -189,17 +189,17 @@ export function MaterialLedgerPage() {
                           </span>
                         </div>
 
-                        {/* 2개 파레트 좌(P1) / 우(P2) 화면 가로 동시 출력 */}
+                        {/* 2개 파레트 좌(P2) / 우(P1) 화면 가로 동시 출력 */}
                         <div className="grid grid-cols-2 gap-0.5 mt-0.5 text-[8px] font-mono leading-none h-full">
-                          <div className={cn('p-0.5 rounded flex flex-col justify-between truncate border', hasP1 ? 'bg-emerald-600 text-white font-bold border-emerald-700' : 'bg-slate-100 text-slate-400 border-dashed border-slate-300')}>
-                            <span className="text-[6px] opacity-85">P1(좌)</span>
-                            <span className="truncate text-[7.5px] font-bold" title={p1.item_name || ''}>{hasP1 ? (p1.item_name || p1.lot_number?.slice(-4)) : '공실'}</span>
-                            {hasP1 && <span className="text-[7px] text-right font-black">{Number(p1.qty||0).toLocaleString()}</span>}
-                          </div>
                           <div className={cn('p-0.5 rounded flex flex-col justify-between truncate border', hasP2 ? 'bg-indigo-600 text-white font-bold border-indigo-700' : 'bg-slate-100 text-slate-400 border-dashed border-slate-300')}>
-                            <span className="text-[6px] opacity-85">P2(우)</span>
+                            <span className="text-[6px] opacity-85">P2(좌)</span>
                             <span className="truncate text-[7.5px] font-bold" title={p2.item_name || ''}>{hasP2 ? (p2.item_name || p2.lot_number?.slice(-4)) : '공실'}</span>
                             {hasP2 && <span className="text-[7px] text-right font-black">{Number(p2.qty||0).toLocaleString()}</span>}
+                          </div>
+                          <div className={cn('p-0.5 rounded flex flex-col justify-between truncate border', hasP1 ? 'bg-emerald-600 text-white font-bold border-emerald-700' : 'bg-slate-100 text-slate-400 border-dashed border-slate-300')}>
+                            <span className="text-[6px] opacity-85">P1(우)</span>
+                            <span className="truncate text-[7.5px] font-bold" title={p1.item_name || ''}>{hasP1 ? (p1.item_name || p1.lot_number?.slice(-4)) : '공실'}</span>
+                            {hasP1 && <span className="text-[7px] text-right font-black">{Number(p1.qty||0).toLocaleString()}</span>}
                           </div>
                         </div>
                       </button>
@@ -230,7 +230,7 @@ export function MaterialLedgerPage() {
     <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
       <PageHeader
         title="📊 재고수불대장 & 2파레트 랙 위치 그래픽 맵"
-        description="랙당 2개 파레트(P1/P2) 화면 동시 출력, 1구역 (O1~A3 15칸×3층) & 2구역 (U1~P3 6칸×3층) 그래픽 시각화 및 수불 연동"
+        description="랙당 2개 파레트(P1/P2) 화면 동시 출력, 1구역 (O1~A3 15칸×3층) & 2구역 (P1~R3 3칸×3층) 그래픽 시각화 및 수불 연동"
       >
         <div className="flex gap-4 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200">
           <div className="flex items-center gap-2">
@@ -262,7 +262,7 @@ export function MaterialLedgerPage() {
         </div>
 
         {renderGraphicRack('1구역 랙 맵 (O~A 15칸 × 3층, 2파레트/셀)', '총 45개 셀 (90파레트 용량)', ZONE_1_COLS, 'bg-slate-900')}
-        {renderGraphicRack('2구역 랙 맵 (U~P 6칸 × 3층, 2파레트/셀)', '총 18개 셀 (36파레트 용량)', ZONE_2_COLS, 'bg-indigo-900')}
+        {renderGraphicRack('2구역 랙 맵 (P~R 3칸 × 3층, 2파레트/셀)', '총 9개 셀 (18파레트 용량)', ZONE_2_COLS, 'bg-indigo-900')}
       </div>
 
       {/* 필터 및 검색 바 */}
@@ -303,19 +303,19 @@ export function MaterialLedgerPage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">랙 위치 선택 (A1~U3)</label>
+            <label className="block text-xs font-medium text-slate-700 mb-1">랙 위치 선택 (A1~R3)</label>
             <select 
               value={locationFilter} 
               onChange={(e) => setLocationFilter(e.target.value)}
               className="border rounded-lg px-3 py-2 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px]"
             >
-              <option value="">전체 랙 위치 (63개 셀)</option>
+              <option value="">전체 랙 위치 (54개 셀)</option>
               <optgroup label="1구역 (O1~A3 15칸 × 3층)">
                 {ZONE_1_COLS.flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
                   <option key={c} value={c}>{c} 랙 셀</option>
                 ))}
               </optgroup>
-              <optgroup label="2구역 (U1~P3 6칸 × 3층)">
+              <optgroup label="2구역 (P1~R3 3칸 × 3층)">
                 {ZONE_2_COLS.flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
                   <option key={c} value={c}>{c} 랙 셀</option>
                 ))}

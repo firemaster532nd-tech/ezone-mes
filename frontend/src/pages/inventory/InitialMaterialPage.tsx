@@ -237,8 +237,8 @@ export function InitialMaterialPage() {
                   <option key={c} value={c}>{c} 랙 셀</option>
                 ))}
               </optgroup>
-              <optgroup label="2구역 (P~U 6칸 × 3층)">
-                {['P','Q','R','S','T','U'].flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
+              <optgroup label="2구역 (P~R 3칸 × 3층)">
+                {['P','Q','R'].flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
                   <option key={c} value={c}>{c} 랙 셀</option>
                 ))}
               </optgroup>

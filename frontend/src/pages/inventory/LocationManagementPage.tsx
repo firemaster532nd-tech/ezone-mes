@@ -7,9 +7,9 @@ import {
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-// ─── 랙 로케이션 마스터 (1구역 O1~A3 15칸×3층 / 2구역 U1~P3 6칸×3층) ─────────
+// ─── 랙 로케이션 마스터 (1구역 O1~A3 15칸×3층 / 2구역 P1~R3 3칸×3층) ─────────
 export const ZONE_1_COLS = ['O','N','M','L','K','J','I','H','G','F','E','D','C','B','A'];
-export const ZONE_2_COLS = ['U','T','S','R','Q','P'];
+export const ZONE_2_COLS = ['P','Q','R'];
 export const RACK_TIERS = [3, 2, 1];
 
 export interface PalletSlot {
@@ -106,30 +106,30 @@ function GraphicRackMap({
                           </span>
                         </div>
 
-                        {/* 2개 파레트 슬롯 가로(좌/우) 화면 시각화 (P1 왼쪽 / P2 오른쪽) */}
+                        {/* 2개 파레트 슬롯 가로(좌/우) 화면 시각화 (P2 왼쪽 / P1 오른쪽) */}
                         <div className="grid grid-cols-2 gap-0.5 mt-0.5 text-[8px] font-mono leading-none h-full">
-                          {/* P1 (왼쪽 파레트) */}
-                          <div className={cn('p-1 rounded flex flex-col justify-between truncate border', hasP1 ? 'bg-emerald-600 text-white font-bold border-emerald-700' : 'bg-slate-100 text-slate-400 border-dashed border-slate-300')}>
-                            <div className="flex justify-between items-center text-[7px] opacity-90">
-                              <span>P1(좌)</span>
-                              {hasP1 && <span className="h-1 w-1 rounded-full bg-white animate-pulse" />}
-                            </div>
-                            <span className="truncate text-[8px] font-bold mt-0.5" title={p1.item_name || ''}>
-                              {hasP1 ? (p1.item_name || p1.lot_number?.slice(-4)) : '공실'}
-                            </span>
-                            {hasP1 && <span className="text-[7px] text-right font-black mt-0.5">{Number(p1.qty||0).toLocaleString()}</span>}
-                          </div>
-
-                          {/* P2 (오른쪽 파레트) */}
+                          {/* P2 (왼쪽 파레트) */}
                           <div className={cn('p-1 rounded flex flex-col justify-between truncate border', hasP2 ? 'bg-indigo-600 text-white font-bold border-indigo-700' : 'bg-slate-100 text-slate-400 border-dashed border-slate-300')}>
                             <div className="flex justify-between items-center text-[7px] opacity-90">
-                              <span>P2(우)</span>
+                              <span>P2(좌)</span>
                               {hasP2 && <span className="h-1 w-1 rounded-full bg-white animate-pulse" />}
                             </div>
                             <span className="truncate text-[8px] font-bold mt-0.5" title={p2.item_name || ''}>
                               {hasP2 ? (p2.item_name || p2.lot_number?.slice(-4)) : '공실'}
                             </span>
                             {hasP2 && <span className="text-[7px] text-right font-black mt-0.5">{Number(p2.qty||0).toLocaleString()}</span>}
+                          </div>
+
+                          {/* P1 (오른쪽 파레트) */}
+                          <div className={cn('p-1 rounded flex flex-col justify-between truncate border', hasP1 ? 'bg-emerald-600 text-white font-bold border-emerald-700' : 'bg-slate-100 text-slate-400 border-dashed border-slate-300')}>
+                            <div className="flex justify-between items-center text-[7px] opacity-90">
+                              <span>P1(우)</span>
+                              {hasP1 && <span className="h-1 w-1 rounded-full bg-white animate-pulse" />}
+                            </div>
+                            <span className="truncate text-[8px] font-bold mt-0.5" title={p1.item_name || ''}>
+                              {hasP1 ? (p1.item_name || p1.lot_number?.slice(-4)) : '공실'}
+                            </span>
+                            {hasP1 && <span className="text-[7px] text-right font-black mt-0.5">{Number(p1.qty||0).toLocaleString()}</span>}
                           </div>
                         </div>
                       </button>
@@ -159,7 +159,7 @@ function GraphicRackMap({
   return (
     <div>
       {renderZoneRack('🏢 1구역 랙 맵 (O~A칸, 2파레트/셀)', '15칸 × 3층 = 총 45개 셀 (90 파레트 용량)', ZONE_1_COLS, 'bg-slate-900')}
-      {renderZoneRack('🏬 2구역 랙 맵 (U~P칸, 2파레트/셀)', '6칸 × 3층 = 총 18개 셀 (36 파레트 용량)', ZONE_2_COLS, 'bg-indigo-900')}
+      {renderZoneRack('🏬 2구역 랙 맵 (P~R칸, 2파레트/셀)', '3칸 × 3층 = 총 9개 셀 (18 파레트 용량)', ZONE_2_COLS, 'bg-indigo-900')}
     </div>
   );
 }
@@ -335,7 +335,7 @@ export function LocationManagementPage() {
   return (
     <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
       <PageHeader
-        title="🏢 공장 랙 로케이션 2파레트 관리 (63개 랙 / 126 파레트)"
+        title="🏢 공장 랙 로케이션 2파레트 관리 (54개 랙 / 108 파레트)"
         description="랙당 2개 파레트(P1/P2) 동시 적재 시각화, 보유 재고 자동 불러오기 및 랙별 입출고/배치 관리"
       >
         <button
@@ -354,8 +354,8 @@ export function LocationManagementPage() {
             <Package className="h-6 w-6" />
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-500">총 랙 셀 (63개 랙)</p>
-            <p className="text-lg font-black text-slate-900 mt-0.5">126 파레트 용량</p>
+            <p className="text-xs font-bold text-slate-500">총 랙 셀 (54개 랙)</p>
+            <p className="text-lg font-black text-slate-900 mt-0.5">108 파레트 용량</p>
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
@@ -385,13 +385,13 @@ export function LocationManagementPage() {
           <div>
             <p className="text-xs font-bold text-slate-500">빈 파레트 용량</p>
             <p className="text-lg font-black text-slate-600 mt-0.5">
-              {126 - Object.values(rackStatusMap).reduce((acc, c) => acc + (c.pallet1.lot_number ? 1 : 0) + (c.pallet2.lot_number ? 1 : 0), 0)}개 여유
+              {108 - Object.values(rackStatusMap).reduce((acc, c) => acc + (c.pallet1.lot_number ? 1 : 0) + (c.pallet2.lot_number ? 1 : 0), 0)}개 여유
             </p>
           </div>
         </div>
       </div>
 
-      {/* 2파레트 랙 그래픽 맵 (1구역 O~A / 2구역 U~P) */}
+      {/* 2파레트 랙 그래픽 맵 (1구역 O~A / 2구역 P~R) */}
       <GraphicRackMap
         statusMap={rackStatusMap}
         selectedLocation={selectedLocation}

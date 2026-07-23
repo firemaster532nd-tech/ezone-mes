@@ -207,8 +207,8 @@ export function RawMaterialInspectionPage() {
                       <option key={c} value={c}>{c} 랙 셀</option>
                     ))}
                   </optgroup>
-                  <optgroup label="2구역 (U1~P3 6칸 × 3층)">
-                    {['U','T','S','R','Q','P'].flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
+                  <optgroup label="2구역 (P1~R3 3칸 × 3층)">
+                    {['P','Q','R'].flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
                       <option key={c} value={c}>{c} 랙 셀</option>
                     ))}
                   </optgroup>

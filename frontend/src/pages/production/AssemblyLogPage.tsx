@@ -60,8 +60,8 @@ const ASSEMBLY_TYPES: AssemblyTypeConfig[] = [
   }
 ];
 
-// 랙 로케이션 옵션 (63개 셀 중 대표 셀)
-const RACK_OPTIONS = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'P1', 'P2', 'P3', 'T1', 'T2', 'T3', 'U1', 'U2', 'U3'];
+// 랙 로케이션 옵션 (54개 셀 중 대표 셀)
+const RACK_OPTIONS = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'P1', 'P2', 'P3', 'Q1', 'Q2', 'Q3', 'R1', 'R2', 'R3'];
 
 export function AssemblyLogPage() {
   const [selectedType, setSelectedType] = useState<AssemblyTypeConfig>(ASSEMBLY_TYPES[0]);
@@ -69,7 +69,7 @@ export function AssemblyLogPage() {
   const [spec, setSpec] = useState('W170×L1000');
   const [inputQty, setInputQty] = useState<number>(10);
   const [producedQty, setProducedQty] = useState<number>(10);
-  const [rackLocation, setRackLocation] = useState('U1');
+  const [rackLocation, setRackLocation] = useState('P1');
   const [workerName, setWorkerName] = useState('조립담당자');
   const [remarks, setRemarks] = useState('');
   
