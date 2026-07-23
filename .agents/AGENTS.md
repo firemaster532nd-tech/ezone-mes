@@ -5,18 +5,21 @@
 
 ---
 
-## 0. 배포 필수 규칙 ⚠️ (매 작업마다 예외 없이 실행)
+## 0. 개발 및 배포 원칙 ⚠️ (EDWARD님 명시적 '배포' 요청 시에만 수행)
 
-코드를 수정할 때마다 아래 순서를 **자동으로** 실행한다. 사용자가 별도로 요청하지 않아도 무조건 수행한다.
+1. **평소 개발 및 검증 절차 (로컬 환경 전담)**:
+   - 코드 수정 완료 ➔ `http://localhost:5173` (프론트엔드) 및 `http://localhost:3000` (백엔드) 로컬 환경에서 UI, 기능, DB 연동을 100% 완벽 검증한다.
+   - 검증 완료 후 `git add` ➔ `git commit` ➔ `git push origin main` 으로 안전하게 버전 이력을 보존한다.
+   - ⚠️ **무단 자동 배포 금지**: 개발 과정에서는 Vercel 프로덕션 배포를 절대로 자동 실행하지 않는다 (Vercel 24시간 한도 및 CDN 캐시 혼선 원천 방지).
 
+2. **프로덕션 배포 절차 (사용자 EDWARD님이 "배포" 또는 "배포해 주세요" 요청 시에만 무조건 실행)**:
 ```
-① 코드 수정 완료
-② git add → git commit → git push origin main
-③ npx vercel --prod --yes  (Vercel 프로덕션 배포)
-④ npx vercel alias set ezone-mes.vercel.app xn--sp5btl20d.kr
+① git add → git commit → git push origin main
+② npx vercel --prod --yes  (Vercel 프로덕션 배포)
+③ npx vercel alias set ezone-mes.vercel.app xn--sp5btl20d.kr
    npx vercel alias set ezone-mes.vercel.app www.xn--sp5btl20d.kr
    (이지원.kr 최종 반영)
-⑤ 배포 URL https://이지원.kr 확인 후 사용자에게 완료 보고
+④ 배포 URL https://이지원.kr 확인 후 EDWARD님에게 완료 보고
 ```
 
 ### 배포 관련 고정 정보
