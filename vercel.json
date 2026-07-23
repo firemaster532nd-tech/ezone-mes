@@ -1,28 +1,15 @@
 {
-  "services": {
-    "frontend": {
-      "root": "frontend",
-      "framework": "vite"
-    },
-    "backend": {
-      "root": "backend",
-      "entrypoint": "src/index.ts"
-    }
-  },
-  "rewrites": [
+  "version": 2,
+  "buildCommand": "cd frontend && npm run build",
+  "outputDirectory": "frontend/dist",
+  "routes": [
     {
-      "source": "/api(/.*)?",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
+      "src": "/api/(.*)",
+      "dest": "backend/src/index.ts"
     },
     {
-      "source": "/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "frontend"
-      }
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
