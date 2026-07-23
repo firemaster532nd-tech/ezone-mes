@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
-import pool from '../db/pool';
-import { requireAuth } from '../middleware/auth';
+import { pool } from '../db/pool.js';
+import { requireAuth } from '../lib/auth-plugin.js';
 
 const GOOGLE_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/1dUrjgHuUFRr0I6yi5EGYYdHH2AWCz2PRfEVPPX_51vg/export?format=csv';
 

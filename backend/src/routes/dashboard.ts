@@ -70,8 +70,16 @@ export async function dashboardRoutes(app: FastifyInstance) {
       const todayWo = todayWoResult.rows[0] ?? { total: 0, completed: 0, in_progress: 0, planned: 0, hold: 0, total_actual_qty: 0 };
       const inspection = inspectionResult.rows[0] ?? { total: 0, pass_count: 0, fail_count: 0, pass_rate: 100 };
 
-      return {
+      const dashboardPayload = {
         date: targetDate,
+        today: {
+          total: String(todayWo.total || 0),
+          completed: String(todayWo.completed || 0),
+          in_progress: String(todayWo.in_progress || 0),
+          planned: String(todayWo.planned || 0),
+          hold: String(todayWo.hold || 0),
+          total_actual_qty: String(todayWo.total_actual_qty || 0),
+        },
         kpi: {
           today_wo_total: Number(todayWo.total || 0),
           today_wo_completed: Number(todayWo.completed || 0),
@@ -85,27 +93,33 @@ export async function dashboardRoutes(app: FastifyInstance) {
           pass_rate: Number(inspection.pass_rate || 100),
           inventory_alerts: inventoryAlertResult.rows.length,
         },
+        by_process: woByProcessResult.rows,
+        by_status: woByStatusResult.rows,
         wo_by_process: woByProcessResult.rows,
         wo_by_status: woByStatusResult.rows,
         inventory_alerts: inventoryAlertResult.rows,
         recent_work_orders: recentWoResult.rows,
+        recent_orders: recentWoResult.rows,
         weekly_production: weeklyProductionResult.rows,
       };
+
+      return { data: dashboardPayload, ...dashboardPayload };
     } catch (err: any) {
       console.error('[GET /api/dashboard Safe Fallback]:', err);
-      return {
+      const fallbackPayload = {
         date: new Date().toISOString().slice(0, 10),
+        today: { total: '0', completed: '0', in_progress: '0', planned: '0', hold: '0', total_actual_qty: '0' },
         kpi: {
           today_wo_total: 0, today_wo_completed: 0, today_wo_in_progress: 0,
           today_wo_planned: 0, today_wo_hold: 0, today_actual_qty: 0,
           inspection_total: 0, inspection_pass: 0, inspection_fail: 0, pass_rate: 100,
           inventory_alerts: 0,
         },
-        wo_by_process: [], wo_by_status: [], inventory_alerts: [], recent_work_orders: [], weekly_production: []
+        by_process: [], by_status: [], wo_by_process: [], wo_by_status: [], inventory_alerts: [], recent_work_orders: [], recent_orders: [], weekly_production: []
       };
+      return { data: fallbackPayload, ...fallbackPayload };
     }
   });
-
 
   // GET /api/dashboard/alerts
   app.get('/api/dashboard/alerts', async () => {
@@ -114,9 +128,9 @@ export async function dashboardRoutes(app: FastifyInstance) {
         `SELECT i.item_id, i.item_code, i.item_name, i.item_category, i.safety_stock
          FROM item_master i LIMIT 0`
       ).catch(() => ({ rows: [] }));
-      return { alerts: res.rows || [] };
+      return { data: { alerts: res.rows || [], failed_inspections_count: 0, pending_approvals_count: 0, safety_stock_alerts_count: 0, stalled_processes_count: 0 }, alerts: res.rows || [] };
     } catch {
-      return { alerts: [] };
+      return { data: { alerts: [], failed_inspections_count: 0, pending_approvals_count: 0, safety_stock_alerts_count: 0, stalled_processes_count: 0 }, alerts: [] };
     }
   });
 
@@ -131,9 +145,24 @@ export async function dashboardRoutes(app: FastifyInstance) {
         FROM work_order
         ORDER BY created_at DESC LIMIT 10
       `).catch(() => ({ rows: [] }));
-      return { logs: result.rows || [] };
+      return { data: result.rows || [], logs: result.rows || [] };
     } catch {
-      return { logs: [] };
+      return { data: [], logs: [] };
     }
+  });
+
+  // GET /api/dashboard/workflow - 업무 플로우차트 데이터
+  app.get('/api/dashboard/workflow', async () => {
+    return {
+      data: {
+        summary: {
+          sales_orders: [], purchase_requests: [],
+          inspection: { total: 0, pass_count: 0, fail_count: 0, pending_count: 0 },
+          work_orders: [], process_log: [], approval: []
+        },
+        orders: [], pipeline: { sales_order: {}, purchase_request: {}, work_order: [], shipment: {}, approval: {} }
+      },
+      workflow: []
+    };
   });
 }

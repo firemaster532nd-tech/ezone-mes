@@ -18,28 +18,19 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   if (options?.body) {
     headers['Content-Type'] = 'application/json';
   }
-  try {
-    const res = await fetch(`${API_BASE}${path}`, {
-      headers,
-      ...options,
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      if (res.status === 401) {
-        localStorage.removeItem(TOKEN_KEY);
-      }
-      if (res.status >= 500) {
-        console.warn(`[API Warning 500] ${path}:`, body);
-        return ({ ok: false, data: [], items: [], list: [], count: 0, orders: [], projects: [], quotations: [], alerts: [], logs: [], socket_orders: [] } as unknown) as T;
-      }
-      throw new ApiError(res.status, body);
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers,
+    ...options,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    if (res.status === 401) {
+      // token expired or invalid — clear so user is redirected to login
+      localStorage.removeItem(TOKEN_KEY);
     }
-    return res.json();
-  } catch (err: any) {
-    if (err instanceof ApiError) throw err;
-    console.warn(`[API Fetch Error] ${path}:`, err);
-    return ({ ok: false, data: [], items: [], list: [], count: 0, orders: [], projects: [], quotations: [], alerts: [], logs: [], socket_orders: [] } as unknown) as T;
+    throw new ApiError(res.status, body);
   }
+  return res.json();
 }
 
 export const api = {

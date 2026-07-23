@@ -1,6 +1,6 @@
 import { FastifyInstance } from 'fastify';
-import pool from '../db/pool';
-import { requireAuth } from '../middleware/auth';
+import { pool } from '../db/pool.js';
+import { requireAuth } from '../lib/auth-plugin.js';
 
 export default async function assemblyLogRoutes(app: FastifyInstance) {
   // ── GET /api/production/assembly-logs (조립생산일지 이력 조회) ──
