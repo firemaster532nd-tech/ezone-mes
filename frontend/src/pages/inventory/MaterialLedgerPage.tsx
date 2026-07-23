@@ -1,10 +1,10 @@
 import { api } from '@/lib/api';
 import { useState, useEffect } from 'react';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { Package, MapPin, Filter, RefreshCw, CheckCircle } from 'lucide-react';
+import { Package, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// ─── 랙 로케이션 마스터 (1구역 O1~A3 / 2구역 U1~P3 거꾸로 배치) ──────────────────────
+// ─── 랙 로케이션 마스터 (1구역 O1~A3 / 2구역 U1~P3) ──────────────────────
 const ZONE_1_COLS = ['O','N','M','L','K','J','I','H','G','F','E','D','C','B','A'];
 const ZONE_2_COLS = ['U','T','S','R','Q','P'];
 const RACK_TIERS = [3, 2, 1]; // 3층, 2층, 1층
@@ -25,11 +25,17 @@ interface LedgerEntry {
   currentStock: number;
 }
 
-interface RackStatus {
+interface PalletSlot {
+  slot_no: 1 | 2;
+  lot_number?: string | null;
+  item_name?: string | null;
+  qty?: number | null;
+}
+
+interface RackCellStatus {
   location_code: string;
-  lot_number: string | null;
-  item_name: string | null;
-  currentStock: number;
+  pallet1: PalletSlot;
+  pallet2: PalletSlot;
 }
 
 export function MaterialLedgerPage() {
@@ -41,8 +47,8 @@ export function MaterialLedgerPage() {
   const [lotSearch, setLotSearch] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // 랙 위치별 재고 맵 상태
-  const [rackMap, setRackMap] = useState<Record<string, RackStatus>>({});
+  // 랙 위치별 2파레트 상태 맵
+  const [rackMap, setRackMap] = useState<Record<string, RackCellStatus>>({});
 
   useEffect(() => {
     // 기본 날짜: 오늘
@@ -64,16 +70,33 @@ export function MaterialLedgerPage() {
       const dataList: LedgerEntry[] = Array.isArray(res) ? res : (res.data || []);
       setEntries(dataList);
 
-      // 랙별 최신 수불/재고 현황 집계
-      const map: Record<string, RackStatus> = {};
+      // 랙 셀별 2파레트 집계
+      const map: Record<string, RackCellStatus> = {};
       for (const entry of dataList) {
-        if (entry.location) {
-          map[entry.location] = {
-            location_code: entry.location,
-            lot_number: entry.lotNumber,
-            item_name: entry.itemName,
-            currentStock: entry.currentStock
-          };
+        const loc = entry.location;
+        if (loc) {
+          if (!map[loc]) {
+            map[loc] = {
+              location_code: loc,
+              pallet1: { slot_no: 1 },
+              pallet2: { slot_no: 2 }
+            };
+          }
+          if (!map[loc].pallet1.lot_number) {
+            map[loc].pallet1 = {
+              slot_no: 1,
+              lot_number: entry.lotNumber,
+              item_name: entry.itemName,
+              qty: entry.currentStock
+            };
+          } else if (!map[loc].pallet2.lot_number && map[loc].pallet1.lot_number !== entry.lotNumber) {
+            map[loc].pallet2 = {
+              slot_no: 2,
+              lot_number: entry.lotNumber,
+              item_name: entry.itemName,
+              qty: entry.currentStock
+            };
+          }
         }
       }
       setRackMap(map);
@@ -103,14 +126,10 @@ export function MaterialLedgerPage() {
 
   // 랙 선택 시 클릭 핸들러
   const handleToggleRackFilter = (code: string) => {
-    if (locationFilter === code) {
-      setLocationFilter(''); // 선택 해제
-    } else {
-      setLocationFilter(code); // 선택 필터링
-    }
+    setLocationFilter(prev => prev === code ? '' : code);
   };
 
-  // 그래픽 랙 그림 렌더링 함수
+  // 2파레트 그래픽 랙 그림 렌더링 함수
   const renderGraphicRack = (title: string, subtitle: string, cols: string[], bgHeader: string) => {
     return (
       <div className="bg-white rounded-xl border border-slate-300 shadow-sm overflow-hidden mb-4">
@@ -121,22 +140,29 @@ export function MaterialLedgerPage() {
             <span className="font-normal opacity-85">({subtitle})</span>
           </div>
           <span className="font-mono bg-white/20 px-2 py-0.5 rounded text-[11px]">
-            클릭하여 랙 위치별 수불대장 즉시 필터링
+            각 랙별 2파레트(P1/P2) 화면 동시 출력 ➔ 랙 클릭 시 수불대장 필터링
           </span>
         </div>
 
         <div className="p-3 overflow-x-auto bg-slate-50">
-          <div className="min-w-[720px] space-y-2">
+          <div className="min-w-[880px] space-y-2">
             {RACK_TIERS.map((tier) => (
               <div key={tier} className="flex items-center gap-2">
-                <div className="w-14 h-12 shrink-0 bg-slate-800 text-white rounded-md font-black text-xs flex flex-col items-center justify-center">
+                <div className="w-14 h-16 shrink-0 bg-slate-900 text-white rounded-md font-black text-xs flex flex-col items-center justify-center">
                   <span>{tier}층</span>
                 </div>
                 <div className="flex-1 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
                   {cols.map((col) => {
                     const code = `${col}${tier}`;
-                    const st = rackMap[code];
-                    const occupied = !!st?.currentStock && st.currentStock > 0;
+                    const cell = rackMap[code] || {
+                      location_code: code,
+                      pallet1: { slot_no: 1 },
+                      pallet2: { slot_no: 2 }
+                    };
+                    const p1 = cell.pallet1;
+                    const p2 = cell.pallet2;
+                    const hasP1 = !!p1.lot_number;
+                    const hasP2 = !!p2.lot_number;
                     const isSelected = locationFilter === code;
 
                     return (
@@ -145,29 +171,35 @@ export function MaterialLedgerPage() {
                         type="button"
                         onClick={() => handleToggleRackFilter(code)}
                         className={cn(
-                          'h-12 rounded-lg border-2 p-1 text-left transition-all relative overflow-hidden flex flex-col justify-between',
+                          'h-16 rounded-lg border-2 p-1 text-left transition-all relative overflow-hidden flex flex-col justify-between',
                           isSelected
                             ? 'ring-4 ring-blue-500 border-blue-600 bg-blue-100 scale-105 z-10'
-                            : occupied
-                              ? 'border-emerald-500 bg-emerald-50 hover:bg-emerald-100'
+                            : (hasP1 || hasP2)
+                              ? 'border-emerald-500 bg-white hover:bg-emerald-50'
                               : 'border-slate-300 bg-white hover:bg-slate-100 border-dashed'
                         )}
                       >
+                        {/* 랙 셀 제목 */}
                         <div className="flex justify-between items-center w-full">
-                          <span className={cn('text-[10px] font-black font-mono px-1 rounded', isSelected ? 'bg-blue-600 text-white' : occupied ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700')}>
+                          <span className={cn('text-[10px] font-black font-mono px-1 rounded', isSelected ? 'bg-blue-600 text-white' : (hasP1 || hasP2) ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-700')}>
                             {code}
                           </span>
-                          {occupied && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />}
+                          <span className="text-[8px] text-slate-400 font-mono">
+                            {hasP1 && hasP2 ? '2P' : hasP1 || hasP2 ? '1P' : '빈랙'}
+                          </span>
                         </div>
 
-                        {occupied ? (
-                          <div className="text-[9px] font-mono leading-tight truncate">
-                            <p className="font-bold text-slate-800 truncate" title={st.item_name || ''}>{st.item_name}</p>
-                            <p className="text-emerald-700 font-black">{Number(st.currentStock).toLocaleString()} EA</p>
+                        {/* 2개 파레트 항목 화면 동시 출력 */}
+                        <div className="space-y-0.5 text-[8px] font-mono leading-none">
+                          <div className={cn('p-0.5 rounded flex justify-between truncate', hasP1 ? 'bg-emerald-600 text-white font-bold' : 'bg-slate-100 text-slate-400')}>
+                            <span className="truncate max-w-[50px]">{hasP1 ? (p1.item_name || p1.lot_number?.slice(-5)) : 'P1공실'}</span>
+                            {hasP1 && <span>{Number(p1.qty||0).toLocaleString()}</span>}
                           </div>
-                        ) : (
-                          <span className="text-[9px] text-slate-400 text-center block">비어있음</span>
-                        )}
+                          <div className={cn('p-0.5 rounded flex justify-between truncate', hasP2 ? 'bg-indigo-600 text-white font-bold' : 'bg-slate-100 text-slate-400')}>
+                            <span className="truncate max-w-[50px]">{hasP2 ? (p2.item_name || p2.lot_number?.slice(-5)) : 'P2공실'}</span>
+                            {hasP2 && <span>{Number(p2.qty||0).toLocaleString()}</span>}
+                          </div>
+                        </div>
                       </button>
                     );
                   })}
@@ -195,8 +227,8 @@ export function MaterialLedgerPage() {
   return (
     <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
       <PageHeader
-        title="📊 재고수불대장 & 랙 위치별 그래픽 맵"
-        description="1구역 (A1~O3 15칸×3층) & 2구역 (P1~U3 6칸×3층) 그래픽 랙 그림 시각화 및 위치별 수불 내역 필터링"
+        title="📊 재고수불대장 & 2파레트 랙 위치 그래픽 맵"
+        description="랙당 2개 파레트(P1/P2) 화면 동시 출력, 1구역 (O1~A3 15칸×3층) & 2구역 (U1~P3 6칸×3층) 그래픽 시각화 및 수불 연동"
       >
         <div className="flex gap-4 bg-white px-4 py-2 rounded-xl shadow-sm border border-slate-200">
           <div className="flex items-center gap-2">
@@ -211,24 +243,24 @@ export function MaterialLedgerPage() {
         </div>
       </PageHeader>
 
-      {/* 🖼️ 상단 시각적 그래픽 랙 맵 그림 뷰어 */}
+      {/* 🖼️ 상단 2파레트 그래픽 랙 맵 그림 뷰어 */}
       <div className="space-y-3">
         <div className="flex justify-between items-center px-1">
           <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
-            🖼️ 공장 랙 위치별 그래픽 맵 (랙 클릭 시 수불대장 즉시 필터링)
+            🖼️ 공장 랙 2파레트 그래픽 맵 (랙 클릭 시 수불대장 즉시 필터링)
           </h3>
           {locationFilter && (
             <button
               onClick={() => setLocationFilter('')}
-              className="text-xs bg-blue-600 text-white font-bold px-2.5 py-1 rounded-lg hover:bg-blue-700 transition-all flex items-center gap-1"
+              className="text-xs bg-blue-600 text-white font-bold px-2.5 py-1 rounded-lg hover:bg-blue-700 transition-all"
             >
               선택 랙({locationFilter}) 필터 해제 ✕
             </button>
           )}
         </div>
 
-        {renderGraphicRack('1구역 랙 맵 (A~O 15칸 × 3층)', '총 45개 셀', ZONE_1_COLS, 'bg-slate-900')}
-        {renderGraphicRack('2구역 랙 맵 (P~U 6칸 × 3층)', '총 18개 셀', ZONE_2_COLS, 'bg-indigo-900')}
+        {renderGraphicRack('1구역 랙 맵 (O~A 15칸 × 3층, 2파레트/셀)', '총 45개 셀 (90파레트 용량)', ZONE_1_COLS, 'bg-slate-900')}
+        {renderGraphicRack('2구역 랙 맵 (U~P 6칸 × 3층, 2파레트/셀)', '총 18개 셀 (36파레트 용량)', ZONE_2_COLS, 'bg-indigo-900')}
       </div>
 
       {/* 필터 및 검색 바 */}
@@ -276,14 +308,14 @@ export function MaterialLedgerPage() {
               className="border rounded-lg px-3 py-2 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[140px]"
             >
               <option value="">전체 랙 위치 (63개 셀)</option>
-              <optgroup label="1구역 (A~O 15칸 × 3층)">
+              <optgroup label="1구역 (O1~A3 15칸 × 3층)">
                 {ZONE_1_COLS.flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
-                  <option key={c} value={c}>{c} 랙 셀 {rackMap[c]?.currentStock ? `(${rackMap[c].item_name})` : '(공실)'}</option>
+                  <option key={c} value={c}>{c} 랙 셀</option>
                 ))}
               </optgroup>
-              <optgroup label="2구역 (P~U 6칸 × 3층)">
+              <optgroup label="2구역 (U1~P3 6칸 × 3층)">
                 {ZONE_2_COLS.flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
-                  <option key={c} value={c}>{c} 랙 셀 {rackMap[c]?.currentStock ? `(${rackMap[c].item_name})` : '(공실)'}</option>
+                  <option key={c} value={c}>{c} 랙 셀</option>
                 ))}
               </optgroup>
             </select>
@@ -382,4 +414,3 @@ export function MaterialLedgerPage() {
     </div>
   );
 }
-
