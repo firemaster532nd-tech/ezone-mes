@@ -78,6 +78,7 @@ const shopNavItems: NavSection[] = [
       // { label: '현장별 작업지시',     path: '/production/project-work-orders' },
       { label: '비인정제품 작업지시',   path: '/production/socket-work-orders' },
       { label: '구조체 작업지시',     path: '/production/struct-work-orders' },
+      { label: '📋 조립생산일지(J-LOT)', path: '/production/assembly-log' },
       { label: '부자재별 작업지시', path: '/production/sub-work-orders' },
       { label: '에프엔테크 작업지시', path: '/production/fn-work-orders' },
     ],

@@ -28,13 +28,15 @@ interface StockSummary {
   }[];
 }
 
-const CATEGORIES = ['전체', '세라믹울', '차열재', '그라스울', '그라스울보드', '소켓', '기타부자재'];
+const CATEGORIES = ['전체', '세라믹울', '차열재', '그라스울', '그라스울보드', '소켓', '반제품', '기타부자재'];
 const LOCATIONS = ['전체', '시험용', '출하대기', '본재고'];
 
 export function MaterialStockPage() {
   const [lots, setLots] = useState<MaterialLot[]>([]);
   const [summary, setSummary] = useState<StockSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSynced, setLastSynced] = useState<string | null>(null);
   
   const [selectedCategory, setSelectedCategory] = useState('전체');
   const [selectedLocation, setSelectedLocation] = useState('전체');
@@ -42,7 +44,33 @@ export function MaterialStockPage() {
 
   useEffect(() => {
     fetchData();
+    fetchSyncStatus();
   }, []);
+
+  const fetchSyncStatus = async () => {
+    try {
+      const res = await api.get('/api/inventory/google-sheets-status');
+      if (res?.last_sync) {
+        setLastSynced(new Date(res.last_sync).toLocaleString());
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const handleGoogleSheetsSync = async () => {
+    try {
+      setSyncing(true);
+      const res = await api.post('/api/inventory/sync-google-sheets', {});
+      alert(res?.message || '구글 스프레드시트 재고 수불표 동기화가 완료되었습니다!');
+      fetchData();
+      fetchSyncStatus();
+    } catch (err: any) {
+      alert(`동기화 실패: ${err?.response?.data?.message || err.message}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -51,7 +79,6 @@ export function MaterialStockPage() {
         api.get('/api/material-lots'),
         api.get('/api/material-stock-summary')
       ]);
-      // 응답 데이터 구조에 맞춰 할당합니다.
       setLots(lotsRes.data || lotsRes || []);
       setSummary(summaryRes.data || summaryRes || null);
     } catch (error) {
@@ -72,11 +99,29 @@ export function MaterialStockPage() {
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center">
-          <Package className="w-6 h-6 mr-2" />
-          LOT 재고현황
-        </h1>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center">
+            <Package className="w-6 h-6 mr-2 text-indigo-600" />
+            LOT 재고현황
+          </h1>
+          {lastSynced && (
+            <p className="text-xs text-slate-500 mt-1 flex items-center">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 mr-1.5 inline-block"></span>
+              구글 시트 연동 마지막 동기화: <strong className="ml-1 text-slate-700">{lastSynced}</strong>
+            </p>
+          )}
+        </div>
+        <button
+          onClick={handleGoogleSheetsSync}
+          disabled={syncing}
+          className={`flex items-center px-4 py-2.5 rounded-lg text-sm font-semibold text-white shadow-sm transition-all ${
+            syncing ? 'bg-indigo-400 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700'
+          }`}
+        >
+          <span className={`mr-2 ${syncing ? 'animate-spin' : ''}`}>🔄</span>
+          {syncing ? '구글 시트 동기화 중...' : '구글 시트 재고 수불표 즉시 동기화'}
+        </button>
       </div>
 
       {/* Summary Cards */}

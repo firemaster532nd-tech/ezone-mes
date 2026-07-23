@@ -58,6 +58,7 @@ import { SubWorkOrderPage } from '@/pages/production/SubWorkOrderPage';
 import { FnWorkOrderPage } from '@/pages/production/FnWorkOrderPage';
 import { FnTechStockPage } from '@/pages/inventory/FnTechStockPage';
 import MaterialOrdersPage from '@/pages/orders/MaterialOrdersPage';
+import { AssemblyLogPage } from '@/pages/production/AssemblyLogPage';
 import ShipmentOrdersPage from '@/pages/shipment/ShipmentOrdersPage';
 import { ShipmentInputPage } from '@/pages/shipment/ShipmentInputPage';
 import ExitPassPrintPage from '@/pages/shipment/ExitPassPrintPage';
@@ -131,6 +132,7 @@ export const router = createBrowserRouter([
       { path: 'production/struct-work-orders',   element: <StructWorkOrderPage /> },
       { path: 'production/sub-work-orders',       element: <SubWorkOrderPage /> },
       { path: 'production/fn-work-orders',        element: <FnWorkOrderPage /> },
+      { path: 'production/assembly-log',          element: <AssemblyLogPage /> },
       // 재고관리
       { path: 'inventory/dashboard', element: <InventoryDashboardPage /> },
       { path: 'inventory/initialize', element: <InitialInventoryPage /> },

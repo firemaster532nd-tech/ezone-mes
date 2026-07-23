@@ -62,6 +62,8 @@ import { announcementRoutes, ensureAnnouncementTables } from './routes/announcem
 import { superadminRoutes } from './routes/superadmin.js';
 import { materialLotsRoutes } from './routes/material-lots.js';
 import { lotLineageRoutes } from './routes/lot-lineage.js';
+import googleSheetsSyncRoutes from './routes/google-sheets-sync.js';
+import assemblyLogRoutes from './routes/assembly-logs.js';
 
 
 let appInstance: any = null;
@@ -134,6 +136,8 @@ export const initApp = async () => {
   await app.register(superadminRoutes);
   await app.register(materialLotsRoutes);
   await app.register(lotLineageRoutes);
+  await app.register(googleSheetsSyncRoutes);
+  await app.register(assemblyLogRoutes);
 
 
   // Health check
