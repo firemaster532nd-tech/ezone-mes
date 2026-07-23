@@ -414,33 +414,12 @@ export function LocationManagementPage() {
               </button>
             </div>
 
-            {/* 현재 랙 셀 2개 파레트 상태 카드 */}
+            {/* 현재 랙 셀 2개 파레트 상태 카드 (왼쪽 P2 / 오른쪽 P1) */}
             <div className="grid grid-cols-2 gap-3">
-              {/* 파레트 1번 (왼쪽) */}
-              <div className={cn('p-3 rounded-xl border space-y-1.5', activeCell.pallet1.lot_number ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200')}>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-black bg-emerald-600 text-white px-2 py-0.5 rounded font-mono">P1 (왼쪽 파레트)</span>
-                  {activeCell.pallet1.lot_number && (
-                    <button onClick={() => handleClearPallet(1)} className="text-[10px] text-rose-600 font-bold hover:underline">
-                      비우기 ✕
-                    </button>
-                  )}
-                </div>
-                {activeCell.pallet1.lot_number ? (
-                  <div>
-                    <p className="font-black text-slate-900 text-xs truncate">{activeCell.pallet1.item_name}</p>
-                    <p className="text-[10px] text-slate-600 font-mono">LOT: {activeCell.pallet1.lot_number}</p>
-                    <p className="text-[10px] text-emerald-800 font-black font-mono mt-0.5">수량: {Number(activeCell.pallet1.qty||0).toLocaleString()} EA</p>
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-slate-400 py-3 text-center">P1 (왼쪽) 빈 파레트</p>
-                )}
-              </div>
-
-              {/* 파레트 2번 (오른쪽) */}
+              {/* 파레트 2번 (왼쪽) */}
               <div className={cn('p-3 rounded-xl border space-y-1.5', activeCell.pallet2.lot_number ? 'bg-indigo-50 border-indigo-300' : 'bg-slate-50 border-slate-200')}>
                 <div className="flex justify-between items-center">
-                  <span className="text-xs font-black bg-indigo-600 text-white px-2 py-0.5 rounded font-mono">P2 (오른쪽 파레트)</span>
+                  <span className="text-xs font-black bg-indigo-600 text-white px-2 py-0.5 rounded font-mono">P2 (왼쪽 파레트)</span>
                   {activeCell.pallet2.lot_number && (
                     <button onClick={() => handleClearPallet(2)} className="text-[10px] text-rose-600 font-bold hover:underline">
                       비우기 ✕
@@ -454,7 +433,28 @@ export function LocationManagementPage() {
                     <p className="text-[10px] text-indigo-900 font-black font-mono mt-0.5">수량: {Number(activeCell.pallet2.qty||0).toLocaleString()} EA</p>
                   </div>
                 ) : (
-                  <p className="text-[11px] text-slate-400 py-3 text-center">P2 (오른쪽) 빈 파레트</p>
+                  <p className="text-[11px] text-slate-400 py-3 text-center">P2 (왼쪽) 빈 파레트</p>
+                )}
+              </div>
+
+              {/* 파레트 1번 (오른쪽) */}
+              <div className={cn('p-3 rounded-xl border space-y-1.5', activeCell.pallet1.lot_number ? 'bg-emerald-50 border-emerald-300' : 'bg-slate-50 border-slate-200')}>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-black bg-emerald-600 text-white px-2 py-0.5 rounded font-mono">P1 (오른쪽 파레트)</span>
+                  {activeCell.pallet1.lot_number && (
+                    <button onClick={() => handleClearPallet(1)} className="text-[10px] text-rose-600 font-bold hover:underline">
+                      비우기 ✕
+                    </button>
+                  )}
+                </div>
+                {activeCell.pallet1.lot_number ? (
+                  <div>
+                    <p className="font-black text-slate-900 text-xs truncate">{activeCell.pallet1.item_name}</p>
+                    <p className="text-[10px] text-slate-600 font-mono">LOT: {activeCell.pallet1.lot_number}</p>
+                    <p className="text-[10px] text-emerald-800 font-black font-mono mt-0.5">수량: {Number(activeCell.pallet1.qty||0).toLocaleString()} EA</p>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-400 py-3 text-center">P1 (오른쪽) 빈 파레트</p>
                 )}
               </div>
             </div>
@@ -473,8 +473,8 @@ export function LocationManagementPage() {
                     onChange={e => setTargetSlotNo(Number(e.target.value) as 1 | 2)}
                     className="w-full border rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold bg-white"
                   >
-                    <option value={1}>P1 슬롯 (왼쪽 파레트)</option>
-                    <option value={2}>P2 슬롯 (오른쪽 파레트)</option>
+                    <option value={2}>P2 슬롯 (왼쪽 파레트)</option>
+                    <option value={1}>P1 슬롯 (오른쪽 파레트)</option>
                   </select>
                 </div>
 
