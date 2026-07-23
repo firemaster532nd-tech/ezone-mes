@@ -151,47 +151,50 @@ export function DashboardPage() {
     return <div className="flex items-center justify-center h-96 text-gray-400">로딩 중...</div>;
   }
 
-  const today = data.today;
-  const totalWo = parseInt(today.total) || 0;
-  const completedRate = totalWo > 0 ? Math.round((parseInt(today.completed) / totalWo) * 100) : 0;
+  const today = data.today || { total: '0', completed: '0', total_actual_qty: '0' };
+  const totalWo = parseInt(today.total || '0') || 0;
+  const completedRate = totalWo > 0 ? Math.round((parseInt(today.completed || '0') / totalWo) * 100) : 0;
+  const inspPassRate = data.inspection?.pass_rate ?? (data as any)?.kpi?.pass_rate ?? '100';
+  const inspTotal = data.inspection?.total ?? (data as any)?.kpi?.inspection_total ?? '0';
+  const inventoryAlertsCount = data.inventory_alerts?.length ?? (data as any)?.kpi?.inventory_alerts ?? 0;
 
   return (
     <div>
-      <PageHeader title="대시보드" description={`${data.date} 기준 생산현황`} />
+      <PageHeader title="대시보드" description={`${data.date || ''} 기준 생산현황`} />
 
       {/* ════ A: 전체 파이프라인 플로우차트 ════ */}
-      {workflow && <PipelineFlow pipeline={workflow.pipeline} />}
+      {workflow && workflow.pipeline && <PipelineFlow pipeline={workflow.pipeline} />}
 
       {/* ════ B: 수주별 진행 트래커 ════ */}
-      {workflow && workflow.orders.length > 0 && <OrderTracker orders={workflow.orders} />}
+      {workflow && workflow.orders && workflow.orders.length > 0 && <OrderTracker orders={workflow.orders} />}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <KpiCard
           icon={<ClipboardList className="text-process-mix" />}
           label="오늘 작업지시"
-          value={today.total}
-          sub={`완료 ${today.completed}건 (${completedRate}%)`}
+          value={today.total || '0'}
+          sub={`완료 ${today.completed || '0'}건 (${completedRate}%)`}
           color="blue"
         />
         <KpiCard
           icon={<Factory className="text-process-ext" />}
           label="생산실적"
-          value={`${parseFloat(today.total_actual_qty).toLocaleString()}`}
+          value={`${parseFloat(today.total_actual_qty || '0').toLocaleString()}`}
           sub="완료 수량 합계"
           color="green"
         />
         <KpiCard
           icon={<CheckCircle className="text-green-600" />}
           label="검사 합격률"
-          value={`${data.inspection.pass_rate}%`}
-          sub={`최근 30일 (${data.inspection.total}건)`}
+          value={`${inspPassRate}%`}
+          sub={`최근 30일 (${inspTotal}건)`}
           color="emerald"
         />
         <KpiCard
           icon={<AlertTriangle className="text-amber-500" />}
           label="안전재고 미달"
-          value={String(data.inventory_alerts.length)}
+          value={String(inventoryAlertsCount)}
           sub="품목 수"
           color="amber"
         />
@@ -201,10 +204,10 @@ export function DashboardPage() {
       {alerts && (
         <div className="mb-6 bg-white rounded-card border p-3">
           <div className="flex items-center gap-2 flex-wrap">
-            {alerts.failed_inspections_count === 0 &&
-             alerts.pending_approvals_count === 0 &&
-             alerts.safety_stock_alerts_count === 0 &&
-             alerts.stalled_processes_count === 0 ? (
+            {!(alerts.failed_inspections_count > 0 ||
+               alerts.pending_approvals_count > 0 ||
+               alerts.safety_stock_alerts_count > 0 ||
+               alerts.stalled_processes_count > 0) ? (
               <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-50 text-green-700 text-xs font-medium">
                 ✅ 알림 없음
               </span>

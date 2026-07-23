@@ -93,6 +93,12 @@ export async function dashboardRoutes(app: FastifyInstance) {
           pass_rate: Number(inspection.pass_rate || 100),
           inventory_alerts: inventoryAlertResult.rows.length,
         },
+        inspection: {
+          total: String(inspection.total || 0),
+          pass_count: String(inspection.pass_count || 0),
+          fail_count: String(inspection.fail_count || 0),
+          pass_rate: String(inspection.pass_rate || 100),
+        },
         by_process: woByProcessResult.rows,
         by_status: woByStatusResult.rows,
         wo_by_process: woByProcessResult.rows,
@@ -115,6 +121,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
           inspection_total: 0, inspection_pass: 0, inspection_fail: 0, pass_rate: 100,
           inventory_alerts: 0,
         },
+        inspection: { total: '0', pass_count: '0', fail_count: '0', pass_rate: '100' },
         by_process: [], by_status: [], wo_by_process: [], wo_by_status: [], inventory_alerts: [], recent_work_orders: [], recent_orders: [], weekly_production: []
       };
       return { data: fallbackPayload, ...fallbackPayload };
