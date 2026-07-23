@@ -58,7 +58,7 @@ import { returnReceiptRoutes } from './routes/return-receipts.js';
 import { shipmentReadyRoutes } from './routes/shipment-ready.js';
 import { returnRoutes } from './routes/returns.js';
 import { socketIncomingRoutes } from './routes/socket-incoming.js';
-import { announcementRoutes } from './routes/announcements.js';
+import { announcementRoutes, ensureAnnouncementTables } from './routes/announcements.js';
 import { superadminRoutes } from './routes/superadmin.js';
 import { materialLotsRoutes } from './routes/material-lots.js';
 import { lotLineageRoutes } from './routes/lot-lineage.js';
