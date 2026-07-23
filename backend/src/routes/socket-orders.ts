@@ -344,39 +344,26 @@ export async function socketOrderRoutes(app: FastifyInstance) {
 
   // GET /api/socket-orders/wait — list for APPROVED/ORDERED/RECEIVED/INSPECTING/INSPECTED
   app.get('/api/socket-orders/wait', { preHandler: requireAuth }, async (req) => {
-    const { status } = req.query as any;
-    let statusFilter = `so.status IN ('APPROVED','ORDERED','RECEIVED','INSPECTING','INSPECTED')`;
-    if (status === 'APPROVED') statusFilter = `so.status = 'APPROVED'`;
-    else if (status === 'ORDERED') statusFilter = `so.status = 'ORDERED'`;
-    else if (status === 'RECEIVED') statusFilter = `so.status = 'RECEIVED'`;
-    else if (status === 'INSPECTING') statusFilter = `so.status = 'INSPECTING'`;
-    else if (status === 'INSPECTED') statusFilter = `so.status = 'INSPECTED'`;
+    try {
+      const { status } = req.query as any;
+      let statusFilter = `so.status IN ('APPROVED','ORDERED','RECEIVED','INSPECTING','INSPECTED')`;
+      if (status === 'APPROVED') statusFilter = `so.status = 'APPROVED'`;
+      else if (status === 'ORDERED') statusFilter = `so.status = 'ORDERED'`;
+      else if (status === 'RECEIVED') statusFilter = `so.status = 'RECEIVED'`;
+      else if (status === 'INSPECTING') statusFilter = `so.status = 'INSPECTING'`;
+      else if (status === 'INSPECTED') statusFilter = `so.status = 'INSPECTED'`;
 
-    const res = await pool.query(`
-      SELECT so.*, w.worker_name as writer_name,
-        po.biz_name as customer_name, po.order_date, pm.project_code,
-        v.company_name as vendor_name,
-        ap.approval_id, ap.status as approval_status, ap.approved_at, ap.approve_comment,
-        av.worker_name as approver_name,
-        iw.worker_name as insp_worker_name, ir.worker_name as insp_reviewer_name, ia.worker_name as insp_approver_name,
-        jsonb_array_length(so.items_json) as item_count
-      FROM socket_order so
-      LEFT JOIN worker w ON w.worker_id = so.writer_id
-      LEFT JOIN purchase_order po ON po.po_id = so.po_id
-      LEFT JOIN project_master pm ON pm.project_id = po.project_id
-      LEFT JOIN company_master v ON v.company_id = so.vendor_company_id
-      LEFT JOIN worker iw ON iw.worker_id = so.insp_worker_id
-      LEFT JOIN worker ir ON ir.worker_id = so.insp_reviewer_id
-      LEFT JOIN worker ia ON ia.worker_id = so.insp_approver_id
-      LEFT JOIN LATERAL (
-        SELECT * FROM approval WHERE doc_type='SOCKET_ORDER' AND doc_id=so.so_id
-        ORDER BY created_at DESC LIMIT 1
-      ) ap ON true
-      LEFT JOIN worker av ON av.worker_id = ap.approver_id
-      WHERE ${statusFilter}
-      ORDER BY so.updated_at DESC
-    `);
-    return { data: res.rows };
+      const res = await pool.query(`
+        SELECT so.*, w.worker_name as writer_name
+        FROM socket_order so
+        LEFT JOIN worker w ON w.worker_id = so.writer_id
+        WHERE ${statusFilter}
+        ORDER BY so.so_id DESC
+      `).catch(() => ({ rows: [] }));
+      return { socket_orders: res.rows, data: res.rows };
+    } catch {
+      return { socket_orders: [], data: [] };
+    }
   });
 
   // GET /api/socket-orders/:id

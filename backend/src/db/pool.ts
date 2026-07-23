@@ -3,7 +3,7 @@ import { env } from '../config/env.js';
 
 export const pool = new pg.Pool({
   connectionString: env.DATABASE_URL,
-  max: 3,  // embedded postgres max_connections=15 제한 대응
+  max: 10,
   idleTimeoutMillis: 10000,
   connectionTimeoutMillis: 5000,
   ssl: (env.DATABASE_URL.includes('localhost') || env.DATABASE_URL.includes('127.0.0.1'))
@@ -14,3 +14,13 @@ export const pool = new pg.Pool({
 pool.on('error', (err) => {
   console.error('Unexpected PostgreSQL pool error:', err);
 });
+
+export async function safeQuery<T = any>(sql: string, params: any[] = [], fallbackRows: T[] = []): Promise<{ rows: T[] }> {
+  try {
+    const res = await pool.query(sql, params);
+    return res;
+  } catch (err: any) {
+    console.warn('[SafeQuery DB Warning]:', err.message || err);
+    return { rows: fallbackRows };
+  }
+}

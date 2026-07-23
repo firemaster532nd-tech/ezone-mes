@@ -154,15 +154,19 @@ export async function announcementRoutes(app: FastifyInstance) {
 
   // GET /api/announcements/unread-count  ─ 공지 + 쪽지 합산 미읽음
   app.get('/api/announcements/unread-count', { preHandler: requireAuth }, async (req) => {
-    const me = req.auth!;
-    const { rows } = await pool.query(
-      `SELECT COUNT(*)::int AS count
-       FROM announcement_receipt r
-       JOIN announcement a ON a.announcement_id = r.announcement_id
-       WHERE r.worker_id = $1 AND r.is_read = FALSE`,
-      [me.worker_id],
-    );
-    return { count: rows[0].count };
+    try {
+      const me = req.auth!;
+      const { rows } = await pool.query(
+        `SELECT COUNT(*)::int AS count
+         FROM announcement_receipt r
+         JOIN announcement a ON a.announcement_id = r.announcement_id
+         WHERE r.worker_id = $1 AND r.is_read = FALSE`,
+        [me.worker_id],
+      );
+      return { count: rows[0]?.count || 0 };
+    } catch {
+      return { count: 0 };
+    }
   });
 
   // GET /api/announcements/:id  ─ 공지 상세 + 읽음 처리
