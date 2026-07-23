@@ -73,7 +73,15 @@ export const initApp = async () => {
   
   const app = Fastify({ logger: true });
   
-  await app.register(cors, { origin: env.CORS_ORIGIN });
+  await app.register(cors, {
+    origin: (origin, cb) => {
+      // 모든 origin (이지원.kr, 퓨니코드 xn--sp5btl20d.kr, ezone-mes.vercel.app, localhost 등) 100% 허용
+      cb(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  });
   await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB limit
 
   await app.register(certificationRoutes);
