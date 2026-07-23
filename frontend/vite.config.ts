@@ -13,6 +13,13 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        entryFileNames: `assets/[name].v260723_${Date.now()}.js`,
+        chunkFileNames: `assets/[name].v260723_${Date.now()}.js`,
+        assetFileNames: `assets/[name].v260723_${Date.now()}[extname]`,
+      },
+    },
   },
   server: {
     port: 5173,
