@@ -6,7 +6,9 @@ export const pool = new pg.Pool({
   max: 3,  // embedded postgres max_connections=15 제한 대응
   idleTimeoutMillis: 10000,
   connectionTimeoutMillis: 5000,
-  ssl: env.DATABASE_URL.includes('supabase') ? { rejectUnauthorized: false } : undefined,
+  ssl: (env.DATABASE_URL.includes('localhost') || env.DATABASE_URL.includes('127.0.0.1'))
+    ? undefined
+    : { rejectUnauthorized: false },
 });
 
 pool.on('error', (err) => {
