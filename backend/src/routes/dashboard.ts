@@ -164,10 +164,18 @@ export async function dashboardRoutes(app: FastifyInstance) {
       data: {
         summary: {
           sales_orders: [], purchase_requests: [],
-          inspection: { total: 0, pass_count: 0, fail_count: 0, pending_count: 0 },
+          inspection: { total: '0', pass_count: '0', fail_count: '0', pending_count: '0' },
           work_orders: [], process_log: [], approval: []
         },
-        orders: [], pipeline: { sales_order: {}, purchase_request: {}, work_order: [], shipment: {}, approval: {} }
+        orders: [],
+        pipeline: {
+          sales_order: {},
+          purchase_request: {},
+          inspection: { total: '0', pass_count: '0', fail_count: '0', pending_count: '0' },
+          work_order: [],
+          shipment: {},
+          approval: {}
+        }
       },
       workflow: []
     };

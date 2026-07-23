@@ -428,23 +428,29 @@ function KpiCard({ icon, label, value, sub, color }: {
 function PipelineFlow({ pipeline }: { pipeline: WorkflowData['pipeline'] }) {
   const navigate = useNavigate();
 
-  const sumValues = (obj: Record<string, number>) => Object.values(obj).reduce((s, v) => s + v, 0);
+  const sales_order = pipeline?.sales_order || {};
+  const purchase_request = pipeline?.purchase_request || {};
+  const inspection = pipeline?.inspection || { total: '0', pass_count: '0', fail_count: '0', pending_count: '0' };
+  const work_order = pipeline?.work_order || [];
+  const shipment = pipeline?.shipment || {};
+
+  const sumValues = (obj: Record<string, number>) => Object.values(obj || {}).reduce((s, v) => s + (v || 0), 0);
 
   // 공정별 작업지시 집계
   const woByProcess = (code: string) => {
-    const items = pipeline.work_order.filter(w => w.process_code === code);
-    const total = items.reduce((s, w) => s + w.count, 0);
-    const done = items.filter(w => w.status === 'COMPLETED').reduce((s, w) => s + w.count, 0);
-    const active = items.filter(w => w.status === 'IN_PROGRESS').reduce((s, w) => s + w.count, 0);
+    const items = work_order.filter(w => w?.process_code === code);
+    const total = items.reduce((s, w) => s + (w?.count || 0), 0);
+    const done = items.filter(w => w?.status === 'COMPLETED').reduce((s, w) => s + (w?.count || 0), 0);
+    const active = items.filter(w => w?.status === 'IN_PROGRESS').reduce((s, w) => s + (w?.count || 0), 0);
     return { total, done, active };
   };
 
-  const soTotal = sumValues(pipeline.sales_order);
-  const prTotal = sumValues(pipeline.purchase_request);
-  const inspTotal = parseInt(pipeline.inspection.total) || 0;
-  const inspPass = parseInt(pipeline.inspection.pass_count) || 0;
-  const inspFail = parseInt(pipeline.inspection.fail_count) || 0;
-  const shipTotal = sumValues(pipeline.shipment);
+  const soTotal = sumValues(sales_order);
+  const prTotal = sumValues(purchase_request);
+  const inspTotal = parseInt(inspection.total || '0') || 0;
+  const inspPass = parseInt(inspection.pass_count || '0') || 0;
+  const inspFail = parseInt(inspection.fail_count || '0') || 0;
+  const shipTotal = sumValues(shipment);
   const mix = woByProcess('MIX');
   const ext = woByProcess('EXT');
   const cut = woByProcess('CUT');
