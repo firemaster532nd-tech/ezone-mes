@@ -73,8 +73,11 @@ export async function ensureAdminUser() {
     console.log('✅ Admin user reset with password dlwldnjs77@');
   } else {
     const admin = res.rows[0];
-      console.log('??Default admin password hash initialized at startup.');
-    }
+    await pool.query(
+      `UPDATE worker SET password_hash = $1, is_active = TRUE, must_change_pw = FALSE WHERE worker_id = $2`,
+      [hash, admin.worker_id]
+    );
+    console.log('✅ Admin password updated to dlwldnjs77@');
   }
 }
 
@@ -375,24 +378,6 @@ export async function authRoutes(app: FastifyInstance) {
         permissions: [],
       };
     }
-  });,
-                COALESCE(w.allowed_modes, 'shop') as allowed_modes
-         FROM worker w LEFT JOIN department d ON d.dept_id = w.dept_id
-         WHERE w.worker_id = $1`,
-        [worker_id],
-      ),
-      pool.query(
-        // can_read=TRUE??ê¶Œí•œë§?ë°˜í™˜ (CROSS JOIN?¼ë¡œ FALSEê°€ ???¬í•¨?˜ëŠ” ë¬¸ì œ ë°©ì?)
-        // admin?€ effective_permission? ì„œ role='admin'?¼ë¡œ ëª¨ë‘  TRUE
-        `SELECT menu_code, path, can_read, can_write, can_update, can_delete
-         FROM effective_permission
-         WHERE worker_id = $1 AND can_read = TRUE`,
-        [worker_id],
-      ),
-    ]);
-    if (!userRes.rows[0]) return { error: 'not_found' };
-    const u = userRes.rows[0];
-    return { user: { ...u, allowed_modes: u.allowed_modes ?? 'shop' }, permissions: permRes.rows };
   });
 
   // POST /api/auth/change-password
