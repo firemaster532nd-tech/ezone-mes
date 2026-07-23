@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import {
   Upload, FileSpreadsheet, X, ChevronDown, ChevronRight,
   Building2, User, MapPin, Calendar, Package, Layers,
-  CheckCircle2, Eye, Trash2, ExternalLink, Download, Wrench,
+  CheckCircle, Eye, Trash2, ExternalLink, Download, Wrench,
   FolderOpen, PlusCircle, MinusCircle, ClipboardList, RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -386,7 +386,7 @@ function PreviewModal({
               {uploading ? (
                 <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />등록 중...</>
               ) : (
-                <><CheckCircle2 className="h-4 w-4" />{selectedProjectId ? '등록 확정' : '프로젝트 선택 필수'}</>
+                <><CheckCircle className="h-4 w-4" />{selectedProjectId ? '등록 확정' : '프로젝트 선택 필수'}</>
               )}
             </button>
           </div>
@@ -1283,7 +1283,7 @@ function ManualPoModal({ onClose, onSaved, projects }: {
 
               {/* 이상 없을 경우 등록 안내 */}
               <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
                 <p className="text-sm text-green-800">
                   내용을 확인하셨으면 <strong>발주서 등록 확정</strong> 버튼을 눌러주세요.
                   저장 후 소켓발주서 탭에서 결재함 제출이 가능합니다.
@@ -1332,7 +1332,7 @@ function ManualPoModal({ onClose, onSaved, projects }: {
                 {saving ? (
                   <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />저장 중...</>
                 ) : (
-                  <><CheckCircle2 className="h-4 w-4" />발주서 등록 확정</>
+                  <><CheckCircle className="h-4 w-4" />발주서 등록 확정</>
                 )}
               </button>
             )}

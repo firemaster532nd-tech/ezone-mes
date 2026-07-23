@@ -4,7 +4,7 @@ import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
-  Package, CheckCircle2, Clock, Download, Truck,
+  Package, CheckCircle, Clock, Download, Truck,
   RefreshCw, ChevronDown, ChevronRight, FileText,
   ArrowRight, ClipboardCheck, AlertCircle, Mail,
   X, Save, Eye, EyeOff,
@@ -70,7 +70,7 @@ const STATUS_CFG = {
     label: '입고완료',
     color: 'text-green-700 bg-green-50 border-green-200',
     dot: 'bg-green-500',
-    icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+    icon: <CheckCircle className="h-3.5 w-3.5" />,
   },
 };
 
@@ -1134,7 +1134,7 @@ export function SocketOrderWaitPage() {
           {[
             { label: '발주대기', count: approvedCount, icon: <AlertCircle className="h-4 w-4" />, color: 'bg-amber-500/20 text-amber-200 border-amber-400/30' },
             { label: '발주완료', count: orderedCount,  icon: <Package className="h-4 w-4" />,     color: 'bg-blue-500/20 text-blue-200 border-blue-400/30' },
-            { label: '입고완료', count: receivedCount, icon: <CheckCircle2 className="h-4 w-4" />, color: 'bg-green-500/20 text-green-200 border-green-400/30' },
+            { label: '입고완료', count: receivedCount, icon: <CheckCircle className="h-4 w-4" />, color: 'bg-green-500/20 text-green-200 border-green-400/30' },
           ].map(({ label, count, icon, color }) => (
             <div key={label} className={cn('rounded-xl border p-3 flex items-center gap-3', color)}>
               {icon}

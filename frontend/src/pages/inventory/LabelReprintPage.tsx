@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
   Scan, Printer, Search, RefreshCw, X, Package,
-  Calendar, Tag, Barcode, AlertTriangle, CheckCircle2
+  Calendar, Tag, Barcode, AlertTriangle, CheckCircle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';

@@ -4,7 +4,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { 
   FileSpreadsheet, Upload, Link2, AlertTriangle, 
-  CheckCircle2, RefreshCw, ChevronRight, HelpCircle, Save,
+  CheckCircle, RefreshCw, ChevronRight, HelpCircle, Save,
   Layers, Package, Check, Database
 } from 'lucide-react';
 import { toast } from 'sonner';

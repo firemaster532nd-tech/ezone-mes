@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import {
-  ClipboardList, Search, Download, CheckCircle2, XCircle,
+  ClipboardList, Search, Download, CheckCircle, XCircle,
   RefreshCw, LogIn, Shield, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -139,7 +139,7 @@ export function LoginLogsPage() {
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
           <p className="text-xs text-emerald-600 mb-1 flex items-center gap-1">
-            <CheckCircle2 className="h-3 w-3" /> 성공
+            <CheckCircle className="h-3 w-3" /> 성공
           </p>
           <p className="text-2xl font-bold text-emerald-600">{successCount.toLocaleString()}</p>
         </div>
@@ -251,7 +251,7 @@ export function LoginLogsPage() {
                   <td className="px-4 py-3 text-center">
                     {l.success ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 border border-emerald-100">
-                        <CheckCircle2 className="h-3 w-3" /> 성공
+                        <CheckCircle className="h-3 w-3" /> 성공
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-600 border border-rose-100">

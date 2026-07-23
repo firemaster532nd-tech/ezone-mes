@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { Plus, RotateCcw, Package, CheckCircle2, Clock, RefreshCw, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, RotateCcw, Package, CheckCircle, Clock, RefreshCw, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -81,7 +81,7 @@ function RRCard({ rr, onRefresh }: { rr: ReturnReceipt; onRefresh: () => void })
         <div className={cn('flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center',
           rr.status === 'COMPLETED' ? 'bg-green-100' : 'bg-amber-100')}>
           {rr.status === 'COMPLETED'
-            ? <CheckCircle2 className="h-5 w-5 text-green-600" />
+            ? <CheckCircle className="h-5 w-5 text-green-600" />
             : <RotateCcw className="h-5 w-5 text-amber-600" />
           }
         </div>
@@ -412,7 +412,7 @@ export default function ReturnReceiptPage() {
         <div className="grid grid-cols-3 gap-4">
           {[
             { label: '접수중',   count: pendingCount,   color: 'text-amber-700',  bg: 'bg-amber-50',  border: 'border-amber-200',  icon: <Clock className="h-5 w-5 text-amber-600" /> },
-            { label: '처리완료', count: completedCount, color: 'text-green-700',  bg: 'bg-green-50',  border: 'border-green-200',  icon: <CheckCircle2 className="h-5 w-5 text-green-600" /> },
+            { label: '처리완료', count: completedCount, color: 'text-green-700',  bg: 'bg-green-50',  border: 'border-green-200',  icon: <CheckCircle className="h-5 w-5 text-green-600" /> },
             { label: '전체',     count: list.length,   color: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-200', icon: <RotateCcw className="h-5 w-5 text-purple-600" /> },
           ].map(({ label, count, color, bg, border, icon }) => (
             <div key={label} className={cn('rounded-2xl border p-4 flex items-center gap-3', bg, border)}>

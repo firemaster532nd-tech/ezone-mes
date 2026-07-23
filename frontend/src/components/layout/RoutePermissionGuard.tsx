@@ -3,7 +3,7 @@ import { useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import { ShieldX, SendHorizonal, Loader2, CheckCircle2, Lock } from 'lucide-react';
+import { ShieldX, SendHorizonal, Loader2, CheckCircle, Lock } from 'lucide-react';
 
 // 권한 체크 없이 항상 허용할 경로 prefix
 const ALWAYS_ALLOWED = [
@@ -102,7 +102,7 @@ function NoPermissionScreen({
         </button>
       ) : (
         <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-xl px-5 py-3 text-sm font-semibold">
-          <CheckCircle2 className="h-4 w-4" />
+          <CheckCircle className="h-4 w-4" />
           요청이 전송되었습니다. 관리자 승인을 기다려 주세요.
         </div>
       )}

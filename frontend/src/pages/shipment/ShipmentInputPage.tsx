@@ -4,7 +4,7 @@ import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
   Search, Truck, Plus, Trash2, Calendar, Building2, MapPin,
-  Car, User, Phone, FileText, CheckCircle2, ChevronRight, AlertCircle, RefreshCw
+  Car, User, Phone, FileText, CheckCircle, ChevronRight, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';

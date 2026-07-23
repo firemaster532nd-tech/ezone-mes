@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
   Plus, Download, RefreshCw, X, ChevronDown, ChevronUp,
-  AlertTriangle, CheckCircle2, Clock, Package,
+  AlertTriangle, CheckCircle, Clock, Package,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -153,7 +153,7 @@ function DetailPanel({
                   : 'bg-amber-100 text-amber-700 border-amber-200',
               )}
             >
-              {row.status === 'SHIPPED' ? <CheckCircle2 className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+              {row.status === 'SHIPPED' ? <CheckCircle className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
               {row.status === 'SHIPPED' ? '출하완료' : '대기중'}
             </span>
           </div>
@@ -788,7 +788,7 @@ export function ShipmentReadyPage() {
             {
               label: '재고확보 현장',
               value: availableSites,
-              icon: <CheckCircle2 className="h-4 w-4 text-green-500" />,
+              icon: <CheckCircle className="h-4 w-4 text-green-500" />,
               color: 'text-green-700',
               bg: 'bg-green-50',
               border: 'border-green-200',
@@ -973,7 +973,7 @@ export function ShipmentReadyPage() {
                           )}
                         >
                           {row.status === 'SHIPPED' ? (
-                            <CheckCircle2 className="h-2.5 w-2.5" />
+                            <CheckCircle className="h-2.5 w-2.5" />
                           ) : (
                             <Clock className="h-2.5 w-2.5" />
                           )}

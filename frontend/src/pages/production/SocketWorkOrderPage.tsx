@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
 import DetailSwoModal from './DetailSwoModal';
 import {
-  Plus, X, ChevronRight, ChevronDown, AlertTriangle, CheckCircle2,
+  Plus, X, ChevronRight, ChevronDown, AlertTriangle, CheckCircle,
   ClipboardList, Building2, Calendar, User, MapPin, FileText,
   AlertCircle, Trash2, Pencil, Play, CheckCheck,
 } from 'lucide-react';
@@ -526,7 +526,7 @@ function CreateSwoModal({ onClose, onCreated }: { onClose: () => void; onCreated
               )}
               {checkResult.incomplete_count === 0 && checkResult.duplicate_count === 0 && (
                 <div className="flex-1 bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                  <CheckCircle className="h-4 w-4 text-green-600" />
                   <p className="text-xs text-green-800 font-medium">발주 내용 정상 — 이상 없음</p>
                 </div>
               )}

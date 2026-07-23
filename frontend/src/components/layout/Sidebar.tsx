@@ -4,7 +4,7 @@ import {
   Truck, Settings, ChevronLeft, ChevronRight, Factory, Database,
   Wrench, FlaskConical, Scissors, Box, Layers,
   ArrowRightLeft, Monitor, HardHat, Boxes, PackageCheck,
-  ChevronDown, Hammer, Inbox, FileText, ShoppingCart, Megaphone, ShieldAlert, CheckCircle2,
+  ChevronDown, Hammer, Inbox, FileText, ShoppingCart, Megaphone, ShieldAlert, CheckCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
@@ -103,7 +103,7 @@ const shopNavItems: NavSection[] = [
   // ── 통합 인수검사 관리 ──
   {
     label: '인수검사 관리',
-    icon: CheckCircle2,
+    icon: CheckCircle,
     children: [
       { label: '🧪 원재료 인수검사 (D101~D104)', path: '/quality/incoming/raw' },
       { label: '📦 부자재 인수검사 (FN테크 연동)', path: '/quality/incoming/sub' },

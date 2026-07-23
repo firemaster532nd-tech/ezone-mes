@@ -4,7 +4,7 @@ import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
-  ClipboardCheck, Tag, CheckCircle2, XCircle, Clock,
+  ClipboardCheck, Tag, CheckCircle, XCircle, Clock,
   ChevronLeft, Printer, RefreshCw, PackageCheck,
   AlertCircle, Layers,
 } from 'lucide-react';

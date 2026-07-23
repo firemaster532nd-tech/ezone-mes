@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
-  Scan, MapPin, AlertTriangle, CheckCircle2, Package,
+  Scan, MapPin, AlertTriangle, CheckCircle, Package,
   RefreshCw, X, ArrowRight, ShieldAlert, Clock
 } from 'lucide-react';
 import { cn } from '@/lib/utils';

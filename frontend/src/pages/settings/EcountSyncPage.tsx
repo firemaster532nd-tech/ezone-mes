@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
-  Settings, RefreshCw, CheckCircle2, XCircle, AlertTriangle,
+  Settings, RefreshCw, CheckCircle, XCircle, AlertTriangle,
   Package, Building2, BarChart3, ShoppingCart, TrendingUp,
   ChevronDown, ChevronUp, Loader2, Eye, EyeOff, Clock,
   Plug, Zap,
@@ -157,7 +157,7 @@ export function EcountSyncPage() {
       )}>
         {isConnected ? (
           <>
-            <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+            <CheckCircle className="h-5 w-5 text-green-600 shrink-0" />
             <div>
               <p className="text-sm font-semibold text-green-800">이카운트 연동 설정 완료</p>
               <p className="text-xs text-green-600 mt-0.5">
@@ -397,7 +397,7 @@ function ConfigForm({ onSaved }: { onSaved: () => void }) {
           testResult.ok ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-red-50 border border-red-200 text-red-800',
         )}>
           {testResult.ok
-            ? <CheckCircle2 className="h-4 w-4 shrink-0" />
+            ? <CheckCircle className="h-4 w-4 shrink-0" />
             : <XCircle className="h-4 w-4 shrink-0" />}
           {testResult.message}
         </div>
@@ -466,7 +466,7 @@ function LogTable({ logs, onRefresh }: { logs: SyncLog[]; onRefresh: () => void 
                 <td className="px-3 py-2 text-center font-mono">{log.synced_count.toLocaleString()}</td>
                 <td className="px-3 py-2 text-center">
                   {log.status === 'success'
-                    ? <span className="inline-flex items-center gap-1 text-green-700 bg-green-100 px-2 py-0.5 rounded-full text-[10px]"><CheckCircle2 className="h-2.5 w-2.5" />성공</span>
+                    ? <span className="inline-flex items-center gap-1 text-green-700 bg-green-100 px-2 py-0.5 rounded-full text-[10px]"><CheckCircle className="h-2.5 w-2.5" />성공</span>
                     : <span className="inline-flex items-center gap-1 text-red-700 bg-red-100 px-2 py-0.5 rounded-full text-[10px]"><XCircle className="h-2.5 w-2.5" />실패</span>}
                 </td>
                 <td className="px-3 py-2 text-red-500 max-w-[200px] truncate">{log.error_msg || '-'}</td>

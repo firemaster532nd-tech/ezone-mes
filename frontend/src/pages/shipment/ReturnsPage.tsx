@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
-  RotateCcw, RefreshCw, Search, CheckCircle2, Clock,
+  RotateCcw, RefreshCw, Search, CheckCircle, Clock,
   Trash2, ChevronDown, ChevronRight, Package, AlertTriangle,
   Plus, ArrowRight,
 } from 'lucide-react';
@@ -153,7 +153,7 @@ function RRCard({ rr, onRefresh }: { rr: ReturnReceipt; onRefresh: () => void })
           rr.status === 'COMPLETED' ? 'bg-emerald-100' : 'bg-violet-100',
         )}>
           {rr.status === 'COMPLETED'
-            ? <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            ? <CheckCircle className="h-5 w-5 text-emerald-600" />
             : <RotateCcw className="h-5 w-5 text-violet-600" />
           }
         </div>
@@ -488,7 +488,7 @@ export default function ReturnsPage() {
             {
               label: '처리완료', count: completedCount,
               color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200',
-              icon: <CheckCircle2 className="h-5 w-5 text-emerald-600" />,
+              icon: <CheckCircle className="h-5 w-5 text-emerald-600" />,
             },
             {
               label: '전체', count: rrList.length,
@@ -603,7 +603,7 @@ export default function ReturnsPage() {
                   </h3>
                   {returnLines.length > 0 && (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-violet-100 text-violet-700 text-xs font-semibold rounded-lg">
-                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      <CheckCircle className="h-3.5 w-3.5" />
                       {returnLines.length}건 선택됨
                     </span>
                   )}
@@ -841,7 +841,7 @@ export default function ReturnsPage() {
                                 : 'bg-red-100 text-red-700',
                             )}>
                               {line.return_type === 'REUSE'
-                                ? <><CheckCircle2 className="h-2.5 w-2.5" /> 재입고 — 새 LOT 생성 (RTN날짜-원래LOT번호)</>
+                                ? <><CheckCircle className="h-2.5 w-2.5" /> 재입고 — 새 LOT 생성 (RTN날짜-원래LOT번호)</>
                                 : <><AlertTriangle className="h-2.5 w-2.5" /> 폐기 — OUT 트랜잭션 처리</>
                               }
                             </span>

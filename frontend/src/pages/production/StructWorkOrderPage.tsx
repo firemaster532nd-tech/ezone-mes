@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 import {
-  Plus, X, ChevronRight, AlertTriangle, CheckCircle2,
+  Plus, X, ChevronRight, AlertTriangle, CheckCircle,
   ClipboardList, Calendar, User, Play, CheckCheck,
   Trash2, Pencil, Loader2, AlertCircle, RefreshCw,
   Package, Info,
@@ -1296,7 +1296,7 @@ function DetailModal({
                   onClick={handleComplete}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-100 text-green-700 hover:bg-green-200 rounded-lg transition-colors"
                 >
-                  <CheckCircle2 className="h-3.5 w-3.5" />작업 완료 (재고 차감)
+                  <CheckCircle className="h-3.5 w-3.5" />작업 완료 (재고 차감)
                 </button>
               )}
             </div>

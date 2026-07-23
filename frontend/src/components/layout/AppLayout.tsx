@@ -8,7 +8,7 @@ import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { 
   LogOut, User, KeyRound, Lock, ShieldAlert, 
-  ChevronDown, CheckCircle2, Eye, EyeOff, X, Menu
+  ChevronDown, CheckCircle, Eye, EyeOff, X, Menu
 } from 'lucide-react';
 import { toast } from 'sonner';
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
   Download, Upload, AlertTriangle, Database, RefreshCw,
-  Trash2, Shield, HardDrive, Lock, CheckCircle2, XCircle,
+  Trash2, Shield, HardDrive, Lock, CheckCircle, XCircle,
   RotateCcw, Eye, EyeOff, ChevronDown, ChevronRight, ShieldAlert,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
@@ -413,7 +413,7 @@ export function BackupPage() {
       {importResult && (
         <div className="mb-6 bg-white rounded-card border p-6">
           <h3 className="text-shop-lg font-bold mb-4 flex items-center gap-2">
-            <CheckCircle2 size={18} className="text-green-600" /> 복원 완료
+            <CheckCircle size={18} className="text-green-600" /> 복원 완료
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-shop-sm">
@@ -643,7 +643,7 @@ export function BackupPage() {
         {resetResult && (
           <div className="mt-4 border rounded-lg p-4 bg-green-50 border-green-200">
             <h3 className="text-shop-sm font-bold text-green-800 mb-3 flex items-center gap-2">
-              <CheckCircle2 size={16} /> 초기화 완료
+              <CheckCircle size={16} /> 초기화 완료
             </h3>
             <p className="text-xs text-green-700 mb-3">
               총 <span className="font-bold">{resetResult.total_deleted.toLocaleString()}건</span> 삭제됨

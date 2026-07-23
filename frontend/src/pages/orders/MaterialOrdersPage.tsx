@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import {
-  Package, Truck, CheckCircle2, Clock, AlertCircle,
+  Package, Truck, CheckCircle, Clock, AlertCircle,
   ChevronDown, ChevronRight, FlaskConical, Search,
   ArrowRight, RefreshCw, FileText, ExternalLink
 } from 'lucide-react';
@@ -61,7 +61,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
   PENDING:    { label: '대기중',   color: 'text-amber-700',  bg: 'bg-amber-50  border-amber-200',  icon: <Clock    className="h-3 w-3" /> },
   INSPECTING: { label: '검사중',   color: 'text-blue-700',   bg: 'bg-blue-50   border-blue-200',   icon: <FlaskConical className="h-3 w-3" /> },
   PARTIAL:    { label: '부분입고', color: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-200', icon: <Package  className="h-3 w-3" /> },
-  RECEIVED:   { label: '입고완료', color: 'text-green-700',  bg: 'bg-green-50  border-green-200',  icon: <CheckCircle2 className="h-3 w-3" /> },
+  RECEIVED:   { label: '입고완료', color: 'text-green-700',  bg: 'bg-green-50  border-green-200',  icon: <CheckCircle className="h-3 w-3" /> },
   REJECTED:   { label: '불합격',   color: 'text-red-700',    bg: 'bg-red-50    border-red-200',    icon: <AlertCircle  className="h-3 w-3" /> },
 };
 
@@ -237,7 +237,7 @@ function PrCard({ pr, onRefresh }: { pr: PR; onRefresh: () => void }) {
             pr.status === 'RECEIVED' ? 'bg-green-100' : pr.status === 'PARTIAL' ? 'bg-indigo-100' : 'bg-blue-100'
           )}>
             {pr.status === 'RECEIVED'
-              ? <CheckCircle2 className="h-5 w-5 text-green-600" />
+              ? <CheckCircle className="h-5 w-5 text-green-600" />
               : pr.status === 'PARTIAL'
               ? <Package className="h-5 w-5 text-indigo-600" />
               : <Truck className="h-5 w-5 text-blue-600" />
@@ -365,7 +365,7 @@ export default function MaterialOrdersPage() {
           {[
             { label: '주문중', count: orderedCount,  icon: <Truck className="h-5 w-5 text-blue-600" />,    bg: 'bg-blue-50',   border: 'border-blue-200',   text: 'text-blue-700' },
             { label: '부분입고', count: partialCount, icon: <Package className="h-5 w-5 text-indigo-600" />,  bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700' },
-            { label: '입고완료', count: receivedCount, icon: <CheckCircle2 className="h-5 w-5 text-green-600" />, bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-700' },
+            { label: '입고완료', count: receivedCount, icon: <CheckCircle className="h-5 w-5 text-green-600" />, bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-700' },
           ].map(({ label, count, icon, bg, border, text }) => (
             <div key={label} className={cn('rounded-2xl border p-4 flex items-center gap-3', bg, border)}>
               <div className="p-2 bg-white rounded-xl shadow-sm">{icon}</div>

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import {
-  ShieldCheck, ShieldX, Clock, CheckCircle2, XCircle,
+  ShieldCheck, ShieldX, Clock, CheckCircle, XCircle,
   Loader2, User, Calendar, MessageSquare, RefreshCw
 } from 'lucide-react';
 
@@ -164,7 +164,7 @@ export function PermissionRequestsPanel({ onCountChange }: Props) {
                       >
                         {approving === r.request_id
                           ? <Loader2 className="h-3 w-3 animate-spin" />
-                          : <CheckCircle2 className="h-3 w-3" />
+                          : <CheckCircle className="h-3 w-3" />
                         }
                         승인
                       </button>
@@ -184,7 +184,7 @@ export function PermissionRequestsPanel({ onCountChange }: Props) {
                         : 'bg-red-100 text-red-600'
                     }`}>
                       {r.status === 'APPROVED'
-                        ? <><CheckCircle2 className="h-3 w-3" />승인됨</>
+                        ? <><CheckCircle className="h-3 w-3" />승인됨</>
                         : <><XCircle className="h-3 w-3" />거절됨</>
                       }
                     </span>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { RefreshCw, AlertTriangle, CheckCircle2, Package } from 'lucide-react';
+import { RefreshCw, AlertTriangle, CheckCircle, Package } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -97,7 +97,7 @@ export default function ShipmentPendingPage() {
         <div className="grid grid-cols-3 gap-4">
           {[
             { label: '미출하', count: pendingCount, color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200', icon: <AlertTriangle className="h-5 w-5 text-red-600" /> },
-            { label: '출하완료', count: doneCount, color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200', icon: <CheckCircle2 className="h-5 w-5 text-green-600" /> },
+            { label: '출하완료', count: doneCount, color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200', icon: <CheckCircle className="h-5 w-5 text-green-600" /> },
             { label: '전체 발주', count: list.length, color: 'text-blue-700', bg: 'bg-blue-50', border: 'border-blue-200', icon: <Package className="h-5 w-5 text-blue-600" /> },
           ].map(({ label, count, color, bg, border, icon }) => (
             <div key={label} className={cn('rounded-2xl border p-4 flex items-center gap-3', bg, border)}>
@@ -131,7 +131,7 @@ export default function ShipmentPendingPage() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-gray-400">
-            <CheckCircle2 className="h-16 w-16 mb-4 text-gray-300" />
+            <CheckCircle className="h-16 w-16 mb-4 text-gray-300" />
             <p className="text-base font-semibold">
               {filter === 'PENDING' ? '모든 발주서의 출하가 완료되었습니다!' : '데이터가 없습니다'}
             </p>
@@ -149,7 +149,7 @@ export default function ShipmentPendingPage() {
                     <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center',
                       isComplete ? 'bg-green-100' : 'bg-red-100')}>
                       {isComplete
-                        ? <CheckCircle2 className="h-5 w-5 text-green-600" />
+                        ? <CheckCircle className="h-5 w-5 text-green-600" />
                         : <AlertTriangle className="h-5 w-5 text-red-600" />
                       }
                     </div>

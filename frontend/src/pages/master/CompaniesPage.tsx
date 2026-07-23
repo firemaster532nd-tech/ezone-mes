@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
   Building2, Search, Plus, X, Save, 
-  ToggleLeft, ToggleRight, FileSpreadsheet, CheckCircle2,
+  ToggleLeft, ToggleRight, FileSpreadsheet, CheckCircle,
   HelpCircle, MapPin, Globe, CreditCard, ChevronRight
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -418,7 +418,7 @@ export function CompaniesPage() {
                             : 'bg-red-50 text-red-700 hover:bg-red-100'
                         }`}
                       >
-                        {company.is_active ? <CheckCircle2 className="h-3.5 w-3.5 text-blue-600" /> : <X className="h-3.5 w-3.5 text-red-600" />}
+                        {company.is_active ? <CheckCircle className="h-3.5 w-3.5 text-blue-600" /> : <X className="h-3.5 w-3.5 text-red-600" />}
                         {company.is_active ? 'YES' : 'NO'}
                       </button>
                     </td>

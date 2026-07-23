@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
   Plus, Truck, FileText, Printer, Trash2, RefreshCw,
-  Search, CheckCircle2, Clock, XCircle, ChevronDown, ChevronRight,
+  Search, CheckCircle, Clock, XCircle, ChevronDown, ChevronRight,
   Building2, MapPin, Car, User, AlertTriangle, Package, RotateCcw,
   Hash, X as XIcon, Filter
 } from 'lucide-react';
@@ -66,7 +66,7 @@ interface ShipmentItem {
 
 const STATUS_CONFIG = {
   DRAFT:   { label: '작성중',   color: 'text-amber-700 bg-amber-100 border-amber-200',  icon: <Clock className="h-3 w-3" /> },
-  SHIPPED: { label: '출하완료', color: 'text-green-700 bg-green-100 border-green-200', icon: <CheckCircle2 className="h-3 w-3" /> },
+  SHIPPED: { label: '출하완료', color: 'text-green-700 bg-green-100 border-green-200', icon: <CheckCircle className="h-3 w-3" /> },
   CANCELLED: { label: '취소',   color: 'text-red-700 bg-red-100 border-red-200',       icon: <XCircle className="h-3 w-3" /> },
 };
 
@@ -924,7 +924,7 @@ export default function ShipmentOrdersPage() {
         <div className="grid grid-cols-3 gap-3">
           {[
             { label: '작성중',   count: draftCount,   color: 'text-amber-700',  bg: 'bg-amber-50',  border: 'border-amber-200',  icon: <Clock className="h-4 w-4 text-amber-500" /> },
-            { label: '출하완료', count: shippedCount, color: 'text-green-700',  bg: 'bg-green-50',  border: 'border-green-200',  icon: <CheckCircle2 className="h-4 w-4 text-green-500" /> },
+            { label: '출하완료', count: shippedCount, color: 'text-green-700',  bg: 'bg-green-50',  border: 'border-green-200',  icon: <CheckCircle className="h-4 w-4 text-green-500" /> },
             { label: '전체',     count: list.length,  color: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-200',   icon: <Truck className="h-4 w-4 text-blue-500" /> },
           ].map(({ label, count, color, bg, border, icon }) => (
             <div key={label} className={cn('rounded-xl border p-3 flex items-center gap-3', bg, border)}>

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
-  Scan, Truck, CheckCircle2, AlertTriangle, Package,
+  Scan, Truck, CheckCircle, AlertTriangle, Package,
   RefreshCw, X, ShieldAlert, Clock, MapPin, FileText, Printer
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -478,7 +478,7 @@ export default function ShipmentStagingPage() {
               <div className="bg-white border-2 border-green-400 rounded-xl overflow-hidden">
                 <div className="bg-green-600 px-4 py-2 flex items-center justify-between">
                   <span className="text-white font-bold text-sm flex items-center gap-1.5">
-                    <CheckCircle2 className="h-4 w-4" /> 출하대기 LOT 확인
+                    <CheckCircle className="h-4 w-4" /> 출하대기 LOT 확인
                   </span>
                   <button onClick={() => { setShipLot(null); shipScanRef.current?.focus(); }}>
                     <X className="h-4 w-4 text-green-100 hover:text-white" />

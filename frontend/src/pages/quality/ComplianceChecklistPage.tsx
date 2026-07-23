@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
   AlertTriangle, AlertCircle, Info, ChevronDown, ChevronRight,
-  RefreshCw, CheckCircle2, ClipboardCheck, FileWarning,
+  RefreshCw, CheckCircle, ClipboardCheck, FileWarning,
 } from 'lucide-react';
 
 interface CheckItem {
@@ -183,7 +183,7 @@ export function ComplianceChecklistPage() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 bg-green-50 rounded-lg border border-green-200">
-          <CheckCircle2 size={48} className="mx-auto mb-3 text-green-500" />
+          <CheckCircle size={48} className="mx-auto mb-3 text-green-500" />
           <p className="text-lg font-medium text-green-700">
             {checks.length === 0 ? '미비사항이 없습니다!' : '선택한 필터 조건에 해당하는 미비사항이 없습니다.'}
           </p>

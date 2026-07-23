@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import {
-  ClipboardCheck, Plus, AlertTriangle, CheckCircle2,
+  ClipboardCheck, Plus, AlertTriangle, CheckCircle,
   XCircle, ArrowUpDown, Filter, Printer, ChevronRight,
   Package, Search, Clock, ShieldCheck, Edit2, Save, RotateCcw,
 } from 'lucide-react';
@@ -408,7 +408,7 @@ export function InventoryClosingPage() {
                     onClick={() => handleStatusChange('approved')}
                     className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
                   >
-                    <CheckCircle2 className="h-3 w-3 inline mr-1" />승인
+                    <CheckCircle className="h-3 w-3 inline mr-1" />승인
                   </button>
                 </>
               )}
@@ -433,7 +433,7 @@ export function InventoryClosingPage() {
           {summary && (
             <div className="grid grid-cols-5 gap-3 p-4 bg-gray-50 border-b">
               <SummaryCard label="전체 항목" value={summary.total_items} icon={Package} color="gray" />
-              <SummaryCard label="실사 완료" value={`${summary.counted}/${summary.total_items}`} icon={CheckCircle2} color="blue" />
+              <SummaryCard label="실사 완료" value={`${summary.counted}/${summary.total_items}`} icon={CheckCircle} color="blue" />
               <SummaryCard label="미실사" value={summary.pending} icon={Clock} color="yellow" />
               <SummaryCard label="차이 발생" value={summary.with_diff} icon={AlertTriangle} color="red" />
               <SummaryCard
@@ -598,7 +598,7 @@ export function InventoryClosingPage() {
                           </td>
                           <td className="px-3 py-2 text-center">
                             {it.count_status === 'counted' ? (
-                              <CheckCircle2 className="h-3.5 w-3.5 text-green-500 inline" />
+                              <CheckCircle className="h-3.5 w-3.5 text-green-500 inline" />
                             ) : it.count_status === 'verified' ? (
                               <ShieldCheck className="h-3.5 w-3.5 text-blue-500 inline" />
                             ) : (
@@ -730,7 +730,7 @@ export function InventoryClosingPage() {
                                 className="rounded bg-green-100 p-1 text-green-700 hover:bg-green-200"
                                 title="승인"
                               >
-                                <CheckCircle2 className="h-3 w-3" />
+                                <CheckCircle className="h-3 w-3" />
                               </button>
                               <button
                                 onClick={() => handleApproveAdj(adj.adj_id, false)}

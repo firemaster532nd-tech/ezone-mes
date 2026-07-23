@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldAlert, Download, Trash2, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { ShieldAlert, Download, Trash2, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 
@@ -131,7 +131,7 @@ export function SuperAdminResetPage() {
 
             {backupDone && (
               <div className="mt-3 flex items-center gap-2 text-green-400 text-sm">
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle className="h-4 w-4" />
                 백업이 완료되었습니다.
               </div>
             )}
@@ -198,7 +198,7 @@ export function SuperAdminResetPage() {
         {step === 'done' && result && (
           <div className={`bg-gray-900 border rounded-2xl p-6 text-center ${result.ok ? 'border-green-800' : 'border-red-800'}`}>
             {result.ok ? (
-              <CheckCircle2 className="h-12 w-12 text-green-400 mx-auto mb-3" />
+              <CheckCircle className="h-12 w-12 text-green-400 mx-auto mb-3" />
             ) : (
               <XCircle className="h-12 w-12 text-red-400 mx-auto mb-3" />
             )}
