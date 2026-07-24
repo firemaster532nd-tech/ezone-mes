@@ -1,17 +1,16 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
   Package, Search, RefreshCw, Printer, Plus, Trash2,
   ArrowDownCircle, ArrowUpCircle, MoveRight, Settings2,
-  Download, Filter, ChevronDown, X, AlertCircle, CheckCircle2,
-  BarChart3, List, BookOpen, Edit3
+  Download, BarChart3, List, BookOpen, Edit3
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-// ─── 공통 타입 ───────────────────────────────────────────────────────────────
+// ─── 타입 ────────────────────────────────────────────────────────────────────
 interface MaterialLot {
   lot_id: number;
   lot_number: string;
@@ -46,7 +45,6 @@ interface Transaction {
   source_type?: string;
   notes?: string;
   item_name?: string;
-  created_at?: string;
 }
 
 interface LedgerRow {
@@ -63,117 +61,89 @@ interface LedgerRow {
   qty_adj: number;
 }
 
-interface SummaryRow {
-  category: string;
-  location: string;
-  lot_count: number;
-  total_qty: number;
-}
-
+// ─── 유틸 ─────────────────────────────────────────────────────────────────────
 const CATEGORIES = ['세라믹울', '그라스울', '그라스울보드', '차열재', '소켓', '반제품', '기타부자재'];
-const TXN_TYPE_LABEL: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  IN:   { label: '입고',     color: 'text-emerald-700 bg-emerald-50 border-emerald-200', icon: <ArrowDownCircle className="h-3.5 w-3.5" /> },
-  OUT:  { label: '출고',     color: 'text-red-700 bg-red-50 border-red-200',             icon: <ArrowUpCircle className="h-3.5 w-3.5" /> },
-  MOVE: { label: '위치이동', color: 'text-amber-700 bg-amber-50 border-amber-200',       icon: <MoveRight className="h-3.5 w-3.5" /> },
-  ADJ:  { label: '재고조정', color: 'text-indigo-700 bg-indigo-50 border-indigo-200',    icon: <Settings2 className="h-3.5 w-3.5" /> },
+
+const TXN_LABEL: Record<string, { text: string; color: string; emoji: string }> = {
+  IN:   { text: '입고',     color: 'text-emerald-700 bg-emerald-50 border-emerald-200', emoji: '📥' },
+  OUT:  { text: '출고',     color: 'text-red-700 bg-red-50 border-red-200',             emoji: '📤' },
+  MOVE: { text: '위치이동', color: 'text-amber-700 bg-amber-50 border-amber-200',       emoji: '🚚' },
+  ADJ:  { text: '재고조정', color: 'text-indigo-700 bg-indigo-50 border-indigo-200',    emoji: '⚙️' },
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
-const fmtDate = (s: string) => s ? new Date(s).toLocaleDateString('ko-KR') : '-';
-const fmtSpec = (l: MaterialLot) => {
-  const parts = [];
-  if (l.density)    parts.push(`${l.density}K`);
-  if (l.thickness)  parts.push(`${l.thickness}T`);
-  if (l.width_mm)   parts.push(`${l.width_mm}W`);
-  if (l.length_mm)  parts.push(`${l.length_mm}L`);
-  return parts.join(' ') || '-';
-};
-const fmtLoc = (loc?: string) => {
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const firstOfMonth = () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); };
+
+function fmtDate(s?: string) { return s ? s.slice(0, 10) : '-'; }
+function fmtSpec(l: { density?: number; thickness?: number; width_mm?: number; length_mm?: number }) {
+  return [l.density && `${l.density}K`, l.thickness && `${l.thickness}T`, l.width_mm && `${l.width_mm}W`, l.length_mm && `${l.length_mm}L`]
+    .filter(Boolean).join(' ') || '-';
+}
+function fmtLoc(loc?: string) {
   if (!loc) return '-';
   const m = loc.match(/^([A-Z]+\d+)-P(\d)$/);
-  if (m) return `${m[1]} (P${m[2]}${m[2] === '1' ? '오른쪽' : '왼쪽'})`;
-  return loc;
-};
+  return m ? `${m[1]}-P${m[2]}(${m[2] === '1' ? '우' : '좌'})` : loc;
+}
 
-// ─── LOT 라벨 인쇄 모달 (80×60mm) ───────────────────────────────────────────
-function LabelPrintModal({ lot, onClose }: { lot: MaterialLot; onClose: () => void }) {
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(lot.lot_number)}&margin=0`;
-  const handlePrint = () => {
-    const win = window.open('', '_blank', 'width=400,height=350');
-    if (!win) return;
-    win.document.write(`<!DOCTYPE html>
-<html><head>
-<meta charset="utf-8">
-<title>LOT 라벨 - ${lot.lot_number}</title>
+// ─── LOT 라벨 인쇄 모달 ───────────────────────────────────────────────────────
+function LabelModal({ lot, onClose }: { lot: MaterialLot; onClose: () => void }) {
+  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(lot.lot_number)}&margin=0`;
+  const doPrint = () => {
+    const w = window.open('', '_blank', 'width=450,height=380');
+    if (!w) return;
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>라벨</title>
 <style>
-  @page { size: 80mm 60mm; margin: 0; }
-  @media print { body { margin: 0; } }
-  body { font-family: 'Malgun Gothic', sans-serif; width: 80mm; height: 60mm;
-         padding: 3mm; box-sizing: border-box; font-size: 8pt; overflow: hidden; }
-  .row { display: flex; align-items: flex-start; gap: 3mm; }
-  .qr { width: 22mm; height: 22mm; flex-shrink: 0; }
-  .qr img { width: 100%; height: 100%; }
-  .info { flex: 1; min-width: 0; }
-  .lot { font-size: 9pt; font-weight: bold; word-break: break-all; }
-  .field { display: flex; gap: 1mm; margin-top: 1.5mm; font-size: 7pt; }
-  .label { color: #666; min-width: 8mm; }
-  .value { font-weight: 600; }
-  .header { display: flex; justify-content: space-between; align-items: center; 
-             border-bottom: 0.5mm solid #333; margin-bottom: 2mm; padding-bottom: 1mm; }
-  .co { font-size: 7pt; font-weight: bold; color: #c00; }
-  .title { font-size: 8pt; font-weight: bold; }
-  .qty-box { border: 0.5mm solid #333; text-align: center; padding: 1mm;
-              margin-top: 2mm; font-size: 10pt; font-weight: bold; }
-  .qty-label { font-size: 6pt; color: #555; }
-</style>
-</head><body>
-<div class="header">
-  <span class="co">(주)이지원</span>
-  <span class="title">원자재 LOT 라벨</span>
-</div>
+@page{size:80mm 60mm;margin:0}
+body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:3mm;box-sizing:border-box;font-size:8pt}
+.top{display:flex;justify-content:space-between;border-bottom:0.3mm solid #333;padding-bottom:1.5mm;margin-bottom:1.5mm;font-size:7pt}
+.co{font-weight:bold;color:#c00}.title{font-weight:bold}
+.row{display:flex;gap:2mm}
+.qr img{width:20mm;height:20mm}
+.info .lot{font-size:9pt;font-weight:900;word-break:break-all}
+.info .field{font-size:6.5pt;margin-top:1mm}
+.info .lbl{color:#666}
+.qty{border:0.4mm solid #333;text-align:center;padding:1mm;margin-top:1.5mm;font-size:11pt;font-weight:900}
+.qty small{display:block;font-size:6pt;color:#555;font-weight:400}
+</style></head><body>
+<div class="top"><span class="co">(주)이지원</span><span class="title">원자재 LOT 라벨</span></div>
 <div class="row">
-  <div class="qr"><img src="${qrUrl}" alt="QR" /></div>
+  <div class="qr"><img src="${qr}"/></div>
   <div class="info">
     <div class="lot">${lot.lot_number}</div>
-    <div class="field"><span class="label">품목:</span><span class="value">${lot.item_name}</span></div>
-    <div class="field"><span class="label">규격:</span><span class="value">${fmtSpec(lot)}</span></div>
-    <div class="field"><span class="label">위치:</span><span class="value">${lot.location || '-'}</span></div>
-    <div class="field"><span class="label">입고일:</span><span class="value">${lot.received_date ? fmtDate(lot.received_date) : '-'}</span></div>
+    <div class="field"><span class="lbl">품목: </span>${lot.item_name}</div>
+    <div class="field"><span class="lbl">규격: </span>${fmtSpec(lot)}</div>
+    <div class="field"><span class="lbl">위치: </span>${lot.location || '-'}</div>
+    <div class="field"><span class="lbl">입고일: </span>${fmtDate(lot.received_date)}</div>
   </div>
 </div>
-<div class="qty-box">
-  <div class="qty-label">현재 수량</div>
-  ${Number(lot.qty_current).toLocaleString()} ${lot.unit}
-</div>
+<div class="qty"><small>현재 수량</small>${Number(lot.qty_current).toLocaleString()} ${lot.unit}</div>
 </body></html>`);
-    win.document.close();
-    setTimeout(() => { win.print(); win.close(); }, 600);
+    w.document.close();
+    setTimeout(() => { w.print(); w.close(); }, 700);
   };
-
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-80 p-5 space-y-4">
-        <div className="flex justify-between items-center">
-          <h3 className="font-bold text-slate-800 flex items-center gap-2"><Printer className="h-4 w-4 text-blue-600" /> LOT 라벨 인쇄</h3>
-          <button onClick={onClose}><X className="h-4 w-4 text-slate-400" /></button>
+      <div className="bg-white rounded-xl shadow-xl w-72 p-5 space-y-4">
+        <div className="flex justify-between">
+          <h3 className="font-bold flex items-center gap-1.5"><Printer className="h-4 w-4 text-blue-600"/>LOT 라벨 인쇄</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-lg leading-none">&times;</button>
         </div>
         {/* 미리보기 */}
-        <div className="border-2 border-dashed border-slate-300 rounded-lg p-3 bg-slate-50" style={{ width: '100%', aspectRatio: '80/60' }}>
-          <div className="flex gap-2 h-full">
-            <img src={qrUrl} alt="QR" className="h-full aspect-square" />
-            <div className="flex-1 min-w-0 text-[10px] space-y-0.5">
-              <p className="font-black text-[9px] break-all">{lot.lot_number}</p>
-              <p className="text-slate-600">품목: <strong>{lot.item_name}</strong></p>
-              <p className="text-slate-600">규격: <strong>{fmtSpec(lot)}</strong></p>
-              <p className="text-slate-600">위치: <strong>{lot.location || '-'}</strong></p>
-              <p className="text-slate-600">수량: <strong className="text-emerald-700">{Number(lot.qty_current).toLocaleString()} {lot.unit}</strong></p>
+        <div className="border-2 border-dashed border-slate-300 rounded-lg p-3 bg-slate-50" style={{aspectRatio:'80/60'}}>
+          <div className="flex gap-2 h-full text-[9px]">
+            <img src={qr} alt="QR" className="h-full aspect-square"/>
+            <div className="flex-1 space-y-0.5 overflow-hidden">
+              <p className="font-black text-[8px] break-all">{lot.lot_number}</p>
+              <p>{lot.item_name}</p>
+              <p className="text-slate-500">{fmtSpec(lot)}</p>
+              <p className="text-slate-500">{lot.location || '-'}</p>
+              <p className="font-bold text-emerald-700">{Number(lot.qty_current).toLocaleString()} {lot.unit}</p>
             </div>
           </div>
         </div>
-        <p className="text-[11px] text-slate-500 text-center">용지 크기: 80×60mm</p>
-        <button onClick={handlePrint}
-          className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2">
-          <Printer className="h-4 w-4" /> 인쇄하기
+        <p className="text-center text-[11px] text-slate-400">용지: 80×60mm</p>
+        <button onClick={doPrint} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2">
+          <Printer className="h-4 w-4"/>인쇄
         </button>
       </div>
     </div>
@@ -181,239 +151,210 @@ function LabelPrintModal({ lot, onClose }: { lot: MaterialLot; onClose: () => vo
 }
 
 // ─── 탭1: 전체 LOT 재고현황 ──────────────────────────────────────────────────
-function Tab1LotStock({ lots, loading, onRefresh, summaries }: {
-  lots: MaterialLot[]; loading: boolean; onRefresh: () => void; summaries: SummaryRow[];
-}) {
+function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading: boolean; onRefresh: () => void }) {
   const [search, setSearch] = useState('');
-  const [catFilter, setCatFilter] = useState('전체');
+  const [cat, setCat] = useState('전체');
   const [printLot, setPrintLot] = useState<MaterialLot | null>(null);
 
-  const filtered = lots.filter(l => {
-    const matchCat = catFilter === '전체' || l.category === catFilter;
-    const matchSearch = !search || l.lot_number.toLowerCase().includes(search.toLowerCase()) ||
-      l.item_name.toLowerCase().includes(search.toLowerCase());
-    return matchCat && matchSearch;
-  });
+  const filtered = lots.filter(l =>
+    (cat === '전체' || l.category === cat) &&
+    (!search || l.lot_number.toLowerCase().includes(search.toLowerCase()) || l.item_name.toLowerCase().includes(search.toLowerCase()))
+  );
 
-  // 카테고리별 집계
   const catTotals: Record<string, number> = {};
-  for (const l of lots) {
-    catTotals[l.category] = (catTotals[l.category] || 0) + Number(l.qty_current || 0);
-  }
-  const totalLots = lots.length;
-  const totalQty = lots.reduce((a, l) => a + Number(l.qty_current || 0), 0);
+  for (const l of lots) catTotals[l.category] = (catTotals[l.category] || 0) + Number(l.qty_current || 0);
 
   return (
     <div className="space-y-4">
       {/* 요약 카드 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center gap-3">
-          <div className="p-2.5 bg-slate-900 text-white rounded-lg"><Package className="h-5 w-5" /></div>
-          <div><p className="text-xs text-slate-500 font-bold">전체 LOT</p><p className="text-lg font-black">{totalLots}개</p></div>
+        <div className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
+          <div className="p-2.5 bg-slate-900 text-white rounded-lg"><Package className="h-5 w-5"/></div>
+          <div><p className="text-xs text-slate-500 font-bold">전체 LOT</p><p className="text-xl font-black">{lots.length}개</p></div>
         </div>
-        {['세라믹울', '그라스울', '그라스울보드'].map(cat => (
-          <div key={cat} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center gap-3">
-            <div className={cn('p-2.5 rounded-lg text-white', cat === '세라믹울' ? 'bg-amber-600' : cat === '그라스울' ? 'bg-sky-600' : 'bg-emerald-600')}>
-              <BarChart3 className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 font-bold">{cat}</p>
-              <p className="text-lg font-black">{(catTotals[cat] || 0).toLocaleString()}</p>
-            </div>
+        {[['세라믹울','amber'],['그라스울','sky'],['그라스울보드','emerald']].map(([c,color]) => (
+          <div key={c} className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
+            <div className={`p-2.5 bg-${color}-600 text-white rounded-lg`}><BarChart3 className="h-5 w-5"/></div>
+            <div><p className="text-xs text-slate-500 font-bold">{c}</p><p className="text-xl font-black">{(catTotals[c] || 0).toLocaleString()}</p></div>
           </div>
         ))}
       </div>
 
       {/* 필터 */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+      <div className="bg-white rounded-xl border p-3 flex flex-wrap gap-2 items-center shadow-sm">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400"/>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="LOT번호 / 품목명 검색"
-            className="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-200 outline-none" />
+            className="pl-9 pr-3 py-2 text-sm border rounded-lg focus:border-blue-500 outline-none w-52"/>
         </div>
-        <div className="flex gap-1.5 flex-wrap">
+        <div className="flex gap-1 flex-wrap">
           {['전체', ...CATEGORIES].map(c => (
-            <button key={c} onClick={() => setCatFilter(c)}
-              className={cn('px-3 py-1.5 rounded-lg text-xs font-bold transition-colors',
-                catFilter === c ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}>
+            <button key={c} onClick={() => setCat(c)}
+              className={cn('px-2.5 py-1.5 rounded-lg text-xs font-bold',
+                cat === c ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}>
               {c}
             </button>
           ))}
         </div>
-        <button onClick={onRefresh} className="ml-auto flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50">
-          <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} /> 새로고침
+        <button onClick={onRefresh} className="ml-auto flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm text-slate-600 hover:bg-slate-50">
+          <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')}/> 새로고침
         </button>
       </div>
 
       {/* 테이블 */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-900 text-white text-xs">
               <tr>
                 {['LOT번호','품목명','분류','규격','단위','위치','현재고','금일입고','금일출고','입고일','라벨'].map(h => (
-                  <th key={h} className="px-3 py-3 text-left font-bold whitespace-nowrap">{h}</th>
+                  <th key={h} className="px-3 py-2.5 text-left font-bold whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={11} className="text-center py-12 text-slate-400">로딩 중...</td></tr>
+                <tr><td colSpan={11} className="text-center py-16 text-slate-400">
+                  <div className="flex flex-col items-center gap-2">
+                    <RefreshCw className="h-6 w-6 animate-spin text-slate-300"/>
+                    <span>로딩 중...</span>
+                  </div>
+                </td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={11} className="text-center py-12 text-slate-400">조회된 LOT가 없습니다.</td></tr>
+                <tr><td colSpan={11} className="text-center py-16 text-slate-400">조회된 LOT가 없습니다.</td></tr>
               ) : filtered.map(lot => (
-                <tr key={lot.lot_id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-3 py-2.5 font-mono text-xs font-bold text-blue-700 whitespace-nowrap">{lot.lot_number}</td>
-                  <td className="px-3 py-2.5 font-medium text-slate-800 whitespace-nowrap">{lot.item_name}</td>
-                  <td className="px-3 py-2.5">
-                    <span className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-[11px] font-bold">{lot.category}</span>
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-slate-500 font-mono whitespace-nowrap">{fmtSpec(lot)}</td>
-                  <td className="px-3 py-2.5 text-xs text-slate-500">{lot.unit}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono whitespace-nowrap">
-                    <span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded font-bold">{fmtLoc(lot.location)}</span>
-                  </td>
-                  <td className="px-3 py-2.5 text-right font-black text-slate-900">{Number(lot.qty_current).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-right font-bold text-emerald-600">
+                <tr key={lot.lot_id} className="hover:bg-slate-50">
+                  <td className="px-3 py-2 font-mono text-xs font-bold text-blue-700 whitespace-nowrap">{lot.lot_number}</td>
+                  <td className="px-3 py-2 font-medium whitespace-nowrap">{lot.item_name}</td>
+                  <td className="px-3 py-2"><span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[11px] font-bold">{lot.category}</span></td>
+                  <td className="px-3 py-2 text-xs font-mono text-slate-500 whitespace-nowrap">{fmtSpec(lot)}</td>
+                  <td className="px-3 py-2 text-xs text-slate-500">{lot.unit}</td>
+                  <td className="px-3 py-2"><span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-mono font-bold">{fmtLoc(lot.location)}</span></td>
+                  <td className="px-3 py-2 text-right font-black text-slate-900">{Number(lot.qty_current || 0).toLocaleString()}</td>
+                  <td className={cn('px-3 py-2 text-right font-bold', Number(lot.today_in || 0) > 0 ? 'text-emerald-600' : 'text-slate-300')}>
                     {Number(lot.today_in || 0) > 0 ? `+${Number(lot.today_in).toLocaleString()}` : '-'}
                   </td>
-                  <td className="px-3 py-2.5 text-right font-bold text-red-600">
+                  <td className={cn('px-3 py-2 text-right font-bold', Number(lot.today_out || 0) > 0 ? 'text-red-600' : 'text-slate-300')}>
                     {Number(lot.today_out || 0) > 0 ? `-${Number(lot.today_out).toLocaleString()}` : '-'}
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap">{fmtDate(lot.received_date || '')}</td>
-                  <td className="px-3 py-2.5">
-                    <button onClick={() => setPrintLot(lot)}
-                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors" title="라벨 인쇄">
-                      <Printer className="h-4 w-4" />
+                  <td className="px-3 py-2 text-xs text-slate-400 whitespace-nowrap">{fmtDate(lot.received_date)}</td>
+                  <td className="px-3 py-2">
+                    <button onClick={() => setPrintLot(lot)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="라벨 인쇄">
+                      <Printer className="h-3.5 w-3.5"/>
                     </button>
                   </td>
                 </tr>
               ))}
             </tbody>
-            {filtered.length > 0 && (
-              <tfoot className="bg-slate-50 border-t-2 border-slate-200">
+            {!loading && filtered.length > 0 && (
+              <tfoot className="bg-slate-50 border-t-2 border-slate-200 text-xs font-bold">
                 <tr>
-                  <td colSpan={6} className="px-3 py-2 text-xs font-bold text-slate-600">합계 ({filtered.length}개 LOT)</td>
-                  <td className="px-3 py-2 text-right font-black text-slate-900">
-                    {filtered.reduce((a, l) => a + Number(l.qty_current || 0), 0).toLocaleString()}
-                  </td>
-                  <td className="px-3 py-2 text-right font-bold text-emerald-600">
-                    +{filtered.reduce((a, l) => a + Number(l.today_in || 0), 0).toLocaleString()}
-                  </td>
-                  <td className="px-3 py-2 text-right font-bold text-red-600">
-                    -{filtered.reduce((a, l) => a + Number(l.today_out || 0), 0).toLocaleString()}
-                  </td>
-                  <td colSpan={2} />
+                  <td colSpan={6} className="px-3 py-2 text-slate-600">합계 ({filtered.length}개 LOT)</td>
+                  <td className="px-3 py-2 text-right text-slate-900">{filtered.reduce((a,l)=>a+Number(l.qty_current||0),0).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right text-emerald-600">+{filtered.reduce((a,l)=>a+Number(l.today_in||0),0).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right text-red-600">-{filtered.reduce((a,l)=>a+Number(l.today_out||0),0).toLocaleString()}</td>
+                  <td colSpan={2}/>
                 </tr>
               </tfoot>
             )}
           </table>
         </div>
       </div>
-
-      {printLot && <LabelPrintModal lot={printLot} onClose={() => setPrintLot(null)} />}
+      {printLot && <LabelModal lot={printLot} onClose={() => setPrintLot(null)}/>}
     </div>
   );
 }
 
-// ─── 탭2: 수불대장 (기간별 이력) ─────────────────────────────────────────────
+// ─── 탭2: 수불대장 (기간별) ──────────────────────────────────────────────────
 function Tab2Ledger() {
-  const [dateFrom, setDateFrom] = useState(() => {
-    const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10);
-  });
-  const [dateTo, setDateTo] = useState(today());
+  const [dateFrom, setDateFrom] = useState(firstOfMonth());
+  const [dateTo, setDateTo] = useState(todayStr());
   const [catFilter, setCatFilter] = useState('');
   const [lotFilter, setLotFilter] = useState('');
   const [rows, setRows] = useState<LedgerRow[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const fetch = useCallback(async () => {
+  const doFetch = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = { date_from: dateFrom, date_to: dateTo };
-      if (catFilter) params.category = catFilter;
-      if (lotFilter) params.lot_number = lotFilter;
-      const res = await api.get<{ data: LedgerRow[] }>('/material-ledger', { params });
+      const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+      if (catFilter) params.set('category', catFilter);
+      if (lotFilter) params.set('lot_number', lotFilter);
+      const res = await api.get<{ data: LedgerRow[] }>(`/material-ledger?${params}`);
       setRows(res.data || []);
-    } catch { toast.error('수불대장 조회 실패'); }
-    finally { setLoading(false); }
+    } catch (e) {
+      console.error(e);
+      toast.error('수불대장 조회 실패');
+    } finally { setLoading(false); }
   }, [dateFrom, dateTo, catFilter, lotFilter]);
 
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => { doFetch(); }, []);
 
-  const handleExport = () => {
-    const header = ['날짜','LOT번호','품목','분류','단위','위치','당일입고','당일출고','당일조정','잔고'].join(',');
-    const body = rows.map(r => [
-      r.txn_date, r.lot_number, r.item_name, r.category, r.unit, r.location || '',
-      r.qty_in, r.qty_out, r.qty_adj, r.qty_current
-    ].join(',')).join('\n');
-    const blob = new Blob(['\uFEFF' + header + '\n' + body], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url;
-    a.download = `수불대장_${dateFrom}_${dateTo}.csv`; a.click();
+  const doExport = () => {
+    const hdr = '날짜,LOT번호,품목,분류,단위,위치,당일입고,당일출고,당일조정,현재고';
+    const body = rows.map(r =>
+      [r.txn_date, r.lot_number, r.item_name, r.category, r.unit, r.location||'',
+       r.qty_in, r.qty_out, r.qty_adj, r.qty_current].join(',')
+    ).join('\n');
+    const blob = new Blob(['\uFEFF'+hdr+'\n'+body], { type:'text/csv;charset=utf-8' });
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `수불대장_${dateFrom}_${dateTo}.csv` });
+    a.click();
   };
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap gap-3 items-end">
+      <div className="bg-white rounded-xl border p-4 flex flex-wrap gap-3 items-end shadow-sm">
         <div><label className="block text-xs font-bold text-slate-600 mb-1">시작일</label>
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" /></div>
+          <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500"/></div>
         <div><label className="block text-xs font-bold text-slate-600 mb-1">종료일</label>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" /></div>
+          <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500"/></div>
         <div><label className="block text-xs font-bold text-slate-600 mb-1">분류</label>
-          <select value={catFilter} onChange={e => setCatFilter(e.target.value)}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
+          <select value={catFilter} onChange={e=>setCatFilter(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
             <option value="">전체</option>
-            {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+            {CATEGORIES.map(c=><option key={c}>{c}</option>)}
           </select></div>
-        <div><label className="block text-xs font-bold text-slate-600 mb-1">LOT번호 검색</label>
-          <input value={lotFilter} onChange={e => setLotFilter(e.target.value)} placeholder="LOT 번호"
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" /></div>
-        <button onClick={fetch}
-          className="px-5 py-2 bg-slate-900 text-white text-sm font-bold rounded-lg hover:bg-slate-700 flex items-center gap-2">
-          <Search className="h-4 w-4" /> 조회
+        <div><label className="block text-xs font-bold text-slate-600 mb-1">LOT 검색</label>
+          <input value={lotFilter} onChange={e=>setLotFilter(e.target.value)} placeholder="LOT번호 일부"
+            className="border rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 w-36"/></div>
+        <button onClick={doFetch} className="px-5 py-2 bg-slate-900 text-white text-sm font-bold rounded-lg hover:bg-slate-700 flex items-center gap-2">
+          <Search className="h-4 w-4"/> 조회
         </button>
-        <button onClick={handleExport}
-          className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 flex items-center gap-2">
-          <Download className="h-4 w-4" /> CSV 다운로드
+        <button onClick={doExport} className="px-4 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg hover:bg-emerald-700 flex items-center gap-2">
+          <Download className="h-4 w-4"/> CSV
         </button>
       </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-800 text-white text-xs">
               <tr>
-                {['날짜','LOT번호','품목명','분류','단위','위치','당일입고(+)','당일출고(-)','재고조정','현재고'].map(h => (
-                  <th key={h} className="px-3 py-3 text-left font-bold whitespace-nowrap">{h}</th>
+                {['날짜','LOT번호','품목명','분류','단위','위치','당일입고(+)','당일출고(-)','재고조정','현재고'].map(h=>(
+                  <th key={h} className="px-3 py-2.5 text-left font-bold whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={10} className="text-center py-12 text-slate-400">조회 중...</td></tr>
+                <tr><td colSpan={10} className="text-center py-16 text-slate-400">
+                  <div className="flex flex-col items-center gap-2"><RefreshCw className="h-6 w-6 animate-spin text-slate-300"/><span>조회 중...</span></div>
+                </td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={10} className="text-center py-12 text-slate-400">해당 기간에 수불 내역이 없습니다.</td></tr>
-              ) : rows.map((r, i) => (
+                <tr><td colSpan={10} className="text-center py-16 text-slate-400">해당 기간에 수불 내역이 없습니다.</td></tr>
+              ) : rows.map((r,i) => (
                 <tr key={i} className="hover:bg-slate-50">
-                  <td className="px-3 py-2.5 text-xs font-mono text-slate-600 whitespace-nowrap">{r.txn_date}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono font-bold text-blue-700">{r.lot_number}</td>
-                  <td className="px-3 py-2.5 text-slate-800 whitespace-nowrap">{r.item_name}</td>
-                  <td className="px-3 py-2.5"><span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[11px] font-bold">{r.category}</span></td>
-                  <td className="px-3 py-2.5 text-xs text-slate-500">{r.unit}</td>
-                  <td className="px-3 py-2.5 text-xs font-mono">{fmtLoc(r.location)}</td>
-                  <td className={cn('px-3 py-2.5 text-right font-bold', Number(r.qty_in) > 0 ? 'text-emerald-600' : 'text-slate-300')}>
-                    {Number(r.qty_in) > 0 ? `+${Number(r.qty_in).toLocaleString()}` : '-'}
-                  </td>
-                  <td className={cn('px-3 py-2.5 text-right font-bold', Number(r.qty_out) > 0 ? 'text-red-600' : 'text-slate-300')}>
-                    {Number(r.qty_out) > 0 ? `-${Number(r.qty_out).toLocaleString()}` : '-'}
-                  </td>
-                  <td className={cn('px-3 py-2.5 text-right font-bold', Number(r.qty_adj) !== 0 ? 'text-indigo-600' : 'text-slate-300')}>
-                    {Number(r.qty_adj) !== 0 ? (Number(r.qty_adj) > 0 ? '+' : '') + Number(r.qty_adj).toLocaleString() : '-'}
-                  </td>
-                  <td className="px-3 py-2.5 text-right font-black text-slate-900">{Number(r.qty_current).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-xs font-mono text-slate-500">{r.txn_date}</td>
+                  <td className="px-3 py-2 text-xs font-mono font-bold text-blue-700">{r.lot_number}</td>
+                  <td className="px-3 py-2 text-slate-800">{r.item_name}</td>
+                  <td className="px-3 py-2"><span className="px-2 py-0.5 bg-slate-100 rounded text-[11px] font-bold">{r.category}</span></td>
+                  <td className="px-3 py-2 text-xs text-slate-500">{r.unit}</td>
+                  <td className="px-3 py-2 text-xs font-mono text-slate-500">{fmtLoc(r.location)}</td>
+                  <td className={cn('px-3 py-2 text-right font-bold', Number(r.qty_in)>0 ? 'text-emerald-600' : 'text-slate-300')}>{Number(r.qty_in)>0 ? `+${r.qty_in}` : '-'}</td>
+                  <td className={cn('px-3 py-2 text-right font-bold', Number(r.qty_out)>0 ? 'text-red-600' : 'text-slate-300')}>{Number(r.qty_out)>0 ? `-${r.qty_out}` : '-'}</td>
+                  <td className={cn('px-3 py-2 text-right font-bold', Number(r.qty_adj)!==0 ? 'text-indigo-600' : 'text-slate-300')}>{Number(r.qty_adj)!==0 ? r.qty_adj : '-'}</td>
+                  <td className="px-3 py-2 text-right font-black text-slate-900">{Number(r.qty_current).toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -425,114 +366,112 @@ function Tab2Ledger() {
 }
 
 // ─── 탭3: 수불 이력 조회 ─────────────────────────────────────────────────────
-function Tab3History({ user }: { user: any }) {
-  const isManager = user?.role === 'manager' || user?.role === 'admin';
-  const [dateFrom, setDateFrom] = useState(today());
-  const [dateTo, setDateTo] = useState(today());
+function Tab3History({ isManager }: { isManager: boolean }) {
+  const [dateFrom, setDateFrom] = useState(todayStr());
+  const [dateTo, setDateTo] = useState(todayStr());
   const [txnType, setTxnType] = useState('');
   const [search, setSearch] = useState('');
   const [rows, setRows] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const fetch = useCallback(async () => {
+  const doFetch = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = { date_from: dateFrom, date_to: dateTo, limit: '500' };
-      if (txnType) params.txn_type = txnType;
-      if (search)  params.search = search;
-      const res = await api.get<{ data: Transaction[] }>('/material-transactions', { params });
+      const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, limit: '500' });
+      if (txnType) params.set('txn_type', txnType);
+      if (search)  params.set('search', search);
+      const res = await api.get<{ data: Transaction[] }>(`/material-transactions?${params}`);
       setRows(res.data || []);
-    } catch { toast.error('이력 조회 실패'); }
-    finally { setLoading(false); }
+    } catch (e) {
+      console.error(e);
+      toast.error('이력 조회 실패');
+    } finally { setLoading(false); }
   }, [dateFrom, dateTo, txnType, search]);
 
-  useEffect(() => { fetch(); }, []);
+  useEffect(() => { doFetch(); }, []);
 
-  const handleDelete = async (txn: Transaction) => {
-    if (!confirm(`수불 기록 #${txn.txn_id}을 삭제하시겠습니까?\n재고가 원복됩니다.`)) return;
+  const handleDelete = async (r: Transaction) => {
+    if (!confirm(`수불 기록 #${r.txn_id} 삭제 시 재고가 원복됩니다.\n계속하시겠습니까?`)) return;
     try {
-      await api.delete(`/material-transactions/${txn.txn_id}`);
-      toast.success('삭제 완료. 재고 원복됨.');
-      fetch();
+      await api.delete(`/material-transactions/${r.txn_id}`);
+      toast.success('삭제 완료, 재고 원복됨');
+      doFetch();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || '삭제 실패');
+      toast.error(e?.body?.message || '삭제 실패');
     }
   };
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex flex-wrap gap-3 items-end">
+      <div className="bg-white rounded-xl border p-4 flex flex-wrap gap-3 items-end shadow-sm">
         <div><label className="block text-xs font-bold text-slate-600 mb-1">시작일</label>
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" /></div>
+          <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500"/></div>
         <div><label className="block text-xs font-bold text-slate-600 mb-1">종료일</label>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" /></div>
+          <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500"/></div>
         <div><label className="block text-xs font-bold text-slate-600 mb-1">거래유형</label>
-          <select value={txnType} onChange={e => setTxnType(e.target.value)}
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none">
+          <select value={txnType} onChange={e=>setTxnType(e.target.value)}
+            className="border rounded-lg px-3 py-2 text-sm outline-none">
             <option value="">전체</option>
-            <option value="IN">입고</option>
-            <option value="OUT">출고</option>
-            <option value="MOVE">위치이동</option>
-            <option value="ADJ">재고조정</option>
+            <option value="IN">📥 입고</option>
+            <option value="OUT">📤 출고</option>
+            <option value="MOVE">🚚 위치이동</option>
+            <option value="ADJ">⚙️ 재고조정</option>
           </select></div>
-        <div><label className="block text-xs font-bold text-slate-600 mb-1">LOT / 품목 검색</label>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="검색어 입력"
-            className="border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500" /></div>
-        <button onClick={fetch}
-          className="px-5 py-2 bg-slate-900 text-white text-sm font-bold rounded-lg hover:bg-slate-700 flex items-center gap-2">
-          <Search className="h-4 w-4" /> 조회
+        <div><label className="block text-xs font-bold text-slate-600 mb-1">LOT/품목 검색</label>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="검색어"
+            className="border rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 w-36"/></div>
+        <button onClick={doFetch} className="px-5 py-2 bg-slate-900 text-white text-sm font-bold rounded-lg hover:bg-slate-700 flex items-center gap-2">
+          <Search className="h-4 w-4"/> 조회
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-4 py-2.5 bg-slate-50 border-b text-xs font-bold text-slate-500 flex items-center gap-2">
-          <List className="h-3.5 w-3.5" /> 총 {rows.length}건 조회됨
-          {isManager && <span className="text-amber-600">· 매니저: 삭제 권한 있음</span>}
+      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+        <div className="px-4 py-2 bg-slate-50 border-b text-xs text-slate-500 flex gap-2 items-center">
+          <List className="h-3.5 w-3.5"/> {rows.length}건 조회됨
+          {isManager && <span className="text-amber-600 font-bold">· 삭제 권한: 매니저 이상</span>}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-100 text-xs">
               <tr>
-                {['일시','구분','LOT번호','품목명','수량','이전수량→이후수량','위치From','위치To','현장/프로젝트','비고','삭제'].map(h => (
+                {['일시','구분','LOT번호','품목명','수량','이전→이후','위치From','위치To','현장/프로젝트','비고','삭제'].map(h=>(
                   <th key={h} className="px-3 py-2.5 text-left font-bold text-slate-600 whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={11} className="text-center py-12 text-slate-400">조회 중...</td></tr>
+                <tr><td colSpan={11} className="text-center py-16 text-slate-400">
+                  <div className="flex flex-col items-center gap-2"><RefreshCw className="h-6 w-6 animate-spin text-slate-300"/><span>조회 중...</span></div>
+                </td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={11} className="text-center py-12 text-slate-400">해당 기간에 거래 내역이 없습니다.</td></tr>
+                <tr><td colSpan={11} className="text-center py-16 text-slate-400">해당 기간에 거래 내역이 없습니다.</td></tr>
               ) : rows.map(r => {
-                const typeInfo = TXN_TYPE_LABEL[r.txn_type] || TXN_TYPE_LABEL.IN;
+                const info = TXN_LABEL[r.txn_type] || TXN_LABEL.IN;
                 return (
                   <tr key={r.txn_id} className="hover:bg-slate-50">
-                    <td className="px-3 py-2.5 text-xs text-slate-500 whitespace-nowrap font-mono">{r.txn_date}</td>
-                    <td className="px-3 py-2.5">
-                      <span className={cn('flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold border w-fit', typeInfo.color)}>
-                        {typeInfo.icon}{typeInfo.label}
+                    <td className="px-3 py-2 text-xs font-mono text-slate-500 whitespace-nowrap">{fmtDate(r.txn_date)}</td>
+                    <td className="px-3 py-2">
+                      <span className={cn('px-2 py-0.5 rounded-full border text-[11px] font-bold', info.color)}>
+                        {info.emoji} {info.text}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-xs font-mono font-bold text-blue-700">{r.lot_number}</td>
-                    <td className="px-3 py-2.5 text-slate-700 whitespace-nowrap">{r.item_name}</td>
-                    <td className={cn('px-3 py-2.5 text-right font-black whitespace-nowrap',
-                      Number(r.qty) > 0 ? 'text-emerald-600' : 'text-red-600')}>
-                      {Number(r.qty) > 0 ? '+' : ''}{Number(r.qty).toLocaleString()}
+                    <td className="px-3 py-2 text-xs font-mono font-bold text-blue-700">{r.lot_number}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-slate-700">{r.item_name || '-'}</td>
+                    <td className={cn('px-3 py-2 text-right font-black', Number(r.qty)>0 ? 'text-emerald-600' : 'text-red-600')}>
+                      {Number(r.qty)>0?'+':''}{Number(r.qty).toLocaleString()}
                     </td>
-                    <td className="px-3 py-2.5 text-xs font-mono text-slate-500">
-                      {Number(r.qty_before).toLocaleString()} → {Number(r.qty_after).toLocaleString()}
-                    </td>
-                    <td className="px-3 py-2.5 text-xs font-mono text-slate-500">{r.location_from || '-'}</td>
-                    <td className="px-3 py-2.5 text-xs font-mono text-slate-500">{r.location_to || '-'}</td>
-                    <td className="px-3 py-2.5 text-xs text-slate-500">{r.project_name || '-'}</td>
-                    <td className="px-3 py-2.5 text-xs text-slate-400 max-w-[120px] truncate" title={r.notes || ''}>{r.notes || '-'}</td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-2 text-xs font-mono text-slate-500">{Number(r.qty_before).toLocaleString()}→{Number(r.qty_after).toLocaleString()}</td>
+                    <td className="px-3 py-2 text-xs font-mono text-slate-500">{r.location_from || '-'}</td>
+                    <td className="px-3 py-2 text-xs font-mono text-slate-500">{r.location_to || '-'}</td>
+                    <td className="px-3 py-2 text-xs text-slate-500">{r.project_name || '-'}</td>
+                    <td className="px-3 py-2 text-xs text-slate-400 max-w-[100px] truncate">{r.notes || '-'}</td>
+                    <td className="px-3 py-2">
                       {isManager && (
-                        <button onClick={() => handleDelete(r)}
-                          className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors" title="삭제 (재고 원복)">
-                          <Trash2 className="h-3.5 w-3.5" />
+                        <button onClick={() => handleDelete(r)} className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded" title="삭제(재고원복)">
+                          <Trash2 className="h-3.5 w-3.5"/>
                         </button>
                       )}
                     </td>
@@ -547,154 +486,144 @@ function Tab3History({ user }: { user: any }) {
   );
 }
 
-// ─── 탭4: 수동 수불 입력 ──────────────────────────────────────────────────────
+// ─── 탭4: 수동 수불 입력 ─────────────────────────────────────────────────────
 function Tab4Manual({ lots, onSuccess }: { lots: MaterialLot[]; onSuccess: () => void }) {
   const [mode, setMode] = useState<'txn' | 'newlot'>('txn');
 
-  // 거래 입력 폼
-  const [txnDate, setTxnDate] = useState(today());
-  const [selLotId, setSelLotId] = useState('');
+  // 거래 폼
+  const [txnDate, setTxnDate] = useState(todayStr());
   const [lotSearch, setLotSearch] = useState('');
+  const [selLotId, setSelLotId] = useState<number | null>(null);
+  const [showDropdown, setShowDropdown] = useState(false);
   const [txnType, setTxnType] = useState<'IN'|'OUT'|'MOVE'|'ADJ'>('IN');
-  const [qty, setQty] = useState<number | ''>('');
-  const [adjTarget, setAdjTarget] = useState<number | ''>('');  // ADJ용 실재고
+  const [qty, setQty] = useState('');
+  const [adjTarget, setAdjTarget] = useState('');
   const [locationTo, setLocationTo] = useState('');
   const [projectName, setProjectName] = useState('');
-  const [txnNotes, setTxnNotes] = useState('');
+  const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // 신규 LOT 폼
-  const [newLot, setNewLot] = useState({
-    lot_number: '', category: '세라믹울', item_name: '', density: '', thickness: '',
-    width_mm: '', length_mm: '', unit: '롤', qty_current: '', location: '', received_date: today(), notes: ''
-  });
-  const [newSubmitting, setNewSubmitting] = useState(false);
+  const [nl, setNl] = useState({ lot_number:'', category:'세라믹울', item_name:'', density:'', thickness:'', width_mm:'', length_mm:'', unit:'롤', qty_current:'', location:'', received_date:todayStr(), supplier_name:'', notes:'' });
+  const [nlSub, setNlSub] = useState(false);
 
+  const selLot = lots.find(l => l.lot_id === selLotId);
   const filteredLots = lots.filter(l =>
-    !lotSearch || l.lot_number.toLowerCase().includes(lotSearch.toLowerCase()) ||
-    l.item_name.toLowerCase().includes(lotSearch.toLowerCase())
+    lotSearch.length >= 1 && (
+      l.lot_number.toLowerCase().includes(lotSearch.toLowerCase()) ||
+      l.item_name.toLowerCase().includes(lotSearch.toLowerCase())
+    )
   );
-  const selectedLot = lots.find(l => String(l.lot_id) === selLotId);
 
   const handleTxnSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selLotId) { toast.error('LOT를 선택해주세요.'); return; }
-
-    let finalQty = Number(qty);
-    if (txnType === 'ADJ') {
-      if (adjTarget === '') { toast.error('실재고 수량을 입력해주세요.'); return; }
-      finalQty = Number(adjTarget) - Number(selectedLot?.qty_current || 0);
-    }
-    if (finalQty === 0 && txnType !== 'MOVE') { toast.error('수량이 0입니다.'); return; }
+    let finalQty = txnType === 'ADJ'
+      ? Number(adjTarget) - Number(selLot?.qty_current || 0)
+      : Number(qty);
+    if (txnType !== 'MOVE' && txnType !== 'ADJ' && !qty) { toast.error('수량을 입력해주세요.'); return; }
+    if (txnType === 'MOVE' && !locationTo) { toast.error('이동 후 위치를 입력해주세요.'); return; }
+    if (txnType === 'ADJ' && !adjTarget) { toast.error('실재고 수량을 입력해주세요.'); return; }
 
     setSubmitting(true);
     try {
       await api.post('/material-transactions', {
-        lot_id: Number(selLotId),
+        lot_id: selLotId,
         txn_type: txnType,
-        qty: finalQty,
+        qty: txnType === 'MOVE' ? Number(qty) || 0 : Math.abs(finalQty),
         txn_date: txnDate,
         location_to: locationTo || undefined,
         project_name: projectName || undefined,
-        notes: txnNotes || undefined,
+        notes: notes || undefined,
         source_type: 'MANUAL',
       });
-      toast.success(`${TXN_TYPE_LABEL[txnType].label} 등록 완료 (LOT: ${selectedLot?.lot_number})`);
-      setQty(''); setAdjTarget(''); setTxnNotes(''); setLocationTo(''); setProjectName('');
+      toast.success(`✅ ${TXN_LABEL[txnType].text} 등록 완료`);
+      setQty(''); setAdjTarget(''); setNotes(''); setLocationTo(''); setProjectName('');
+      setSelLotId(null); setLotSearch('');
       onSuccess();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || '등록 실패');
+      toast.error(e?.body?.message || '등록 실패');
     } finally { setSubmitting(false); }
   };
 
-  const handleNewLotSubmit = async (e: React.FormEvent) => {
+  const handleNewLot = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newLot.lot_number || !newLot.item_name) { toast.error('LOT번호와 품목명은 필수입니다.'); return; }
-    setNewSubmitting(true);
+    if (!nl.lot_number || !nl.item_name) { toast.error('LOT번호와 품목명은 필수입니다.'); return; }
+    setNlSub(true);
     try {
       await api.post('/material-lots', {
-        ...newLot,
-        density:    newLot.density    ? Number(newLot.density)    : null,
-        thickness:  newLot.thickness  ? Number(newLot.thickness)  : null,
-        width_mm:   newLot.width_mm   ? Number(newLot.width_mm)   : null,
-        length_mm:  newLot.length_mm  ? Number(newLot.length_mm)  : null,
-        qty_current: newLot.qty_current ? Number(newLot.qty_current) : 0,
+        ...nl,
+        density:    nl.density    ? Number(nl.density)    : null,
+        thickness:  nl.thickness  ? Number(nl.thickness)  : null,
+        width_mm:   nl.width_mm   ? Number(nl.width_mm)   : null,
+        length_mm:  nl.length_mm  ? Number(nl.length_mm)  : null,
+        qty_current: nl.qty_current ? Number(nl.qty_current) : 0,
       });
-      toast.success(`신규 LOT (${newLot.lot_number}) 등록 완료!`);
-      setNewLot({ lot_number:'', category:'세라믹울', item_name:'', density:'', thickness:'',
-        width_mm:'', length_mm:'', unit:'롤', qty_current:'', location:'', received_date:today(), notes:'' });
+      toast.success(`신규 LOT [${nl.lot_number}] 등록 완료!`);
+      setNl({ lot_number:'', category:'세라믹울', item_name:'', density:'', thickness:'', width_mm:'', length_mm:'', unit:'롤', qty_current:'', location:'', received_date:todayStr(), supplier_name:'', notes:'' });
       onSuccess();
     } catch (e: any) {
-      toast.error(e?.response?.data?.message || '등록 실패');
-    } finally { setNewSubmitting(false); }
+      toast.error(e?.body?.message || '등록 실패');
+    } finally { setNlSub(false); }
   };
+
+  const TX_BTN = (['IN','OUT','MOVE','ADJ'] as const).map(t => ({
+    key: t,
+    emoji: TXN_LABEL[t].emoji,
+    label: TXN_LABEL[t].text,
+    active: `${t==='IN'?'bg-emerald-600':t==='OUT'?'bg-red-600':t==='MOVE'?'bg-amber-500':'bg-indigo-600'} text-white shadow-lg`,
+    idle: 'bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100',
+  }));
 
   return (
     <div className="space-y-4">
-      {/* 모드 선택 */}
       <div className="flex gap-2">
-        {[
-          { key: 'txn', icon: <Edit3 className="h-4 w-4" />, label: '입출고 · 위치이동 · 재고조정' },
-          { key: 'newlot', icon: <Plus className="h-4 w-4" />, label: '신규 LOT 등록' }
-        ].map(m => (
-          <button key={m.key} onClick={() => setMode(m.key as any)}
-            className={cn('flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-colors',
-              mode === m.key ? 'bg-slate-900 text-white' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50')}>
-            {m.icon}{m.label}
-          </button>
-        ))}
+        <button onClick={()=>setMode('txn')} className={cn('flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-colors', mode==='txn' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50')}>
+          <Edit3 className="h-4 w-4"/> 입출고 · 이동 · 조정
+        </button>
+        <button onClick={()=>setMode('newlot')} className={cn('flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-colors', mode==='newlot' ? 'bg-slate-900 text-white' : 'bg-white border border-slate-300 text-slate-600 hover:bg-slate-50')}>
+          <Plus className="h-4 w-4"/> 신규 LOT 등록
+        </button>
       </div>
 
       {mode === 'txn' && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-          <h3 className="font-bold text-slate-800 mb-5 flex items-center gap-2">
-            <Edit3 className="h-4 w-4 text-blue-600" /> 수동 수불 입력
-          </h3>
+        <div className="bg-white rounded-xl border shadow-sm p-6">
+          <h3 className="font-bold text-slate-800 mb-5 flex items-center gap-2"><Edit3 className="h-4 w-4 text-blue-600"/> 수동 수불 입력</h3>
           <form onSubmit={handleTxnSubmit} className="space-y-5">
-            {/* 거래 유형 버튼 */}
+            {/* 거래유형 */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-2">거래 유형 *</label>
               <div className="grid grid-cols-4 gap-2">
-                {(['IN','OUT','MOVE','ADJ'] as const).map(t => {
-                  const info = TXN_TYPE_LABEL[t];
-                  return (
-                    <button key={t} type="button" onClick={() => setTxnType(t)}
-                      className={cn('py-3 rounded-xl border-2 font-bold text-sm flex flex-col items-center gap-1.5 transition-all',
-                        txnType === t
-                          ? (t==='IN' ? 'bg-emerald-600 border-emerald-600 text-white' :
-                             t==='OUT' ? 'bg-red-600 border-red-600 text-white' :
-                             t==='MOVE' ? 'bg-amber-500 border-amber-500 text-white' :
-                             'bg-indigo-600 border-indigo-600 text-white')
-                          : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100')}>
-                      <span className="text-lg">{t==='IN'?'📥':t==='OUT'?'📤':t==='MOVE'?'🚚':'⚙️'}</span>
-                      <span>{info.label}</span>
-                    </button>
-                  );
-                })}
+                {TX_BTN.map(b => (
+                  <button key={b.key} type="button" onClick={()=>setTxnType(b.key)}
+                    className={cn('py-3 rounded-xl font-bold text-sm flex flex-col items-center gap-1 transition-all', txnType===b.key ? b.active : b.idle)}>
+                    <span className="text-xl">{b.emoji}</span><span>{b.label}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
-              {/* 날짜 */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">거래일 *</label>
-                <input type="date" value={txnDate} onChange={e => setTxnDate(e.target.value)}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200" required />
+                <input type="date" value={txnDate} onChange={e=>setTxnDate(e.target.value)} required
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500"/>
               </div>
-              {/* LOT 선택 */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">LOT 선택 *</label>
-                <input value={lotSearch} onChange={e => { setLotSearch(e.target.value); setSelLotId(''); }}
-                  placeholder="LOT번호 또는 품목명으로 검색 후 선택"
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500" />
-                {lotSearch && !selLotId && filteredLots.length > 0 && (
-                  <div className="mt-1 border border-slate-200 rounded-lg shadow-lg bg-white max-h-48 overflow-y-auto z-10 relative">
-                    {filteredLots.slice(0, 20).map(l => (
+              <div className="relative">
+                <label className="block text-xs font-bold text-slate-700 mb-1">LOT 검색 후 선택 *</label>
+                <input value={lotSearch}
+                  onChange={e=>{ setLotSearch(e.target.value); setSelLotId(null); setShowDropdown(true); }}
+                  onFocus={()=>setShowDropdown(true)}
+                  placeholder="LOT번호 또는 품목명 입력"
+                  className={cn('w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500', selLotId ? 'border-emerald-400 bg-emerald-50' : '')}/>
+                {showDropdown && filteredLots.length > 0 && !selLotId && (
+                  <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                    {filteredLots.slice(0,15).map(l=>(
                       <button key={l.lot_id} type="button"
-                        onClick={() => { setSelLotId(String(l.lot_id)); setLotSearch(`${l.lot_number} (${l.item_name})`); }}
-                        className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm flex justify-between items-center">
-                        <span className="font-mono font-bold text-blue-700">{l.lot_number}</span>
-                        <span className="text-slate-500 text-xs">{l.item_name} | 현재고: {Number(l.qty_current).toLocaleString()}</span>
+                        onClick={()=>{ setSelLotId(l.lot_id); setLotSearch(`${l.lot_number} | ${l.item_name}`); setShowDropdown(false); }}
+                        className="w-full text-left px-3 py-2 hover:bg-blue-50 text-sm border-b border-slate-100 last:border-0">
+                        <span className="font-mono font-bold text-blue-700 text-xs">{l.lot_number}</span>
+                        <span className="text-slate-500 text-xs ml-2">{l.item_name} · 현재고 {Number(l.qty_current).toLocaleString()}{l.unit}</span>
                       </button>
                     ))}
                   </div>
@@ -702,127 +631,97 @@ function Tab4Manual({ lots, onSuccess }: { lots: MaterialLot[]; onSuccess: () =>
               </div>
             </div>
 
-            {/* 선택된 LOT 정보 */}
-            {selectedLot && (
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-6 text-sm">
-                <div><span className="text-blue-400 text-xs font-bold">품목</span><p className="font-bold text-blue-900">{selectedLot.item_name}</p></div>
-                <div><span className="text-blue-400 text-xs font-bold">현재고</span><p className="font-black text-blue-900 text-lg">{Number(selectedLot.qty_current).toLocaleString()} {selectedLot.unit}</p></div>
-                <div><span className="text-blue-400 text-xs font-bold">위치</span><p className="font-bold text-blue-900">{fmtLoc(selectedLot.location)}</p></div>
-                <div><span className="text-blue-400 text-xs font-bold">규격</span><p className="font-bold text-blue-900">{fmtSpec(selectedLot)}</p></div>
+            {selLot && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 grid grid-cols-4 gap-4 text-sm">
+                <div><p className="text-xs text-blue-400 font-bold">품목</p><p className="font-bold text-blue-900">{selLot.item_name}</p></div>
+                <div><p className="text-xs text-blue-400 font-bold">현재고</p><p className="text-xl font-black text-blue-900">{Number(selLot.qty_current).toLocaleString()} {selLot.unit}</p></div>
+                <div><p className="text-xs text-blue-400 font-bold">위치</p><p className="font-bold text-blue-900">{fmtLoc(selLot.location)}</p></div>
+                <div><p className="text-xs text-blue-400 font-bold">규격</p><p className="font-bold text-blue-900">{fmtSpec(selLot)}</p></div>
               </div>
             )}
 
             <div className="grid grid-cols-3 gap-4">
-              {/* 수량 (ADJ는 실재고) */}
               {txnType === 'ADJ' ? (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">실재고 수량 (직접 입력) *</label>
-                  <input type="number" min="0" value={adjTarget} onChange={e => setAdjTarget(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder="실제 재고 수량"
-                    className="w-full border border-indigo-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 font-bold" required />
-                  {selectedLot && adjTarget !== '' && (
-                    <p className={cn('text-xs mt-1 font-bold', Number(adjTarget) >= Number(selectedLot.qty_current) ? 'text-emerald-600' : 'text-red-600')}>
-                      조정량: {Number(adjTarget) - Number(selectedLot.qty_current) >= 0 ? '+' : ''}{Number(adjTarget) - Number(selectedLot.qty_current)} {selectedLot.unit}
+                  <input type="number" min="0" value={adjTarget} onChange={e=>setAdjTarget(e.target.value)} required
+                    className="w-full border border-indigo-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-indigo-500 font-bold"/>
+                  {selLot && adjTarget && (
+                    <p className={cn('text-xs mt-1 font-bold', Number(adjTarget)>=Number(selLot.qty_current) ? 'text-emerald-600' : 'text-red-600')}>
+                      조정량: {Number(adjTarget)-Number(selLot.qty_current)>=0?'+':''}{Number(adjTarget)-Number(selLot.qty_current)}
                     </p>
                   )}
                 </div>
               ) : (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">수량 *</label>
-                  <input type="number" min="0" value={qty} onChange={e => setQty(e.target.value === '' ? '' : Number(e.target.value))}
-                    placeholder={txnType === 'MOVE' ? '이동할 수량' : '수량 입력'}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500 font-bold"
-                    required={txnType !== 'MOVE'} />
+                  <input type="number" min="0" step="any" value={qty} onChange={e=>setQty(e.target.value)}
+                    required={txnType !== 'MOVE'}
+                    className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500 font-bold"/>
                 </div>
               )}
-              {/* 이동 후 위치 (MOVE, IN에서도 위치 지정 가능) */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  {txnType === 'MOVE' ? '이동 후 위치 *' : '배치 위치'}
-                </label>
-                <input value={locationTo} onChange={e => setLocationTo(e.target.value)}
+                <label className="block text-xs font-bold text-slate-700 mb-1">{txnType==='MOVE' ? '이동 후 위치 *' : '배치 위치'}</label>
+                <input value={locationTo} onChange={e=>setLocationTo(e.target.value)}
                   placeholder="예: A1-P1, H3-P2"
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500 font-mono" />
+                  required={txnType==='MOVE'}
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"/>
               </div>
-              {/* 현장/프로젝트 (OUT) */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  {txnType === 'OUT' ? '출하처/현장명' : '비고'}
-                </label>
-                <input value={txnType === 'OUT' ? projectName : txnNotes}
-                  onChange={e => txnType === 'OUT' ? setProjectName(e.target.value) : setTxnNotes(e.target.value)}
-                  placeholder={txnType === 'OUT' ? '판교현장, 부산현장 등' : '비고 입력'}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500" />
+                <label className="block text-xs font-bold text-slate-700 mb-1">{txnType==='OUT' ? '출하처/현장' : '비고'}</label>
+                <input value={txnType==='OUT' ? projectName : notes}
+                  onChange={e=>txnType==='OUT' ? setProjectName(e.target.value) : setNotes(e.target.value)}
+                  placeholder={txnType==='OUT' ? '판교현장 등' : ''}
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500"/>
               </div>
             </div>
 
             <button type="submit" disabled={submitting || !selLotId}
-              className={cn('w-full py-3 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors',
-                txnType==='IN' ? 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300' :
-                txnType==='OUT' ? 'bg-red-600 hover:bg-red-700 disabled:bg-red-300' :
-                txnType==='MOVE' ? 'bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300' :
-                'bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300')}>
-              {submitting ? '등록 중...' : `${TXN_TYPE_LABEL[txnType].label} 등록`}
+              className={cn('w-full py-3 rounded-xl text-white font-bold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50',
+                txnType==='IN'?'bg-emerald-600 hover:bg-emerald-700':txnType==='OUT'?'bg-red-600 hover:bg-red-700':txnType==='MOVE'?'bg-amber-500 hover:bg-amber-600':'bg-indigo-600 hover:bg-indigo-700')}>
+              {submitting ? '등록 중...' : `${TXN_LABEL[txnType].emoji} ${TXN_LABEL[txnType].text} 등록`}
             </button>
           </form>
         </div>
       )}
 
       {mode === 'newlot' && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-          <h3 className="font-bold text-slate-800 mb-5 flex items-center gap-2">
-            <Plus className="h-4 w-4 text-emerald-600" /> 신규 LOT 기초재고 등록
-          </h3>
-          <form onSubmit={handleNewLotSubmit} className="space-y-4">
+        <div className="bg-white rounded-xl border shadow-sm p-6">
+          <h3 className="font-bold text-slate-800 mb-5 flex items-center gap-2"><Plus className="h-4 w-4 text-emerald-600"/> 신규 LOT 기초재고 등록</h3>
+          <form onSubmit={handleNewLot} className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {[
-                { key: 'lot_number', label: 'LOT 번호 *', ph: '260722CW001', type: 'text', required: true },
-                { key: 'item_name',  label: '품목명 *',   ph: '세라믹울 104K 25T', type: 'text', required: true },
-                { key: 'received_date', label: '입고일 *', ph: '', type: 'date', required: true },
-              ].map(f => (
-                <div key={f.key}>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">{f.label}</label>
-                  <input type={f.type} value={(newLot as any)[f.key]} placeholder={f.ph} required={f.required}
-                    onChange={e => setNewLot(p => ({ ...p, [f.key]: e.target.value }))}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500" />
-                </div>
-              ))}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">분류 *</label>
-                <select value={newLot.category} onChange={e => setNewLot(p => ({ ...p, category: e.target.value }))}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500">
-                  {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">단위</label>
-                <select value={newLot.unit} onChange={e => setNewLot(p => ({ ...p, unit: e.target.value }))}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none">
-                  {['롤','장','EA','kg','m'].map(u => <option key={u}>{u}</option>)}
-                </select>
-              </div>
-              {[
-                { key: 'qty_current', label: '기초수량', ph: '0', type: 'number' },
-                { key: 'location',    label: '적재위치', ph: 'A1-P1', type: 'text' },
-                { key: 'density',     label: '밀도 (K)', ph: '104', type: 'number' },
-                { key: 'thickness',   label: '두께 (T)', ph: '25', type: 'number' },
-                { key: 'width_mm',    label: '폭 (W)', ph: '200', type: 'number' },
-                { key: 'length_mm',   label: '길이 (L)', ph: '7400', type: 'number' },
-                { key: 'supplier_name', label: '공급업체', ph: '', type: 'text' },
-                { key: 'notes',       label: '비고', ph: '', type: 'text' },
-              ].map(f => (
-                <div key={f.key}>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">{f.label}</label>
-                  <input type={f.type} value={(newLot as any)[f.key]} placeholder={f.ph}
-                    onChange={e => setNewLot(p => ({ ...p, [f.key]: e.target.value }))}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500" />
-                </div>
+              <div><label className="block text-xs font-bold text-slate-700 mb-1">LOT 번호 *</label>
+                <input value={nl.lot_number} onChange={e=>setNl(p=>({...p,lot_number:e.target.value}))} required placeholder="260722CW001"
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500 font-mono"/></div>
+              <div><label className="block text-xs font-bold text-slate-700 mb-1">품목명 *</label>
+                <input value={nl.item_name} onChange={e=>setNl(p=>({...p,item_name:e.target.value}))} required placeholder="세라믹울 104K 25T"
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500"/></div>
+              <div><label className="block text-xs font-bold text-slate-700 mb-1">입고일 *</label>
+                <input type="date" value={nl.received_date} onChange={e=>setNl(p=>({...p,received_date:e.target.value}))} required
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500"/></div>
+              <div><label className="block text-xs font-bold text-slate-700 mb-1">분류 *</label>
+                <select value={nl.category} onChange={e=>setNl(p=>({...p,category:e.target.value}))}
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500">
+                  {CATEGORIES.map(c=><option key={c}>{c}</option>)}
+                </select></div>
+              <div><label className="block text-xs font-bold text-slate-700 mb-1">단위</label>
+                <select value={nl.unit} onChange={e=>setNl(p=>({...p,unit:e.target.value}))}
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none">
+                  {['롤','장','EA','kg','m'].map(u=><option key={u}>{u}</option>)}
+                </select></div>
+              {[{k:'qty_current',label:'기초수량',ph:'0'},{k:'location',label:'적재위치',ph:'A1-P1'},
+                {k:'density',label:'밀도(K)',ph:'104'},{k:'thickness',label:'두께(T)',ph:'25'},
+                {k:'width_mm',label:'폭(W)mm',ph:'200'},{k:'length_mm',label:'길이(L)mm',ph:'7400'},
+                {k:'supplier_name',label:'공급업체',ph:''},{k:'notes',label:'비고',ph:''}
+              ].map(f=>(
+                <div key={f.k}><label className="block text-xs font-bold text-slate-700 mb-1">{f.label}</label>
+                  <input value={(nl as any)[f.k]} onChange={e=>setNl(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph}
+                    className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none focus:border-blue-500"/></div>
               ))}
             </div>
-            <button type="submit" disabled={newSubmitting}
-              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-bold rounded-xl flex items-center justify-center gap-2">
-              <Plus className="h-4 w-4" />
-              {newSubmitting ? '등록 중...' : '신규 LOT 기초재고 등록'}
+            <button type="submit" disabled={nlSub}
+              className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl flex items-center justify-center gap-2">
+              <Plus className="h-4 w-4"/> {nlSub ? '등록 중...' : '신규 LOT 등록'}
             </button>
           </form>
         </div>
@@ -831,32 +730,29 @@ function Tab4Manual({ lots, onSuccess }: { lots: MaterialLot[]; onSuccess: () =>
   );
 }
 
-// ─── 메인 페이지 ─────────────────────────────────────────────────────────────
+// ─── 메인 ────────────────────────────────────────────────────────────────────
 const TABS = [
-  { id: 'stock',   label: '전체 LOT 재고현황', icon: <Package className="h-4 w-4" /> },
-  { id: 'ledger',  label: '수불대장 (기간별)',  icon: <BookOpen className="h-4 w-4" /> },
-  { id: 'history', label: '수불 이력 조회',     icon: <List className="h-4 w-4" /> },
-  { id: 'manual',  label: '수동 수불 입력',     icon: <Edit3 className="h-4 w-4" /> },
+  { id: 'stock',   icon: '📦', label: '전체 LOT 재고현황' },
+  { id: 'ledger',  icon: '📑', label: '수불대장 (기간별)' },
+  { id: 'history', icon: '📋', label: '수불 이력 조회' },
+  { id: 'manual',  icon: '✏️', label: '수동 수불 입력' },
 ] as const;
 
 export function MaterialStockPage() {
-  const { me: user } = useAuth();
-  const [activeTab, setActiveTab] = useState<typeof TABS[number]['id']>('stock');
+  const { user, isManager } = useAuth();
+  const [tab, setTab] = useState<typeof TABS[number]['id']>('stock');
   const [lots, setLots] = useState<MaterialLot[]>([]);
-  const [summaries, setSummaries] = useState<SummaryRow[]>([]);
   const [loading, setLoading] = useState(false);
 
   const loadLots = useCallback(async () => {
     setLoading(true);
     try {
-      const [lotsRes, sumRes] = await Promise.all([
-        api.get<{ data: MaterialLot[] }>('/material-lots?active=1'),
-        api.get<{ data: SummaryRow[] }>('/material-stock-summary').catch(() => ({ data: [] })),
-      ]);
-      setLots(lotsRes.data || []);
-      setSummaries(sumRes.data || []);
-    } catch { toast.error('LOT 재고 조회 실패'); }
-    finally { setLoading(false); }
+      const res = await api.get<{ data: MaterialLot[] }>('/material-lots');
+      setLots(res.data || []);
+    } catch (e) {
+      console.error('material-lots error:', e);
+      toast.error('LOT 재고 조회 실패');
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { loadLots(); }, [loadLots]);
@@ -865,29 +761,24 @@ export function MaterialStockPage() {
     <div className="p-6 space-y-5 bg-slate-50 min-h-screen">
       <PageHeader
         title="📦 원자재 통합 재고관리"
-        description="LOT별 재고현황 · 수불대장 · 이력조회 · 수동입력 통합 관리"
+        description="전체 LOT 재고현황 · 수불대장 · 이력조회 · 수동 수불 입력"
       />
 
-      {/* 탭 네비게이션 */}
-      <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1.5 shadow-sm w-fit">
-        {TABS.map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all whitespace-nowrap',
-              activeTab === tab.id
-                ? 'bg-slate-900 text-white shadow-sm'
-                : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
-            )}>
-            {tab.icon}{tab.label}
+      {/* 탭 */}
+      <div className="flex gap-1 bg-white border border-slate-200 rounded-xl p-1.5 shadow-sm w-fit flex-wrap">
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={cn('flex items-center gap-1.5 px-4 py-2.5 rounded-lg text-sm font-bold transition-all whitespace-nowrap',
+              tab === t.id ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100')}>
+            {t.icon} {t.label}
           </button>
         ))}
       </div>
 
-      {/* 탭 콘텐츠 */}
-      {activeTab === 'stock'   && <Tab1LotStock lots={lots} loading={loading} onRefresh={loadLots} summaries={summaries} />}
-      {activeTab === 'ledger'  && <Tab2Ledger />}
-      {activeTab === 'history' && <Tab3History user={user} />}
-      {activeTab === 'manual'  && <Tab4Manual lots={lots} onSuccess={loadLots} />}
+      {tab === 'stock'   && <Tab1Stock lots={lots} loading={loading} onRefresh={loadLots}/>}
+      {tab === 'ledger'  && <Tab2Ledger/>}
+      {tab === 'history' && <Tab3History isManager={!!(isManager)}/>}
+      {tab === 'manual'  && <Tab4Manual lots={lots} onSuccess={loadLots}/>}
     </div>
   );
 }
