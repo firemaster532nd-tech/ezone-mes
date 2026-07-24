@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
@@ -191,47 +191,61 @@ export function LocationManagementPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. 보유 중인 활성 LOT 목록 불러오기
-      const res = await api.get<{ data: any[] }>('/lots?status=ACTIVE');
-      const rawLots = res.data ?? [];
+      // 1-a. 기존 lots 테이블 활성 LOT
+      const resLots = await api.get<{ data: any[] }>('/lots?status=ACTIVE').catch(() => ({ data: [] }));
+      // 1-b. 새 material_lots 테이블 (구글시트 등록분 포함)
+      const resMat = await api.get<{ data: any[] }>('/material-lots?active=1').catch(() => ({ data: [] }));
+
+      const rawLots = [...(resLots.data ?? []), ...(resMat.data ?? [])];
 
       const availList: AvailableLot[] = rawLots.map(l => ({
         lot_id: l.lot_id,
         lot_number: l.lot_number,
         item_name: l.item_name || '자재/부자재',
-        remaining_qty: l.remaining_qty ?? l.qty ?? 0,
-        location: l.staging_location || l.location
-      }));
+        remaining_qty: l.remaining_qty ?? l.qty_current ?? l.qty ?? 0,
+        location: l.staging_location || l.location || null
+      })).filter(l => !!l.lot_number);
+
       setAvailableLots(availList);
 
       // 2. 랙 셀별 2파레트 매핑
+      // location 형식: "A1" (구형) 또는 "A1-P1" / "A1-P2" (신형)
       const map: Record<string, RackCellStatus> = {};
       for (const l of availList) {
-        if (l.location) {
-          if (!map[l.location]) {
-            map[l.location] = {
-              location_code: l.location,
-              pallet1: { slot_no: 1 },
-              pallet2: { slot_no: 2 }
-            };
-          }
-          // 슬롯 1번이 비어있으면 1번에, 없으면 2번에 배치
-          if (!map[l.location].pallet1.lot_number) {
-            map[l.location].pallet1 = {
-              slot_no: 1,
-              lot_id: l.lot_id,
-              lot_number: l.lot_number,
-              item_name: l.item_name,
-              qty: l.remaining_qty
-            };
-          } else if (!map[l.location].pallet2.lot_number) {
-            map[l.location].pallet2 = {
-              slot_no: 2,
-              lot_id: l.lot_id,
-              lot_number: l.lot_number,
-              item_name: l.item_name,
-              qty: l.remaining_qty
-            };
+        if (!l.location) continue;
+
+        let rackCode = l.location;
+        let palletSlot: 1 | 2 | null = null;
+
+        // 신형 위치 포맷 파싱: "A1-P1" or "A1-P2"
+        const pMatch = l.location.match(/^([A-Z]+\d+)-P(\d)$/);
+        if (pMatch) {
+          rackCode = pMatch[1];
+          palletSlot = parseInt(pMatch[2]) as 1 | 2;
+        }
+
+        if (!map[rackCode]) {
+          map[rackCode] = { location_code: rackCode, pallet1: { slot_no: 1 }, pallet2: { slot_no: 2 } };
+        }
+
+        const slot: PalletSlot = {
+          slot_no: palletSlot || 1,
+          lot_id: l.lot_id,
+          lot_number: l.lot_number,
+          item_name: l.item_name,
+          qty: l.remaining_qty
+        };
+
+        if (palletSlot === 1) {
+          map[rackCode].pallet1 = slot;
+        } else if (palletSlot === 2) {
+          map[rackCode].pallet2 = slot;
+        } else {
+          // 구형 포맷: 비어있는 슬롯에 순서대로 배치
+          if (!map[rackCode].pallet1.lot_number) {
+            map[rackCode].pallet1 = { ...slot, slot_no: 1 };
+          } else if (!map[rackCode].pallet2.lot_number) {
+            map[rackCode].pallet2 = { ...slot, slot_no: 2 };
           }
         }
       }
