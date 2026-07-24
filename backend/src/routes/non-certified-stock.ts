@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+﻿import type { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -35,16 +35,7 @@ export async function nonCertifiedStockRoutes(app: FastifyInstance) {
   await migrateNonCertifiedStock();
 
   // ── GET /api/non-certified-stock ─────────────────────────────────────────
-  app.get('/api/non-certified-stock', async (req) => {
-    const { status, rack_code } = req.query as any;
-    let sql = `SELECT * FROM non_certified_stock WHERE 1=1`;
-    const params: any[] = [];
-    if (status)    { params.push(status);    sql += ` AND status=$${params.length}`; }
-    if (rack_code) { params.push(rack_code); sql += ` AND rack_code=$${params.length}`; }
-    sql += ` ORDER BY rack_code, pallet_no, created_at DESC`;
-    const { rows } = await pool.query(sql, params);
-    return { data: rows };
-  });
+  // GET /api/non-certified-stock is handled in material-lots.ts (removed duplicate)
 
   // ── POST /api/non-certified-stock ─────────────────────────────────────────
   app.post('/api/non-certified-stock', async (req, reply) => {

@@ -1,6 +1,6 @@
-﻿import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
-import { requireAuth } from '../lib/auth-plugin.js';
+import { requireAuth, requireRole } from '../lib/auth-plugin.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DB 마이그레이션 — material_lots + material_transactions
