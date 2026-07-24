@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+﻿import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { requireAuth, requireRole } from '../lib/auth-plugin.js';
@@ -113,6 +113,30 @@ export async function announcementRoutes(app: FastifyInstance) {
   // ════════════════════════════════════════════════════════════════════════════
   // 공지 (NOTICE) — manager/admin 작성, 전체/부서/개인 발송
   // ════════════════════════════════════════════════════════════════════════════
+
+  // GET /api/announcements/public  ─ 로그인 전 공개 공지 목록 (인증 불필요)
+  app.get('/api/announcements/public', async () => {
+    try {
+      const { rows } = await pool.query(`
+        SELECT
+          a.announcement_id,
+          a.title,
+          a.body,
+          a.created_at,
+          a.target_type,
+          w.worker_name AS author_name
+        FROM announcement a
+        LEFT JOIN worker w ON w.worker_id = a.created_by
+        WHERE a.msg_type = 'NOTICE'
+          AND a.target_type = 'ALL'
+        ORDER BY a.created_at DESC
+        LIMIT 5
+      `);
+      return { announcements: rows };
+    } catch {
+      return { announcements: [] };
+    }
+  });
 
   // GET /api/announcements  ─ 공지 목록
   app.get('/api/announcements', { preHandler: requireAuth }, async (req) => {

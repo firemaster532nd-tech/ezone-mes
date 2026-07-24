@@ -64,7 +64,6 @@ import { materialLotsRoutes } from './routes/material-lots.js';
 import { lotLineageRoutes } from './routes/lot-lineage.js';
 import googleSheetsSyncRoutes from './routes/google-sheets-sync.js';
 import assemblyLogRoutes from './routes/assembly-logs.js';
-import { nonCertifiedStockRoutes } from './routes/non-certified-stock.js';
 
 
 let appInstance: any = null;
@@ -147,7 +146,6 @@ export const initApp = async () => {
   await app.register(lotLineageRoutes);
   await app.register(googleSheetsSyncRoutes);
   await app.register(assemblyLogRoutes);
-  await app.register(nonCertifiedStockRoutes);
 
 
   // Health check

@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+﻿import type { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 
@@ -434,5 +434,105 @@ export async function materialLotsRoutes(app: FastifyInstance) {
       ORDER BY category, location
     `);
     return { data: rows };
+  });
+
+  // ── GET /api/non-certified-stock ─────────────────────────────────────────
+  app.get('/api/non-certified-stock', async (req) => {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS non_certified_stock (
+        id SERIAL PRIMARY KEY, rack_code VARCHAR(10), pallet_no INTEGER DEFAULT 1,
+        item_name VARCHAR(200), spec VARCHAR(300), lot_number VARCHAR(100),
+        qty NUMERIC(12,3) DEFAULT 0, unit VARCHAR(20) DEFAULT 'EA',
+        reason VARCHAR(200) DEFAULT '로트미확인', status VARCHAR(20) DEFAULT 'ACTIVE',
+        notes TEXT, registered_at DATE DEFAULT CURRENT_DATE, created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `).catch(() => {});
+    const { status, rack_code } = req.query as any;
+    let sql = `SELECT * FROM non_certified_stock WHERE 1=1`;
+    const params: any[] = [];
+    if (status)    { params.push(status);    sql += ` AND status=$${params.length}`; }
+    if (rack_code) { params.push(rack_code); sql += ` AND rack_code=$${params.length}`; }
+    sql += ` ORDER BY rack_code, pallet_no, created_at DESC`;
+    const { rows } = await pool.query(sql, params);
+    return { data: rows };
+  });
+
+  // ── POST /api/non-certified-stock ─────────────────────────────────────────
+  app.post('/api/non-certified-stock', async (req, reply) => {
+    const b = req.body as any;
+    if (!b.rack_code || !b.item_name) return reply.status(400).send({ error: 'rack_code, item_name은 필수입니다.' });
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO non_certified_stock (rack_code,pallet_no,item_name,spec,lot_number,qty,unit,reason,notes,registered_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_DATE) RETURNING *`,
+      [b.rack_code, b.pallet_no||1, b.item_name, b.spec||null, b.lot_number||null, b.qty||0, b.unit||'EA', b.reason||'로트미확인', b.notes||null]
+    );
+    return { data: row };
+  });
+
+  // ── PATCH /api/non-certified-stock/:id ───────────────────────────────────
+  app.patch('/api/non-certified-stock/:id', async (req) => {
+    const { id } = req.params as any;
+    const b = req.body as any;
+    const { rows: [row] } = await pool.query(
+      `UPDATE non_certified_stock SET status=COALESCE($1,status), item_name=COALESCE($2,item_name), notes=COALESCE($3,notes) WHERE id=$4 RETURNING *`,
+      [b.status, b.item_name, b.notes, id]
+    );
+    return { data: row };
+  });
+
+  // ── DELETE /api/non-certified-stock/:id ───────────────────────────────────
+  app.delete('/api/non-certified-stock/:id', async (req) => {
+    const { id } = req.params as any;
+    await pool.query(`UPDATE non_certified_stock SET status='DISPOSED' WHERE id=$1`, [id]);
+    return { message: '폐기처리 완료' };
+  });
+
+  // ── POST /api/non-certified-stock/google-sheet-import ─────────────────────
+  app.post('/api/non-certified-stock/google-sheet-import', async (req, reply) => {
+    interface SheetRow { rack_code: string; pallet_no: number; item_name: string; spec?: string; lot_number?: string; qty?: number; notes?: string; }
+    const { rows: sheetRows } = req.body as { rows: SheetRow[] };
+    if (!Array.isArray(sheetRows) || sheetRows.length === 0) return reply.status(400).send({ error: '데이터 없음' });
+    const client = await pool.connect();
+    const certR: any[] = [], nonCR: any[] = [];
+    try {
+      await client.query('BEGIN');
+      for (const row of sheetRows) {
+        const { rack_code, pallet_no, item_name, spec, lot_number, qty, notes } = row;
+        const location = `${rack_code}-P${pallet_no}`;
+        const hasLot = lot_number && lot_number.trim() !== '';
+        if (hasLot) {
+          const cleanLot = lot_number!.trim();
+          const { rows: ex } = await client.query(`SELECT lot_id FROM material_lots WHERE lot_number=$1 AND is_active=TRUE LIMIT 1`, [cleanLot]);
+          if (ex.length) {
+            await client.query(`UPDATE material_lots SET location=$1, qty_current=$2, updated_at=NOW() WHERE lot_id=$3`, [location, qty||0, ex[0].lot_id]);
+            certR.push({ status: 'updated', lot_number: cleanLot });
+          } else {
+            const cat = item_name.includes('그라스울보드') ? '그라스울보드' : item_name.includes('그라스울') ? '그라스울' : '세라믹울';
+            const { rows: [lot] } = await client.query(
+              `INSERT INTO material_lots (lot_number,category,item_name,unit,qty_current,location,received_date,notes) VALUES ($1,$2,$3,'롤',$4,$5,CURRENT_DATE,$6) ON CONFLICT DO NOTHING RETURNING lot_id`,
+              [cleanLot, cat, item_name, qty||0, location, notes||'구글시트 초기등록']
+            );
+            if (lot?.lot_id && (qty||0) > 0) {
+              await client.query(`INSERT INTO material_transactions (txn_date,lot_id,lot_number,category,txn_type,qty,qty_before,qty_after,source_type,notes) VALUES (CURRENT_DATE,$1,$2,$3,'IN',$4,0,$4,'GOOGLE_SHEET_IMPORT','구글시트 기초재고') ON CONFLICT DO NOTHING`, [lot.lot_id, cleanLot, cat, qty||0]).catch(() => {});
+            }
+            certR.push({ status: lot?.lot_id ? 'created' : 'skipped', lot_number: cleanLot });
+          }
+        } else {
+          const { rows: ex } = await client.query(`SELECT id FROM non_certified_stock WHERE rack_code=$1 AND pallet_no=$2 AND status='ACTIVE' LIMIT 1`, [rack_code, pallet_no]);
+          if (ex.length) {
+            await client.query(`UPDATE non_certified_stock SET item_name=$1 WHERE id=$2`, [item_name, ex[0].id]);
+            nonCR.push({ status: 'updated' });
+          } else {
+            await client.query(`INSERT INTO non_certified_stock (rack_code,pallet_no,item_name,spec,lot_number,qty,reason,notes,registered_at) VALUES ($1,$2,$3,$4,$5,$6,'로트미확인',$7,CURRENT_DATE)`, [rack_code, pallet_no, item_name, spec||null, lot_number&&lot_number.trim()?lot_number.trim():null, qty||0, notes||'구글시트 초기등록']);
+            nonCR.push({ status: 'created' });
+          }
+        }
+      }
+      await client.query('COMMIT');
+      return { data: { certified: { total: certR.length, created: certR.filter(r=>r.status==='created').length, updated: certR.filter(r=>r.status==='updated').length }, non_certified: { total: nonCR.length, created: nonCR.filter(r=>r.status==='created').length } }, message: `업로드 완료: 인정재고 ${certR.length}건, 비인정재고 ${nonCR.length}건` };
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return reply.status(500).send({ error: e.message });
+    } finally { client.release(); }
   });
 }
