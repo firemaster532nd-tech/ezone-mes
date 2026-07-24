@@ -90,7 +90,6 @@ const shopNavItems: NavSection[] = [
     icon: Boxes,
     children: [
       { label: '📦 원자재 통합 재고관리',  path: '/inventory/material-stock' },
-      { label: '📑 통합 재고수불대장',      path: '/inventory/material-ledger' },
       { label: '📱 바코드 스캔 WMS',        path: '/inventory/barcode-wms' },
       { label: '🗺️ 랙 로케이션 관리',       path: '/inventory/location' },
       { label: '❓ 비인정 재고 관리',       path: '/inventory/non-certified-stock' },
@@ -100,7 +99,6 @@ const shopNavItems: NavSection[] = [
       { label: '🏭 에프엔테크 재고현황',   path: '/inventory/fn-tech-stock' },
       { label: '🏷️ LOT 라벨 재출력',       path: '/inventory/label-reprint' },
       { label: '🗓️ 월말 실사/마감',         path: '/inventory/closing' },
-      { label: '🗓️ 월말 실사/마감',       path: '/inventory/closing' },
     ],
     dividerAfter: true,
   },
@@ -201,7 +199,6 @@ const shopNavItems: NavSection[] = [
       { label: '인정기준 검증', path: '/quality/cert-check' },
       { label: '불량/폐기', path: '/quality/defects' },
       { label: '로스 분석', path: '/reports/loss' },
-      { label: '월말 실사/마감', path: '/inventory/closing' },
       { label: '미비사항 점검', path: '/quality/compliance' },
     ],
     dividerAfter: true,
@@ -293,7 +290,6 @@ const adminNavItems: NavSection[] = [
       { label: '에프엔테크 재고현황', path: '/inventory/fn-tech-stock' },
       { label: '로케이션 관리', path: '/inventory/location' },
       { label: 'LOT 라벨 재출력', path: '/inventory/label-reprint' },
-      { label: '월말 실사/마감', path: '/inventory/closing' },
     ],
   },
   {
