@@ -197,6 +197,50 @@ function GraphicRackMap({
 }
 
 // ─── 메인 페이지 ────────────────────────────────────────────────────────────
+// ─── 랙 LOT 라벨 인쇄 (80×60mm) ────────────────────────────────────────────
+function printRackLabel(locationCode: string, slotNo: 1 | 2, slot: PalletSlot) {
+  const locFull = `${locationCode}-P${slotNo}`;
+  const lotNo   = slot.lot_number || '-';
+  const item    = slot.item_name  || '-';
+  const qty     = Number(slot.qty || 0).toLocaleString();
+  const side    = slotNo === 1 ? '오른쪽(P1)' : '왼쪽(P2)';
+  const qrData  = encodeURIComponent(lotNo !== '-' ? lotNo : locFull);
+  const qrUrl   = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${qrData}&margin=0`;
+
+  const w = window.open('', '_blank', 'width=450,height=380');
+  if (!w) return;
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>랙 라벨</title>
+<style>
+@page{size:80mm 60mm;margin:0}
+body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:3mm;box-sizing:border-box;font-size:8pt;margin:0}
+.top{display:flex;justify-content:space-between;border-bottom:0.3mm solid #333;padding-bottom:1.5mm;margin-bottom:2mm;font-size:7pt}
+.co{font-weight:bold;color:#c00}.title{font-weight:bold}
+.row{display:flex;gap:3mm;align-items:flex-start}
+.qr img{width:22mm;height:22mm;border:0.2mm solid #ccc}
+.info .loc{font-size:12pt;font-weight:900;font-family:monospace;color:#1a237e}
+.info .side{font-size:7pt;color:#555;margin-bottom:1mm}
+.info .field{font-size:6.5pt;margin-top:1.5mm}
+.info .lbl{color:#888}
+.info .val{font-weight:bold}
+.qty{border:0.4mm solid #333;text-align:center;padding:1.5mm;margin-top:2mm;font-size:11pt;font-weight:900}
+.qty small{display:block;font-size:6pt;color:#555;font-weight:400;margin-bottom:0.5mm}
+</style></head><body>
+<div class="top"><span class="co">(주)이지원</span><span class="title">랙 위치 LOT 라벨</span><span>${new Date().toLocaleDateString('ko-KR')}</span></div>
+<div class="row">
+  <div class="qr"><img src="${qrUrl}"/></div>
+  <div class="info">
+    <div class="loc">${locFull}</div>
+    <div class="side">${side} 파레트</div>
+    <div class="field"><span class="lbl">LOT: </span><span class="val">${lotNo}</span></div>
+    <div class="field"><span class="lbl">품목: </span><span class="val">${item}</span></div>
+  </div>
+</div>
+<div class="qty"><small>수량</small>${qty}</div>
+</body></html>`);
+  w.document.close();
+  setTimeout(() => { w.print(); w.close(); }, 700);
+}
+
 export function LocationManagementPage() {
   const [selectedLocation, setSelectedLocation] = useState('');
   const [rackStatusMap, setRackStatusMap] = useState<Record<string, RackCellStatus>>({});
@@ -516,9 +560,19 @@ export function LocationManagementPage() {
                   <span className={cn('text-xs font-black text-white px-2 py-0.5 rounded font-mono',
                     activeCell.pallet2.type !== 'empty' ? (activeCell.pallet2.type === 'non_certified' ? 'bg-amber-500' : 'bg-indigo-600') : 'bg-slate-400'
                   )}>P2 (왼쪽 파레트)</span>
-                  {activeCell.pallet2.type !== 'empty' && (
-                    <button onClick={() => handleClearPallet(2)} className="text-[10px] text-rose-600 font-bold hover:underline">비우기 ✕</button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {activeCell.pallet2.type === 'certified' && activeCell.pallet2.lot_number && (
+                      <button
+                        type="button"
+                        onClick={() => printRackLabel(activeCellCode, 2, activeCell.pallet2)}
+                        className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-0.5"
+                        title="80×60mm LOT 라벨 인쇄"
+                      >🖨 라벨</button>
+                    )}
+                    {activeCell.pallet2.type !== 'empty' && (
+                      <button onClick={() => handleClearPallet(2)} className="text-[10px] text-rose-600 font-bold hover:underline">비우기 ✕</button>
+                    )}
+                  </div>
                 </div>
                 {activeCell.pallet2.type !== 'empty' ? (
                   <div>
@@ -547,9 +601,19 @@ export function LocationManagementPage() {
                   <span className={cn('text-xs font-black text-white px-2 py-0.5 rounded font-mono',
                     activeCell.pallet1.type !== 'empty' ? (activeCell.pallet1.type === 'non_certified' ? 'bg-amber-500' : 'bg-emerald-600') : 'bg-slate-400'
                   )}>P1 (오른쪽 파레트)</span>
-                  {activeCell.pallet1.type !== 'empty' && (
-                    <button onClick={() => handleClearPallet(1)} className="text-[10px] text-rose-600 font-bold hover:underline">비우기 ✕</button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {activeCell.pallet1.type === 'certified' && activeCell.pallet1.lot_number && (
+                      <button
+                        type="button"
+                        onClick={() => printRackLabel(activeCellCode, 1, activeCell.pallet1)}
+                        className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-0.5"
+                        title="80×60mm LOT 라벨 인쇄"
+                      >🖨 라벨</button>
+                    )}
+                    {activeCell.pallet1.type !== 'empty' && (
+                      <button onClick={() => handleClearPallet(1)} className="text-[10px] text-rose-600 font-bold hover:underline">비우기 ✕</button>
+                    )}
+                  </div>
                 </div>
                 {activeCell.pallet1.type !== 'empty' ? (
                   <div>
