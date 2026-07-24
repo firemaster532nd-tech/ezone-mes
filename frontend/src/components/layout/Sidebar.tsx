@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from 'react-router-dom';
+﻿import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, Package, ShieldCheck,
   Truck, Settings, ChevronLeft, ChevronRight, Factory, Database,
@@ -89,15 +89,17 @@ const shopNavItems: NavSection[] = [
     label: '통합 재고 관리',
     icon: Boxes,
     children: [
-      { label: '📊 전체 LOT 재고현황',  path: '/inventory/material-stock' },
-      { label: '📑 통합 재고수불대장',    path: '/inventory/material-ledger' },
-      { label: '❓ 비인정 재고 관리',   path: '/inventory/non-certified-stock' },
-      { label: '⚙️ 기초/초기 재고 설정', path: '/inventory/material-init' },
-      { label: '🔄 수불대장 엑셀 연동',   path: '/inventory/import' },
-      { label: '🔌 소켓 / 평철 재고',    path: '/inventory/socket-stock' },
-      { label: '🏭 에프엔테크 재고현황',  path: '/inventory/fn-tech-stock' },
-      { label: '📍 로케이션 관리',       path: '/inventory/location' },
-      { label: '🏷️ LOT 라벨 재출력',     path: '/inventory/label-reprint' },
+      { label: '📦 원자재 통합 재고관리',  path: '/inventory/material-stock' },
+      { label: '📑 통합 재고수불대장',      path: '/inventory/material-ledger' },
+      { label: '📱 바코드 스캔 WMS',        path: '/inventory/barcode-wms' },
+      { label: '🗺️ 랙 로케이션 관리',       path: '/inventory/location' },
+      { label: '❓ 비인정 재고 관리',       path: '/inventory/non-certified-stock' },
+      { label: '⚙️ 기초/초기 재고 설정',   path: '/inventory/material-init' },
+      { label: '🔄 수불대장 엑셀 연동',     path: '/inventory/import' },
+      { label: '🔌 소켓 / 평철 재고',      path: '/inventory/socket-stock' },
+      { label: '🏭 에프엔테크 재고현황',   path: '/inventory/fn-tech-stock' },
+      { label: '🏷️ LOT 라벨 재출력',       path: '/inventory/label-reprint' },
+      { label: '🗓️ 월말 실사/마감',         path: '/inventory/closing' },
       { label: '🗓️ 월말 실사/마감',       path: '/inventory/closing' },
     ],
     dividerAfter: true,

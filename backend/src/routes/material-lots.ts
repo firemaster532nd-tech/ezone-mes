@@ -356,6 +356,29 @@ export async function materialLotsRoutes(app: FastifyInstance) {
     } finally { client.release(); }
   });
 
+  // -- DELETE /api/material-transactions/:id (매니저 이상만) -------------------
+  app.delete('/api/material-transactions/:id', { preHandler: requireRole('manager') }, async (req) => {
+    const { id } = (req.params as any);
+    const { rows: [txn] } = await pool.query(
+      `SELECT mt.* FROM material_transactions mt WHERE mt.txn_id=$1`, [id]
+    );
+    if (!txn) throw { statusCode: 404, message: '수불 기록을 찾을 수 없습니다.' };
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const reverseQty = -Number(txn.qty);
+      await client.query(
+        `UPDATE material_lots SET qty_current = qty_current + $1, updated_at=NOW() WHERE lot_id=$2`,
+        [reverseQty, txn.lot_id]
+      );
+      await client.query(`DELETE FROM material_transactions WHERE txn_id=$1`, [id]);
+      await client.query('COMMIT');
+      return { message: `수불 기록 #${id} 삭제 완료` };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally { client.release(); }
+  });
   // ── GET /api/material-ledger (수불대장 뷰) ─────────────────────────────────
   // 날짜별 전일이월 + 당일입고 + 당일출고 + 현재고
   app.get('/api/material-ledger', { preHandler: requireAuth }, async (req) => {

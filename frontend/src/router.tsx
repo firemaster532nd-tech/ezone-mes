@@ -86,6 +86,7 @@ import { SubMaterialInspectionPage } from '@/pages/quality/SubMaterialInspection
 import { SocketBracketInspectionPage } from '@/pages/quality/SocketBracketInspectionPage';
 import { NonCertifiedInspectionPage } from '@/pages/quality/NonCertifiedInspectionPage';
 import { NonCertifiedStockPage } from '@/pages/inventory/NonCertifiedStockPage';
+import BarcodeScanWmsPage from '@/pages/inventory/BarcodeScanWmsPage';
 
 
 
@@ -189,6 +190,7 @@ export const router = createBrowserRouter([
       { path: 'inventory/material-transaction', element: <MaterialTransactionPage /> },
       { path: 'inventory/material-init',        element: <InitialMaterialPage /> },
       { path: 'inventory/label-print',          element: <LabelPrintPage /> },
+      { path: 'inventory/barcode-wms',          element: <BarcodeScanWmsPage /> },
 
 
       // 마스터관리
