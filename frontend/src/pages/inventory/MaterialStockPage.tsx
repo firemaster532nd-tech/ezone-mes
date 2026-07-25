@@ -661,11 +661,37 @@ function Tab4Manual({ lots, onSuccess }: { lots: MaterialLot[]; onSuccess: () =>
                 </div>
               )}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">{txnType==='MOVE' ? '이동 후 위치 *' : '배치 위치'}</label>
-                <input value={locationTo} onChange={e=>setLocationTo(e.target.value)}
-                  placeholder="예: A1-P1, H3-P2"
-                  required={txnType==='MOVE'}
-                  className="w-full border rounded-lg px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"/>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {txnType==='MOVE' ? '이동 후 위치 *' : '배치 위치'}
+                  <span className="ml-2 text-[10px] font-normal text-blue-500">📱 파레트 위치 라벨 스캔 or 직접 입력</span>
+                </label>
+                <div className="flex gap-1.5">
+                  <input value={locationTo} onChange={e=>setLocationTo(e.target.value)}
+                    onKeyDown={e => {
+                      // 바코드 스캐너 Enter 자동 감지
+                      if (e.key === 'Enter') { e.preventDefault(); }
+                    }}
+                    placeholder="📷 스캔 또는 A1-P1 형식 입력"
+                    required={txnType==='MOVE'}
+                    className="flex-1 border rounded-lg px-3 py-2.5 text-sm font-mono outline-none focus:border-blue-500"/>
+                  <select
+                    value={locationTo}
+                    onChange={e => setLocationTo(e.target.value)}
+                    className="border rounded-lg px-2 py-2.5 text-xs font-mono outline-none focus:border-blue-500 bg-white max-w-[110px]">
+                    <option value="">위치 선택</option>
+                    {['O','N','M','L','K','J','I','H','G','F','E','D','C','B','A','P','Q','R'].flatMap(col =>
+                      [3,2,1].flatMap(tier =>
+                        [1,2].map(p => {
+                          const loc = `${col}${tier}-P${p}`;
+                          return <option key={loc} value={loc}>{loc} {p===1?'(우)':'(좌)'}</option>;
+                        })
+                      )
+                    )}
+                  </select>
+                </div>
+                {locationTo && (
+                  <p className="text-[11px] text-blue-600 font-bold mt-1">📍 선택된 위치: {locationTo} {locationTo.endsWith('-P1') ? '(오른쪽 파레트)' : locationTo.endsWith('-P2') ? '(왼쪽 파레트)' : ''}</p>
+                )}
               </div>
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">{txnType==='OUT' ? '출하처/현장' : '비고'}</label>

@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
-  Package, MapPin, CheckCircle, RefreshCw, X, Plus, Layers, AlertTriangle, HelpCircle
+  Package, MapPin, CheckCircle, RefreshCw, X, Plus, Layers, AlertTriangle, HelpCircle, Printer
 } from 'lucide-react';
+
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -197,6 +198,59 @@ function GraphicRackMap({
 }
 
 // ─── 메인 페이지 ────────────────────────────────────────────────────────────
+// ─── 파레트 위치 라벨 일괄 인쇄 ────────────────────────────────────────
+function printAllPalletLabels(zones: { title: string; cols: string[] }[], tiers: number[]) {
+  const allLocations: { code: string; p: 1 | 2 }[] = [];
+  for (const z of zones) {
+    for (const col of z.cols) {
+      for (const tier of tiers) {
+        const code = `${col}${tier}`;
+        allLocations.push({ code, p: 1 });
+        allLocations.push({ code, p: 2 });
+      }
+    }
+  }
+
+  const labelHtml = allLocations.map(({ code, p }) => {
+    const locFull = `${code}-P${p}`;
+    const side    = p === 1 ? '오른쪽' : '왼쪽';
+    const qrUrl   = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(locFull)}&margin=0`;
+    return `
+<div class="label">
+  <div class="top"><span class="co">(주)이지원</span><span class="title">낙 위치 라벨</span></div>
+  <div class="row">
+    <div class="qr"><img src="${qrUrl}"/></div>
+    <div class="info">
+      <div class="loc">${locFull}</div>
+      <div class="side">${side} 파레트 (P${p})</div>
+      <div class="zone">낙: ${code}</div>
+    </div>
+  </div>
+  <div class="scan">📱 스캔 후 입고 등록</div>
+</div>`;
+  }).join('');
+
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if (!w) { alert('팝업 차단 해제 후 다시 시도하세요.'); return; }
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>파레트 위치 라벨 일괄</title>
+<style>
+@page{size:80mm 60mm;margin:0}
+body{margin:0;padding:0;font-family:'Malgun Gothic',sans-serif}
+.label{width:80mm;height:60mm;padding:3mm;box-sizing:border-box;page-break-after:always;display:flex;flex-direction:column;justify-content:space-between}
+.top{display:flex;justify-content:space-between;border-bottom:0.3mm solid #333;padding-bottom:1mm;margin-bottom:1.5mm;font-size:6.5pt}
+.co{font-weight:bold;color:#c00}.title{font-weight:bold}
+.row{display:flex;gap:3mm;align-items:center;flex:1}
+.qr img{width:24mm;height:24mm;border:0.2mm solid #ccc}
+.info{flex:1}
+.info .loc{font-size:16pt;font-weight:900;font-family:monospace;color:#1a237e;line-height:1}
+.info .side{font-size:7pt;color:#555;margin-top:1mm;font-weight:bold}
+.info .zone{font-size:6.5pt;color:#888;margin-top:0.5mm}
+.scan{font-size:6pt;color:#999;text-align:center;border-top:0.2mm dashed #ccc;padding-top:1mm;margin-top:1mm}
+</style></head><body>${labelHtml}</body></html>`);
+  w.document.close();
+  setTimeout(() => { w.print(); w.close(); }, 1000);
+}
+
 // ─── 랙 LOT 라벨 인쇄 (80×60mm) ────────────────────────────────────────────
 function printRackLabel(locationCode: string, slotNo: 1 | 2, slot: PalletSlot) {
   const locFull = `${locationCode}-P${slotNo}`;
@@ -454,16 +508,28 @@ export function LocationManagementPage() {
   return (
     <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
       <PageHeader
-        title="🏢 공장 랙 로케이션 관리 (구글시트 연동)"
+        title="🏢 공장 랙 로케이션 관리"
         description="2파레트/셀 기준 랙맵 시각화 — 🟢 인정재고(LOT있음) / 🟡 비인정재고(LOT없음·인정심사·반품) / ⬜ 공실"
       >
-        <button
-          onClick={loadData}
-          className="flex items-center gap-2 px-3.5 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 font-medium shadow-sm"
-        >
-          <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-          현황 새로고침
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => printAllPalletLabels(
+              [{ title: '존1', cols: ZONE_1_COLS }, { title: '존2', cols: ZONE_2_COLS }],
+              RACK_TIERS
+            )}
+            className="flex items-center gap-2 px-3.5 py-2 bg-blue-600 text-white border border-blue-700 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm"
+          >
+            <Printer className="h-4 w-4" />
+            파레트 위치 라벨 일괄 출력
+          </button>
+          <button
+            onClick={loadData}
+            className="flex items-center gap-2 px-3.5 py-2 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 hover:bg-slate-50 font-medium shadow-sm"
+          >
+            <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+            현황 새로고침
+          </button>
+        </div>
       </PageHeader>
 
       {/* 요약 카드 */}
