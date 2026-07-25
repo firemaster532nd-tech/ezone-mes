@@ -1,47 +1,47 @@
-import { FastifyInstance } from 'fastify';
+﻿import { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 
 export async function shipmentOrderRoutes(app: FastifyInstance) {
-  // ─── DB 마이그레이션 ─────────────────────────────────────────────────
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS shipment_order (
-      so_id        SERIAL PRIMARY KEY,
-      so_number    VARCHAR(30) UNIQUE NOT NULL,
-      so_date      DATE NOT NULL,
-      po_id        INTEGER,
-      project_id   INTEGER,
-      customer_id  INTEGER,
-      customer_name VARCHAR(200),
-      destination  VARCHAR(500),
-      contact_person VARCHAR(100),
-      contact_phone VARCHAR(50),
-      vehicle_number VARCHAR(30),
-      driver_name  VARCHAR(50),
-      remarks      TEXT,
-      status       VARCHAR(20) DEFAULT 'DRAFT',
-      statement_id INTEGER,
-      created_by   INTEGER,
-      created_at   TIMESTAMPTZ DEFAULT NOW(),
-      shipped_at   TIMESTAMPTZ
-    );
-    CREATE TABLE IF NOT EXISTS shipment_order_item (
-      soi_id       SERIAL PRIMARY KEY,
-      so_id        INTEGER REFERENCES shipment_order(so_id) ON DELETE CASCADE,
-      item_id      INTEGER,
-      item_name    VARCHAR(200),
-      spec         VARCHAR(300),
-      unit         VARCHAR(20) DEFAULT 'EA',
-      qty          NUMERIC(12,2) DEFAULT 0,
-      lot_id       INTEGER,
-      lot_number   VARCHAR(100),
-      unit_price   NUMERIC(15,2) DEFAULT 0,
-      amount       NUMERIC(15,2) DEFAULT 0,
-      remarks      VARCHAR(500),
-      sort_order   INTEGER DEFAULT 0
-    );
-  `).catch((e: unknown) => console.error('[Migration] shipment_order:', e));
-
-  // ─── GET /api/shipment-orders — 출하지시서 목록 ──────────────────────
+  // \u2500\u2500 \uc11c\ubc84 \uc2dc\uc791 \uc2dc \uba85\ucba8 \ub370\uc774\ud130 \ucd08\uae30\ud654 (\ube44\ub3d9\uae30 \ubc31\uadf8\ub77c\uc6b4\ub4dc)\n  setImmediate(async () => {\n    try {\n    // ─── DB 마이그레이션 ─────────────────────────────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS shipment_order (
+          so_id        SERIAL PRIMARY KEY,
+          so_number    VARCHAR(30) UNIQUE NOT NULL,
+          so_date      DATE NOT NULL,
+          po_id        INTEGER,
+          project_id   INTEGER,
+          customer_id  INTEGER,
+          customer_name VARCHAR(200),
+          destination  VARCHAR(500),
+          contact_person VARCHAR(100),
+          contact_phone VARCHAR(50),
+          vehicle_number VARCHAR(30),
+          driver_name  VARCHAR(50),
+          remarks      TEXT,
+          status       VARCHAR(20) DEFAULT 'DRAFT',
+          statement_id INTEGER,
+          created_by   INTEGER,
+          created_at   TIMESTAMPTZ DEFAULT NOW(),
+          shipped_at   TIMESTAMPTZ
+        );
+        CREATE TABLE IF NOT EXISTS shipment_order_item (
+          soi_id       SERIAL PRIMARY KEY,
+          so_id        INTEGER REFERENCES shipment_order(so_id) ON DELETE CASCADE,
+          item_id      INTEGER,
+          item_name    VARCHAR(200),
+          spec         VARCHAR(300),
+          unit         VARCHAR(20) DEFAULT 'EA',
+          qty          NUMERIC(12,2) DEFAULT 0,
+          lot_id       INTEGER,
+          lot_number   VARCHAR(100),
+          unit_price   NUMERIC(15,2) DEFAULT 0,
+          amount       NUMERIC(15,2) DEFAULT 0,
+          remarks      VARCHAR(500),
+          sort_order   INTEGER DEFAULT 0
+        );
+      `).catch((e: unknown) => console.error('[Migration] shipment_order:', e));
+    
+      // ─── GET /api/shipment-orders — 출하지시서 목록 ──────────────────────\n    } catch (e) { console.warn([\u0022shipment-orders.ts\u0022 init], e); }\n  });\n
   app.get('/api/shipment-orders', async (req) => {
     const q = req.query as Record<string, string>;
     const conditions: string[] = [];

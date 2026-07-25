@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+﻿import { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 
 /**
@@ -79,16 +79,16 @@ const PROCESS_PRESETS: Record<string, { label: string; description: string; item
 };
 
 export async function selfInspectionRoutes(app: FastifyInstance) {
-  // 마이그레이션: reviewer, approver 컬럼 자동 추가
-  try {
-    await pool.query(`
-      ALTER TABLE self_inspection
-        ADD COLUMN IF NOT EXISTS reviewer TEXT,
-        ADD COLUMN IF NOT EXISTS approver TEXT
-    `);
-  } catch (_) { /* ignore */ }
-
-  // GET /api/lots/mix-completed - 배합 완료 LOT 목록 (압출/재단에서 배합로트 불러오기)
+  // \u2500\u2500 \uc11c\ubc84 \uc2dc\uc791 \uc2dc \uba85\ucba8 \ub370\uc774\ud130 \ucd08\uae30\ud654 (\ube44\ub3d9\uae30 \ubc31\uadf8\ub77c\uc6b4\ub4dc)\n  setImmediate(async () => {\n    try {\n    // 마이그레이션: reviewer, approver 컬럼 자동 추가
+      try {
+        await pool.query(`
+          ALTER TABLE self_inspection
+            ADD COLUMN IF NOT EXISTS reviewer TEXT,
+            ADD COLUMN IF NOT EXISTS approver TEXT
+        `);
+      } catch (_) { /* ignore */ }
+    
+      // GET /api/lots/mix-completed - 배합 완료 LOT 목록 (압출/재단에서 배합로트 불러오기)\n    } catch (e) { console.warn([\u0022self-inspections.ts\u0022 init], e); }\n  });\n
   app.get('/api/lots/mix-completed', async () => {
     const result = await pool.query(`
       SELECT wo_id, wo_number, wo_date, lot_number, actual_qty, input_weight_kg, item_name

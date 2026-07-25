@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+﻿import type { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { requireAuth, requireRole } from '../lib/auth-plugin.js';
 
@@ -114,94 +114,93 @@ async function logSync(type: string, status: 'success' | 'error', total: number,
 
 // ─────────────────────────────────────────────────────────────────────────────
 export async function ecountRoutes(app: FastifyInstance) {
-
-  // ── DB 마이그레이션 ──────────────────────────────────────────────────────
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS ecount_config (
-      id            SERIAL PRIMARY KEY,
-      com_code      VARCHAR(20) NOT NULL,
-      user_id       VARCHAR(50) NOT NULL,
-      api_cert_key  VARCHAR(500) NOT NULL,
-      lan_type      VARCHAR(20) DEFAULT 'ko-KR',
-      zone          VARCHAR(10),
-      session_id    VARCHAR(1000),
-      session_at    TIMESTAMPTZ,
-      is_active     BOOLEAN DEFAULT TRUE,
-      created_at    TIMESTAMPTZ DEFAULT NOW(),
-      updated_at    TIMESTAMPTZ DEFAULT NOW()
-    )
-  `).catch(() => {});
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS ecount_sync_log (
-      log_id       SERIAL PRIMARY KEY,
-      sync_type    VARCHAR(30) NOT NULL,
-      status       VARCHAR(20),
-      total_count  INT DEFAULT 0,
-      synced_count INT DEFAULT 0,
-      error_msg    TEXT,
-      started_at   TIMESTAMPTZ DEFAULT NOW(),
-      finished_at  TIMESTAMPTZ
-    )
-  `).catch(() => {});
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS ecount_stock (
-      id          SERIAL PRIMARY KEY,
-      prod_cd     VARCHAR(50),
-      prod_nm     VARCHAR(500),
-      wh_cd       VARCHAR(50),
-      wh_nm       VARCHAR(200),
-      qty         DECIMAL(18,4) DEFAULT 0,
-      unit        VARCHAR(30),
-      synced_at   TIMESTAMPTZ DEFAULT NOW()
-    )
-  `).catch(() => {});
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS ecount_purchase (
-      id          SERIAL PRIMARY KEY,
-      slip_date   DATE,
-      cust_cd     VARCHAR(50),
-      cust_nm     VARCHAR(500),
-      prod_cd     VARCHAR(50),
-      prod_nm     VARCHAR(500),
-      qty         DECIMAL(18,4),
-      price       DECIMAL(18,2),
-      supply_amt  DECIMAL(18,2),
-      vat_amt     DECIMAL(18,2),
-      total_amt   DECIMAL(18,2),
-      io_type_nm  VARCHAR(100),
-      memo        TEXT,
-      synced_at   TIMESTAMPTZ DEFAULT NOW()
-    )
-  `).catch(() => {});
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS ecount_sale (
-      id          SERIAL PRIMARY KEY,
-      slip_date   DATE,
-      cust_cd     VARCHAR(50),
-      cust_nm     VARCHAR(500),
-      prod_cd     VARCHAR(50),
-      prod_nm     VARCHAR(500),
-      qty         DECIMAL(18,4),
-      price       DECIMAL(18,2),
-      supply_amt  DECIMAL(18,2),
-      vat_amt     DECIMAL(18,2),
-      total_amt   DECIMAL(18,2),
-      io_type_nm  VARCHAR(100),
-      memo        TEXT,
-      synced_at   TIMESTAMPTZ DEFAULT NOW()
-    )
-  `).catch(() => {});
-
-  // item_master에 이카운트 품목코드 컬럼 추가
-  await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS ecount_prod_cd VARCHAR(50)`).catch(() => {});
-  // company_master에 이카운트 거래처코드 컬럼 추가
-  await pool.query(`ALTER TABLE company_master ADD COLUMN IF NOT EXISTS ecount_cust_cd VARCHAR(50)`).catch(() => {});
-
-  // ── GET /api/ecount/config ─ 설정 조회 ───────────────────────────────────
+  // \u2500\u2500 \uc11c\ubc84 \uc2dc\uc791 \uc2dc \uba85\ucba8 \ub370\uc774\ud130 \ucd08\uae30\ud654 (\ube44\ub3d9\uae30 \ubc31\uadf8\ub77c\uc6b4\ub4dc)\n  setImmediate(async () => {\n    try {\n    // ── DB 마이그레이션 ──────────────────────────────────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ecount_config (
+          id            SERIAL PRIMARY KEY,
+          com_code      VARCHAR(20) NOT NULL,
+          user_id       VARCHAR(50) NOT NULL,
+          api_cert_key  VARCHAR(500) NOT NULL,
+          lan_type      VARCHAR(20) DEFAULT 'ko-KR',
+          zone          VARCHAR(10),
+          session_id    VARCHAR(1000),
+          session_at    TIMESTAMPTZ,
+          is_active     BOOLEAN DEFAULT TRUE,
+          created_at    TIMESTAMPTZ DEFAULT NOW(),
+          updated_at    TIMESTAMPTZ DEFAULT NOW()
+        )
+      `).catch(() => {});
+    
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ecount_sync_log (
+          log_id       SERIAL PRIMARY KEY,
+          sync_type    VARCHAR(30) NOT NULL,
+          status       VARCHAR(20),
+          total_count  INT DEFAULT 0,
+          synced_count INT DEFAULT 0,
+          error_msg    TEXT,
+          started_at   TIMESTAMPTZ DEFAULT NOW(),
+          finished_at  TIMESTAMPTZ
+        )
+      `).catch(() => {});
+    
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ecount_stock (
+          id          SERIAL PRIMARY KEY,
+          prod_cd     VARCHAR(50),
+          prod_nm     VARCHAR(500),
+          wh_cd       VARCHAR(50),
+          wh_nm       VARCHAR(200),
+          qty         DECIMAL(18,4) DEFAULT 0,
+          unit        VARCHAR(30),
+          synced_at   TIMESTAMPTZ DEFAULT NOW()
+        )
+      `).catch(() => {});
+    
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ecount_purchase (
+          id          SERIAL PRIMARY KEY,
+          slip_date   DATE,
+          cust_cd     VARCHAR(50),
+          cust_nm     VARCHAR(500),
+          prod_cd     VARCHAR(50),
+          prod_nm     VARCHAR(500),
+          qty         DECIMAL(18,4),
+          price       DECIMAL(18,2),
+          supply_amt  DECIMAL(18,2),
+          vat_amt     DECIMAL(18,2),
+          total_amt   DECIMAL(18,2),
+          io_type_nm  VARCHAR(100),
+          memo        TEXT,
+          synced_at   TIMESTAMPTZ DEFAULT NOW()
+        )
+      `).catch(() => {});
+    
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ecount_sale (
+          id          SERIAL PRIMARY KEY,
+          slip_date   DATE,
+          cust_cd     VARCHAR(50),
+          cust_nm     VARCHAR(500),
+          prod_cd     VARCHAR(50),
+          prod_nm     VARCHAR(500),
+          qty         DECIMAL(18,4),
+          price       DECIMAL(18,2),
+          supply_amt  DECIMAL(18,2),
+          vat_amt     DECIMAL(18,2),
+          total_amt   DECIMAL(18,2),
+          io_type_nm  VARCHAR(100),
+          memo        TEXT,
+          synced_at   TIMESTAMPTZ DEFAULT NOW()
+        )
+      `).catch(() => {});
+    
+      // item_master에 이카운트 품목코드 컬럼 추가
+      await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS ecount_prod_cd VARCHAR(50)`).catch(() => {});
+      // company_master에 이카운트 거래처코드 컬럼 추가
+      await pool.query(`ALTER TABLE company_master ADD COLUMN IF NOT EXISTS ecount_cust_cd VARCHAR(50)`).catch(() => {});
+    
+      // ── GET /api/ecount/config ─ 설정 조회 ───────────────────────────────────\n    } catch (e) { console.warn([\u0022ecount.ts\u0022 init], e); }\n  });\n
   app.get('/api/ecount/config', { preHandler: requireRole('admin') }, async (_req, reply) => {
     const { rows } = await pool.query(
       `SELECT id, com_code, user_id, lan_type, zone, session_at, is_active, updated_at

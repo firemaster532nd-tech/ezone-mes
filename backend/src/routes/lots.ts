@@ -1,18 +1,18 @@
-import { FastifyInstance } from 'fastify';
+﻿import { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { traceBack, traceForward } from './lot-utils.js';
 
 export async function lotRoutes(app: FastifyInstance) {
-  // ── DB 마이그레이션: 스테이징 컬럼 추가 ──
-  await pool.query(`
-    ALTER TABLE lot_transaction
-      ADD COLUMN IF NOT EXISTS staging_status  VARCHAR(20) DEFAULT 'STOCK',
-      ADD COLUMN IF NOT EXISTS staging_location VARCHAR(100),
-      ADD COLUMN IF NOT EXISTS staged_at        TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS staged_by        VARCHAR(100)
-  `).catch(() => {});
-
-  // GET /api/lots - LOT 목록
+  // \u2500\u2500 \uc11c\ubc84 \uc2dc\uc791 \uc2dc \uba85\ucba8 \ub370\uc774\ud130 \ucd08\uae30\ud654 (\ube44\ub3d9\uae30 \ubc31\uadf8\ub77c\uc6b4\ub4dc)\n  setImmediate(async () => {\n    try {\n    // ── DB 마이그레이션: 스테이징 컬럼 추가 ──
+      await pool.query(`
+        ALTER TABLE lot_transaction
+          ADD COLUMN IF NOT EXISTS staging_status  VARCHAR(20) DEFAULT 'STOCK',
+          ADD COLUMN IF NOT EXISTS staging_location VARCHAR(100),
+          ADD COLUMN IF NOT EXISTS staged_at        TIMESTAMPTZ,
+          ADD COLUMN IF NOT EXISTS staged_by        VARCHAR(100)
+      `).catch(() => {});
+    
+      // GET /api/lots - LOT 목록\n    } catch (e) { console.warn([\u0022lots.ts\u0022 init], e); }\n  });\n
   app.get('/api/lots', async (request) => {
     const { lot_type, status, item_id } = request.query as {
       lot_type?: string;

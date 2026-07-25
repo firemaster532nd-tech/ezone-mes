@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+﻿import { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import pg from 'pg';
 import { determineSamplingMode } from './lot-validation.js';
@@ -491,18 +491,18 @@ export const INCOMING_FORM_PRESETS: IncomingFormPreset[] = [
 ];
 
 export async function inspectionRoutes(app: FastifyInstance) {
-  // DB 마이그레이션: 스펙 치수 컬럼 추가
-  await pool.query(`
-    ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS spec_thickness_mm NUMERIC(10,2);
-    ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS spec_width_mm NUMERIC(10,2);
-    ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS spec_length_mm NUMERIC(10,2);
-    ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS spec_density VARCHAR(30);
-    ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS total_length_mm BIGINT;
-    ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS length_mm BIGINT;
-  `).catch((e: unknown) => console.error('[Migration] spec columns:', e));
-
-
-  // GET /api/inspection-criteria - 인수검사 마스터 검사기준 조회
+  // \u2500\u2500 \uc11c\ubc84 \uc2dc\uc791 \uc2dc \uba85\ucba8 \ub370\uc774\ud130 \ucd08\uae30\ud654 (\ube44\ub3d9\uae30 \ubc31\uadf8\ub77c\uc6b4\ub4dc)\n  setImmediate(async () => {\n    try {\n    // DB 마이그레이션: 스펙 치수 컬럼 추가
+      await pool.query(`
+        ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS spec_thickness_mm NUMERIC(10,2);
+        ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS spec_width_mm NUMERIC(10,2);
+        ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS spec_length_mm NUMERIC(10,2);
+        ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS spec_density VARCHAR(30);
+        ALTER TABLE lot_transaction ADD COLUMN IF NOT EXISTS total_length_mm BIGINT;
+        ALTER TABLE inventory_transaction ADD COLUMN IF NOT EXISTS length_mm BIGINT;
+      `).catch((e: unknown) => console.error('[Migration] spec columns:', e));
+    
+    
+      // GET /api/inspection-criteria - 인수검사 마스터 검사기준 조회\n    } catch (e) { console.warn([\u0022inspections.ts\u0022 init], e); }\n  });\n
   app.get('/api/inspection-criteria', async (request) => {
     const { category } = request.query as { category?: string };
     let q = 'SELECT * FROM inspection_criteria WHERE is_active=true';

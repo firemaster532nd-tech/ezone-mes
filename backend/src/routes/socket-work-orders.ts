@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+﻿import type { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 import { expandAndSortSocketItems } from '../lib/socket-sort.js';
@@ -26,57 +26,57 @@ async function generateSwoNumber(date: string): Promise<string> {
 }
 
 export async function socketWorkOrderRoutes(app: FastifyInstance) {
-  // ── DB 마이그레이션 ──────────────────────────────────────────────────────
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS socket_work_order (
-      swo_id        SERIAL PRIMARY KEY,
-      swo_number    VARCHAR(30) UNIQUE NOT NULL,
-      po_id         INT REFERENCES purchase_order(po_id) ON DELETE RESTRICT,
-      project_id    INT REFERENCES project_master(project_id) ON DELETE SET NULL,
-      project_name  VARCHAR(300),
-      sheet_name    VARCHAR(100),
-      wo_date       DATE NOT NULL DEFAULT CURRENT_DATE,
-      delivery_date DATE,
-      status        VARCHAR(20) NOT NULL DEFAULT 'PLANNED',
-      worker        VARCHAR(100),
-      remarks       TEXT,
-      warnings      TEXT,
-      created_by    INT,
-      created_at    TIMESTAMPTZ DEFAULT NOW(),
-      updated_at    TIMESTAMPTZ DEFAULT NOW()
-    )
-  `).catch(() => {});
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS socket_work_order_item (
-      swi_id            SERIAL PRIMARY KEY,
-      swo_id            INT NOT NULL REFERENCES socket_work_order(swo_id) ON DELETE CASCADE,
-      po_item_id        INT REFERENCES purchase_order_item(po_item_id) ON DELETE SET NULL,
-      seq_no            INT,
-      material          VARCHAR(50),
-      structure         VARCHAR(100),
-      pipe_width_mm     INT,
-      pipe_height_mm    INT,
-      opening_width_mm  INT,
-      opening_height_mm INT,
-      product_type      VARCHAR(100),
-      item_name         VARCHAR(200),
-      item_type         VARCHAR(20) DEFAULT 'socket',
-      planned_qty       INT DEFAULT 1,
-      actual_qty        INT,
-      remark            TEXT,
-      is_incomplete     BOOLEAN DEFAULT FALSE,
-      created_at        TIMESTAMPTZ DEFAULT NOW()
-    )
-  `).catch(() => {});
-
-  // 신규 컬럼 추가 (이미 있으면 무시)
-  await pool.query(`ALTER TABLE socket_work_order_item ADD COLUMN IF NOT EXISTS construction_seq INT DEFAULT 1`).catch(() => {});
-  await pool.query(`ALTER TABLE socket_work_order_item ADD COLUMN IF NOT EXISTS insp_lot_no VARCHAR(50)`).catch(() => {});
-  await pool.query(`ALTER TABLE socket_work_order_item ADD COLUMN IF NOT EXISTS sii_id INT`).catch(() => {});
-
-
-  // ── GET /api/socket-work-orders ─ 목록 ────────────────────────────────────
+  // \u2500\u2500 \uc11c\ubc84 \uc2dc\uc791 \uc2dc \uba85\ucba8 \ub370\uc774\ud130 \ucd08\uae30\ud654 (\ube44\ub3d9\uae30 \ubc31\uadf8\ub77c\uc6b4\ub4dc)\n  setImmediate(async () => {\n    try {\n    // ── DB 마이그레이션 ──────────────────────────────────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS socket_work_order (
+          swo_id        SERIAL PRIMARY KEY,
+          swo_number    VARCHAR(30) UNIQUE NOT NULL,
+          po_id         INT REFERENCES purchase_order(po_id) ON DELETE RESTRICT,
+          project_id    INT REFERENCES project_master(project_id) ON DELETE SET NULL,
+          project_name  VARCHAR(300),
+          sheet_name    VARCHAR(100),
+          wo_date       DATE NOT NULL DEFAULT CURRENT_DATE,
+          delivery_date DATE,
+          status        VARCHAR(20) NOT NULL DEFAULT 'PLANNED',
+          worker        VARCHAR(100),
+          remarks       TEXT,
+          warnings      TEXT,
+          created_by    INT,
+          created_at    TIMESTAMPTZ DEFAULT NOW(),
+          updated_at    TIMESTAMPTZ DEFAULT NOW()
+        )
+      `).catch(() => {});
+    
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS socket_work_order_item (
+          swi_id            SERIAL PRIMARY KEY,
+          swo_id            INT NOT NULL REFERENCES socket_work_order(swo_id) ON DELETE CASCADE,
+          po_item_id        INT REFERENCES purchase_order_item(po_item_id) ON DELETE SET NULL,
+          seq_no            INT,
+          material          VARCHAR(50),
+          structure         VARCHAR(100),
+          pipe_width_mm     INT,
+          pipe_height_mm    INT,
+          opening_width_mm  INT,
+          opening_height_mm INT,
+          product_type      VARCHAR(100),
+          item_name         VARCHAR(200),
+          item_type         VARCHAR(20) DEFAULT 'socket',
+          planned_qty       INT DEFAULT 1,
+          actual_qty        INT,
+          remark            TEXT,
+          is_incomplete     BOOLEAN DEFAULT FALSE,
+          created_at        TIMESTAMPTZ DEFAULT NOW()
+        )
+      `).catch(() => {});
+    
+      // 신규 컬럼 추가 (이미 있으면 무시)
+      await pool.query(`ALTER TABLE socket_work_order_item ADD COLUMN IF NOT EXISTS construction_seq INT DEFAULT 1`).catch(() => {});
+      await pool.query(`ALTER TABLE socket_work_order_item ADD COLUMN IF NOT EXISTS insp_lot_no VARCHAR(50)`).catch(() => {});
+      await pool.query(`ALTER TABLE socket_work_order_item ADD COLUMN IF NOT EXISTS sii_id INT`).catch(() => {});
+    
+    
+      // ── GET /api/socket-work-orders ─ 목록 ────────────────────────────────────\n    } catch (e) { console.warn([\u0022socket-work-orders.ts\u0022 init], e); }\n  });\n
   app.get('/api/socket-work-orders', { preHandler: requireAuth }, async (req, reply) => {
     const { po_id, status, search } = req.query as any;
     const params: any[] = [];

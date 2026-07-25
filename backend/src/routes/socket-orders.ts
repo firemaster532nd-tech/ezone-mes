@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+﻿import type { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 import XLSX from 'xlsx';
@@ -277,29 +277,29 @@ async function buildSocketOrderExcel(soRow: any, ourCompany: any = null): Promis
 
 // Routes
 export async function socketOrderRoutes(app: FastifyInstance) {
-  await migrateSocketOrderTable();
-  await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS vendor_company_id INTEGER REFERENCES company_master(company_id) ON DELETE SET NULL`);
-  await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS vendor_email VARCHAR(200)`);
-  await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMPTZ`);
-  await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS order_note TEXT`);
-  await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS ordered_by INTEGER`);
-  
-  // 인수검사 결재선 3단계 컬럼 추가
-  await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS insp_worker_id INTEGER REFERENCES worker(worker_id) ON DELETE SET NULL`);
-  await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS insp_reviewer_id INTEGER REFERENCES worker(worker_id) ON DELETE SET NULL`);
-  await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS insp_approver_id INTEGER REFERENCES worker(worker_id) ON DELETE SET NULL`);
-
-  // 인수검사 2차 점검 결과 컬럼 추가
-  await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS insp_result_2 VARCHAR(10) DEFAULT 'PENDING'`);
-  await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS insp_note_2 TEXT`);
-  await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS inspected_by_2 INTEGER REFERENCES worker(worker_id) ON DELETE SET NULL`);
-  await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS inspected_at_2 TIMESTAMPTZ`);
-
-  await pool.query(`ALTER TABLE socket_order DROP CONSTRAINT IF EXISTS socket_order_status_check`).catch(() => {});
-
-
-
-  // POST /api/socket-orders
+  // \u2500\u2500 \uc11c\ubc84 \uc2dc\uc791 \uc2dc \uba85\ucba8 \ub370\uc774\ud130 \ucd08\uae30\ud654 (\ube44\ub3d9\uae30 \ubc31\uadf8\ub77c\uc6b4\ub4dc)\n  setImmediate(async () => {\n    try {\n    await migrateSocketOrderTable();
+      await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS vendor_company_id INTEGER REFERENCES company_master(company_id) ON DELETE SET NULL`);
+      await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS vendor_email VARCHAR(200)`);
+      await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS ordered_at TIMESTAMPTZ`);
+      await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS order_note TEXT`);
+      await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS ordered_by INTEGER`);
+      
+      // 인수검사 결재선 3단계 컬럼 추가
+      await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS insp_worker_id INTEGER REFERENCES worker(worker_id) ON DELETE SET NULL`);
+      await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS insp_reviewer_id INTEGER REFERENCES worker(worker_id) ON DELETE SET NULL`);
+      await pool.query(`ALTER TABLE socket_order ADD COLUMN IF NOT EXISTS insp_approver_id INTEGER REFERENCES worker(worker_id) ON DELETE SET NULL`);
+    
+      // 인수검사 2차 점검 결과 컬럼 추가
+      await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS insp_result_2 VARCHAR(10) DEFAULT 'PENDING'`);
+      await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS insp_note_2 TEXT`);
+      await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS inspected_by_2 INTEGER REFERENCES worker(worker_id) ON DELETE SET NULL`);
+      await pool.query(`ALTER TABLE socket_incoming_inspection ADD COLUMN IF NOT EXISTS inspected_at_2 TIMESTAMPTZ`);
+    
+      await pool.query(`ALTER TABLE socket_order DROP CONSTRAINT IF EXISTS socket_order_status_check`).catch(() => {});
+    
+    
+    
+      // POST /api/socket-orders\n    } catch (e) { console.warn([\u0022socket-orders.ts\u0022 init], e); }\n  });\n
   app.post('/api/socket-orders', { preHandler: requireAuth }, async (req, reply) => {
     const { po_id, project_name, items_json, writer_id } = req.body as any;
     if (!items_json || !writer_id) return reply.code(400).send({ error: 'items_json, writer_id 필수' });

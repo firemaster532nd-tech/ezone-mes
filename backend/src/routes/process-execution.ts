@@ -1,19 +1,19 @@
-import { FastifyInstance } from 'fastify';
+﻿import { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { kgToMeters } from './lot-properties.js';
 
 export async function processExecutionRoutes(app: FastifyInstance) {
-  // Migration: add worker_ids and worker_names columns, expand shift column
-  await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS worker_ids TEXT`);
-  await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS worker_names TEXT`);
-  await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS raw_material_inputs TEXT`);
-  await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS parent_lot_number TEXT`);
-  await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS dummy_weight_kg NUMERIC(10,2)`);
-  await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS scrap_kg NUMERIC(10,2)`);
-  await pool.query(`ALTER TABLE process_log ALTER COLUMN shift TYPE VARCHAR(20)`);
-  await pool.query(`ALTER TABLE process_log DROP CONSTRAINT IF EXISTS process_log_shift_check`);
-
-  // GET /api/process-logs - 공정 실행 로그 목록
+  // \u2500\u2500 \uc11c\ubc84 \uc2dc\uc791 \uc2dc \uba85\ucba8 \ub370\uc774\ud130 \ucd08\uae30\ud654 (\ube44\ub3d9\uae30 \ubc31\uadf8\ub77c\uc6b4\ub4dc)\n  setImmediate(async () => {\n    try {\n    // Migration: add worker_ids and worker_names columns, expand shift column
+      await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS worker_ids TEXT`);
+      await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS worker_names TEXT`);
+      await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS raw_material_inputs TEXT`);
+      await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS parent_lot_number TEXT`);
+      await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS dummy_weight_kg NUMERIC(10,2)`);
+      await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS scrap_kg NUMERIC(10,2)`);
+      await pool.query(`ALTER TABLE process_log ALTER COLUMN shift TYPE VARCHAR(20)`);
+      await pool.query(`ALTER TABLE process_log DROP CONSTRAINT IF EXISTS process_log_shift_check`);
+    
+      // GET /api/process-logs - 공정 실행 로그 목록\n    } catch (e) { console.warn([\u0022process-execution.ts\u0022 init], e); }\n  });\n
   app.get('/api/process-logs', async (request) => {
     const { wo_id, process_code, date, shift, worker_id, status } = request.query as {
       wo_id?: string;

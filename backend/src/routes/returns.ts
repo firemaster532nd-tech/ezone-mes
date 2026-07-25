@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+﻿import { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 
 /**
@@ -7,46 +7,45 @@ import { pool } from '../db/pool.js';
  * 반품 대상 품목을 선택하고 반품입고를 등록한다.
  */
 export async function returnRoutes(app: FastifyInstance) {
-
-  // ─── DB 마이그레이션 (테이블이 없으면 생성) ───────────────────────────────
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS return_receipt (
-      rr_id         SERIAL PRIMARY KEY,
-      rr_number     VARCHAR(30) UNIQUE NOT NULL,
-      rr_date       DATE NOT NULL,
-      statement_id  INTEGER,
-      so_id         INTEGER,
-      customer_id   INTEGER,
-      customer_name VARCHAR(200),
-      reason        TEXT,
-      status        VARCHAR(20) DEFAULT 'PENDING',
-      worker        VARCHAR(100),
-      remarks       TEXT,
-      created_at    TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE TABLE IF NOT EXISTS return_receipt_item (
-      rri_id              SERIAL PRIMARY KEY,
-      rr_id               INTEGER REFERENCES return_receipt(rr_id) ON DELETE CASCADE,
-      item_id             INTEGER,
-      item_name           VARCHAR(200),
-      item_code           VARCHAR(50),
-      item_category       VARCHAR(10),
-      spec                VARCHAR(300),
-      unit                VARCHAR(20),
-      qty                 NUMERIC(12,2),
-      original_lot_id     INTEGER,
-      original_lot_number VARCHAR(100),
-      return_type         VARCHAR(30),
-      new_lot_id          INTEGER,
-      new_lot_number      VARCHAR(100),
-      dispose_reason      VARCHAR(200),
-      remarks             VARCHAR(500)
-    );
-  `).catch((e: unknown) => console.error('[Migration] return_receipt:', e));
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // GET /api/returns  — 반품 목록
-  // ─────────────────────────────────────────────────────────────────────────
+  // \u2500\u2500 \uc11c\ubc84 \uc2dc\uc791 \uc2dc \uba85\ucba8 \ub370\uc774\ud130 \ucd08\uae30\ud654 (\ube44\ub3d9\uae30 \ubc31\uadf8\ub77c\uc6b4\ub4dc)\n  setImmediate(async () => {\n    try {\n    // ─── DB 마이그레이션 (테이블이 없으면 생성) ───────────────────────────────
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS return_receipt (
+          rr_id         SERIAL PRIMARY KEY,
+          rr_number     VARCHAR(30) UNIQUE NOT NULL,
+          rr_date       DATE NOT NULL,
+          statement_id  INTEGER,
+          so_id         INTEGER,
+          customer_id   INTEGER,
+          customer_name VARCHAR(200),
+          reason        TEXT,
+          status        VARCHAR(20) DEFAULT 'PENDING',
+          worker        VARCHAR(100),
+          remarks       TEXT,
+          created_at    TIMESTAMPTZ DEFAULT NOW()
+        );
+        CREATE TABLE IF NOT EXISTS return_receipt_item (
+          rri_id              SERIAL PRIMARY KEY,
+          rr_id               INTEGER REFERENCES return_receipt(rr_id) ON DELETE CASCADE,
+          item_id             INTEGER,
+          item_name           VARCHAR(200),
+          item_code           VARCHAR(50),
+          item_category       VARCHAR(10),
+          spec                VARCHAR(300),
+          unit                VARCHAR(20),
+          qty                 NUMERIC(12,2),
+          original_lot_id     INTEGER,
+          original_lot_number VARCHAR(100),
+          return_type         VARCHAR(30),
+          new_lot_id          INTEGER,
+          new_lot_number      VARCHAR(100),
+          dispose_reason      VARCHAR(200),
+          remarks             VARCHAR(500)
+        );
+      `).catch((e: unknown) => console.error('[Migration] return_receipt:', e));
+    
+      // ─────────────────────────────────────────────────────────────────────────
+      // GET /api/returns  — 반품 목록
+      // ─────────────────────────────────────────────────────────────────────────\n    } catch (e) { console.warn([\u0022returns.ts\u0022 init], e); }\n  });\n
   app.get('/api/returns', async (req) => {
     const q = req.query as Record<string, string>;
     const conditions: string[] = [];

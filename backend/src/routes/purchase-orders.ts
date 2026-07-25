@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+﻿import type { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 import XLSX from 'xlsx';
@@ -269,92 +269,91 @@ function parsePurchaseOrderExcel(buffer: Buffer) {
 
 // ────────────────────────────────────────────────────────────────────────────
 export async function purchaseOrderRoutes(app: FastifyInstance) {
-
-  // DB 마이그레이션: 발주서 테이블 생성
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS purchase_order (
-      po_id              SERIAL PRIMARY KEY,
-      project_id         INT REFERENCES project_master(project_id) ON DELETE SET NULL,
-      file_name          VARCHAR(500) NOT NULL,
-      project_name       VARCHAR(300),
-      order_date         VARCHAR(100),
-      delivery_date      VARCHAR(100),
-      -- 발주처 정보
-      biz_name           VARCHAR(300),
-      biz_no             VARCHAR(50),
-      biz_ceo            VARCHAR(100),
-      biz_address        VARCHAR(500),
-      biz_manager        VARCHAR(100),
-      biz_contact        VARCHAR(100),
-      -- 제출인 / 공사 정보
-      submitter          VARCHAR(300),
-      submitter_address  VARCHAR(500),
-      construction_site  VARCHAR(500),
-      contractor         VARCHAR(300),
-      contractor_address VARCHAR(500),
-      supervisor         VARCHAR(500),
-      supervisor_office  VARCHAR(300),
-      supervisor_address VARCHAR(500),
-      -- 납품 정보
-      site_address       VARCHAR(500),
-      consignee          VARCHAR(200),
-      builder_name       VARCHAR(200),
-      special_notes      TEXT,
-      status             VARCHAR(20) DEFAULT 'ACTIVE',
-      uploaded_by        INT,
-      created_at         TIMESTAMPTZ DEFAULT NOW()
-    )
-  `).catch(() => {});
-
-  // 기존 테이블 컬럼 추가 (이미 생성된 경우)
-  const newCols = [
-    ['biz_name',           'VARCHAR(300)'],
-    ['biz_no',             'VARCHAR(50)'],
-    ['biz_ceo',            'VARCHAR(100)'],
-    ['biz_address',        'VARCHAR(500)'],
-    ['biz_manager',        'VARCHAR(100)'],
-    ['biz_contact',        'VARCHAR(100)'],
-    ['submitter_address',  'VARCHAR(500)'],
-    ['contractor_address', 'VARCHAR(500)'],
-    ['supervisor_office',  'VARCHAR(300)'],
-    ['supervisor_address', 'VARCHAR(500)'],
-    ['consignee',          'VARCHAR(200)'],
-    ['builder_name',       'VARCHAR(200)'],
-  ];
-  for (const [col, type] of newCols) {
-    await pool.query(`ALTER TABLE purchase_order ADD COLUMN IF NOT EXISTS ${col} ${type}`).catch(() => {});
-  }
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS purchase_order_item (
-      po_item_id        SERIAL PRIMARY KEY,
-      po_id             INT NOT NULL REFERENCES purchase_order(po_id) ON DELETE CASCADE,
-      sheet_name        VARCHAR(100),
-      seq_no            INT,
-      item_type         VARCHAR(20) DEFAULT 'socket',
-      material          VARCHAR(50),
-      structure         VARCHAR(100),
-      pipe_width_mm     INT,
-      pipe_height_mm    INT,
-      opening_width_mm  INT,
-      opening_height_mm INT,
-      qty               INT DEFAULT 1,
-      product_type      VARCHAR(100),
-      item_name         VARCHAR(200),
-      spec              VARCHAR(300),
-      remark            TEXT,
-      lot_number        VARCHAR(60),
-      linked_item_id    INT REFERENCES item_master(item_id) ON DELETE SET NULL,
-      created_at        TIMESTAMPTZ DEFAULT NOW()
-    )
-  `).catch(() => {});
-
-  // lot_number 컬럼 추가 (기존 테이블)
-  await pool.query(`ALTER TABLE purchase_order_item ADD COLUMN IF NOT EXISTS lot_number VARCHAR(60)`).catch(() => {});
-
-
-  // ── POST /api/purchase-orders/parse ── 업로드 전 미리보기 (저장 없음)
-  // { file_base64: string, file_name: string }
+  // \u2500\u2500 \uc11c\ubc84 \uc2dc\uc791 \uc2dc \uba85\ucba8 \ub370\uc774\ud130 \ucd08\uae30\ud654 (\ube44\ub3d9\uae30 \ubc31\uadf8\ub77c\uc6b4\ub4dc)\n  setImmediate(async () => {\n    try {\n    // DB 마이그레이션: 발주서 테이블 생성
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS purchase_order (
+          po_id              SERIAL PRIMARY KEY,
+          project_id         INT REFERENCES project_master(project_id) ON DELETE SET NULL,
+          file_name          VARCHAR(500) NOT NULL,
+          project_name       VARCHAR(300),
+          order_date         VARCHAR(100),
+          delivery_date      VARCHAR(100),
+          -- 발주처 정보
+          biz_name           VARCHAR(300),
+          biz_no             VARCHAR(50),
+          biz_ceo            VARCHAR(100),
+          biz_address        VARCHAR(500),
+          biz_manager        VARCHAR(100),
+          biz_contact        VARCHAR(100),
+          -- 제출인 / 공사 정보
+          submitter          VARCHAR(300),
+          submitter_address  VARCHAR(500),
+          construction_site  VARCHAR(500),
+          contractor         VARCHAR(300),
+          contractor_address VARCHAR(500),
+          supervisor         VARCHAR(500),
+          supervisor_office  VARCHAR(300),
+          supervisor_address VARCHAR(500),
+          -- 납품 정보
+          site_address       VARCHAR(500),
+          consignee          VARCHAR(200),
+          builder_name       VARCHAR(200),
+          special_notes      TEXT,
+          status             VARCHAR(20) DEFAULT 'ACTIVE',
+          uploaded_by        INT,
+          created_at         TIMESTAMPTZ DEFAULT NOW()
+        )
+      `).catch(() => {});
+    
+      // 기존 테이블 컬럼 추가 (이미 생성된 경우)
+      const newCols = [
+        ['biz_name',           'VARCHAR(300)'],
+        ['biz_no',             'VARCHAR(50)'],
+        ['biz_ceo',            'VARCHAR(100)'],
+        ['biz_address',        'VARCHAR(500)'],
+        ['biz_manager',        'VARCHAR(100)'],
+        ['biz_contact',        'VARCHAR(100)'],
+        ['submitter_address',  'VARCHAR(500)'],
+        ['contractor_address', 'VARCHAR(500)'],
+        ['supervisor_office',  'VARCHAR(300)'],
+        ['supervisor_address', 'VARCHAR(500)'],
+        ['consignee',          'VARCHAR(200)'],
+        ['builder_name',       'VARCHAR(200)'],
+      ];
+      for (const [col, type] of newCols) {
+        await pool.query(`ALTER TABLE purchase_order ADD COLUMN IF NOT EXISTS ${col} ${type}`).catch(() => {});
+      }
+    
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS purchase_order_item (
+          po_item_id        SERIAL PRIMARY KEY,
+          po_id             INT NOT NULL REFERENCES purchase_order(po_id) ON DELETE CASCADE,
+          sheet_name        VARCHAR(100),
+          seq_no            INT,
+          item_type         VARCHAR(20) DEFAULT 'socket',
+          material          VARCHAR(50),
+          structure         VARCHAR(100),
+          pipe_width_mm     INT,
+          pipe_height_mm    INT,
+          opening_width_mm  INT,
+          opening_height_mm INT,
+          qty               INT DEFAULT 1,
+          product_type      VARCHAR(100),
+          item_name         VARCHAR(200),
+          spec              VARCHAR(300),
+          remark            TEXT,
+          lot_number        VARCHAR(60),
+          linked_item_id    INT REFERENCES item_master(item_id) ON DELETE SET NULL,
+          created_at        TIMESTAMPTZ DEFAULT NOW()
+        )
+      `).catch(() => {});
+    
+      // lot_number 컬럼 추가 (기존 테이블)
+      await pool.query(`ALTER TABLE purchase_order_item ADD COLUMN IF NOT EXISTS lot_number VARCHAR(60)`).catch(() => {});
+    
+    
+      // ── POST /api/purchase-orders/parse ── 업로드 전 미리보기 (저장 없음)
+      // { file_base64: string, file_name: string }\n    } catch (e) { console.warn([\u0022purchase-orders.ts\u0022 init], e); }\n  });\n
   app.post('/api/purchase-orders/parse', { preHandler: requireAuth }, async (req, reply) => {
     const body = req.body as any;
     if (!body?.file_base64) {

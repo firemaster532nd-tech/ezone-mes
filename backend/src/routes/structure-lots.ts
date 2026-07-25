@@ -7,48 +7,53 @@ import { pool } from '../db/pool.js';
  * 예시: 260309-VT-049-200X150-001~050
  */
 export async function structureLotRoutes(app: FastifyInstance) {
+  // ── 서버 시작 시 명세 데이터 초기화 (비동기 백그라운드)
+  setImmediate(async () => {
+    try {
+    // ─── DB 마이그레이션 ─────────────────────────────────────────────────────
+      // lot_number_sequence: 구조체 LOT 번호 중복 방지용 전용 시퀀스 테이블
+      // SELECT FOR UPDATE로 잠금 → 동시 요청 시 순차 처리 보장
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS lot_number_sequence (
+          base_lot    VARCHAR(200) PRIMARY KEY,
+          last_serial INTEGER NOT NULL DEFAULT 0,
+          updated_at  TIMESTAMPTZ DEFAULT NOW()
+        );
+      `).catch((e: unknown) => console.error('[Migration] lot_number_sequence:', e));
+    
+      // lot_transaction.lot_number UNIQUE 제약 (안전망)
+      await pool.query(`
+        ALTER TABLE lot_transaction
+        ADD CONSTRAINT uk_lot_number_unique UNIQUE (lot_number);
+      `).catch(() => { /* 이미 존재하거나 다른 방식으로 처리 */ });
+    
+      // ★ 서버 시작 시 기존 lot_transaction → lot_number_sequence 자동 동기화
+      // 기존에 시퀀스 테이블 없이 저장된 LOT들도 올바른 시퀀스로 초기화됨
+      await pool.query(`
+        INSERT INTO lot_number_sequence (base_lot, last_serial)
+        SELECT base_lot, COALESCE(MAX(serial_end), 0)
+        FROM lot_transaction
+        WHERE base_lot IS NOT NULL
+        GROUP BY base_lot
+        ON CONFLICT (base_lot) DO UPDATE
+          SET last_serial = GREATEST(
+            lot_number_sequence.last_serial,
+            EXCLUDED.last_serial
+          ),
+          updated_at = NOW()
+      `).catch((e: unknown) => console.error('[Migration] sync lot_number_sequence:', e));
+    
+      console.log('[structureLotRoutes] LOT 시퀀스 테이블 초기화 완료');
+    
+    
+      /**
+       * POST /api/structure-lots/generate
+       * 구조 LOT 번호 생성 (미리보기, DB 저장하지 않음)
+       * NOTE: lot_number_sequence 테이블에서 현재 마지막 시리얼을 읽어 정확한 미리보기 제공
+        */
+    } catch (e) { console.warn('[structure-lots.ts init]', e); }
+  });
 
-  // ─── DB 마이그레이션 ─────────────────────────────────────────────────────
-  // lot_number_sequence: 구조체 LOT 번호 중복 방지용 전용 시퀀스 테이블
-  // SELECT FOR UPDATE로 잠금 → 동시 요청 시 순차 처리 보장
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS lot_number_sequence (
-      base_lot    VARCHAR(200) PRIMARY KEY,
-      last_serial INTEGER NOT NULL DEFAULT 0,
-      updated_at  TIMESTAMPTZ DEFAULT NOW()
-    );
-  `).catch((e: unknown) => console.error('[Migration] lot_number_sequence:', e));
-
-  // lot_transaction.lot_number UNIQUE 제약 (안전망)
-  await pool.query(`
-    ALTER TABLE lot_transaction
-    ADD CONSTRAINT uk_lot_number_unique UNIQUE (lot_number);
-  `).catch(() => { /* 이미 존재하거나 다른 방식으로 처리 */ });
-
-  // ★ 서버 시작 시 기존 lot_transaction → lot_number_sequence 자동 동기화
-  // 기존에 시퀀스 테이블 없이 저장된 LOT들도 올바른 시퀀스로 초기화됨
-  await pool.query(`
-    INSERT INTO lot_number_sequence (base_lot, last_serial)
-    SELECT base_lot, COALESCE(MAX(serial_end), 0)
-    FROM lot_transaction
-    WHERE base_lot IS NOT NULL
-    GROUP BY base_lot
-    ON CONFLICT (base_lot) DO UPDATE
-      SET last_serial = GREATEST(
-        lot_number_sequence.last_serial,
-        EXCLUDED.last_serial
-      ),
-      updated_at = NOW()
-  `).catch((e: unknown) => console.error('[Migration] sync lot_number_sequence:', e));
-
-  console.log('[structureLotRoutes] LOT 시퀀스 테이블 초기화 완료');
-
-
-  /**
-   * POST /api/structure-lots/generate
-   * 구조 LOT 번호 생성 (미리보기, DB 저장하지 않음)
-   * NOTE: lot_number_sequence 테이블에서 현재 마지막 시리얼을 읽어 정확한 미리보기 제공
-   */
   app.post('/api/structure-lots/generate', async (request, reply) => {
 
     const body = request.body as {
