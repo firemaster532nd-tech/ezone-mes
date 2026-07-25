@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+﻿import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import { env } from './config/env.js';
@@ -274,4 +274,6 @@ export const initApp = async () => {
   return app;
 };
 
-
+// ── Vercel Serverless / @vercel/backends 호환 default export ─────────────
+// Vercel은 index.ts의 default export가 Fastify 앱 인스턴스여야 함
+export default initApp;
