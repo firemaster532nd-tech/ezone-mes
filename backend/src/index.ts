@@ -277,8 +277,6 @@ export const initApp = async () => {
 };
 
 
-// ── Vercel @vercel/backends 호환: top-level await로 초기화된 앱 인스턴스 export
-// initApp()이 반환하는 Fastify 인스턴스를 default export (함수 참조 X)
-const _app = await initApp();
-export default _app;
-
+// ── Vercel @vercel/node 호환: api/index.ts가 initApp()을 직접 호출하므로
+// top-level await 불필요. initApp named export만 사용.
+// (로컬 개발 시 server.ts에서 initApp().then(app => app.listen(...)) 호출)
