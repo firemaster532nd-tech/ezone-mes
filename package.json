@@ -11,7 +11,8 @@
     "dev": "docker compose up",
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
-    "build": "npm run build --workspaces"
+    "build": "npm run build --workspaces",
+    "vercel-build": "cd frontend && npm install && npm run build"
   },
   "dependencies": {
     "docx": "^9.6.1"
