@@ -118,10 +118,9 @@ export function LoginPage() {
     if (!authLoading && isAuthenticated && !showSuperWelcome) navigate('/dashboard', { replace: true });
   }, [isAuthenticated, authLoading, navigate, showSuperWelcome]);
 
-  // 로그인 전 공개 공지사항 조회
+  // 로그인 전 공개 공지사항 조회 (상대경로 사용 — Vercel 프로덕션 호환)
   useEffect(() => {
-    const baseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/$/, '');
-    fetch(`${baseUrl}/api/announcements/public`)
+    fetch('/api/announcements/public')
       .then(r => r.json())
       .then(d => { if (d.announcements?.length) setAnnouncements(d.announcements); })
       .catch(() => {}); // 실패해도 무시
