@@ -364,7 +364,8 @@ export async function authRoutes(app: FastifyInstance) {
       };
     } catch (err: any) {
       console.error('[GET /api/auth/me Error]:', err);
-      const reqAuth = req.auth || {};
+      const reqAuth = (req.auth || {}) as any;
+
       return {
         user: {
           worker_id: reqAuth.worker_id || 1,

@@ -71,7 +71,8 @@ export default async function googleSheetsSyncRoutes(app: FastifyInstance) {
         const current_qty = parseFloat((cols[5] || '0').replace(/,/g, '')) || 0;
 
         if (col0 && (init_qty !== 0 || in_qty !== 0 || out_qty !== 0 || current_qty !== 0)) {
-          parsedRows.append ? null : parsedRows.push({
+          parsedRows.push({
+
             category: currentCategory,
             name: col0,
             spec,
