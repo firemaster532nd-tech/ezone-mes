@@ -1,10 +1,12 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "module": "CommonJS",
-    "moduleResolution": "node",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
     "outDir": ".",
     "rootDir": ".",
+    "strict": false,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true
   },
