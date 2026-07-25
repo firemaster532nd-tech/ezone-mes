@@ -1,4 +1,4 @@
-﻿import Fastify from 'fastify';
+import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import { env } from './config/env.js';
@@ -151,11 +151,13 @@ export const initApp = async () => {
   // Health check
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
-    // ── 신규 메뉴 자동 등록 마이그레이션 ──────────────────────────
-    // menu 테이블에 없는 신규 페이지를 서버 시작 시 자동으로 추가
-    // ON CONFLICT DO NOTHING → 이미 있으면 무시
+  appInstance = app;
+
+  // ── 신규 메뉴 마이그레이션 (비동기 백그라운드 — 콜드스타트 블로킹 방지) ──
+  setImmediate(async () => {
     try {
       const { pool } = await import('./db/pool.js');
+
       // 1. INVENTORY 부모 메뉴 가져오기
       const parentRes = await pool.query(
         `SELECT menu_id FROM menu WHERE menu_code = 'INVENTORY' LIMIT 1`
@@ -269,11 +271,14 @@ export const initApp = async () => {
     } catch (e) {
       console.warn('⚠ Menu migration skipped:', e);
     }
+  }); // end setImmediate background migration
 
-  appInstance = app;
   return app;
 };
 
-// ── Vercel Serverless / @vercel/backends 호환 default export ─────────────
-// Vercel은 index.ts의 default export가 Fastify 앱 인스턴스여야 함
-export default initApp;
+
+// ── Vercel @vercel/backends 호환: top-level await로 초기화된 앱 인스턴스 export
+// initApp()이 반환하는 Fastify 인스턴스를 default export (함수 참조 X)
+const _app = await initApp();
+export default _app;
+
