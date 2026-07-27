@@ -2,11 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
-  Package, MapPin, CheckCircle, RefreshCw, X, Plus, Layers, AlertTriangle, HelpCircle, Printer
+  Package, MapPin, CheckCircle, RefreshCw, X, Plus, AlertTriangle, HelpCircle, Printer, LogOut, Search
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { WmsInventoryModal } from '@/components/WmsInventoryModal';
 
 // ─── 랙 로케이션 마스터 ────────────────────────────────────────────────────────
 export const ZONE_1_COLS = ['O','N','M','L','K','J','I','H','G','F','E','D','C','B','A'];
@@ -309,33 +310,45 @@ export function LocationManagementPage() {
   const [inputLotNo, setInputLotNo] = useState('');
   const [inputItemName, setInputItemName] = useState('');
   const [inputQty, setInputQty] = useState<number>(100);
-  const [targetMoveCode, setTargetMoveCode] = useState('');
 
-  // 데이터 로드
+  // 재고 등록 모달
+  const [inventoryModalOpen, setInventoryModalOpen] = useState(false);
+
+  // 출고 처리 모달
+  const [outModalOpen, setOutModalOpen] = useState(false);
+  const [outSearchQuery, setOutSearchQuery] = useState('');
+  const [outSearchResult, setOutSearchResult] = useState<any | null>(null);
+  const [outQty, setOutQty] = useState<number>(0);
+  const [outSearching, setOutSearching] = useState(false);
+  const [outProcessing, setOutProcessing] = useState(false);
+
+  // 데이터 로드 — /api/wms/rack-map 단일 엔드포인트
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // ① 인정재고 LOT (lots + material_lots 병합)
-      const resLots = await api.get<{ data: any[] }>('/lots?status=ACTIVE').catch(() => ({ data: [] }));
-      const resMat  = await api.get<{ data: any[] }>('/material-lots?active=1').catch(() => ({ data: [] }));
-      const rawLots = [...(resLots.data ?? []), ...(resMat.data ?? [])];
+      const res = await api.get<{ data: { non_certified: any[]; lots: any[]; material_lots: any[] } }>('/wms/rack-map');
+      const { non_certified = [], lots = [], material_lots = [] } = res.data ?? {};
 
-      const availList: AvailableLot[] = rawLots
-        .filter(l => !!l.lot_number)
-        .map(l => ({
+      // 인정재고 목록 구성 (lots + material_lots)
+      const availList: AvailableLot[] = [
+        ...lots.map((l: any) => ({
           lot_id: l.lot_id,
           lot_number: l.lot_number,
-          item_name: l.item_name || '자재/부자재',
-          remaining_qty: l.remaining_qty ?? l.qty_current ?? l.qty ?? 0,
-          location: l.staging_location || l.location || null
-        }));
+          item_name: l.item_name || '완제품',
+          remaining_qty: l.remaining_qty ?? l.qty ?? 0,
+          location: l.staging_location || l.location || null,
+        })),
+        ...material_lots.map((ml: any) => ({
+          lot_id: ml.lot_id ?? ml.material_lot_id,
+          lot_number: ml.lot_number,
+          item_name: ml.item_name || '자재',
+          remaining_qty: ml.qty_current ?? ml.remaining_qty ?? 0,
+          location: ml.location || null,
+        })),
+      ].filter(l => !!l.lot_number);
       setAvailableLots(availList);
 
-      // ② 비인정재고 (non_certified_stock)
-      const resNc = await api.get<{ data: any[] }>('/non-certified-stock?status=ACTIVE').catch(() => ({ data: [] }));
-      const ncItems: any[] = resNc.data ?? [];
-
-      // ③ 랙맵 구성
+      // 랙맵 구성
       const map: Record<string, RackCellStatus> = {};
 
       const ensureCell = (code: string) => {
@@ -343,7 +356,7 @@ export function LocationManagementPage() {
           map[code] = {
             location_code: code,
             pallet1: { slot_no: 1, type: 'empty' },
-            pallet2: { slot_no: 2, type: 'empty' }
+            pallet2: { slot_no: 2, type: 'empty' },
           };
         }
       };
@@ -367,7 +380,7 @@ export function LocationManagementPage() {
           lot_id: l.lot_id,
           lot_number: l.lot_number,
           item_name: l.item_name,
-          qty: l.remaining_qty
+          qty: l.remaining_qty,
         };
 
         if (palletSlot === 1) {
@@ -375,7 +388,6 @@ export function LocationManagementPage() {
         } else if (palletSlot === 2) {
           map[rackCode].pallet2 = slot;
         } else {
-          // 구형 포맷: 빈 슬롯 순서대로
           if (map[rackCode].pallet1.type === 'empty') {
             map[rackCode].pallet1 = { ...slot, slot_no: 1 };
           } else if (map[rackCode].pallet2.type === 'empty') {
@@ -384,8 +396,8 @@ export function LocationManagementPage() {
         }
       }
 
-      // 비인정재고 배치 (rack_code + pallet_no)
-      for (const nc of ncItems) {
+      // 비인정재고 배치
+      for (const nc of non_certified) {
         const rackCode = nc.rack_code;
         const palletNo = nc.pallet_no as 1 | 2;
         if (!rackCode) continue;
@@ -397,30 +409,71 @@ export function LocationManagementPage() {
           lot_number: nc.lot_number || null,
           item_name: nc.item_name,
           qty: nc.qty ?? 0,
-          notes: nc.notes || nc.reason
+          notes: nc.notes || nc.reason,
         };
 
         if (palletNo === 1) {
-          // 이미 인정재고가 있으면 덮어쓰지 않음 (인정재고 우선)
-          if (map[rackCode].pallet1.type === 'empty') {
-            map[rackCode].pallet1 = slot;
-          }
+          if (map[rackCode].pallet1.type === 'empty') map[rackCode].pallet1 = slot;
         } else {
-          if (map[rackCode].pallet2.type === 'empty') {
-            map[rackCode].pallet2 = slot;
-          }
+          if (map[rackCode].pallet2.type === 'empty') map[rackCode].pallet2 = slot;
         }
       }
 
       setRackStatusMap(map);
     } catch (e) {
       console.error('loadData error', e);
+      toast.error('랙맵 데이터 로드 실패');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
+
+  // 출고 LOT 검색
+  const handleOutSearch = async () => {
+    if (!outSearchQuery.trim()) return;
+    setOutSearching(true);
+    setOutSearchResult(null);
+    try {
+      const res = await api.get<{ data: any }>(`/wms/search?q=${encodeURIComponent(outSearchQuery.trim())}`);
+      if (res.data) {
+        setOutSearchResult(res.data);
+        setOutQty(res.data.remaining_qty ?? res.data.qty_current ?? 0);
+      } else {
+        toast.error('해당 LOT/바코드를 찾을 수 없습니다.');
+      }
+    } catch {
+      toast.error('검색 실패');
+    } finally {
+      setOutSearching(false);
+    }
+  };
+
+  // 출고 처리
+  const handleOutSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!outSearchResult) return;
+    if (outQty <= 0) { toast.error('출고 수량을 입력하세요.'); return; }
+    setOutProcessing(true);
+    try {
+      await api.post('/wms/out', {
+        lot_number: outSearchResult.lot_number,
+        lot_id: outSearchResult.lot_id,
+        qty: outQty,
+      });
+      toast.success(`출고 완료 — LOT: ${outSearchResult.lot_number}, 수량: ${outQty}`);
+      setOutModalOpen(false);
+      setOutSearchQuery('');
+      setOutSearchResult(null);
+      loadData();
+    } catch (err: unknown) {
+      const msg = (err instanceof Error) ? err.message : '출고 실패';
+      toast.error(msg);
+    } finally {
+      setOutProcessing(false);
+    }
+  };
 
   const handleSelectCell = (code: string) => {
     setActiveCellCode(code);
@@ -512,6 +565,20 @@ export function LocationManagementPage() {
         description="2파레트/셀 기준 랙맵 시각화 — 🟢 인정재고(LOT있음) / 🟡 비인정재고(LOT없음·인정심사·반품) / ⬜ 공실"
       >
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setInventoryModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 text-white border border-emerald-700 rounded-lg text-sm font-bold hover:bg-emerald-700 shadow-sm"
+          >
+            <Plus className="h-4 w-4" />
+            재고 등록
+          </button>
+          <button
+            onClick={() => setOutModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 bg-rose-600 text-white border border-rose-700 rounded-lg text-sm font-bold hover:bg-rose-700 shadow-sm"
+          >
+            <LogOut className="h-4 w-4" />
+            출고 처리
+          </button>
           <button
             onClick={() => printAllPalletLabels(
               [{ title: '존1', cols: ZONE_1_COLS }, { title: '존2', cols: ZONE_2_COLS }],
@@ -756,6 +823,98 @@ export function LocationManagementPage() {
                 className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-all shadow">
                 {activeCellCode} 랙 [P{targetSlotNo} 파레트] 배치
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 재고 등록 모달 */}
+      {inventoryModalOpen && (
+        <WmsInventoryModal
+          onClose={() => setInventoryModalOpen(false)}
+          onSuccess={() => loadData()}
+        />
+      )}
+
+      {/* 출고 처리 모달 */}
+      {outModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 bg-rose-600 text-white rounded-lg">
+                  <LogOut className="h-4 w-4" />
+                </span>
+                <h2 className="font-black text-slate-800 text-base">출고 처리</h2>
+              </div>
+              <button onClick={() => { setOutModalOpen(false); setOutSearchResult(null); setOutSearchQuery(''); }} className="text-slate-400 hover:text-slate-600">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleOutSubmit} className="p-5 space-y-4">
+              {/* LOT 검색 */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">LOT번호 또는 바코드 입력</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={outSearchQuery}
+                    onChange={e => setOutSearchQuery(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleOutSearch())}
+                    placeholder="LOT 번호 또는 바코드"
+                    className="flex-1 border rounded-lg px-3 py-2 text-sm font-mono bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleOutSearch}
+                    disabled={outSearching}
+                    className="px-3 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-700 disabled:opacity-60"
+                  >
+                    {outSearching ? '검색 중…' : <Search className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* 검색 결과 */}
+              {outSearchResult && (
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1">
+                  <p className="text-xs font-bold text-slate-800">{outSearchResult.item_name}</p>
+                  <p className="text-[10px] text-slate-500 font-mono">LOT: {outSearchResult.lot_number}</p>
+                  <p className="text-[10px] text-slate-500">현재위치: {outSearchResult.location || '-'}</p>
+                  <p className="text-[10px] text-emerald-700 font-black">재고: {Number(outSearchResult.remaining_qty ?? outSearchResult.qty_current ?? 0).toLocaleString()} EA</p>
+                </div>
+              )}
+
+              {/* 출고 수량 */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">출고 수량</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={outQty}
+                  onChange={e => setOutQty(Number(e.target.value))}
+                  disabled={!outSearchResult}
+                  className="w-full border rounded-lg px-3 py-2 text-sm font-mono font-bold bg-white disabled:bg-slate-100"
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setOutModalOpen(false); setOutSearchResult(null); setOutSearchQuery(''); }}
+                  className="flex-1 py-2.5 border border-slate-300 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-50"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  disabled={!outSearchResult || outProcessing}
+                  className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-bold shadow transition-all disabled:opacity-60"
+                >
+                  {outProcessing ? '처리 중…' : '출고 확인'}
+                </button>
+              </div>
             </form>
           </div>
         </div>

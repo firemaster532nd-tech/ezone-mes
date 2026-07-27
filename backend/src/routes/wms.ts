@@ -742,4 +742,83 @@ export async function wmsRoutes(app: FastifyInstance) {
     `, params);
     return { data: rows };
   });
+
+  // ── GET /api/wms/search ───────────────────────────────────────────────────
+  // 바코드 또는 LOT번호로 통합 검색 (출고 처리 전 품목 확인용)
+  app.get('/api/wms/search', async (req, reply) => {
+    const { q } = req.query as { q?: string };
+    if (!q || !q.trim()) return reply.status(400).send({ error: '검색어(q)를 입력하세요.' });
+    const query = q.trim();
+
+    // 1. non_certified_stock 검색
+    const { rows: ncRows } = await pool.query(`
+      SELECT
+        ncs.id, ncs.lot_number, ncs.item_name, ncs.spec, ncs.qty,
+        ncs.unit, ncs.status, ncs.wms_status, ncs.category,
+        ncs.shipment_site_name, ncs.barcode,
+        sl.location_code, sl.display_name AS location_name
+      FROM non_certified_stock ncs
+      LEFT JOIN storage_locations sl ON sl.location_id = ncs.location_id
+      WHERE ncs.status = 'ACTIVE'
+        AND (ncs.lot_number ILIKE $1 OR ncs.barcode = $2 OR ncs.item_name ILIKE $1)
+      ORDER BY ncs.id DESC
+      LIMIT 10
+    `, [`%${query}%`, query]);
+
+    if (ncRows.length > 0) {
+      const item = ncRows[0];
+      return {
+        data: {
+          id: item.id,
+          lot_number: item.lot_number,
+          item_name: item.item_name,
+          spec: item.spec,
+          qty_current: parseFloat(item.qty) || 0,
+          remaining_qty: parseFloat(item.qty) || 0,
+          unit: item.unit,
+          status: item.wms_status || item.status,
+          category: item.category,
+          location: item.location_code,
+          location_name: item.location_name,
+          source: 'non_certified_stock',
+          all_results: ncRows,
+        }
+      };
+    }
+
+    // 2. lots 테이블 검색
+    const { rows: lotRows } = await pool.query(`
+      SELECT
+        l.lot_id AS id, l.lot_number, l.remaining_qty, l.status,
+        i.item_name, i.spec,
+        sl.location_code, sl.display_name AS location_name
+      FROM lots l
+      LEFT JOIN items i ON i.item_id = l.item_id
+      LEFT JOIN storage_locations sl ON sl.location_id = l.location_id
+      WHERE l.status = 'ACTIVE'
+        AND (l.lot_number ILIKE $1)
+      LIMIT 5
+    `, [`%${query}%`]);
+
+    if (lotRows.length > 0) {
+      const item = lotRows[0];
+      return {
+        data: {
+          id: item.id,
+          lot_number: item.lot_number,
+          item_name: item.item_name,
+          spec: item.spec,
+          qty_current: parseFloat(item.remaining_qty) || 0,
+          remaining_qty: parseFloat(item.remaining_qty) || 0,
+          status: item.status,
+          location: item.location_code,
+          location_name: item.location_name,
+          source: 'lots',
+          all_results: lotRows,
+        }
+      };
+    }
+
+    return reply.status(404).send({ error: `'${query}'에 해당하는 재고를 찾을 수 없습니다.` });
+  });
 }
