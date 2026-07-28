@@ -3,10 +3,11 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { StatusBadge } from '@/components/shared/StatusBadge';
-import { Plus, ClipboardCheck, MoreHorizontal, Trash2, FileText, Printer, Info, ChevronDown, ChevronUp, AlertTriangle, Pencil, X, Loader2, Tag } from 'lucide-react';
+import { Plus, ClipboardCheck, MoreHorizontal, Trash2, FileText, Printer, Info, ChevronDown, ChevronUp, AlertTriangle, Pencil, X, Loader2, Tag, MapPin } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AttachmentSection } from '@/components/shared/AttachmentSection';
 import { useAuth } from '@/lib/auth';
+import { LocationPicker } from '@/components/LocationPicker';
 
 
 
@@ -1426,6 +1427,46 @@ function CreateInspectionModal({
               onPrint={openLabel}
             />
           </div>
+
+          {/* 적재 위치 지정 (합격 시만 표시) */}
+          {result.pass && (
+            <div className="px-6 py-4 space-y-2 border-b bg-emerald-50">
+              <p className="text-xs font-bold text-emerald-700 flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5" />
+                📦 적재 위치 지정 (선택사항)
+              </p>
+              <p className="text-[10px] text-emerald-600">합격된 자재를 보관할 위치를 지정합니다.</p>
+              <LocationPicker
+                onChange={async (locationCode, locationId) => {
+                  if (!locationCode || !result.lot_number) return;
+                  try {
+                    // material_lots 위치 업데이트
+                    await api.patch(`/material-lots/by-lot/${encodeURIComponent(result.lot_number)}`, {
+                      location: locationCode,
+                      location_id: locationId,
+                    }).catch(() => {});
+                    // WMS 이력 기록
+                    await api.post('/wms/inventory', {
+                      lot_number: result.lot_number,
+                      item_name: itemObj?.item_name || '',
+                      spec: specStr || null,
+                      unit: itemObj?.unit || 'EA',
+                      qty: parseFloat(qty) || 0,
+                      category: '인정재고',
+                      location_code: locationCode,
+                      location_id: locationId,
+                      source_type: 'MATERIAL_LOTS',
+                      notes: `인수검사 합격 입고: ${result.lot_number}`,
+                    }).catch(() => {});
+                    toast?.success?.(`위치 저장: ${locationCode}`);
+                  } catch {
+                    // 위치 저장 실패는 무시 (선택사항)
+                  }
+                }}
+                placeholder="보관 위치 선택 (선택사항)"
+              />
+            </div>
+          )}
 
           {/* 확인 버튼 */}
           <div className="px-6 py-4">

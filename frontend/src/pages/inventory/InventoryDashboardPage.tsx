@@ -143,12 +143,21 @@ export function InventoryDashboardPage() {
   const [ledgerItemName, setLedgerItemName] = useState('');
   const [ledgerData, setLedgerData] = useState<LedgerEntry[]>([]);
   const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [shipmentReadyCount, setShipmentReadyCount] = useState(0);
+  const [shipmentReadyItems, setShipmentReadyItems] = useState<any[]>([]);
 
   const fetchDashboard = () => {
     api.get<{ data: DashboardCard[] }>('/inventory/dashboard').then((r) => setDashboard(r.data));
   };
 
-  useEffect(() => { fetchDashboard(); }, []);
+  useEffect(() => {
+    fetchDashboard();
+    api.get<{ data: any[] }>('/wms/shipment-ready-items').then(res => {
+      const items = res.data ?? [];
+      setShipmentReadyItems(items);
+      setShipmentReadyCount(items.length);
+    }).catch(() => {});
+  }, []);
 
   const fetchSummary = () => {
     const params = selectedCategory ? `?category=${selectedCategory}` : '';
@@ -285,6 +294,33 @@ export function InventoryDashboardPage() {
           );
         })}
       </div>
+
+      {/* 출하대기 WMS 위젯 */}
+      {shipmentReadyCount > 0 && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🚚</span>
+              <span className="font-bold text-amber-800 text-sm">출하대기 품목</span>
+              <span className="bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">{shipmentReadyCount}개 품목</span>
+            </div>
+            <a href="/inventory/location" className="text-xs text-amber-700 hover:underline font-semibold">렉맵보기 →</a>
+          </div>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {shipmentReadyItems.slice(0, 5).map((item: any) => (
+              <div key={item.id} className="flex items-center gap-2 text-xs">
+                <span className="text-amber-500">●</span>
+                <span className="flex-1 text-amber-900 font-medium truncate">{item.item_name}</span>
+                <span className="text-amber-600 text-[10px] truncate max-w-[100px]">{item.shipment_site_name}</span>
+                <span className="font-mono text-amber-700 text-[10px]">{item.location_code || '위치미지정'}</span>
+              </div>
+            ))}
+            {shipmentReadyItems.length > 5 && (
+              <p className="text-[10px] text-amber-500 text-center">외 {shipmentReadyItems.length - 5}개 품목...</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Tabs + View Toggle */}
       <div className="flex items-center justify-between mb-4 border-b">

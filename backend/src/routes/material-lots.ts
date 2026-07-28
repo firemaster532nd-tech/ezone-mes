@@ -283,6 +283,23 @@ export async function materialLotsRoutes(app: FastifyInstance) {
     return { data: lot };
   });
 
+  // ── PATCH /api/material-lots/by-lot/:lot_number ───────────────────────────
+  // 인수검사 결과 화면에서 LOT번호로 위치 직접 업데이트
+  app.patch('/api/material-lots/by-lot/:lot_number', async (req) => {
+    const { lot_number } = req.params as any;
+    const b = req.body as any;
+    const { rows: [lot] } = await pool.query(`
+      UPDATE material_lots
+      SET location = COALESCE($1, location),
+          location_id = COALESCE($2, location_id),
+          updated_at = NOW()
+      WHERE lot_number = $3
+      RETURNING lot_id, lot_number, location, location_id
+    `, [b.location || null, b.location_id || null, decodeURIComponent(lot_number)]);
+    if (!lot) return { data: null, message: 'LOT를 찾을 수 없습니다.' };
+    return { data: lot };
+  });
+
   // ── DELETE /api/material-lots/:id ─────────────────────────────────────────
   app.delete('/api/material-lots/:id', { preHandler: requireAuth }, async (req) => {
     const { id } = req.params as any;

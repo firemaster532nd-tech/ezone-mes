@@ -4,10 +4,11 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import {
   RotateCcw, RefreshCw, Search, CheckCircle, Clock,
   Trash2, ChevronDown, ChevronRight, Package, AlertTriangle,
-  Plus, ArrowRight,
+  Plus, ArrowRight, MapPin,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { LocationPicker } from '@/components/LocationPicker';
 
 // ─── 타입 정의 ──────────────────────────────────────────────────────────────
 
@@ -299,6 +300,10 @@ export default function ReturnsPage() {
   // ── 반품 목록 필터 ──
   const [rrStatusFilter, setRrStatusFilter] = useState<'ALL' | 'PENDING' | 'COMPLETED'>('ALL');
 
+  // ── 반품 저장 위치 ──
+  const [returnLocationCode, setReturnLocationCode] = useState('');
+  const [returnLocationId, setReturnLocationId] = useState<number | undefined>(undefined);
+
   // ── 제출 ──
   const [submitting, setSubmitting] = useState(false);
 
@@ -416,6 +421,8 @@ export default function ReturnsPage() {
         reason: rrReason || null,
         remarks: rrRemarks || null,
         worker: rrWorker || null,
+        location_code: returnLocationCode || null,
+        location_id: returnLocationId || null,
         items: returnLines.map(l => ({
           item_id: l.item_id,
           item_name: l.item_name,
@@ -748,6 +755,28 @@ export default function ReturnsPage() {
                       />
                     </div>
                   </div>
+                </div>
+
+                {/* 반품 입고 위치 선택 */}
+                <div className="px-5 py-3 bg-amber-50 border-b border-amber-100">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <MapPin className="h-3.5 w-3.5 text-amber-600" />
+                    <span className="text-xs font-bold text-amber-700">반품 입고 위치 (렉/보관 위치)</span>
+                  </div>
+                  <p className="text-[10px] text-amber-600 mb-2">반품 자재가 보관될 렉 위치 또는 창고 위치를 지정하세요.</p>
+                  <LocationPicker
+                    value={returnLocationCode}
+                    onChange={(code, id) => {
+                      setReturnLocationCode(code);
+                      setReturnLocationId(id);
+                    }}
+                    placeholder="보관 위치 선택 (선택사항)"
+                  />
+                  {returnLocationCode && (
+                    <p className="text-[10px] text-amber-700 font-bold mt-1">
+                      📦 선택된 위치: <span className="font-mono">{returnLocationCode}</span>
+                    </p>
+                  )}
                 </div>
 
                 {/* 품목별 입력 */}

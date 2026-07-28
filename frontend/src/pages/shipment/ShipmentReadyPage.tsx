@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
   Plus, Download, RefreshCw, X, ChevronDown, ChevronUp,
-  AlertTriangle, CheckCircle, Clock, Package,
+  AlertTriangle, CheckCircle, Clock, Package, MapPin,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -686,6 +686,11 @@ export function ShipmentReadyPage() {
   // 요약 토글
   const [showSummary, setShowSummary] = useState(true);
 
+  // WMS 탭
+  const [activeWmsTab, setActiveWmsTab] = useState<'staging' | 'wms'>('staging');
+  const [shipmentReadyItems, setShipmentReadyItems] = useState<any[]>([]);
+  const [wmsLoading, setWmsLoading] = useState(false);
+
   // 동적 열: summary에 있는 item_spec만 표시
   const activeSpecs = new Set(summary.map((s) => s.item_spec));
   const visibleCols = COLUMN_SPECS.filter((col) => activeSpecs.has(col.item_spec));
@@ -713,6 +718,20 @@ export function ShipmentReadyPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const loadShipmentReadyItems = useCallback(async () => {
+    setWmsLoading(true);
+    try {
+      const res = await api.get<{ data: any[] }>('/wms/shipment-ready-items');
+      setShipmentReadyItems(res.data ?? []);
+    } catch {
+      // 조용히 실패
+    } finally {
+      setWmsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { if (activeWmsTab === 'wms') loadShipmentReadyItems(); }, [activeWmsTab, loadShipmentReadyItems]);
 
   // 요약 카드 계산
   const totalSites = rows.length;
@@ -773,7 +792,93 @@ export function ShipmentReadyPage() {
         </div>
       </PageHeader>
 
-      <div className="flex-1 overflow-auto px-4 pb-4 space-y-3">
+      {/* WMS 탭 스위처 */}
+      <div className="flex items-center gap-1 px-4 pt-3">
+        <button
+          onClick={() => setActiveWmsTab('staging')}
+          className={cn(
+            'px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+            activeWmsTab === 'staging'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'bg-white border text-gray-600 hover:bg-gray-50',
+          )}
+        >
+          현 스테이징 뷰
+        </button>
+        <button
+          onClick={() => setActiveWmsTab('wms')}
+          className={cn(
+            'inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+            activeWmsTab === 'wms'
+              ? 'bg-amber-500 text-white shadow-sm'
+              : 'bg-white border text-gray-600 hover:bg-gray-50',
+          )}
+        >
+          <MapPin className="h-3 w-3" />
+          WMS 렉위치
+        </button>
+      </div>
+
+      {/* WMS 탭: 렉위치 설정된 출하대기 품목 */}
+      {activeWmsTab === 'wms' && (
+        <div className="px-4 pt-3">
+          <div className="bg-white rounded-xl border shadow-sm">
+            <div className="p-4 space-y-2">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-bold text-slate-700">
+                  WMS 렉에 기록된 출하대기 품목
+                </p>
+                <button onClick={loadShipmentReadyItems} className="text-xs text-blue-600 hover:underline">
+                  새로고침
+                </button>
+              </div>
+              {wmsLoading ? (
+                <p className="text-xs text-gray-400 text-center py-4">로딩 중...</p>
+              ) : shipmentReadyItems.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-8">
+                  WMS에 등록된 출하대기 품목이 없습니다.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {Object.entries(
+                    shipmentReadyItems.reduce((acc: Record<string, any[]>, item) => {
+                      const site = item.shipment_site_name || '사이트없음';
+                      if (!acc[site]) acc[site] = [];
+                      acc[site].push(item);
+                      return acc;
+                    }, {})
+                  ).map(([site, items]) => (
+                    <div key={site} className="border rounded-xl overflow-hidden">
+                      <div className="bg-amber-50 px-3 py-2 flex items-center justify-between">
+                        <span className="font-bold text-sm text-amber-800">{site}</span>
+                        <span className="text-xs text-amber-600">{items.length}개 품목</span>
+                      </div>
+                      <div className="divide-y">
+                        {items.map((item: any) => (
+                          <div key={item.id} className="px-3 py-2.5 grid grid-cols-5 gap-2 text-xs items-center">
+                            <div className="col-span-2">
+                              <p className="font-semibold text-gray-800">{item.item_name}</p>
+                              <p className="text-gray-400 font-mono text-[10px]">{item.lot_number || '-'}</p>
+                            </div>
+                            <div className="text-gray-600">{item.spec || '-'}</div>
+                            <div className="font-bold text-emerald-700">{Number(item.qty).toLocaleString()} {item.unit}</div>
+                            <div className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-slate-400" />
+                              <span className="text-slate-500 text-[10px]">{item.location_code || '위치미지정'}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className={cn('flex-1 overflow-auto px-4 pb-4 space-y-3', activeWmsTab === 'wms' && 'hidden')}>
         {/* 요약 카드 3개 */}
         <div className="grid grid-cols-3 gap-3">
           {[
