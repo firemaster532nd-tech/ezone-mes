@@ -821,4 +821,218 @@ export async function wmsRoutes(app: FastifyInstance) {
 
     return reply.status(404).send({ error: `'${query}'에 해당하는 재고를 찾을 수 없습니다.` });
   });
+
+  // ─── GET /api/wms/scan/:lot_number ────────────────────────────────────────
+  // 스캐너 전용 정밀 조회: LOT번호 정확히 일치하는 재고 반환
+  // 응답: 재고 전체 정보 (위치, 수량, 상태, 출하대기여부 포함)
+  app.get('/api/wms/scan/:lot_number', async (req, reply) => {
+    const { lot_number } = req.params as { lot_number: string };
+    const lotNo = decodeURIComponent(lot_number).trim();
+
+    // 1) material_lots (원/부자재) 정확 조회
+    const { rows: [ml] } = await pool.query(`
+      SELECT
+        ml.lot_id AS id,
+        ml.lot_number,
+        ml.category,
+        ml.item_name,
+        ml.density,
+        ml.thickness,
+        ml.width_mm,
+        ml.length_mm,
+        ml.unit,
+        ml.qty_current,
+        ml.received_date,
+        ml.location,
+        ml.location_id,
+        ml.supplier_name,
+        ml.supplier_lot,
+        sl.display_name   AS location_name,
+        sl.location_code  AS location_code_from_sl,
+        'material_lots'   AS source_table
+      FROM material_lots ml
+      LEFT JOIN storage_locations sl ON sl.location_id = ml.location_id
+      WHERE ml.lot_number = $1 AND ml.is_active = TRUE
+      LIMIT 1
+    `, [lotNo]);
+
+    if (ml) {
+      return { data: {
+        ...ml,
+        source: 'material_lots',
+        location: ml.location_code_from_sl || ml.location || null,
+        location_name: ml.location_name || null,
+        wms_status: 'NORMAL',
+      }};
+    }
+
+    // 2) non_certified_stock (제품/반제품)
+    const { rows: [ncs] } = await pool.query(`
+      SELECT
+        ncs.stock_id AS id,
+        ncs.lot_number,
+        ncs.category,
+        ncs.item_name,
+        ncs.spec,
+        ncs.unit,
+        ncs.qty           AS qty_current,
+        ncs.received_date,
+        ncs.wms_status,
+        ncs.po_id,
+        ncs.po_date,
+        ncs.shipment_po_no,
+        ncs.location_id,
+        sl.location_code,
+        sl.display_name   AS location_name,
+        po.po_number,
+        po.site_name      AS po_site_name,
+        'non_certified_stock' AS source_table
+      FROM non_certified_stock ncs
+      LEFT JOIN storage_locations sl ON sl.location_id = ncs.location_id
+      LEFT JOIN purchase_order po ON po.po_id = ncs.po_id
+      WHERE ncs.lot_number = $1 AND ncs.is_active = TRUE
+      LIMIT 1
+    `, [lotNo]);
+
+    if (ncs) {
+      return { data: {
+        ...ncs,
+        source: 'non_certified_stock',
+        location: ncs.location_code || null,
+      }};
+    }
+
+    // 3) lots (완제품 LOT)
+    const { rows: [lot] } = await pool.query(`
+      SELECT
+        l.lot_id AS id,
+        l.lot_number,
+        l.remaining_qty   AS qty_current,
+        l.status,
+        l.location_id,
+        i.item_name,
+        i.spec,
+        i.unit,
+        sl.location_code,
+        sl.display_name   AS location_name,
+        'lots'            AS source_table
+      FROM lots l
+      LEFT JOIN items i ON i.item_id = l.item_id
+      LEFT JOIN storage_locations sl ON sl.location_id = l.location_id
+      WHERE l.lot_number = $1 AND l.status = 'ACTIVE'
+      LIMIT 1
+    `, [lotNo]);
+
+    if (lot) {
+      return { data: {
+        ...lot,
+        source: 'lots',
+        location: lot.location_code || null,
+        wms_status: 'NORMAL',
+      }};
+    }
+
+    return reply.status(404).send({ error: `LOT '${lotNo}'를 찾을 수 없습니다.`, lot_number: lotNo });
+  });
+
+  // ─── POST /api/wms/location-move ──────────────────────────────────────────
+  // 스캐너 위치이동: LOT의 위치를 새 위치로 이동하고 WMS 이력 기록
+  app.post('/api/wms/location-move', async (req, reply) => {
+    const b = req.body as {
+      lot_number: string;
+      source_table: string;      // 'material_lots' | 'non_certified_stock' | 'lots'
+      source_id: number;
+      from_location_id?: number;
+      to_location_code: string;
+      to_location_id: number;
+      qty?: number;
+      notes?: string;
+    };
+
+    if (!b.lot_number || !b.to_location_code || !b.to_location_id)
+      return reply.status(400).send({ error: '필수 파라미터 누락 (lot_number, to_location_code, to_location_id)' });
+
+    // 테이블 별 위치 업데이트
+    if (b.source_table === 'material_lots') {
+      await pool.query(
+        `UPDATE material_lots SET location = $1, location_id = $2, updated_at = NOW()
+         WHERE lot_id = $3`,
+        [b.to_location_code, b.to_location_id, b.source_id]
+      );
+    } else if (b.source_table === 'non_certified_stock') {
+      await pool.query(
+        `UPDATE non_certified_stock SET location_id = $1, updated_at = NOW()
+         WHERE stock_id = $2`,
+        [b.to_location_id, b.source_id]
+      );
+    } else if (b.source_table === 'lots') {
+      await pool.query(
+        `UPDATE lots SET location_id = $1, updated_at = NOW()
+         WHERE lot_id = $2`,
+        [b.to_location_id, b.source_id]
+      );
+    }
+
+    // WMS 이력 기록
+    await pool.query(`
+      INSERT INTO wms_transactions
+        (lot_number, item_name, qty, category, txn_type,
+         from_location_id, to_location_id, source_type, notes)
+      SELECT
+        $1, COALESCE(item_name, ''), COALESCE($2::numeric, 0),
+        COALESCE(category, ''), 'MOVE',
+        $3, $4, $5, $6
+      FROM (
+        SELECT item_name, category FROM material_lots WHERE lot_number = $1
+        UNION ALL
+        SELECT item_name, category FROM non_certified_stock WHERE lot_number = $1
+        LIMIT 1
+      ) t
+      LIMIT 1
+    `, [b.lot_number, b.qty || 0, b.from_location_id || null, b.to_location_id, b.source_table, b.notes || '위치이동']);
+
+    return { ok: true, message: `${b.lot_number} → ${b.to_location_code} 이동 완료` };
+  });
+
+  // ─── POST /api/wms/shipment-ready-register ────────────────────────────────
+  // 출하대기 등록: LOT + 발주서 연결
+  app.post('/api/wms/shipment-ready-register', async (req, reply) => {
+    const b = req.body as {
+      lot_number: string;
+      stock_id: number;
+      po_id: number;
+      po_date?: string;
+      po_number?: string;
+      site_name?: string;
+      qty?: number;
+      notes?: string;
+    };
+
+    if (!b.lot_number || !b.stock_id || !b.po_id)
+      return reply.status(400).send({ error: '필수 파라미터 누락 (lot_number, stock_id, po_id)' });
+
+    // non_certified_stock에 출하대기 상태 + 발주서 연결
+    await pool.query(`
+      UPDATE non_certified_stock
+      SET wms_status      = 'SHIPMENT_READY',
+          po_id           = $1,
+          po_date         = $2,
+          shipment_po_no  = $3,
+          shipment_site_name = $4,
+          updated_at      = NOW()
+      WHERE stock_id = $5
+    `, [b.po_id, b.po_date || null, b.po_number || null, b.site_name || null, b.stock_id]);
+
+    // WMS 이력
+    await pool.query(`
+      INSERT INTO wms_transactions
+        (lot_number, item_name, qty, category, txn_type, source_type, notes)
+      SELECT lot_number, item_name, COALESCE($1::numeric, qty), category,
+             'SHIPMENT_READY', 'non_certified_stock',
+             $2
+      FROM non_certified_stock WHERE stock_id = $3
+    `, [b.qty || null, `출하대기 등록: PO ${b.po_number || b.po_id} / ${b.site_name}`, b.stock_id]);
+
+    return { ok: true, message: `출하대기 등록 완료 (PO: ${b.po_number || b.po_id})` };
+  });
 }

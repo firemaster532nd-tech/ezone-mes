@@ -537,6 +537,41 @@ export async function authRoutes(app: FastifyInstance) {
     },
   );
 
+  // POST /api/auth/users/:id/reset-to-phone  (admin 전용: 전화번호로 자동 초기화)
+  // 비밀번호를 등록된 전화번호로 초기화하고 must_change_pw=TRUE 설정
+  app.post<{ Params: { id: string } }>(
+    '/api/auth/users/:id/reset-to-phone',
+    { preHandler: requireRole('admin') },
+    async (req, reply) => {
+      const id = parseInt(req.params.id, 10);
+
+      // 대상 사용자 조회 (전화번호 포함)
+      const { rows: [target] } = await pool.query(
+        `SELECT worker_id, worker_name, phone, employee_no FROM worker WHERE worker_id = $1`,
+        [id]
+      );
+      if (!target) return reply.code(404).send({ error: 'not_found', message: '사용자를 찾을 수 없습니다.' });
+      if (target.employee_no === 'admin') return reply.code(403).send({ error: 'forbidden', message: '관리자 계정은 초기화할 수 없습니다.' });
+      if (!target.phone?.trim()) return reply.code(400).send({ error: 'no_phone', message: '등록된 전화번호가 없습니다. 전화번호를 먼저 등록해주세요.' });
+
+      const tempPw = target.phone.trim(); // 예: "010-1234-5678"
+      // 전화번호는 비밀번호 정책 검사 없이 바로 해시화 (임시비밀번호이므로)
+      const hash = await hashPassword(tempPw);
+
+      await pool.query(
+        `UPDATE worker SET password_hash = $1, must_change_pw = TRUE, updated_at = NOW() WHERE worker_id = $2`,
+        [hash, id]
+      );
+
+      return {
+        ok: true,
+        message: `${target.worker_name}님의 비밀번호가 전화번호(${tempPw})로 초기화되었습니다. 다음 로그인 시 비밀번호 변경이 요구됩니다.`,
+        worker_name: target.worker_name,
+        temp_password: tempPw,
+      };
+    }
+  );
+
   // PATCH /api/auth/users/:id  (admin ?„ìš©: ê³„ì • ?•ë³´ ?˜ì •)
   app.patch<{ Params: { id: string } }>(
     '/api/auth/users/:id',
