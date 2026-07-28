@@ -1,4 +1,4 @@
-﻿import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { pool } from '../db/pool.js';
 import { requireAuth, requireRole } from '../lib/auth-plugin.js';
@@ -482,4 +482,84 @@ export async function announcementRoutes(app: FastifyInstance) {
       return { ok: true };
     },
   );
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // 비로그인 문의 전송 (로그인 페이지 → 관리자 쪽지함)
+  // POST /api/announcements/public-inquiry  (인증 불필요)
+  // ════════════════════════════════════════════════════════════════════════════
+  app.post('/api/announcements/public-inquiry', async (req, reply) => {
+    try {
+      const { sender_name, sender_contact, message } = req.body as any;
+      if (!sender_name?.trim() || !message?.trim()) {
+        return reply.status(400).send({ error: '이름과 문의내용은 필수입니다.' });
+      }
+
+      // public_inquiries 테이블 자동 생성
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS public_inquiries (
+          id            SERIAL PRIMARY KEY,
+          sender_name   VARCHAR(100) NOT NULL,
+          sender_contact VARCHAR(100),
+          message       TEXT NOT NULL,
+          is_read       BOOLEAN DEFAULT FALSE,
+          created_at    TIMESTAMPTZ DEFAULT NOW()
+        )
+      `).catch(() => {});
+
+      // 문의 저장
+      const { rows: [inq] } = await pool.query(`
+        INSERT INTO public_inquiries (sender_name, sender_contact, message)
+        VALUES ($1, $2, $3) RETURNING id
+      `, [sender_name.trim(), sender_contact?.trim() || null, message.trim()]);
+
+      // admin 계정 조회 (employee_no = 'admin' 또는 role = 'admin' 첫 번째)
+      const { rows: adminRows } = await pool.query(`
+        SELECT worker_id FROM worker
+        WHERE employee_no = 'admin' OR role = 'admin'
+        ORDER BY worker_id LIMIT 1
+      `);
+
+      if (adminRows.length > 0) {
+        const adminId = adminRows[0].worker_id;
+        const title = `[외부문의] ${sender_name.trim()}님의 문의`;
+        const body = `${message.trim()}\n\n---\n연락처: ${sender_contact?.trim() || '미입력'}`;
+
+        // announcement에 쪽지로 저장
+        const { rows: [ann] } = await pool.query(`
+          INSERT INTO announcement
+            (msg_type, title, body, target_type, target_ids, created_by)
+          VALUES ('MESSAGE', $1, $2, 'INDIVIDUAL', ARRAY[$3]::int[], NULL)
+          RETURNING announcement_id
+        `, [title, body, adminId]);
+
+        // 수신함에 등록
+        await pool.query(`
+          INSERT INTO announcement_receipt (announcement_id, worker_id)
+          VALUES ($1, $2) ON CONFLICT DO NOTHING
+        `, [ann.announcement_id, adminId]);
+      }
+
+      return { ok: true, inquiry_id: inq.id, message: '문의가 전송되었습니다.' };
+    } catch (e: any) {
+      return reply.status(500).send({ error: e.message });
+    }
+  });
+
+  // GET /api/announcements/public-inquiries  (admin 전용 — 외부 문의 목록)
+  app.get('/api/announcements/public-inquiries', { preHandler: requireRole('admin') }, async () => {
+    const { rows } = await pool.query(`
+      SELECT * FROM public_inquiries ORDER BY created_at DESC LIMIT 100
+    `).catch(() => ({ rows: [] }));
+    return { data: rows };
+  });
+
+  // PATCH /api/announcements/public-inquiries/:id/read  (읽음 처리)
+  app.patch('/api/announcements/public-inquiries/:id/read', { preHandler: requireRole('admin') }, async (req) => {
+    await pool.query(
+      `UPDATE public_inquiries SET is_read = TRUE WHERE id = $1`,
+      [(req.params as any).id]
+    ).catch(() => {});
+    return { ok: true };
+  });
 }
+

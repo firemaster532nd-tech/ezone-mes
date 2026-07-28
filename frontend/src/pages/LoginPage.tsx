@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ShieldAlert, Bell, ChevronLeft, ChevronRight, X,
   Megaphone, Eye, EyeOff, Shield, Flame, Building2,
+  MessageCircle, Mail, Send, CheckCircle,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 
@@ -86,6 +87,14 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showSuperWelcome, setShowSuperWelcome] = useState(false);
   const [announcements, setAnnouncements] = useState<PublicAnnouncement[]>([]);
+  // 문의 모달
+  const [showInquiry, setShowInquiry] = useState(false);
+  const [inqName, setInqName] = useState('');
+  const [inqContact, setInqContact] = useState('');
+  const [inqMessage, setInqMessage] = useState('');
+  const [inqLoading, setInqLoading] = useState(false);
+  const [inqDone, setInqDone] = useState(false);
+  const [inqError, setInqError] = useState('');
   const { login, refreshMe, isAuthenticated, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -347,14 +356,28 @@ export function LoginPage() {
 
           {/* 하단 회사 정보 */}
           <div className="mt-8 pt-6 border-t border-slate-100">
-            <div className="flex items-center gap-2 mb-2">
-              <img src="/ezone-logo-v4.png" alt="이지원" className="h-4 object-contain opacity-50" />
-              <span className="text-[11px] font-bold text-slate-400 tracking-widest">(주)이지원</span>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <img src="/ezone-logo-v4.png" alt="이지원" className="h-4 object-contain opacity-50" />
+                <span className="text-[11px] font-bold text-slate-400 tracking-widest">(주)이지원</span>
+              </div>
+              {/* 관리자 문의 버튼 */}
+              <button
+                onClick={() => { setShowInquiry(true); setInqDone(false); setInqError(''); }}
+                className="flex items-center gap-1.5 rounded-lg bg-orange-50 px-3 py-1.5 text-[11px] font-semibold text-orange-500 hover:bg-orange-100 transition-colors border border-orange-200"
+              >
+                <MessageCircle className="h-3 w-3" />
+                관리자 문의
+              </button>
             </div>
             <div className="space-y-1">
-              <p className="text-[11px] text-slate-400">
-                📞 &nbsp;문의: 관리자
-              </p>
+              <a
+                href="mailto:firemaster532nd@gmail.com"
+                className="flex items-center gap-1.5 text-[11px] text-slate-400 hover:text-orange-500 transition-colors"
+              >
+                <Mail className="h-3 w-3" />
+                firemaster532nd@gmail.com
+              </a>
               <p className="text-[11px] text-slate-400">
                 🌐 &nbsp;
                 <a href="https://xn--sp5btl20d.kr" target="_blank" rel="noreferrer" className="text-orange-400 hover:underline">
@@ -366,6 +389,108 @@ export function LoginPage() {
               </p>
             </div>
           </div>
+
+          {/* ── 문의 모달 ── */}
+          {showInquiry && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+              <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden">
+                {/* 헤더 */}
+                <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-orange-500 to-orange-600">
+                  <div className="flex items-center gap-2">
+                    <MessageCircle className="h-4 w-4 text-white" />
+                    <span className="text-sm font-bold text-white">관리자에게 문의하기</span>
+                  </div>
+                  <button onClick={() => setShowInquiry(false)} className="text-white/70 hover:text-white">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="px-5 py-5">
+                  {inqDone ? (
+                    /* 전송 완료 */
+                    <div className="text-center py-6">
+                      <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-3" />
+                      <p className="font-bold text-slate-700 mb-1">문의가 전송되었습니다!</p>
+                      <p className="text-xs text-slate-400">관리자가 확인 후 연락드립니다.</p>
+                      <button
+                        onClick={() => setShowInquiry(false)}
+                        className="mt-4 px-6 py-2 rounded-lg bg-orange-500 text-white text-sm font-semibold hover:bg-orange-600"
+                      >
+                        닫기
+                      </button>
+                    </div>
+                  ) : (
+                    /* 입력 폼 */
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">이름 *</label>
+                        <input
+                          value={inqName}
+                          onChange={e => setInqName(e.target.value)}
+                          placeholder="성함을 입력하세요"
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">연락처 (선택)</label>
+                        <input
+                          value={inqContact}
+                          onChange={e => setInqContact(e.target.value)}
+                          placeholder="전화번호 또는 이메일"
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">문의 내용 *</label>
+                        <textarea
+                          value={inqMessage}
+                          onChange={e => setInqMessage(e.target.value)}
+                          placeholder="문의하실 내용을 입력하세요"
+                          rows={4}
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 resize-none"
+                        />
+                      </div>
+                      {inqError && <p className="text-xs text-red-500">{inqError}</p>}
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => setShowInquiry(false)}
+                          className="flex-1 rounded-lg border border-slate-200 py-2.5 text-sm text-slate-500 hover:bg-slate-50"
+                        >
+                          취소
+                        </button>
+                        <button
+                          disabled={inqLoading}
+                          onClick={async () => {
+                            if (!inqName.trim()) { setInqError('이름을 입력해주세요.'); return; }
+                            if (!inqMessage.trim()) { setInqError('문의 내용을 입력해주세요.'); return; }
+                            setInqLoading(true); setInqError('');
+                            try {
+                              const res = await fetch('/api/announcements/public-inquiry', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ sender_name: inqName, sender_contact: inqContact, message: inqMessage }),
+                              });
+                              if (!res.ok) { const d = await res.json(); throw new Error(d.error || '전송 실패'); }
+                              setInqDone(true);
+                            } catch (err: any) {
+                              setInqError(err.message || '전송 중 오류가 발생했습니다.');
+                            } finally {
+                              setInqLoading(false);
+                            }
+                          }}
+                          className="flex-1 rounded-lg bg-orange-500 py-2.5 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-60 flex items-center justify-center gap-1.5"
+                        >
+                          {inqLoading
+                            ? <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            : <><Send className="h-3.5 w-3.5" /> 전송</>}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
       </div>
