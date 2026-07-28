@@ -65,6 +65,7 @@ import { lotLineageRoutes } from './routes/lot-lineage.js';
 import googleSheetsSyncRoutes from './routes/google-sheets-sync.js';
 import assemblyLogRoutes from './routes/assembly-logs.js';
 import { wmsRoutes } from './routes/wms.js';
+import { productionWorkforceRoutes } from './routes/production-workforce.js';
 
 
 let appInstance: any = null;
@@ -148,6 +149,7 @@ export const initApp = async () => {
   await app.register(googleSheetsSyncRoutes);
   await app.register(assemblyLogRoutes);
   await app.register(wmsRoutes);
+  await app.register(productionWorkforceRoutes);
 
 
   // Health check
