@@ -91,6 +91,10 @@ import { NonCertifiedStockPage } from '@/pages/inventory/NonCertifiedStockPage';
 import BarcodeScanWmsPage from '@/pages/inventory/BarcodeScanWmsPage';
 import { ForceChangePasswordPage } from '@/pages/auth/ForceChangePasswordPage';
 import { LogisticsScannerPage } from '@/pages/inventory/LogisticsScannerPage';
+import AccountingSetupPage from '@/pages/accounting/AccountingSetupPage';
+import AccountingRevenuePage from '@/pages/accounting/AccountingRevenuePage';
+import AccountingCostPage from '@/pages/accounting/AccountingCostPage';
+import AccountingPLPage from '@/pages/accounting/AccountingPLPage';
 
 
 
@@ -224,6 +228,11 @@ export const router = createBrowserRouter([
       { path: 'announcements/:id',     element: <AnnouncementsPage /> },
       // 슈퍼관리자 전용
       { path: 'superadmin/reset', element: <SuperAdminResetPage /> },
+      // 회계 모듈
+      { path: 'accounting/setup',        element: <AccountingSetupPage /> },
+      { path: 'accounting/revenue',      element: <AccountingRevenuePage /> },
+      { path: 'accounting/cost',         element: <AccountingCostPage /> },
+      { path: 'accounting/profit-loss',  element: <AccountingPLPage /> },
       // catch-all: unknown paths redirect to dashboard
       { path: '*', element: <Navigate to="/dashboard" replace /> },
     ],

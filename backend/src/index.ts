@@ -66,6 +66,7 @@ import googleSheetsSyncRoutes from './routes/google-sheets-sync.js';
 import assemblyLogRoutes from './routes/assembly-logs.js';
 import { wmsRoutes } from './routes/wms.js';
 import { productionWorkforceRoutes } from './routes/production-workforce.js';
+import accountingRoutes from './routes/accounting.js';
 
 
 let appInstance: any = null;
@@ -150,6 +151,9 @@ export const initApp = async () => {
   await app.register(assemblyLogRoutes);
   await app.register(wmsRoutes);
   await app.register(productionWorkforceRoutes);
+
+  // ── 회계 모듈 ──
+  await app.register(accountingRoutes, { prefix: '/api/accounting' });
 
 
   // Health check
@@ -274,10 +278,115 @@ export const initApp = async () => {
       await pool.query(`INSERT INTO menu (menu_code,menu_name,path,parent_menu_id,sort_order) VALUES ('PRODUCTION_DAILY_WORKFORCE','일일인력투입','/production/daily-workforce',null,71),('PRODUCTION_YIELD_DASHBOARD','수율현황','/production/yield-dashboard',null,72) ON CONFLICT (menu_code) DO NOTHING`);
       await pool.query(`INSERT INTO menu (menu_code,menu_name,path,parent_menu_id,sort_order) VALUES ('INVENTORY_LOGISTICS','물류팀 재고관리','/inventory/logistics',null,77) ON CONFLICT (menu_code) DO NOTHING`);
 
+      // ── 회계 모듈 테이블 마이그레이션 ────────────────────────────────
+      // ① 공정별 인건비 단가 마스터
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS labor_cost_master (
+          id              SERIAL PRIMARY KEY,
+          process_code    VARCHAR(20) NOT NULL,
+          worker_type     VARCHAR(20) NOT NULL DEFAULT 'REGULAR',
+          hourly_rate     NUMERIC(10,2),
+          daily_rate      NUMERIC(10,2),
+          effective_from  DATE NOT NULL DEFAULT CURRENT_DATE,
+          effective_to    DATE,
+          memo            TEXT,
+          created_by      INTEGER,
+          created_at      TIMESTAMPTZ DEFAULT NOW(),
+          updated_at      TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_lcm_process ON labor_cost_master(process_code)`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_lcm_effective ON labor_cost_master(effective_from, effective_to)`);
+
+      // ② 원자재 구매 단가 마스터 (엑셀 임포트)
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS material_cost_master (
+          id              SERIAL PRIMARY KEY,
+          category        VARCHAR(50) NOT NULL,
+          item_name       VARCHAR(100) NOT NULL,
+          spec            VARCHAR(100),
+          unit            VARCHAR(20) NOT NULL DEFAULT 'EA',
+          unit_price      NUMERIC(12,2) NOT NULL,
+          supplier_name   VARCHAR(100),
+          effective_from  DATE NOT NULL DEFAULT CURRENT_DATE,
+          effective_to    DATE,
+          source          VARCHAR(20) DEFAULT 'MANUAL',
+          created_by      INTEGER,
+          created_at      TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_mcm_category ON material_cost_master(category)`);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_mcm_item ON material_cost_master(item_name)`);
+
+      // ③ 제조간접비율
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS overhead_rate_master (
+          id              SERIAL PRIMARY KEY,
+          year_month      CHAR(7) NOT NULL UNIQUE,
+          overhead_pct    NUMERIC(5,2) NOT NULL DEFAULT 15.0,
+          fixed_monthly   NUMERIC(12,2) DEFAULT 0,
+          memo            TEXT,
+          created_by      INTEGER,
+          created_at      TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      // ④ 운반비 (건별 입력)
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS transport_cost (
+          id              SERIAL PRIMARY KEY,
+          cost_date       DATE NOT NULL,
+          site_name       VARCHAR(100),
+          so_id           INTEGER,
+          amount          NUMERIC(12,2) NOT NULL,
+          carrier         VARCHAR(100),
+          invoice_no      VARCHAR(50),
+          memo            TEXT,
+          created_by      INTEGER,
+          created_at      TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+      await pool.query(`CREATE INDEX IF NOT EXISTS idx_tc_date ON transport_cost(cost_date)`);
+
+      // ⑤ 월별 손익 스냅샷
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS monthly_pl_snapshot (
+          id              SERIAL PRIMARY KEY,
+          year_month      CHAR(7) NOT NULL UNIQUE,
+          revenue         NUMERIC(14,2) DEFAULT 0,
+          material_cost   NUMERIC(14,2) DEFAULT 0,
+          labor_cost      NUMERIC(14,2) DEFAULT 0,
+          overhead_cost   NUMERIC(14,2) DEFAULT 0,
+          transport_cost  NUMERIC(14,2) DEFAULT 0,
+          total_cost      NUMERIC(14,2) DEFAULT 0,
+          gross_profit    NUMERIC(14,2) DEFAULT 0,
+          gross_margin    NUMERIC(5,2)  DEFAULT 0,
+          produced_qty    INTEGER       DEFAULT 0,
+          cost_per_unit   NUMERIC(12,2) DEFAULT 0,
+          confirmed       BOOLEAN       DEFAULT FALSE,
+          memo            TEXT,
+          created_at      TIMESTAMPTZ DEFAULT NOW(),
+          updated_at      TIMESTAMPTZ DEFAULT NOW()
+        )
+      `);
+
+      // 메뉴 등록
+      await pool.query(`
+        INSERT INTO menu (menu_code,menu_name,path,parent_menu_id,sort_order) VALUES
+          ('ACCOUNTING','회계관리','/accounting',null,80),
+          ('ACCOUNTING_SETUP','기초데이터설정','/accounting/setup',null,81),
+          ('ACCOUNTING_REVENUE','매출현황','/accounting/revenue',null,82),
+          ('ACCOUNTING_COST','원가현황','/accounting/cost',null,83),
+          ('ACCOUNTING_PL','손익분석','/accounting/profit-loss',null,84)
+        ON CONFLICT (menu_code) DO NOTHING
+      `);
+
+      console.log('✅ 회계 모듈 테이블 마이그레이션 완료 (5개 테이블)');
       console.log('✅ Menu migration done: inventory + shipment + statement menus granted to all departments');
     } catch (e) {
       console.warn('⚠ Menu migration skipped:', e);
     }
+
   }); // end setImmediate background migration
 
   return app;

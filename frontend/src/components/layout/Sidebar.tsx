@@ -4,7 +4,7 @@ import {
   Truck, Settings, ChevronLeft, ChevronRight, Factory, Database,
   Wrench, FlaskConical, Scissors, Box, Layers,
   ArrowRightLeft, Monitor, HardHat, Boxes, PackageCheck,
-  ChevronDown, Hammer, Inbox, FileText, ShoppingCart, Megaphone, ShieldAlert, CheckCircle,
+  ChevronDown, Hammer, Inbox, FileText, ShoppingCart, Megaphone, ShieldAlert, CheckCircle, TrendingUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect } from 'react';
@@ -214,7 +214,18 @@ const shopNavItems: NavSection[] = [
       { label: 'BOM 관리', path: '/master/bom' },
     ],
   },
-
+  // ── 회계 관리 (매니저 이상) ──
+  {
+    label: '회계 관리',
+    icon: TrendingUp,
+    children: [
+      { label: '기초데이터 설정', path: '/accounting/setup' },
+      { label: '매출 현황',     path: '/accounting/revenue' },
+      { label: '원가 현황',     path: '/accounting/cost' },
+      { label: '손익 분석',     path: '/accounting/profit-loss' },
+    ],
+    dividerAfter: true,
+  },
 ];
 
 // ─── 관리 모드: 업무 흐름 순서 (수주→발주→생산→품질→출하) ───
@@ -335,6 +346,17 @@ const adminNavItems: NavSection[] = [
       { label: '백업 / 초기화',     path: '/settings/backup' },
     ],
   },
+  // ── 회계 관리 (매니저 이상) ──
+  {
+    label: '회계 관리',
+    icon: TrendingUp,
+    children: [
+      { label: '기초데이터 설정', path: '/accounting/setup' },
+      { label: '매출 현황',     path: '/accounting/revenue' },
+      { label: '원가 현황',     path: '/accounting/cost' },
+      { label: '손익 분석',     path: '/accounting/profit-loss' },
+    ],
+  },
 
 ];
 
@@ -361,11 +383,15 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
     return found.can_read;
   };
 
-  // manager 미만(worker)이 볼 수 없는 경로 목록 (현황판)
+  // manager 미만(worker)이 볼 수 없는 경로 목록 (현황판 + 회계)
   const MANAGER_ONLY_PATHS = [
     '/production/production-dashboard',
     '/inventory/dashboard',
     '/production/yield-dashboard',
+    '/accounting/setup',
+    '/accounting/revenue',
+    '/accounting/cost',
+    '/accounting/profit-loss',
   ];
 
   // 섹션/링크를 권한으로 필터링: 그룹 노드는 자식 1개 이상이 보일 때만 노출
