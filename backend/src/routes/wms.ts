@@ -88,16 +88,19 @@ async function migrateWms() {
         AND ncs.rack_code IS NOT NULL
     `).catch(() => {});
 
-    // 5. lots 테이블에 location_id 추가
-    await pool.query(`ALTER TABLE lots ADD COLUMN IF NOT EXISTS location_id INTEGER REFERENCES storage_locations(location_id)`).catch(() => {});
+    // 5. assembly_lot 테이블에 location_id / staging_location 추가 (Supabase 호환)
+    await pool.query(`ALTER TABLE assembly_lot ADD COLUMN IF NOT EXISTS location_id INTEGER REFERENCES storage_locations(location_id)`).catch(() => {});
+    await pool.query(`ALTER TABLE assembly_lot ADD COLUMN IF NOT EXISTS staging_location VARCHAR(50)`).catch(() => {});
+    await pool.query(`ALTER TABLE assembly_lot ADD COLUMN IF NOT EXISTS remaining_qty INTEGER`).catch(() => {});
+    await pool.query(`ALTER TABLE assembly_lot ADD COLUMN IF NOT EXISTS item_name VARCHAR(200)`).catch(() => {});
     // 기존 staging_location 문자열로 location_id 채우기
     await pool.query(`
-      UPDATE lots l
+      UPDATE assembly_lot al
       SET location_id = sl.location_id
       FROM storage_locations sl
-      WHERE sl.location_code = l.staging_location
-        AND l.location_id IS NULL
-        AND l.staging_location IS NOT NULL
+      WHERE sl.location_code = al.staging_location
+        AND al.location_id IS NULL
+        AND al.staging_location IS NOT NULL
     `).catch(() => {});
 
     // 6. material_lots 테이블에 location_id 추가
@@ -186,21 +189,23 @@ export async function wmsRoutes(app: FastifyInstance) {
         ORDER BY ncs.id
       `);
 
-      // 인정재고 lots (생산 완제품)
+      // 인정재고 assembly_lot (생산 완제품 — Supabase 실제 테이블)
       const { rows: lots } = await pool.query(`
         SELECT
-          l.lot_id, l.lot_number, l.item_id, l.qty, l.remaining_qty,
-          l.staging_location, l.status,
-          l.location_id,
+          al.lot_id, al.lot_number, al.qty,
+          COALESCE(al.remaining_qty, al.qty) AS remaining_qty,
+          al.staging_location, al.status,
+          al.location_id,
           sl.location_code, sl.display_name,
           sl.rack_col, sl.rack_tier, sl.rack_pallet,
-          i.item_name, i.item_code, i.spec
-        FROM lots l
-        LEFT JOIN storage_locations sl ON sl.location_id = l.location_id
-        LEFT JOIN items i ON i.item_id = l.item_id
-        WHERE l.status = 'ACTIVE'
-        ORDER BY l.lot_id
-      `);
+          COALESCE(al.item_name, al.lot_type, al.lot_number) AS item_name,
+          al.lot_type AS item_code,
+          NULL AS spec
+        FROM assembly_lot al
+        LEFT JOIN storage_locations sl ON sl.location_id = al.location_id
+        WHERE al.status IN ('ACTIVE','STOCK','COMPLETE')
+        ORDER BY al.lot_id
+      `).catch(() => ({ rows: [] as any[] }));
 
       // 자재 material_lots
       const { rows: mats } = await pool.query(`
@@ -497,21 +502,21 @@ export async function wmsRoutes(app: FastifyInstance) {
           [b.lot_number]
         );
         item = r;
-        // lots 테이블도 확인
+        // assembly_lot 테이블도 확인
         if (!item) {
           const { rows: [l] } = await client.query(
-            `SELECT lot_id AS id, lot_number, remaining_qty AS qty, location_id FROM lots WHERE lot_number=$1 AND status='ACTIVE' LIMIT 1`,
+            `SELECT lot_id AS id, lot_number, COALESCE(remaining_qty, qty) AS qty, location_id FROM assembly_lot WHERE lot_number=$1 AND status IN ('ACTIVE','STOCK','COMPLETE') LIMIT 1`,
             [b.lot_number]
-          );
+          ).catch(() => ({ rows: [] as any[] }));
           if (l) {
-            // lots 출고 처리
+            // assembly_lot 출고 처리
             await client.query(
-              `UPDATE lots SET remaining_qty = remaining_qty - $1 WHERE lot_id = $2`,
+              `UPDATE assembly_lot SET remaining_qty = COALESCE(remaining_qty, qty) - $1 WHERE lot_id = $2`,
               [b.qty, l.id]
-            );
+            ).catch(() => {});
             await client.query(`
               INSERT INTO wms_transactions (item_table, item_id, lot_number, txn_type, qty, from_location_id, scanned_barcode, notes, performed_by)
-              VALUES ('lots', $1, $2, 'OUT', $3, $4, $5, $6, $7)
+              VALUES ('assembly_lot', $1, $2, 'OUT', $3, $4, $5, $6, $7)
             `, [l.id, l.lot_number, b.qty, l.location_id, b.barcode || null,
                 b.notes || '바코드 스캔 출고', b.performed_by || null]);
             await client.query('COMMIT');
@@ -696,16 +701,16 @@ export async function wmsRoutes(app: FastifyInstance) {
       ORDER BY ncs.id
     `, [identifier]);
 
-    // lots 테이블도 조회
+    // assembly_lot 테이블도 조회
     const { rows: lotRows } = await pool.query(`
-      SELECT l.lot_id AS id, l.lot_number, l.remaining_qty AS qty, l.status,
+      SELECT al.lot_id AS id, al.lot_number,
+             COALESCE(al.remaining_qty, al.qty) AS qty, al.status,
              sl.location_code, sl.display_name,
-             i.item_name, i.spec
-      FROM lots l
-      LEFT JOIN storage_locations sl ON sl.location_id = l.location_id
-      LEFT JOIN items i ON i.item_id = l.item_id
-      WHERE l.lot_number=$1 AND l.status='ACTIVE'
-    `, [identifier]);
+             COALESCE(al.item_name, al.lot_type) AS item_name, NULL AS spec
+      FROM assembly_lot al
+      LEFT JOIN storage_locations sl ON sl.location_id = al.location_id
+      WHERE al.lot_number=$1 AND al.status IN ('ACTIVE','STOCK','COMPLETE')
+    `, [identifier]).catch(() => ({ rows: [] as any[] }));
 
     if (ncRows.length === 0 && lotRows.length === 0) {
       return reply.status(404).send({ error: '해당 바코드/LOT를 찾을 수 없습니다.' });
@@ -786,19 +791,19 @@ export async function wmsRoutes(app: FastifyInstance) {
       };
     }
 
-    // 2. lots 테이블 검색
+    // 2. assembly_lot 테이블 검색
     const { rows: lotRows } = await pool.query(`
       SELECT
-        l.lot_id AS id, l.lot_number, l.remaining_qty, l.status,
-        i.item_name, i.spec,
+        al.lot_id AS id, al.lot_number,
+        COALESCE(al.remaining_qty, al.qty) AS remaining_qty, al.status,
+        COALESCE(al.item_name, al.lot_type) AS item_name, NULL AS spec,
         sl.location_code, sl.display_name AS location_name
-      FROM lots l
-      LEFT JOIN items i ON i.item_id = l.item_id
-      LEFT JOIN storage_locations sl ON sl.location_id = l.location_id
-      WHERE l.status = 'ACTIVE'
-        AND (l.lot_number ILIKE $1)
+      FROM assembly_lot al
+      LEFT JOIN storage_locations sl ON sl.location_id = al.location_id
+      WHERE al.status IN ('ACTIVE','STOCK','COMPLETE')
+        AND (al.lot_number ILIKE $1)
       LIMIT 5
-    `, [`%${query}%`]);
+    `, [`%${query}%`]).catch(() => ({ rows: [] as any[] }));
 
     if (lotRows.length > 0) {
       const item = lotRows[0];
@@ -813,7 +818,7 @@ export async function wmsRoutes(app: FastifyInstance) {
           status: item.status,
           location: item.location_code,
           location_name: item.location_name,
-          source: 'lots',
+          source: 'assembly_lot',
           all_results: lotRows,
         }
       };
@@ -902,26 +907,25 @@ export async function wmsRoutes(app: FastifyInstance) {
       }};
     }
 
-    // 3) lots (완제품 LOT)
+    // 3) assembly_lot (완제품 LOT)
     const { rows: [lot] } = await pool.query(`
       SELECT
-        l.lot_id AS id,
-        l.lot_number,
-        l.remaining_qty   AS qty_current,
-        l.status,
-        l.location_id,
-        i.item_name,
-        i.spec,
-        i.unit,
+        al.lot_id AS id,
+        al.lot_number,
+        COALESCE(al.remaining_qty, al.qty) AS qty_current,
+        al.status,
+        al.location_id,
+        COALESCE(al.item_name, al.lot_type) AS item_name,
+        NULL AS spec,
+        NULL AS unit,
         sl.location_code,
         sl.display_name   AS location_name,
-        'lots'            AS source_table
-      FROM lots l
-      LEFT JOIN items i ON i.item_id = l.item_id
-      LEFT JOIN storage_locations sl ON sl.location_id = l.location_id
-      WHERE l.lot_number = $1 AND l.status = 'ACTIVE'
+        'assembly_lot'    AS source_table
+      FROM assembly_lot al
+      LEFT JOIN storage_locations sl ON sl.location_id = al.location_id
+      WHERE al.lot_number = $1 AND al.status IN ('ACTIVE','STOCK','COMPLETE')
       LIMIT 1
-    `, [lotNo]);
+    `, [lotNo]).catch(() => ({ rows: [] as any[] }));
 
     if (lot) {
       return { data: {
