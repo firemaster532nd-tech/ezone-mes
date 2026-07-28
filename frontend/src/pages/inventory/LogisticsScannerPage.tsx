@@ -107,7 +107,7 @@ export function LogisticsScannerPage() {
     if (!poSearchKeyword.trim()) return;
     setPoSearching(true);
     try {
-      const res = await api.get<{ data: any[] }>(`/purchase-orders?site_name=${encodeURIComponent(poSearchKeyword)}&limit=20`);
+      const res = await api.get<{ data: any[] }>(`/purchase-orders?search=${encodeURIComponent(poSearchKeyword)}&status=CONFIRMED&limit=20`);
       setPoList(res.data ?? []);
       if ((res.data ?? []).length === 0) toast.info('검색된 발주서가 없습니다.');
     } catch {

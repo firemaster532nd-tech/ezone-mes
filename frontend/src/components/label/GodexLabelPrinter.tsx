@@ -78,7 +78,7 @@ function buildZpl(data: LabelData, copies: number = 1): string {
 ^FO10,92^A0N,20,20^FD수량: ${qty_current} ${unit}^FS
 ^FO10,114^A0N,20,20^FD입고일: ${dateStr}^FS
 
-${location ? `^FO10,140^A0N,20,20^FD위치: ${location_name || location}^FS` : ''}
+^FO10,140^A0N,24,24^FD위치: ${location_name || location || '위치 미지정'}^FS
 ^FO10,165^BY2,3,50^BCN,50,Y,N,N
 ^FD${lot_number}^FS
 
@@ -165,7 +165,7 @@ function LabelPreview({ data }: { data: LabelData }) {
       <div style={{ fontSize: '9px', marginBottom: '2px' }}>규격: {spec || '—'}</div>
       <div style={{ fontSize: '9px', marginBottom: '2px' }}>수량: {data.qty_current} {data.unit || 'EA'}</div>
       <div style={{ fontSize: '9px', marginBottom: '4px' }}>입고: {dateStr}</div>
-      {data.location && <div style={{ fontSize: '9px', marginBottom: '4px', color: '#1d4ed8', fontWeight: 'bold' }}>위치: {data.location_name || data.location}</div>}
+      <div style={{ fontSize: '9px', marginBottom: '4px', color: '#1d4ed8', fontWeight: 'bold' }}>위치: {data.location_name || data.location || '위치 미지정'}</div>
 
       {/* 바코드 시뮬레이션 */}
       <div style={{ display: 'flex', gap: '1px', height: '28px', marginBottom: '2px' }}>
@@ -262,7 +262,7 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
       <div class="small">규격: ${spec}</div>
       <div class="small">수량: ${labelData.qty_current} ${labelData.unit || 'EA'}</div>
       <div class="small">입고: ${labelData.received_date || ''}</div>
-      ${labelData.location ? `<div class="small" style="font-weight:bold;">위치: ${labelData.location_name || labelData.location}</div>` : ''}
+      <div class="small" style="font-weight:bold;">위치: ${labelData.location_name || labelData.location || '위치 미지정'}</div>
       <hr/>
       <div style="font-size:28pt;text-align:center;letter-spacing:-1px;">*${labelData.lot_number}*</div>
       <div class="lot">${labelData.lot_number}</div>
