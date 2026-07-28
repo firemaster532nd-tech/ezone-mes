@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 
@@ -103,6 +105,8 @@ const KpiCard = ({ label, value, sub, color }: { label: string, value: string, s
 };
 
 export const YieldDashboardPage: React.FC = () => {
+  const { isManager, isAdmin } = useAuth();
+
   const today = new Date();
   const [from, setFrom] = useState(new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0]);
   const [to, setTo] = useState(today.toISOString().split('T')[0]);
@@ -115,15 +119,15 @@ export const YieldDashboardPage: React.FC = () => {
   const fetchData = async () => {
     try {
       const [resRange, resMonthly, resTarget] = await Promise.all([
-        api.get(`/api/production/yield?from=${from}&to=${to}`),
-        api.get('/api/production/yield/monthly?months=12'),
-        api.get(`/api/production/kpi-target?year_month=${today.toISOString().substring(0,7)}`).catch(() => ({ data: { data: null } }))
+        api.get<{ data: { summary: Summary; by_process: ProcessYield[] } }>(`/api/production/yield?from=${from}&to=${to}`),
+        api.get<{ data: { monthly: MonthlyYield[] } }>('/api/production/yield/monthly?months=12'),
+        api.get<{ data: Target | null }>(`/api/production/kpi-target?year_month=${today.toISOString().substring(0,7)}`).catch(() => ({ data: null }))
       ]);
 
       setSummary(resRange.data.data.summary || {});
       setByProcess(resRange.data.data.by_process || []);
       setMonthlyYields(resMonthly.data.data.monthly || []);
-      setCurrentTarget(resTarget.data.data);
+      setCurrentTarget(resTarget.data);
     } catch (err) {
       console.error('Failed to fetch yield data', err);
     }
@@ -133,6 +137,9 @@ export const YieldDashboardPage: React.FC = () => {
     fetchData();
     // eslint-disable-next-line
   }, []);
+
+  // ✅ 모든 훅 선언 이후에 가드 적용 (Rules of Hooks 준수)
+  if (!isManager && !isAdmin) return <Navigate to="/production/work-orders" replace />;
 
   const setRange = (type: 'week' | 'month') => {
     const end = new Date();

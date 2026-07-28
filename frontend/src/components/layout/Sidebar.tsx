@@ -1,4 +1,4 @@
-﻿import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, Package, ShieldCheck,
   Truck, Settings, ChevronLeft, ChevronRight, Factory, Database,
@@ -346,7 +346,7 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
   const [approvalCount, setApprovalCount] = useState(0);
   const [socketWaitCount, setSocketWaitCount] = useState(0);
   const location = useLocation();
-  const { user, permissions, isAdmin, isSuperAdmin } = useAuth();
+  const { user, permissions, isAdmin, isSuperAdmin, isManager } = useAuth();
   // 관리모드 접근 가능: admin 또는 allowed_modes='both' 이면 모드 토글 표시
   const canSwitchMode = isAdmin || user?.allowed_modes === 'both';
   const currentMode = canSwitchMode ? mode : 'shop';
@@ -361,13 +361,27 @@ export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
     return found.can_read;
   };
 
+  // manager 미만(worker)이 볼 수 없는 경로 목록 (현황판)
+  const MANAGER_ONLY_PATHS = [
+    '/production/production-dashboard',
+    '/inventory/dashboard',
+    '/production/yield-dashboard',
+  ];
+
   // 섹션/링크를 권한으로 필터링: 그룹 노드는 자식 1개 이상이 보일 때만 노출
   const filterNav = (items: NavSection[]): NavSection[] => {
+    const canViewPath = (path?: string) => {
+      if (!path) return true;
+      // manager 미만은 현황판 경로 숨김
+      if (!isManager && !isAdmin && MANAGER_ONLY_PATHS.includes(path)) return false;
+      return pathReadable(path);
+    };
     return items
       .map((s) => {
-        if (s.path) return pathReadable(s.path) ? s : null;
+        if (s.path) return canViewPath(s.path) ? s : null;
         if (s.children) {
-          const visible = s.children.filter((c) => pathReadable(c.path));
+          const visible = s.children.filter((c) => canViewPath(c.path));
+          // 현황판 섹션 자체도 worker에게는 숨김
           return visible.length ? { ...s, children: visible } : null;
         }
         return s;

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
+import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -129,6 +130,7 @@ interface LedgerEntry {
 }
 
 export function InventoryDashboardPage() {
+  const { isManager, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [dashboard, setDashboard] = useState<DashboardCard[]>([]);
   const [summary, setSummary] = useState<InventorySummary[]>([]);
@@ -182,6 +184,9 @@ export function InventoryDashboardPage() {
     fetchLotInventory();
     fetchTxnHistory();
   }, [selectedCategory]);
+
+  // ✅ 모든 훅 선언 이후에 가드 적용 (Rules of Hooks 준수)
+  if (!isManager && !isAdmin) return <Navigate to="/inventory/material-stock" replace />;
 
   const handleExpandItem = (itemId: number) => {
     if (expandedItem === itemId) {

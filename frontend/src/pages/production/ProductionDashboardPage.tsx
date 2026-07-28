@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -56,6 +58,7 @@ interface WeeklyData {
 }
 
 export function ProductionDashboardPage() {
+  const { isManager, isAdmin } = useAuth();
   const [stats, setStats] = useState<StatsData | null>(null);
   const [weekly, setWeekly] = useState<WeeklyData | null>(null);
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
@@ -64,6 +67,9 @@ export function ProductionDashboardPage() {
     api.get<{ data: StatsData }>(`/production/stats?date=${date}`).then((r) => setStats(r.data));
     api.get<{ data: WeeklyData }>('/production/stats/weekly').then((r) => setWeekly(r.data));
   }, [date]);
+
+  // ✅ 모든 훅 선언 이후에 가드 적용 (Rules of Hooks 준수)
+  if (!isManager && !isAdmin) return <Navigate to="/production/work-orders" replace />;
 
   if (!stats) {
     return <div className="flex items-center justify-center h-96 text-gray-400">로딩 중...</div>;
