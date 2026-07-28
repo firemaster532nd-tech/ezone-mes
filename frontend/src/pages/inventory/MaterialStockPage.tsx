@@ -791,17 +791,32 @@ export function MaterialStockPage() {
 
   useEffect(() => { loadLotsWithTimestamp(); }, [loadLotsWithTimestamp]);
 
-  // 1시간마다 자동 갱신
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 매일 오후 4시 자동 갱신
   useEffect(() => {
-    autoRefreshRef.current = setInterval(() => { loadLotsWithTimestamp(); }, 60 * 60 * 1000);
-    return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current); };
+    const msUntilNext4PM = () => {
+      const now = new Date();
+      const next = new Date();
+      next.setHours(16, 0, 0, 0);
+      if (now >= next) next.setDate(next.getDate() + 1);
+      return next.getTime() - now.getTime();
+    };
+    timeoutRef.current = setTimeout(() => {
+      loadLotsWithTimestamp();
+      autoRefreshRef.current = setInterval(loadLotsWithTimestamp, 24 * 60 * 60 * 1000);
+    }, msUntilNext4PM());
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+    };
   }, [loadLotsWithTimestamp]);
 
   return (
     <div className="p-6 space-y-5 bg-slate-50 min-h-screen">
       <PageHeader
         title="📦 원자재 통합 재고관리"
-        description={`전체 LOT 재고현황 · 수불대장 · 이력조회 · 수동 수불 입력${lastUpdated ? ` · 🕐 ${lastUpdated.toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'})} 업데이트 · 매시간 자동갱신` : ''}`}
+        description={`전체 LOT 재고현황 · 수불대장 · 이력조회 · 수동 수불 입력${lastUpdated ? ` · 🕐 ${lastUpdated.toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'})} 업데이트 · 매일 16:00 자동갱신` : ''}`}
       />
 
       {/* 탭 */}

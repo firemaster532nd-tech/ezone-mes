@@ -101,21 +101,32 @@ export default function SocketStockPage() {
 
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadDataWithTimestamp = useCallback(async () => {
     await loadData();
     setLastUpdated(new Date());
   }, [loadData]);
 
-  // 최초 로드
   useEffect(() => { loadDataWithTimestamp(); }, [loadDataWithTimestamp]);
 
-  // 1시간마다 자동 갱신
+  // 매일 오후 4시 자동 갱신
   useEffect(() => {
-    autoRefreshRef.current = setInterval(() => {
+    const msUntilNext4PM = () => {
+      const now = new Date();
+      const next = new Date();
+      next.setHours(16, 0, 0, 0);
+      if (now >= next) next.setDate(next.getDate() + 1);
+      return next.getTime() - now.getTime();
+    };
+    timeoutRef.current = setTimeout(() => {
       loadDataWithTimestamp();
-    }, 60 * 60 * 1000);
-    return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current); };
+      autoRefreshRef.current = setInterval(loadDataWithTimestamp, 24 * 60 * 60 * 1000);
+    }, msUntilNext4PM());
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
+    };
   }, [loadDataWithTimestamp]);
 
   const openUseModal = (stockType:'SOCKET'|'BRACKET', stock:any) => {
@@ -170,7 +181,7 @@ export default function SocketStockPage() {
             입고 자재의 현장별·전체 재고 현황, 사용 등록, 절곡 작업지시
             {lastUpdated && (
               <span className="ml-2 text-xs text-gray-400">
-                🕐 {lastUpdated.toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'})} 업데이트 · 매시간 자동갱신
+            🕐 {lastUpdated.toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'})} 업데이트 · 매일 16:00 자동갱신
               </span>
             )}
           </p>

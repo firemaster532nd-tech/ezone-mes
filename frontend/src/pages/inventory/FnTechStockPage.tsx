@@ -539,6 +539,7 @@ export function FnTechStockPage() {
 
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadDataWithTimestamp = useCallback(async () => {
     await loadData();
@@ -548,12 +549,21 @@ export function FnTechStockPage() {
   // 최초 로드
   useEffect(() => { loadDataWithTimestamp(); }, [loadDataWithTimestamp]);
 
-  // 1시간마다 자동 갱신
+  // 매일 오후 4시 자동 갱신
   useEffect(() => {
-    autoRefreshRef.current = setInterval(() => {
+    const msUntilNext4PM = () => {
+      const now = new Date();
+      const next = new Date();
+      next.setHours(16, 0, 0, 0);
+      if (now >= next) next.setDate(next.getDate() + 1); // 이미 4시 지났으면 내일
+      return next.getTime() - now.getTime();
+    };
+    timeoutRef.current = setTimeout(() => {
       loadDataWithTimestamp();
-    }, 60 * 60 * 1000); // 1시간 = 3,600,000ms
+      autoRefreshRef.current = setInterval(loadDataWithTimestamp, 24 * 60 * 60 * 1000);
+    }, msUntilNext4PM());
     return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
     };
   }, [loadDataWithTimestamp]);
@@ -609,7 +619,7 @@ export function FnTechStockPage() {
                 EZ-FN-P100 및 FS-NP24-1112-2 | 입고 시 LOT번호 필수
                 {lastUpdated && (
                   <span className="ml-3 text-blue-300 text-xs">
-                    🕐 {lastUpdated.toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'})} 업데이트 · 매시간 자동갱신
+                    🕐 {lastUpdated.toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'})} 업데이트 · 매일 16:00 자동갱신
                   </span>
                 )}
               </p>
