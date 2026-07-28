@@ -873,14 +873,12 @@ export function UsersPage() {
                             </button>
                             <button
                               onClick={async () => {
-                                if (!confirm(`${u.worker_name}님의 비밀번호를 전화번호로 초기화하시겠습니까?`)) return;
+                                if (!confirm(`${u.worker_name}님의 비밀번호를 스마트폰 번호로 초기화합니다. 계속하시겠습니까?`)) return;
                                 try {
-                                  const res = await api.post<{ ok: boolean; temp_password: string; message: string }>(
-                                    `/auth/users/${u.worker_id}/reset-to-phone`, {}
-                                  );
-                                  alert(`초기화 완료\n임시 비밀번호: ${res.temp_password}\n다음 로그인 시 변경 요구`);
+                                  await api.post(`/auth/reset-password/${u.worker_id}`);
+                                  toast.success('비밀번호가 스마트폰 번호로 초기화되었습니다');
                                 } catch (err: any) {
-                                  alert(err?.response?.data?.message || '초기화 실패');
+                                  toast.error(err?.response?.data?.message || '초기화 실패');
                                 }
                               }}
                               className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 font-medium whitespace-nowrap"

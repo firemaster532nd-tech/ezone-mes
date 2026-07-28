@@ -23,11 +23,8 @@ export function ForceChangePasswordPage() {
         current_password: currentPw,
         new_password: newPw,
       });
-      toast.success('비밀번호가 변경되었습니다. 다시 로그인해주세요.');
-      // 로그아웃 처리 후 로그인 페이지
-      localStorage.removeItem('auth_token');
-      sessionStorage.clear();
-      navigate('/login');
+      toast.success('비밀번호가 변경되었습니다.');
+      window.location.href = '/';
     } catch (err: any) {
       toast.error(err?.response?.data?.message || '비밀번호 변경 실패');
     } finally {

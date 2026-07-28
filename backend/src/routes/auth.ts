@@ -112,6 +112,10 @@ export async function authRoutes(app: FastifyInstance) {
     ALTER TABLE worker ADD COLUMN IF NOT EXISTS allowed_modes VARCHAR(10) DEFAULT 'shop';
   `).catch(() => {});
 
+  await pool.query(`
+    ALTER TABLE worker ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE;
+  `).catch(() => {});
+
   // ?¸ë¶„ë¥?ë§ˆìŠ¤???Œì ´ë¸?? ì„± (ì¿¼ë¦¬ 1)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS item_subcategory_master (
@@ -176,6 +180,7 @@ export async function authRoutes(app: FastifyInstance) {
             role: 'admin',
             dept_id: deptId,
             must_change_pw: false,
+            must_change_password: false,
             allowed_modes: 'both',
           },
         };
@@ -198,6 +203,7 @@ export async function authRoutes(app: FastifyInstance) {
             role: 'superadmin',
             dept_id: 0,
             must_change_pw: false,
+            must_change_password: false,
             allowed_modes: 'both',
           },
         };
@@ -214,7 +220,7 @@ export async function authRoutes(app: FastifyInstance) {
         ).catch(() => {});
 
       const { rows } = await pool.query(
-        `SELECT worker_id, employee_no, worker_name, password_hash, role, dept_id, is_active, must_change_pw,
+        `SELECT worker_id, employee_no, worker_name, password_hash, role, dept_id, is_active, must_change_pw, must_change_password,
                 COALESCE(allowed_modes, 'shop') as allowed_modes
          FROM worker WHERE employee_no = $1`,
         [employee_no],
@@ -260,6 +266,7 @@ export async function authRoutes(app: FastifyInstance) {
           role: w.role,
           dept_id: w.dept_id,
           must_change_pw: w.must_change_pw,
+          must_change_password: w.must_change_pw || w.must_change_password,
           allowed_modes: w.allowed_modes ?? 'shop',
         },
       };
@@ -276,6 +283,7 @@ export async function authRoutes(app: FastifyInstance) {
             role: 'admin',
             dept_id: 1,
             must_change_pw: false,
+            must_change_password: false,
             allowed_modes: 'both',
           },
         };
@@ -303,6 +311,7 @@ export async function authRoutes(app: FastifyInstance) {
             position: '시스템 관리자',
             email: null,
             must_change_pw: false,
+            must_change_password: false,
             allowed_modes: 'both',
           },
           permissions: [],
@@ -312,7 +321,7 @@ export async function authRoutes(app: FastifyInstance) {
       const [userRes, permRes] = await Promise.all([
         pool.query(
           `SELECT w.worker_id, w.employee_no, w.worker_name, w.role, w.dept_id, w.position, w.email,
-                  w.must_change_pw, d.dept_code, d.dept_name,
+                  w.must_change_pw, w.must_change_password, d.dept_code, d.dept_name,
                   COALESCE(w.allowed_modes, 'shop') as allowed_modes
            FROM worker w LEFT JOIN department d ON d.dept_id = w.dept_id
            WHERE w.worker_id = $1`,
@@ -340,6 +349,7 @@ export async function authRoutes(app: FastifyInstance) {
             position: null,
             email: null,
             must_change_pw: false,
+            must_change_password: false,
             allowed_modes: 'shop',
           },
           permissions: [],
@@ -358,6 +368,7 @@ export async function authRoutes(app: FastifyInstance) {
           position: u.position,
           email: u.email,
           must_change_pw: u.must_change_pw,
+          must_change_password: u.must_change_pw || u.must_change_password,
           allowed_modes: u.allowed_modes ?? 'shop',
         },
         permissions: permRes.rows,
@@ -374,6 +385,7 @@ export async function authRoutes(app: FastifyInstance) {
           role: reqAuth.role || 'admin',
           dept_id: 1,
           must_change_pw: false,
+          must_change_password: false,
           allowed_modes: 'both',
         },
         permissions: [],
@@ -408,7 +420,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     const hash = await hashPassword(new_password);
     await pool.query(
-      `UPDATE worker SET password_hash = $1, must_change_pw = FALSE, updated_at = NOW() WHERE worker_id = $2`,
+      `UPDATE worker SET password_hash = $1, must_change_pw = FALSE, must_change_password = FALSE, updated_at = NOW() WHERE worker_id = $2`,
       [hash, worker_id],
     );
     return { ok: true };
@@ -535,6 +547,35 @@ export async function authRoutes(app: FastifyInstance) {
       if (!r.rows[0]) return reply.code(404).send({ error: 'not_found' });
       return { ok: true };
     },
+  );
+
+  // POST /api/auth/reset-password/:workerId  (admin: ë¹„ë?ë²ˆí˜¸ ìŠ¤ë§ˆíŠ¸í ° ë²ˆí˜¸ë¡? ì´ˆê¸°??
+  app.post<{ Params: { workerId: string } }>(
+    '/api/auth/reset-password/:workerId',
+    { preHandler: requireRole('admin') },
+    async (req, reply) => {
+      const id = parseInt(req.params.workerId, 10);
+      const { rows: [target] } = await pool.query(
+        `SELECT worker_id, worker_name, phone, employee_no FROM worker WHERE worker_id = $1`,
+        [id]
+      );
+      if (!target) return reply.code(404).send({ error: 'not_found', message: '사용자를 찾을 수 없습니다.' });
+      if (target.employee_no === 'admin') return reply.code(403).send({ error: 'forbidden', message: '관리자 계정은 초기화할 수 없습니다.' });
+      if (!target.phone?.trim()) return reply.code(400).send({ error: 'no_phone', message: '등록된 스마트폰 번호가 없습니다.' });
+
+      const phonePw = target.phone.trim();
+      const hash = await hashPassword(phonePw);
+
+      await pool.query(
+        `UPDATE worker SET password_hash = $1, must_change_password = TRUE, updated_at = NOW() WHERE worker_id = $2`,
+        [hash, id]
+      );
+
+      return {
+        ok: true,
+        message: '비밀번호가 스마트폰 번호로 초기화되었습니다',
+      };
+    }
   );
 
   // POST /api/auth/users/:id/reset-to-phone  (admin 전용: 전화번호로 자동 초기화)

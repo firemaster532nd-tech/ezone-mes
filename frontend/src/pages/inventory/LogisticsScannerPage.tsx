@@ -124,19 +124,15 @@ export function LogisticsScannerPage() {
     try {
       if (action === 'MOVE') {
         if (!moveLocationId) { toast.error('이동할 위치를 선택해주세요.'); return; }
-        await api.post('/wms/location-move', {
-          lot_number: scannedItem.lot_number,
-          source_table: scannedItem.source_table,
-          source_id: scannedItem.id,
-          from_location_id: scannedItem.location_id,
-          to_location_code: moveLocationCode,
-          to_location_id: moveLocationId,
-          qty: parseFloat(actionQty) || scannedItem.qty_current,
-          notes: actionNote || '스캐너 위치이동',
+        await api.put('/wms/change-location', {
+          item_table: scannedItem.source_table,
+          item_id: scannedItem.id,
+          location_id: moveLocationId,
+          memo: actionNote || '스캐너 위치이동',
         });
         toast.success(`${scannedItem.lot_number} → ${moveLocationCode} 이동 완료`);
         // 위치이동 후 아이템 업데이트
-        setScannedItem(prev => prev ? { ...prev, location: moveLocationCode, location_name: moveLocationCode } : null);
+        setScannedItem(prev => prev ? { ...prev, location: moveLocationCode, location_name: moveLocationCode, location_id: moveLocationId } : null);
         resetAction();
 
       } else if (action === 'IN') {

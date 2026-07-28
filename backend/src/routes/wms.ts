@@ -1035,4 +1035,85 @@ export async function wmsRoutes(app: FastifyInstance) {
 
     return { ok: true, message: `출하대기 등록 완료 (PO: ${b.po_number || b.po_id})` };
   });
+
+  // ─── PUT /api/wms/change-location ──────────────────────────────────────────
+  // 공통 위치 변경 API (item_table 별 location_id 업데이트)
+  app.put('/api/wms/change-location', async (req, reply) => {
+    const b = req.body as {
+      item_table: 'material_lots' | 'non_certified_stock' | 'socket_stock';
+      item_id: number;
+      location_id: number;
+      memo?: string;
+    };
+
+    if (!b.item_table || !b.item_id || !b.location_id) {
+      return reply.status(400).send({ error: 'item_table, item_id, location_id는 필수입니다.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 목적지 위치 정보 조회
+      const { rows: [loc] } = await client.query(
+        `SELECT location_code FROM storage_locations WHERE location_id = $1`,
+        [b.location_id]
+      );
+      if (!loc) throw new Error('유효하지 않은 위치입니다.');
+
+      let lotNumber = '';
+      let itemName = '';
+      let fromLocationId = null;
+      let qty = 0;
+
+      // 테이블별 업데이트 처리
+      if (b.item_table === 'material_lots') {
+        const { rows: [ml] } = await client.query(`SELECT * FROM material_lots WHERE lot_id = $1`, [b.item_id]);
+        if (!ml) throw new Error('재고 항목을 찾을 수 없습니다.');
+        lotNumber = ml.lot_number; itemName = ml.item_name; fromLocationId = ml.location_id; qty = ml.qty_current;
+
+        await client.query(
+          `UPDATE material_lots SET location = $1, location_id = $2, updated_at = NOW() WHERE lot_id = $3`,
+          [loc.location_code, b.location_id, b.item_id]
+        );
+      } else if (b.item_table === 'non_certified_stock') {
+        const { rows: [ncs] } = await client.query(`SELECT * FROM non_certified_stock WHERE stock_id = $1`, [b.item_id]);
+        if (!ncs) throw new Error('재고 항목을 찾을 수 없습니다.');
+        lotNumber = ncs.lot_number; itemName = ncs.item_name; fromLocationId = ncs.location_id; qty = ncs.qty;
+
+        await client.query(
+          `UPDATE non_certified_stock SET location_id = $1, updated_at = NOW() WHERE stock_id = $2`,
+          [b.location_id, b.item_id]
+        );
+      } else if (b.item_table === 'socket_stock') {
+        // socket_stock 테이블도 처리 (있는 경우)
+        const { rows: [sock] } = await client.query(`SELECT * FROM socket_stock WHERE id = $1`, [b.item_id]);
+        if (!sock) throw new Error('재고 항목을 찾을 수 없습니다.');
+        lotNumber = sock.lot_number || ''; itemName = sock.item_name || ''; fromLocationId = sock.location_id; qty = sock.qty;
+
+        await client.query(
+          `UPDATE socket_stock SET location_id = $1, updated_at = NOW() WHERE id = $2`,
+          [b.location_id, b.item_id]
+        );
+      } else {
+        throw new Error('지원하지 않는 테이블입니다.');
+      }
+
+      // WMS 이력 기록
+      await client.query(`
+        INSERT INTO wms_transactions
+          (item_table, item_id, lot_number, item_name, txn_type, qty,
+           from_location_id, to_location_id, notes)
+        VALUES ($1, $2, $3, $4, 'MOVE', $5, $6, $7, $8)
+      `, [b.item_table, b.item_id, lotNumber, itemName, qty, fromLocationId, b.location_id, b.memo || '스캐너 위치이동 API']);
+
+      await client.query('COMMIT');
+      return { ok: true, message: `위치 변경 완료 (${loc.location_code})` };
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return reply.status(500).send({ error: e.message });
+    } finally {
+      client.release();
+    }
+  });
 }

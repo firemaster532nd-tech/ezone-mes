@@ -262,6 +262,7 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
       <div class="small">규격: ${spec}</div>
       <div class="small">수량: ${labelData.qty_current} ${labelData.unit || 'EA'}</div>
       <div class="small">입고: ${labelData.received_date || ''}</div>
+      ${labelData.location ? `<div class="small" style="font-weight:bold;">위치: ${labelData.location_name || labelData.location}</div>` : ''}
       <hr/>
       <div style="font-size:28pt;text-align:center;letter-spacing:-1px;">*${labelData.lot_number}*</div>
       <div class="lot">${labelData.lot_number}</div>

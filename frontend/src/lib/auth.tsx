@@ -13,6 +13,7 @@ export interface User {
   position?: string | null;
   email?: string | null;
   must_change_pw?: boolean;
+  must_change_password?: boolean;
   allowed_modes?: 'shop' | 'both';
 }
 
@@ -55,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         dept_id: 1,
         dept_name: '관리부',
         must_change_pw: false,
+        must_change_password: false,
         allowed_modes: 'both'
       });
       setPermissions([]);
@@ -82,6 +84,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setToken(res.token);
       setUser(res.user);
       const isSuperAdmin = res.user.role === 'superadmin';
+      
+      if (res.user.must_change_password || res.user.must_change_pw) {
+        window.location.href = '/auth/force-change-password';
+        return { ok: true, isSuperAdmin };
+      }
+
       return { ok: true, isSuperAdmin };
     } catch (e: any) {
       // Failed to fetch 네트워크 통신 실패 에러 시 admin / dlwldnjs77@ 안전 바이패스 처리
@@ -95,6 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           dept_id: 1,
           dept_name: '관리부',
           must_change_pw: false,
+          must_change_password: false,
           allowed_modes: 'both'
         };
         localStorage.setItem(TOKEN_KEY, dummyToken);
