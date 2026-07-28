@@ -89,7 +89,8 @@ import { SocketBracketInspectionPage } from '@/pages/quality/SocketBracketInspec
 import { NonCertifiedInspectionPage } from '@/pages/quality/NonCertifiedInspectionPage';
 import { NonCertifiedStockPage } from '@/pages/inventory/NonCertifiedStockPage';
 import BarcodeScanWmsPage from '@/pages/inventory/BarcodeScanWmsPage';
-
+import { ForceChangePasswordPage } from '@/pages/auth/ForceChangePasswordPage';
+import { LogisticsScannerPage } from '@/pages/inventory/LogisticsScannerPage';
 
 
 
@@ -109,6 +110,7 @@ function RouteErrorBoundary() {
 
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  { path: '/auth/force-change-password', element: <ForceChangePasswordPage /> },
 
   // ══ 인쇄 전용 페이지 (새 탭/팝업용 — token을 URL 쿼리로 전달) ══
   // 출차증 인쇄 (AuthGuard 없이 독립 렌더링)
@@ -140,6 +142,7 @@ export const router = createBrowserRouter([
       { path: 'production/yield-dashboard', element: <YieldDashboardPage /> },
       // 재고관리
       { path: 'inventory/dashboard', element: <InventoryDashboardPage /> },
+      { path: 'inventory/logistics', element: <LogisticsScannerPage /> },
       { path: 'inventory/initialize', element: <InitialInventoryPage /> },
       { path: 'inventory/closing', element: <InventoryClosingPage /> },
       { path: 'inventory/import', element: <InventoryImportPage /> },

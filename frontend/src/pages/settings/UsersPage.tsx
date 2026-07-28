@@ -871,6 +871,22 @@ export function UsersPage() {
                             >
                               <KeyRound className="h-4 w-4" />
                             </button>
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`${u.worker_name}님의 비밀번호를 전화번호로 초기화하시겠습니까?`)) return;
+                                try {
+                                  const res = await api.post<{ ok: boolean; temp_password: string; message: string }>(
+                                    `/auth/users/${u.worker_id}/reset-to-phone`, {}
+                                  );
+                                  alert(`초기화 완료\n임시 비밀번호: ${res.temp_password}\n다음 로그인 시 변경 요구`);
+                                } catch (err: any) {
+                                  alert(err?.response?.data?.message || '초기화 실패');
+                                }
+                              }}
+                              className="text-xs px-2 py-1 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 font-medium whitespace-nowrap"
+                            >
+                              🔑 PW초기화
+                            </button>
                             {/* 삭제 버튼 — admin 계정 및 본인 제외 */}
                             {u.employee_no !== 'admin' && (
                               <button

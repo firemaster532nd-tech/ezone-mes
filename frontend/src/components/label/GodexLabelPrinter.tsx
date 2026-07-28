@@ -21,6 +21,8 @@ interface LabelData {
   unit?: string;
   qty_current?: number | string;
   received_date?: string;
+  location?: string;
+  location_name?: string;
 }
 
 interface GodexLabelPrinterProps {
@@ -45,6 +47,8 @@ function buildZpl(data: LabelData, copies: number = 1): string {
     unit = 'EA',
     qty_current = '',
     received_date = '',
+    location = '',
+    location_name = '',
   } = data;
 
   // 규격 문자열 조합
@@ -74,10 +78,11 @@ function buildZpl(data: LabelData, copies: number = 1): string {
 ^FO10,92^A0N,20,20^FD수량: ${qty_current} ${unit}^FS
 ^FO10,114^A0N,20,20^FD입고일: ${dateStr}^FS
 
-^FO10,140^BY2,3,60^BCN,60,Y,N,N
+${location ? `^FO10,140^A0N,20,20^FD위치: ${location_name || location}^FS` : ''}
+^FO10,165^BY2,3,50^BCN,50,Y,N,N
 ^FD${lot_number}^FS
 
-^FO10,218^A0N,18,18^FDLOT: ${lot_number}^FS
+^FO10,240^A0N,18,18^FDLOT: ${lot_number}^FS
 
 ^PQ${copies},0,1,Y
 ^XZ
@@ -160,6 +165,7 @@ function LabelPreview({ data }: { data: LabelData }) {
       <div style={{ fontSize: '9px', marginBottom: '2px' }}>규격: {spec || '—'}</div>
       <div style={{ fontSize: '9px', marginBottom: '2px' }}>수량: {data.qty_current} {data.unit || 'EA'}</div>
       <div style={{ fontSize: '9px', marginBottom: '4px' }}>입고: {dateStr}</div>
+      {data.location && <div style={{ fontSize: '9px', marginBottom: '4px', color: '#1d4ed8', fontWeight: 'bold' }}>위치: {data.location_name || data.location}</div>}
 
       {/* 바코드 시뮬레이션 */}
       <div style={{ display: 'flex', gap: '1px', height: '28px', marginBottom: '2px' }}>
