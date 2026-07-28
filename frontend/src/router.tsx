@@ -26,6 +26,8 @@ import { DepartmentsPage } from '@/pages/settings/DepartmentsPage';
 import { PermissionsPage } from '@/pages/settings/PermissionsPage';
 import { ProcessExecutionPage } from '@/pages/production/ProcessExecutionPage';
 import { ProductionDashboardPage } from '@/pages/production/ProductionDashboardPage';
+import { DailyWorkforcePage } from '@/pages/production/DailyWorkforcePage';
+import { YieldDashboardPage } from '@/pages/production/YieldDashboardPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { ApprovalInboxPage } from '@/pages/approval/ApprovalInboxPage';
 import { ApprovalLinePage } from '@/pages/approval/ApprovalLinePage';
@@ -134,6 +136,8 @@ export const router = createBrowserRouter([
       { path: 'production/sub-work-orders',       element: <SubWorkOrderPage /> },
       { path: 'production/fn-work-orders',        element: <FnWorkOrderPage /> },
       { path: 'production/assembly-log',          element: <AssemblyLogPage /> },
+      { path: 'production/daily-workforce', element: <DailyWorkforcePage /> },
+      { path: 'production/yield-dashboard', element: <YieldDashboardPage /> },
       // 재고관리
       { path: 'inventory/dashboard', element: <InventoryDashboardPage /> },
       { path: 'inventory/initialize', element: <InitialInventoryPage /> },

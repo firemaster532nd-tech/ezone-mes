@@ -271,6 +271,8 @@ export const initApp = async () => {
       // ── 공지/쪽지/권한요청 테이블 초기화 ──
       await ensureAnnouncementTables();
 
+      await pool.query(`INSERT INTO menu (menu_code,menu_name,path,parent_menu_id,sort_order) VALUES ('PRODUCTION_DAILY_WORKFORCE','일일인력투입','/production/daily-workforce',null,71),('PRODUCTION_YIELD_DASHBOARD','수율현황','/production/yield-dashboard',null,72) ON CONFLICT (menu_code) DO NOTHING`);
+
       console.log('✅ Menu migration done: inventory + shipment + statement menus granted to all departments');
     } catch (e) {
       console.warn('⚠ Menu migration skipped:', e);
