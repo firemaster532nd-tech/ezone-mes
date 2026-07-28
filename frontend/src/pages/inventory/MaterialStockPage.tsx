@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -781,13 +781,27 @@ export function MaterialStockPage() {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { loadLots(); }, [loadLots]);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const loadLotsWithTimestamp = useCallback(async () => {
+    await loadLots();
+    setLastUpdated(new Date());
+  }, [loadLots]);
+
+  useEffect(() => { loadLotsWithTimestamp(); }, [loadLotsWithTimestamp]);
+
+  // 1시간마다 자동 갱신
+  useEffect(() => {
+    autoRefreshRef.current = setInterval(() => { loadLotsWithTimestamp(); }, 60 * 60 * 1000);
+    return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current); };
+  }, [loadLotsWithTimestamp]);
 
   return (
     <div className="p-6 space-y-5 bg-slate-50 min-h-screen">
       <PageHeader
         title="📦 원자재 통합 재고관리"
-        description="전체 LOT 재고현황 · 수불대장 · 이력조회 · 수동 수불 입력"
+        description={`전체 LOT 재고현황 · 수불대장 · 이력조회 · 수동 수불 입력${lastUpdated ? ` · 🕐 ${lastUpdated.toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'})} 업데이트 · 매시간 자동갱신` : ''}`}
       />
 
       {/* 탭 */}

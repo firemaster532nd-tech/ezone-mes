@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
@@ -99,7 +99,24 @@ export default function SocketStockPage() {
     finally { setLoading(false); }
   }, [tab, viewMode, selectedProject]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const loadDataWithTimestamp = useCallback(async () => {
+    await loadData();
+    setLastUpdated(new Date());
+  }, [loadData]);
+
+  // 최초 로드
+  useEffect(() => { loadDataWithTimestamp(); }, [loadDataWithTimestamp]);
+
+  // 1시간마다 자동 갱신
+  useEffect(() => {
+    autoRefreshRef.current = setInterval(() => {
+      loadDataWithTimestamp();
+    }, 60 * 60 * 1000);
+    return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current); };
+  }, [loadDataWithTimestamp]);
 
   const openUseModal = (stockType:'SOCKET'|'BRACKET', stock:any) => {
     const label = stockType==='SOCKET' ? `${stock.product_type} (${stock.width_mm}×${stock.height_mm}×${stock.depth_mm})` : `GI ${stock.thickness_t}T×${stock.width_mm}×${stock.length_mm}`;
@@ -149,7 +166,14 @@ export default function SocketStockPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">소켓/평철 재고 관리</h1>
-          <p className="mt-1 text-sm text-gray-500">입고 자재의 현장별·전체 재고 현황, 사용 등록, 절곡 작업지시</p>
+          <p className="mt-1 text-sm text-gray-500">
+            입고 자재의 현장별·전체 재고 현황, 사용 등록, 절곡 작업지시
+            {lastUpdated && (
+              <span className="ml-2 text-xs text-gray-400">
+                🕐 {lastUpdated.toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'})} 업데이트 · 매시간 자동갱신
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex gap-2">
           {tab==='bending' && (
