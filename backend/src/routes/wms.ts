@@ -1124,4 +1124,164 @@ export async function wmsRoutes(app: FastifyInstance) {
       client.release();
     }
   });
+
+  // ─── POST /api/wms/transfer ────────────────────────────────────────────────
+  // 렉 이동 전용 API (출발 렉/파레트 → 도착 렉/파레트, 전체/일부 수량 이동 & 수량 합침)
+  app.post('/api/wms/transfer', async (req, reply) => {
+    const {
+      from_location_code,
+      to_location_code,
+      transfer_mode = 'FULL', // 'FULL' | 'PARTIAL'
+      transfer_qty = 0,
+      notes = '',
+      performed_by = '',
+    } = req.body as {
+      from_location_code: string;
+      to_location_code: string;
+      transfer_mode?: 'FULL' | 'PARTIAL';
+      transfer_qty?: number;
+      notes?: string;
+      performed_by?: string;
+    };
+
+    if (!from_location_code || !to_location_code) {
+      return reply.status(400).send({ error: '출발 위치(from_location_code)와 도착 위치(to_location_code)는 필수입니다.' });
+    }
+
+    if (from_location_code === to_location_code) {
+      return reply.status(400).send({ error: '출발 위치와 도착 위치가 같습니다.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. 출발 위치 재고 검색 (material_lots 또는 non_certified_stock)
+      const { rows: matRows } = await client.query(
+        `SELECT 'material_lots' AS tbl, lot_id AS id, lot_number, item_name, current_qty AS qty, location AS loc_code, location_id
+         FROM material_lots WHERE location = $1 AND current_qty > 0
+         UNION ALL
+         SELECT 'non_certified_stock' AS tbl, stock_id AS id, lot_number, item_name, qty, rack_code AS loc_code, location_id
+         FROM non_certified_stock WHERE (rack_code = $1 OR shipment_site_name = $1) AND qty > 0
+         LIMIT 1`,
+        [from_location_code]
+      );
+
+      const source = matRows[0];
+      if (!source) {
+        throw new Error(`출발 위치 [${from_location_code}]에 적재된 재고를 찾을 수 없습니다.`);
+      }
+
+      const availableQty = Number(source.qty || 0);
+      const moveQty = transfer_mode === 'FULL' ? availableQty : Math.min(availableQty, Number(transfer_qty || 0));
+
+      if (moveQty <= 0) {
+        throw new Error('이동할 수량이 0 이하입니다.');
+      }
+
+      // 2. 도착 위치 정보 조회
+      const { rows: locRows } = await client.query(
+        `SELECT location_id, location_code FROM storage_locations WHERE location_code = $1`,
+        [to_location_code]
+      );
+      const toLoc = locRows[0] || { location_id: null, location_code: to_location_code };
+
+      // 3. 도착 위치의 기존 재고 검색 (동일 LOT 또는 다른 재고)
+      const { rows: destRows } = await client.query(
+        `SELECT 'material_lots' AS tbl, lot_id AS id, lot_number, item_name, current_qty AS qty
+         FROM material_lots WHERE location = $1 AND current_qty > 0
+         UNION ALL
+         SELECT 'non_certified_stock' AS tbl, stock_id AS id, lot_number, item_name, qty
+         FROM non_certified_stock WHERE (rack_code = $1 OR shipment_site_name = $1) AND qty > 0
+         LIMIT 1`,
+        [to_location_code]
+      );
+      const dest = destRows[0];
+
+      // 4. 재고 이동 & 수량 합침 처리
+      if (source.tbl === 'material_lots') {
+        if (transfer_mode === 'FULL') {
+          // 전체 수량 이동
+          if (dest && dest.lot_number === source.lot_number && dest.tbl === 'material_lots') {
+            // 동일 LOT 도착지 재고와 수량 합침!
+            await client.query(`UPDATE material_lots SET current_qty = current_qty + $1 WHERE lot_id = $2`, [moveQty, dest.id]);
+            await client.query(`UPDATE material_lots SET current_qty = 0 WHERE lot_id = $1`, [source.id]);
+          } else {
+            // 도착지가 빈 공간이거나 다른 재고: 위치 단순 이동
+            await client.query(
+              `UPDATE material_lots SET location = $1, location_id = $2, updated_at = NOW() WHERE lot_id = $3`,
+              [to_location_code, toLoc.location_id, source.id]
+            );
+          }
+        } else {
+          // 일부 수량 이동
+          await client.query(`UPDATE material_lots SET current_qty = current_qty - $1 WHERE lot_id = $2`, [moveQty, source.id]);
+
+          if (dest && dest.lot_number === source.lot_number && dest.tbl === 'material_lots') {
+            // 동일 LOT 수량 합침
+            await client.query(`UPDATE material_lots SET current_qty = current_qty + $1 WHERE lot_id = $2`, [moveQty, dest.id]);
+          } else {
+            // 도착지에 분할 신규 LOT 생성
+            const splitLotNumber = `${source.lot_number}-M`;
+            await client.query(
+              `INSERT INTO material_lots (lot_number, item_name, category, init_qty, current_qty, location, location_id, remark)
+               VALUES ($1, $2, '반제품', $3, $3, $4, $5, $6)`,
+              [splitLotNumber, source.item_name, moveQty, to_location_code, toLoc.location_id, `이동 분할 재고 (${from_location_code}에서 ${moveQty}ea 이동)`]
+            );
+          }
+        }
+      } else {
+        // non_certified_stock 처리
+        if (transfer_mode === 'FULL') {
+          await client.query(
+            `UPDATE non_certified_stock SET rack_code = $1, location_id = $2, updated_at = NOW() WHERE stock_id = $3`,
+            [to_location_code, toLoc.location_id, source.id]
+          );
+        } else {
+          await client.query(`UPDATE non_certified_stock SET qty = qty - $1 WHERE stock_id = $2`, [moveQty, source.id]);
+          await client.query(
+            `INSERT INTO non_certified_stock (lot_number, item_name, qty, rack_code, location_id, notes)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [source.lot_number, source.item_name, moveQty, to_location_code, toLoc.location_id, `이동 분할 재고 (${from_location_code}에서 이동)`]
+          );
+        }
+      }
+
+      // 5. WMS 이력 로그 기록
+      await client.query(
+        `INSERT INTO wms_transactions
+           (lot_number, item_name, qty, category, txn_type,
+            from_location_id, to_location_id, notes, performed_by)
+         VALUES ($1, $2, $3, 'WMS', 'TRANSFER', $4, $5, $6, $7)`,
+        [
+          source.lot_number,
+          source.item_name,
+          moveQty,
+          source.location_id || null,
+          toLoc.location_id || null,
+          `[렉이동] ${from_location_code} ➔ ${to_location_code} (${transfer_mode === 'FULL' ? '전체' : '일부'} ${moveQty}ea) ${notes}`,
+          performed_by || '시스템작업자',
+        ]
+      );
+
+      await client.query('COMMIT');
+      return reply.send({
+        ok: true,
+        message: `✅ 렉 이동 완료: [${from_location_code}] ➔ [${to_location_code}] (${moveQty} EA 이동)`,
+        data: {
+          lot_number: source.lot_number,
+          item_name: source.item_name,
+          moved_qty: moveQty,
+          from: from_location_code,
+          to: to_location_code,
+          merged: !!dest,
+        },
+      });
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return reply.status(500).send({ error: e.message });
+    } finally {
+      client.release();
+    }
+  });
 }

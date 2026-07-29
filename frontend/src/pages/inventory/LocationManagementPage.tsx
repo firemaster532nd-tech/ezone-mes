@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import {
-  Package, MapPin, CheckCircle, RefreshCw, X, Plus, AlertTriangle, HelpCircle, Printer, LogOut, Search
+  Package, MapPin, CheckCircle, RefreshCw, X, Plus, AlertTriangle, HelpCircle, Printer, LogOut, Search, ArrowLeftRight
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { WmsInventoryModal } from '@/components/WmsInventoryModal';
+import { RackTransferModal } from '@/components/RackTransferModal';
 
 // ─── 랙 로케이션 마스터 ────────────────────────────────────────────────────────
 export const ZONE_1_COLS = ['O','N','M','L','K','J','I','H','G','F','E','D','C','B','A'];
@@ -311,6 +312,9 @@ export function LocationManagementPage() {
   const [inputItemName, setInputItemName] = useState('');
   const [inputQty, setInputQty] = useState<number>(100);
 
+  // 렉 이동 모달
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+
   // 재고 등록 모달
   const [inventoryModalOpen, setInventoryModalOpen] = useState(false);
 
@@ -565,6 +569,13 @@ export function LocationManagementPage() {
         description="2파레트/셀 기준 랙맵 시각화 — 🟢 인정재고(LOT있음) / 🟡 비인정재고(LOT없음·인정심사·반품) / ⬜ 공실"
       >
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setTransferModalOpen(true)}
+            className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 text-white border border-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-700 shadow-sm"
+          >
+            <ArrowLeftRight className="h-4 w-4" />
+            🔄 렉 이동
+          </button>
           <button
             onClick={() => setInventoryModalOpen(true)}
             className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 text-white border border-emerald-700 rounded-lg text-sm font-bold hover:bg-emerald-700 shadow-sm"
@@ -919,6 +930,14 @@ export function LocationManagementPage() {
           </div>
         </div>
       )}
+
+      {/* 렉 이동 모달 */}
+      <RackTransferModal
+        isOpen={transferModalOpen}
+        onClose={() => setTransferModalOpen(false)}
+        onSuccess={loadData}
+        initialFromLocation={selectedLocation}
+      />
     </div>
   );
 }
