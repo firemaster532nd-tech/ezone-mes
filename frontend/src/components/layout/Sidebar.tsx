@@ -1,119 +1,119 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, Package, ShieldCheck,
-  Truck, Settings, ChevronLeft, ChevronRight, Factory, Database,
+  Truck, Settings, Factory, Database,
   Wrench, FlaskConical, Scissors, Box, Layers,
-  ArrowRightLeft, Monitor, HardHat, Boxes, PackageCheck,
-  ChevronDown, Hammer, Inbox, FileText, ShoppingCart, Megaphone, ShieldAlert, CheckCircle, TrendingUp,
-  Search, X, HeadphonesIcon,
+  Hammer, Inbox, FileText, ShoppingCart, Megaphone, ShieldAlert,
+  CheckCircle, TrendingUp, HardHat, Boxes, Monitor,
+  HeadphonesIcon, Search, X, ChevronDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 
-type SidebarMode = 'shop' | 'admin';
+export type SidebarMode = 'shop' | 'admin';
 
-interface NavChild {
+// ── 네비게이션 데이터 타입 ────────────────────────────────────────────────
+export interface SubNavItem {
   label: string;
   path: string;
-  disabled?: boolean;
-}
-
-interface NavSection {
-  label: string;
-  icon: React.ElementType;
   step?: string;
-  path?: string;
-  children?: NavChild[];
-  dividerAfter?: boolean;
+  disabled?: boolean;
+  children?: { label: string; path: string }[];
 }
 
-// ─── 이모티콘 제거 헬퍼 ───────────────────────────────────────────
-const stripEmoji = (s: string) =>
+export interface TopNavGroup {
+  key: string;
+  label: string;
+  Icon: React.ElementType;
+  path?: string;       // 직접 링크 (하위 없음)
+  children?: SubNavItem[];
+  dividerBefore?: boolean;
+}
+
+// ── 이모티콘 제거 ──────────────────────────────────────────────────────────
+const strip = (s: string) =>
   s.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FEFF}]/gu, '').trim();
 
-// ─── 실무 모드 ───────────────────────────────────────────────────
-const shopNavItems: NavSection[] = [
-  { label: '오늘의 작업', icon: LayoutDashboard, path: '/dashboard' },
+// ─────────────────────────────────────────────────────────────────────────────
+// 실무 모드 상단 탭 그룹
+// ─────────────────────────────────────────────────────────────────────────────
+export const shopTopGroups: TopNavGroup[] = [
   {
-    label: '수주/발주', icon: ShoppingCart,
+    key: 'home', label: '홈', Icon: LayoutDashboard, path: '/dashboard',
+  },
+  {
+    key: 'order', label: '수주/발주', Icon: ShoppingCart,
     children: [
       { label: '현장별 프로젝트', path: '/orders/projects' },
-      { label: '발주서 관리', path: '/orders/purchase-orders' },
-      { label: '견적서 등록/관리', path: '/orders/quotations' },
-      { label: '미주문현황 조회', path: '/orders/unordered' },
       { label: '수주 관리 / BOM', path: '/orders' },
+      { label: '견적서 등록/관리', path: '/orders/quotations' },
+      { label: '발주서 관리', path: '/orders/purchase-orders' },
       { label: '자재 발주서', path: '/orders/purchase-requests' },
-      { label: '주문내역 입고신청', path: '/orders/material-orders' },
+      { label: '주문내역 → 입고신청', path: '/orders/material-orders' },
+      { label: '미주문현황 조회', path: '/orders/unordered' },
+      { label: '자재발주대기', path: '/orders/socket-order-wait' },
     ],
   },
-  { label: '결재함', icon: Inbox, path: '/approval/inbox' },
-  { label: '공지 / 쪽지함', icon: Megaphone, path: '/announcements' },
-  { label: '자재발주대기', icon: Package, path: '/orders/socket-order-wait', dividerAfter: true },
-  { label: 'TBM 안전회의', icon: HardHat, path: '/production/tbm' },
   {
-    label: '작업지시', icon: ClipboardList,
+    key: 'comm', label: '소통', Icon: Inbox,
     children: [
+      { label: '결재함', path: '/approval/inbox' },
+      { label: '공지 / 쪽지함', path: '/announcements' },
+    ],
+  },
+  {
+    key: 'production', label: '생산관리', Icon: ClipboardList,
+    children: [
+      { label: 'TBM 안전회의', path: '/production/tbm' },
       { label: '일반 작업지시', path: '/production/work-orders' },
       { label: '비인정제품 작업지시', path: '/production/socket-work-orders' },
       { label: '구조체 작업지시', path: '/production/struct-work-orders' },
-      { label: '조립생산일지(J-LOT)', path: '/production/assembly-log' },
+      { label: '조립생산일지 (J-LOT)', path: '/production/assembly-log' },
       { label: '부자재별 작업지시', path: '/production/sub-work-orders' },
       { label: '에프엔테크 작업지시', path: '/production/fn-work-orders' },
+      { label: '공정 실행', path: '/production/process-execution' },
     ],
-    dividerAfter: true,
   },
   {
-    label: '통합 재고 관리', icon: Boxes,
+    key: 'process', label: '공정 단계', Icon: Factory,
+    children: [
+      { label: '원재료 인수검사', path: '/quality/incoming/raw', step: '①' },
+      { label: '공정 실행 (배합)', path: '/production/process-execution', step: '②' },
+      { label: '공정 실행 (압출)', path: '/production/process-execution', step: '③' },
+      { label: '공정 실행 (재단)', path: '/production/process-execution', step: '④' },
+      { label: '부자재 인수검사', path: '/quality/incoming/sub', step: '⑤' },
+      { label: '공정 실행 (조립)', path: '/production/process-execution', step: '⑥' },
+      { label: '중간검사 (C-701)', path: '/quality/process-inspection', step: '⑦' },
+    ],
+  },
+  {
+    key: 'inventory', label: '재고관리', Icon: Boxes,
     children: [
       { label: '원자재 통합 재고관리', path: '/inventory/material-stock' },
       { label: '바코드 스캔 WMS', path: '/inventory/barcode-wms' },
       { label: '랙 로케이션 관리', path: '/inventory/location' },
       { label: '비인정 재고 관리', path: '/inventory/non-certified-stock' },
-      { label: '기초/초기 재고 설정', path: '/inventory/material-init' },
-      { label: '수불대장 엑셀 연동', path: '/inventory/import' },
       { label: '소켓 / 평철 재고', path: '/inventory/socket-stock' },
       { label: '에프엔테크 재고현황', path: '/inventory/fn-tech-stock' },
       { label: 'LOT 라벨 재출력', path: '/inventory/label-reprint' },
+      { label: '기초/초기 재고 설정', path: '/inventory/material-init' },
+      { label: '수불대장 엑셀 연동', path: '/inventory/import' },
       { label: '월말 실사/마감', path: '/inventory/closing' },
     ],
-    dividerAfter: true,
   },
   {
-    label: '인수검사 관리', icon: CheckCircle,
+    key: 'inspection', label: '인수검사', Icon: CheckCircle,
     children: [
-      { label: '원재료 인수검사 (D101~D104)', path: '/quality/incoming/raw' },
-      { label: '부자재 인수검사 (FN테크 연동)', path: '/quality/incoming/sub' },
-      { label: '소켓 / 브라켓류 인수검사', path: '/quality/incoming/socket' },
-      { label: '비인정제품 인수검사 (기준등록)', path: '/quality/incoming/non-certified' },
-    ],
-    dividerAfter: true,
-  },
-  { label: '원재료 입고/검사', icon: Package, step: '①', children: [{ label: '원재료 인수검사', path: '/quality/incoming/raw' }] },
-  { label: '배합', icon: FlaskConical, step: '②', children: [{ label: '공정 실행', path: '/production/process-execution' }, { label: '자주검사', path: '/quality/self-inspection' }] },
-  { label: '압출', icon: Layers, step: '③', children: [{ label: '공정 실행', path: '/production/process-execution' }, { label: '자주검사', path: '/quality/self-inspection' }] },
-  { label: '재단', icon: Scissors, step: '④', children: [{ label: '공정 실행', path: '/production/process-execution' }, { label: '자주검사', path: '/quality/self-inspection' }] },
-  {
-    label: '부자재 입고/검사', icon: Box, step: '⑤',
-    children: [
+      { label: '원재료 인수검사', path: '/quality/incoming/raw' },
       { label: '부자재 인수검사 (FN테크)', path: '/quality/incoming/sub' },
-      { label: '소켓/브라켓 인수검사', path: '/quality/incoming/socket' },
+      { label: '소켓 / 브라켓류 인수검사', path: '/quality/incoming/socket' },
       { label: '비인정제품 인수검사', path: '/quality/incoming/non-certified' },
-      { label: '부자재 입출고 등록', path: '/inventory/material-tx' },
     ],
   },
   {
-    label: '조립', icon: Hammer, step: '⑥',
-    children: [
-      { label: '공정 실행', path: '/production/process-execution' },
-      { label: '중간검사 (C-701)', path: '/quality/process-inspection' },
-      { label: '자주검사', path: '/quality/self-inspection' },
-    ],
-    dividerAfter: true,
-  },
-  {
-    label: '출하', icon: Truck, step: '⑦',
+    key: 'shipment', label: '출하', Icon: Truck,
     children: [
       { label: '출하대기현황', path: '/shipment/ready' },
       { label: '출하조회', path: '/shipment/orders' },
@@ -123,10 +123,9 @@ const shopNavItems: NavSection[] = [
       { label: '거래명세서 관리', path: '/shipment/statements' },
       { label: '반품입고', path: '/shipment/returns' },
     ],
-    dividerAfter: true,
   },
   {
-    label: '현황판', icon: Monitor,
+    key: 'monitor', label: '현황판', Icon: Monitor,
     children: [
       { label: '생산 현황', path: '/production/production-dashboard' },
       { label: 'LOT 추적', path: '/quality/lot-trace' },
@@ -136,10 +135,9 @@ const shopNavItems: NavSection[] = [
       { label: '로스 분석', path: '/reports/loss' },
       { label: '미비사항 점검', path: '/quality/compliance' },
     ],
-    dividerAfter: true,
   },
   {
-    label: '기초등록', icon: Database,
+    key: 'master', label: '기초등록', Icon: Database,
     children: [
       { label: '품목 등록/관리', path: '/master/items' },
       { label: '거래처 관리', path: '/master/companies' },
@@ -148,44 +146,51 @@ const shopNavItems: NavSection[] = [
     ],
   },
   {
-    label: '회계 관리', icon: TrendingUp,
+    key: 'accounting', label: '회계', Icon: TrendingUp,
     children: [
       { label: '기초데이터 설정', path: '/accounting/setup' },
       { label: '매출 현황', path: '/accounting/revenue' },
       { label: '원가 현황', path: '/accounting/cost' },
       { label: '손익 분석', path: '/accounting/profit-loss' },
     ],
-    dividerAfter: true,
   },
-  { label: '고객센터', icon: HeadphonesIcon, path: '/support' },
+  {
+    key: 'support', label: '고객센터', Icon: HeadphonesIcon, path: '/support',
+  },
 ];
 
-// ─── 관리 모드 ───────────────────────────────────────────────────
-const adminNavItems: NavSection[] = [
-  { label: '대시보드', icon: LayoutDashboard, path: '/dashboard' },
+// ─────────────────────────────────────────────────────────────────────────────
+// 관리 모드 상단 탭 그룹
+// ─────────────────────────────────────────────────────────────────────────────
+export const adminTopGroups: TopNavGroup[] = [
   {
-    label: '수주/구매', icon: ShoppingCart,
+    key: 'home', label: '홈', Icon: LayoutDashboard, path: '/dashboard',
+  },
+  {
+    key: 'order', label: '수주/구매', Icon: ShoppingCart,
     children: [
       { label: '현장별 프로젝트', path: '/orders/projects' },
-      { label: '발주서 관리', path: '/orders/purchase-orders' },
-      { label: '견적서 등록/관리', path: '/orders/quotations' },
-      { label: '미주문현황 조회', path: '/orders/unordered' },
       { label: '수주 관리 / BOM', path: '/orders' },
+      { label: '견적서 등록/관리', path: '/orders/quotations' },
+      { label: '발주서 관리', path: '/orders/purchase-orders' },
       { label: '자재 발주서', path: '/orders/purchase-requests' },
-      { label: '주문내역 입고신청', path: '/orders/material-orders' },
+      { label: '주문내역 → 입고신청', path: '/orders/material-orders' },
+      { label: '미주문현황 조회', path: '/orders/unordered' },
+      { label: '자재발주대기', path: '/orders/socket-order-wait' },
     ],
   },
   {
-    label: '결재 관리', icon: Inbox,
+    key: 'approval', label: '결재관리', Icon: Inbox,
     children: [
       { label: '결재함', path: '/approval/inbox' },
       { label: '결재 라인 설정', path: '/approval/lines' },
+      { label: '공지 / 쪽지함', path: '/announcements' },
     ],
   },
-  { label: '자재발주대기', icon: Package, path: '/orders/socket-order-wait', dividerAfter: true },
   {
-    label: '생산관리', icon: ClipboardList,
+    key: 'production', label: '생산관리', Icon: ClipboardList,
     children: [
+      { label: 'TBM 안전회의', path: '/production/tbm' },
       { label: '작업지시 목록', path: '/production/work-orders' },
       { label: '비인정제품 작업지시', path: '/production/socket-work-orders' },
       { label: '구조체 작업지시', path: '/production/struct-work-orders' },
@@ -194,13 +199,16 @@ const adminNavItems: NavSection[] = [
       { label: '공정 실행', path: '/production/process-execution' },
       { label: '생산 현황', path: '/production/production-dashboard' },
       { label: '공정일지', path: '/production/daily-log' },
-      { label: 'TBM 안전회의', path: '/production/tbm' },
     ],
   },
   {
-    label: '품질관리', icon: ShieldCheck,
+    key: 'quality', label: '품질관리', Icon: ShieldCheck,
     children: [
       { label: '인수검사', path: '/quality/incoming' },
+      { label: '원재료 인수검사', path: '/quality/incoming/raw' },
+      { label: '부자재 인수검사', path: '/quality/incoming/sub' },
+      { label: '소켓/브라켓 인수검사', path: '/quality/incoming/socket' },
+      { label: '비인정제품 인수검사', path: '/quality/incoming/non-certified' },
       { label: '중간검사 (C-701)', path: '/quality/process-inspection' },
       { label: '자주검사', path: '/quality/self-inspection' },
       { label: '완제품검사 (C-901)', path: '/quality/fqc-inspection' },
@@ -212,7 +220,7 @@ const adminNavItems: NavSection[] = [
     ],
   },
   {
-    label: '통합 재고 관리', icon: Boxes,
+    key: 'inventory', label: '재고관리', Icon: Boxes,
     children: [
       { label: '전체 LOT 재고현황', path: '/inventory/dashboard' },
       { label: '통합 재고수불대장', path: '/inventory/ledger' },
@@ -225,7 +233,7 @@ const adminNavItems: NavSection[] = [
     ],
   },
   {
-    label: '출하 관리', icon: Truck,
+    key: 'shipment', label: '출하관리', Icon: Truck,
     children: [
       { label: '출하대기현황', path: '/shipment/ready' },
       { label: '출하조회', path: '/shipment/orders' },
@@ -237,14 +245,14 @@ const adminNavItems: NavSection[] = [
     ],
   },
   {
-    label: '보고서', icon: FileText,
+    key: 'report', label: '보고서', Icon: FileText,
     children: [
       { label: '일일/주간/월간', path: '/reports' },
       { label: '로스 분석', path: '/reports/loss' },
     ],
   },
   {
-    label: '기초등록', icon: Database,
+    key: 'master', label: '기초등록', Icon: Database,
     children: [
       { label: '품목 등록/관리', path: '/master/items' },
       { label: '거래처 관리', path: '/master/companies' },
@@ -253,7 +261,7 @@ const adminNavItems: NavSection[] = [
     ],
   },
   {
-    label: '설정', icon: Settings,
+    key: 'settings', label: '설정', Icon: Settings,
     children: [
       { label: '사용자 관리', path: '/settings/users' },
       { label: '부서 관리', path: '/settings/departments' },
@@ -264,7 +272,7 @@ const adminNavItems: NavSection[] = [
     ],
   },
   {
-    label: '회계 관리', icon: TrendingUp,
+    key: 'accounting', label: '회계', Icon: TrendingUp,
     children: [
       { label: '기초데이터 설정', path: '/accounting/setup' },
       { label: '매출 현황', path: '/accounting/revenue' },
@@ -272,474 +280,362 @@ const adminNavItems: NavSection[] = [
       { label: '손익 분석', path: '/accounting/profit-loss' },
     ],
   },
-  { label: '고객센터', icon: HeadphonesIcon, path: '/support' },
+  {
+    key: 'support', label: '고객센터', Icon: HeadphonesIcon, path: '/support',
+  },
 ];
 
-// ─── 전체 검색용 플랫 메뉴 목록 ────────────────────────────────
-function buildFlatMenu(items: NavSection[]) {
-  const result: { label: string; path: string; parent?: string }[] = [];
-  for (const s of items) {
-    if (s.path) result.push({ label: stripEmoji(s.label), path: s.path });
-    if (s.children) {
-      for (const c of s.children) {
-        result.push({ label: stripEmoji(c.label), path: c.path, parent: stripEmoji(s.label) });
+// ─────────────────────────────────────────────────────────────────────────────
+// 검색용 플랫 리스트
+// ─────────────────────────────────────────────────────────────────────────────
+function buildFlat(groups: TopNavGroup[]) {
+  const result: { label: string; path: string; group: string }[] = [];
+  for (const g of groups) {
+    if (g.path) result.push({ label: strip(g.label), path: g.path, group: strip(g.label) });
+    if (g.children) {
+      for (const c of g.children) {
+        result.push({ label: strip(c.label), path: c.path, group: strip(g.label) });
       }
     }
   }
   return result;
 }
 
-// ─── 메뉴 검색 바 ──────────────────────────────────────────────
-function MenuSearchBar({ currentMode }: { currentMode: SidebarMode }) {
-  const [query, setQuery] = useState('');
-  const [show, setShow] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const navigate = useNavigate();
-  const allItems = useMemo(() =>
-    buildFlatMenu(currentMode === 'shop' ? shopNavItems : adminNavItems),
-    [currentMode]
-  );
-  const filtered = useMemo(() => {
-    if (!query.trim()) return [];
-    const q = query.toLowerCase();
-    return allItems.filter(i => i.label.toLowerCase().includes(q) || i.parent?.toLowerCase().includes(q)).slice(0, 8);
-  }, [query, allItems]);
-
-  const isAdmin = currentMode === 'admin';
-  const accentBg = isAdmin ? 'bg-indigo-700/40' : 'bg-teal-700/40';
-  const accentBorder = isAdmin ? 'border-indigo-600/50' : 'border-teal-600/50';
-  const accentFocus = isAdmin ? 'focus:border-indigo-400' : 'focus:border-teal-400';
-  const accentHover = isAdmin ? 'hover:bg-indigo-700/50' : 'hover:bg-teal-700/50';
-  const accentText = isAdmin ? 'text-indigo-300' : 'text-teal-300';
-
-  return (
-    <div className="relative px-2 py-2">
-      <div className={cn('flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 transition-all', accentBg, accentBorder)}>
-        <Search className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
-        <input
-          ref={inputRef}
-          value={query}
-          onChange={e => { setQuery(e.target.value); setShow(true); }}
-          onFocus={() => setShow(true)}
-          onBlur={() => setTimeout(() => setShow(false), 150)}
-          placeholder="메뉴 검색..."
-          className={cn('flex-1 bg-transparent text-xs text-white placeholder-slate-500 outline-none', accentFocus)}
-        />
-        {query && (
-          <button onClick={() => setQuery('')} className="text-slate-500 hover:text-white">
-            <X className="h-3 w-3" />
-          </button>
-        )}
-      </div>
-      {/* 검색 결과 드롭다운 */}
-      {show && filtered.length > 0 && (
-        <div className="absolute left-2 right-2 top-full z-50 mt-1 rounded-lg border border-slate-600 bg-slate-800 shadow-xl overflow-hidden">
-          {filtered.map((item) => (
-            <button
-              key={item.path}
-              onMouseDown={() => { navigate(item.path); setQuery(''); setShow(false); }}
-              className={cn('flex w-full flex-col px-3 py-2 text-left transition-colors', accentHover)}
-            >
-              <span className="text-xs font-medium text-white">{item.label}</span>
-              {item.parent && <span className={cn('text-[10px]', accentText)}>{item.parent}</span>}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── 테마 정의 ──────────────────────────────────────────────────
-function getTheme(mode: SidebarMode) {
-  if (mode === 'shop') {
-    return {
-      aside:        'border-slate-700',
-      asideBg:      '#1e2535',          // 딥 네이비 슬레이트
-      logo:         'border-slate-700/60',
-      logoText:     'text-white',
-      collapseBtn:  'text-slate-400 hover:text-white',
-      modeBar:      'border-slate-700/60',
-      modeActiveBg: 'bg-teal-600',
-      modeInactive: 'text-slate-400 hover:text-white',
-      navDivider:   'border-slate-700/60',
-      accent:       '#14b8a6',          // teal-500
-      accentLight:  'rgba(20,184,166,0.15)',
-      accentText:   'text-teal-300',
-      stepColor:    'text-teal-400',
-      sectionText:  'text-slate-300',
-      childText:    'text-slate-400',
-      label:        '실무',
-    };
-  }
-  return {
-    aside:        'border-slate-700',
-    asideBg:      '#1a2035',          // 딥 다크 인디고 (보라 아님)
-    logo:         'border-slate-700/60',
-    logoText:     'text-white',
-    collapseBtn:  'text-slate-400 hover:text-white',
-    modeBar:      'border-slate-700/60',
-    modeActiveBg: 'bg-indigo-600',
-    modeInactive: 'text-slate-400 hover:text-white',
-    navDivider:   'border-slate-700/60',
-    accent:       '#818cf8',          // indigo-400
-    accentLight:  'rgba(129,140,248,0.15)',
-    accentText:   'text-indigo-300',
-    stepColor:    'text-indigo-400',
-    sectionText:  'text-slate-300',
-    childText:    'text-slate-400',
-    label:        '관리',
-  };
-}
-
-// ─── 3D 입체 버튼 스타일 헬퍼 ───────────────────────────────────
-function btn3dStyle(active: boolean, accent: string, accentLight: string) {
-  if (active) {
-    return {
-      background: `linear-gradient(180deg, ${accent}dd 0%, ${accent}99 100%)`,
-      boxShadow: `inset 0 1px 0 rgba(255,255,255,0.18), 0 2px 4px rgba(0,0,0,0.4), 0 1px 0 rgba(0,0,0,0.3)`,
-      border: `1px solid ${accent}80`,
-    };
-  }
-  return {
-    background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(0,0,0,0.08) 100%)',
-    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 1px 3px rgba(0,0,0,0.25)',
-    border: '1px solid rgba(255,255,255,0.06)',
-  };
-}
-
-export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [mode, _setMode] = useState<SidebarMode>(() => (localStorage.getItem('sidebar_mode') as SidebarMode) || 'shop');
-  const setMode = (m: SidebarMode) => { _setMode(m); localStorage.setItem('sidebar_mode', m); };
-  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
-  const [approvalCount, setApprovalCount] = useState(0);
-  const [socketWaitCount, setSocketWaitCount] = useState(0);
+// ─────────────────────────────────────────────────────────────────────────────
+// SubSidebar — 선택된 그룹의 하위 메뉴 표시
+// ─────────────────────────────────────────────────────────────────────────────
+export function SubSidebar({
+  group,
+  mode,
+  approvalCount,
+  socketWaitCount,
+}: {
+  group: TopNavGroup | null;
+  mode: SidebarMode;
+  approvalCount: number;
+  socketWaitCount: number;
+}) {
   const location = useLocation();
-  const { user, permissions, isAdmin, isSuperAdmin, isManager } = useAuth();
-  const canSwitchMode = isAdmin || user?.allowed_modes === 'both';
-  const currentMode = canSwitchMode ? mode : 'shop';
-  const theme = getTheme(currentMode);
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set());
 
-  const pathReadable = (path?: string) => {
-    if (!path) return true;
-    if (isAdmin) return true;
-    const found = permissions.find((p: { path: string | null; can_read: boolean }) => p.path === path);
-    if (!found) return true;
-    return found.can_read;
-  };
+  if (!group || !group.children || group.children.length === 0) return null;
 
-  const MANAGER_ONLY_PATHS = [
-    '/production/production-dashboard', '/inventory/dashboard',
-    '/production/yield-dashboard', '/accounting/setup',
-    '/accounting/revenue', '/accounting/cost', '/accounting/profit-loss',
-  ];
+  const accentColor = mode === 'shop' ? '#14b8a6' : '#818cf8';
+  const accentBg = mode === 'shop' ? 'rgba(20,184,166,0.12)' : 'rgba(129,140,248,0.12)';
 
-  const filterNav = (items: NavSection[]): NavSection[] => {
-    const canViewPath = (path?: string) => {
-      if (!path) return true;
-      if (!isManager && !isAdmin && MANAGER_ONLY_PATHS.includes(path)) return false;
-      return pathReadable(path);
-    };
-    return items
-      .map((s) => {
-        if (s.path) return canViewPath(s.path) ? s : null;
-        if (s.children) {
-          const visible = s.children.filter((c) => canViewPath(c.path));
-          return visible.length ? { ...s, children: visible } : null;
-        }
-        return s;
-      })
-      .filter((s): s is NavSection => s !== null);
-  };
-
-  useEffect(() => {
-    if (!user) return;
-    const fetchCount = () => {
-      api.get<{ data: { total: number } }>(`/approvals/counts?worker_id=${user.worker_id}`)
-        .then((res) => setApprovalCount(res.data.total))
-        .catch(() => {});
-    };
-    fetchCount();
-    const interval = setInterval(fetchCount, 60000);
-    return () => clearInterval(interval);
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-    const fetchWaitCount = () => {
-      api.get<{ data: any[] }>('/socket-orders/wait?status=APPROVED')
-        .then((res) => setSocketWaitCount(res.data?.length ?? 0))
-        .catch(() => {});
-    };
-    fetchWaitCount();
-    const interval = setInterval(fetchWaitCount, 60000);
-    return () => clearInterval(interval);
-  }, [user]);
-
-  const navItems = filterNav(currentMode === 'shop' ? shopNavItems : adminNavItems);
-
-  const toggleSection = (label: string) => {
-    setOpenSections((prev) => {
+  const toggle = (label: string) => {
+    setOpenSections(prev => {
       const next = new Set(prev);
-      if (next.has(label)) next.delete(label);
-      else next.add(label);
+      if (next.has(label)) next.delete(label); else next.add(label);
       return next;
     });
   };
 
-  const isSectionActive = (section: NavSection) => {
-    if (section.path) return location.pathname === section.path;
-    return section.children?.some((c) => location.pathname === c.path);
-  };
-
   return (
     <aside
-      className={cn('flex flex-col border-r transition-all duration-200', theme.aside, collapsed ? 'w-16' : 'w-64')}
-      style={{ background: theme.asideBg }}
+      className="flex flex-col border-r flex-shrink-0 overflow-y-auto"
+      style={{ width: 172, background: '#f8fafc', borderColor: '#e2e8f0' }}
     >
-      {/* Logo */}
-      <div className={cn('flex h-14 items-center justify-between border-b px-3', theme.logo)}>
-        {!collapsed && (
-          <div className="flex items-center gap-2">
-            <img src="/ezone-logo-v4.png" alt="EZONE" className="h-7 w-auto object-contain" />
-            <span className={cn('font-bold text-sm tracking-wide', theme.logoText)}>EZONE MES</span>
-          </div>
-        )}
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className={cn('rounded-md p-1.5 transition-colors', theme.collapseBtn)}
-        >
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-        </button>
-        {onMobileClose && (
-          <button onClick={onMobileClose} className={cn('lg:hidden rounded-md p-1.5', theme.collapseBtn)}>
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-        )}
+      {/* 그룹 헤더 */}
+      <div
+        className="flex items-center gap-1.5 px-3 py-2.5 border-b"
+        style={{ borderColor: '#e2e8f0', background: '#f1f5f9' }}
+      >
+        <group.Icon className="h-3.5 w-3.5 flex-shrink-0" style={{ color: accentColor }} />
+        <span className="text-xs font-bold text-slate-700 truncate">{strip(group.label)}</span>
       </div>
 
-      {/* Mode Toggle — 3D 버튼 */}
-      {!collapsed && canSwitchMode && (
-        <div className={cn('flex gap-1.5 border-b px-2 py-2', theme.modeBar)}>
-          {(['shop', 'admin'] as const).map((m) => {
-            const active = currentMode === m;
-            const label = m === 'shop' ? '실무' : '관리';
-            const Icon = m === 'shop' ? Wrench : Settings;
+      {/* 메뉴 리스트 */}
+      <nav className="flex-1 py-1.5 px-1.5 space-y-0.5">
+        {group.children.map((item) => {
+          const isActive = location.pathname === item.path;
+          const badge =
+            item.path === '/approval/inbox' ? approvalCount :
+            item.path === '/orders/socket-order-wait' ? socketWaitCount : 0;
+
+          if (item.children && item.children.length > 0) {
+            const isOpen = openSections.has(item.label) || item.children.some(c => location.pathname === c.path);
             return (
-              <button
-                key={m}
-                onClick={() => { setMode(m); setOpenSections(new Set()); }}
-                className={cn('flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold transition-all', active ? 'text-white' : 'text-slate-400 hover:text-slate-200')}
-                style={btn3dStyle(active, theme.accent, theme.accentLight)}
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {/* 메뉴 검색 */}
-      {!collapsed && <MenuSearchBar currentMode={currentMode} />}
-
-      {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
-        {navItems.map((section) => (
-          <div key={`${mode}-${section.label}`}>
-            {section.path ? (
-              <SidebarLink
-                item={{ label: stripEmoji(section.label), icon: section.icon, path: section.path }}
-                collapsed={collapsed}
-                step={section.step}
-                theme={theme}
-                badge={
-                  section.path === '/approval/inbox' ? approvalCount :
-                  section.path === '/orders/socket-order-wait' ? socketWaitCount :
-                  undefined
-                }
-              />
-            ) : (
-              <SidebarSection
-                section={{ ...section, label: stripEmoji(section.label), children: section.children?.map(c => ({ ...c, label: stripEmoji(c.label) })) }}
-                collapsed={collapsed}
-                isOpen={openSections.has(section.label) || !!isSectionActive(section)}
-                onToggle={() => toggleSection(section.label)}
-                theme={theme}
-                childBadges={{ '/orders/socket-order-wait': socketWaitCount }}
-              />
-            )}
-            {section.dividerAfter && !collapsed && (
-              <div className={cn('my-1.5 border-t', theme.navDivider)} />
-            )}
-            {section.dividerAfter && collapsed && (
-              <div className={cn('my-1 border-t mx-2', theme.navDivider)} />
-            )}
-          </div>
-        ))}
-
-        {/* 슈퍼관리자 전용 */}
-        {isSuperAdmin && (
-          <>
-            <div className="my-2 border-t border-red-700/50" />
-            {!collapsed && (
-              <div className="px-3 py-1 flex items-center gap-1.5">
-                <ShieldAlert className="h-3.5 w-3.5 text-red-400" />
-                <span className="text-[10px] font-bold text-red-400 tracking-widest uppercase">Super Admin</span>
+              <div key={item.label}>
+                <button
+                  onClick={() => toggle(item.label)}
+                  className="flex w-full items-center gap-1.5 rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-slate-600 hover:bg-white hover:text-slate-900 transition-colors"
+                >
+                  {item.step && <span className="text-[10px] font-bold w-4 text-center flex-shrink-0" style={{ color: accentColor }}>{item.step}</span>}
+                  <span className="flex-1 truncate">{strip(item.label)}</span>
+                  <ChevronDown className={cn('h-3 w-3 opacity-50 transition-transform', isOpen && 'rotate-180')} />
+                </button>
+                {isOpen && (
+                  <div className="ml-3 mt-0.5 space-y-0.5 border-l pl-2" style={{ borderColor: accentColor + '40' }}>
+                    {item.children.map(child => {
+                      const childActive = location.pathname === child.path;
+                      return (
+                        <NavLink key={child.path} to={child.path}
+                          className={cn('block rounded px-2 py-1 text-xs transition-colors truncate',
+                            childActive ? 'font-semibold text-white' : 'text-slate-500 hover:text-slate-800 hover:bg-white'
+                          )}
+                          style={childActive ? { background: accentColor } : undefined}
+                        >
+                          {strip(child.label)}
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
+            );
+          }
+
+          return (
             <NavLink
-              to="/superadmin/reset"
-              className={({ isActive }) => cn(
-                'flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-colors',
-                isActive ? 'bg-red-600 text-white' : 'text-red-400 hover:bg-red-900/40 hover:text-red-300',
-                collapsed && 'justify-center'
+              key={item.path}
+              to={item.path}
+              className={cn(
+                'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+                isActive ? 'text-white font-semibold' : 'text-slate-600 hover:bg-white hover:text-slate-900'
               )}
-              title={collapsed ? '시스템 초기화' : undefined}
+              style={isActive ? { background: accentColor } : undefined}
             >
-              <ShieldAlert className="h-4 w-4 flex-shrink-0" />
-              {!collapsed && <span>시스템 초기화</span>}
+              {item.step && (
+                <span className="text-[10px] font-bold w-4 text-center flex-shrink-0"
+                  style={{ color: isActive ? 'rgba(255,255,255,0.8)' : accentColor }}>
+                  {item.step}
+                </span>
+              )}
+              <span className="flex-1 truncate">{strip(item.label)}</span>
+              {badge > 0 && (
+                <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white flex-shrink-0">
+                  {badge}
+                </span>
+              )}
             </NavLink>
-          </>
-        )}
+          );
+        })}
       </nav>
     </aside>
   );
 }
 
-// ─── SidebarSection ─────────────────────────────────────────────
-function SidebarSection({
-  section, collapsed, isOpen, onToggle, theme, childBadges = {},
+// ─────────────────────────────────────────────────────────────────────────────
+// TopNav — 상단 가로 메뉴 바 (AppLayout에서 사용)
+// ─────────────────────────────────────────────────────────────────────────────
+export function TopNav({
+  mode,
+  canSwitchMode,
+  onModeChange,
+  activeGroupKey,
+  onGroupChange,
+  approvalCount,
+  socketWaitCount,
 }: {
-  section: NavSection;
-  collapsed: boolean;
-  isOpen: boolean;
-  onToggle: () => void;
-  theme: ReturnType<typeof getTheme>;
-  childBadges?: Record<string, number>;
+  mode: SidebarMode;
+  canSwitchMode: boolean;
+  onModeChange: (m: SidebarMode) => void;
+  activeGroupKey: string;
+  onGroupChange: (key: string) => void;
+  approvalCount: number;
+  socketWaitCount: number;
 }) {
-  const Icon = section.icon;
-  const location = useLocation();
-  const hasActiveChild = section.children?.some((c) => location.pathname === c.path);
+  const navigate = useNavigate();
+  const groups = mode === 'shop' ? shopTopGroups : adminTopGroups;
+  const isAdmin = mode === 'admin';
 
-  if (collapsed) {
-    const firstChild = section.children?.[0];
-    if (!firstChild) return null;
-    return (
-      <NavLink
-        to={firstChild.path}
-        className={() => cn(
-          'flex items-center justify-center rounded-lg px-2 py-2.5 transition-colors',
-          hasActiveChild ? 'text-white' : 'text-slate-400 hover:text-white hover:bg-white/5'
-        )}
-        title={section.label}
-        style={hasActiveChild ? btn3dStyle(true, theme.accent, theme.accentLight) : undefined}
-      >
-        <Icon className="h-5 w-5 flex-shrink-0" />
-      </NavLink>
-    );
-  }
+  // 메뉴 검색
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQ, setSearchQ] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  const allItems = useMemo(() => buildFlat(groups), [mode]);
+  const searchResults = useMemo(() => {
+    if (!searchQ.trim()) return [];
+    const q = searchQ.toLowerCase();
+    return allItems.filter(i => i.label.toLowerCase().includes(q) || i.group.toLowerCase().includes(q)).slice(0, 8);
+  }, [searchQ, allItems]);
+
+  useEffect(() => {
+    if (searchOpen) setTimeout(() => searchRef.current?.focus(), 50);
+  }, [searchOpen]);
+
+  const accentColor = isAdmin ? '#6366f1' : '#0d9488';
+  const topBg = isAdmin ? '#1a2035' : '#1e2535';
 
   return (
-    <div>
-      <button
-        onClick={onToggle}
-        className={cn(
-          'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-all',
-          hasActiveChild ? 'text-white' : 'text-slate-300 hover:text-white'
-        )}
-        style={btn3dStyle(hasActiveChild ?? false, theme.accent, theme.accentLight)}
-      >
-        {section.step && (
-          <span className={cn('text-xs font-bold w-4 text-center flex-shrink-0', theme.stepColor)}>
-            {section.step}
-          </span>
-        )}
-        <Icon className="h-4 w-4 flex-shrink-0" />
-        <span className="flex-1 text-left">{section.label}</span>
-        <ChevronDown className={cn('h-3 w-3 transition-transform opacity-50', isOpen && 'rotate-180')} />
-      </button>
-      {isOpen && section.children && (
-        <div className="ml-4 mt-0.5 space-y-0.5 border-l pl-3" style={{ borderColor: theme.accent + '40' }}>
-          {section.children.map((child) => {
-            const isActive = location.pathname === child.path;
-            return (
-              <NavLink
-                key={child.path}
-                to={child.path}
-                className={cn(
-                  'flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-all',
-                  isActive ? 'font-semibold text-white' : 'text-slate-400 hover:text-white hover:bg-white/5',
-                  child.disabled && 'opacity-30 cursor-not-allowed pointer-events-none'
-                )}
-                style={isActive ? { background: theme.accentLight, color: theme.accent } : undefined}
-              >
-                <span className="flex-1">{child.label}</span>
-                {childBadges[child.path] > 0 && (
-                  <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
-                    {childBadges[child.path]}
-                  </span>
-                )}
-              </NavLink>
-            );
-          })}
+    <div
+      className="flex-shrink-0 flex items-center border-b"
+      style={{ background: topBg, borderColor: 'rgba(255,255,255,0.08)', height: 44 }}
+    >
+      {/* 로고 */}
+      <div className="flex items-center gap-2 px-4 border-r flex-shrink-0" style={{ borderColor: 'rgba(255,255,255,0.1)', height: '100%' }}>
+        <img src="/ezone-logo-v4.png" alt="EZONE" className="h-6 w-auto object-contain" />
+        <span className="text-white font-bold text-sm tracking-wide hidden sm:block">EZONE</span>
+      </div>
+
+      {/* 상단 탭 (가로 스크롤) */}
+      <nav className="flex items-center flex-1 overflow-x-auto scrollbar-hide" style={{ height: '100%' }}>
+        {groups.map((g) => {
+          const isActive = activeGroupKey === g.key;
+          const badge = g.key === 'comm' || g.key === 'approval'
+            ? approvalCount : g.key === 'order' ? socketWaitCount : 0;
+          const Icon = g.Icon;
+          return (
+            <button
+              key={g.key}
+              onClick={() => {
+                onGroupChange(g.key);
+                if (g.path) navigate(g.path);
+              }}
+              className={cn(
+                'relative flex items-center gap-1.5 px-3 h-full flex-shrink-0 text-xs font-medium transition-all border-b-2',
+                isActive
+                  ? 'text-white border-current'
+                  : 'text-slate-400 border-transparent hover:text-slate-200 hover:bg-white/5'
+              )}
+              style={isActive ? { borderColor: accentColor, color: 'white' } : undefined}
+            >
+              <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+              <span className="whitespace-nowrap">{strip(g.label)}</span>
+              {badge > 0 && (
+                <span className="flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
+                  {badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* 우측: 검색 + 모드 전환 */}
+      <div className="flex items-center gap-1 px-2 flex-shrink-0" style={{ height: '100%' }}>
+        {/* 검색 */}
+        <div className="relative">
+          {searchOpen ? (
+            <div className="flex items-center gap-1 rounded-lg bg-white/10 border border-white/20 px-2">
+              <Search className="h-3.5 w-3.5 text-slate-300 flex-shrink-0" />
+              <input
+                ref={searchRef}
+                value={searchQ}
+                onChange={e => setSearchQ(e.target.value)}
+                onBlur={() => setTimeout(() => { setSearchOpen(false); setSearchQ(''); }, 150)}
+                placeholder="메뉴 검색..."
+                className="bg-transparent text-xs text-white placeholder-slate-400 outline-none py-1.5"
+                style={{ width: 140 }}
+              />
+              <button onClick={() => { setSearchOpen(false); setSearchQ(''); }}>
+                <X className="h-3 w-3 text-slate-400 hover:text-white" />
+              </button>
+              {/* 결과 드롭다운 */}
+              {searchResults.length > 0 && (
+                <div className="absolute right-0 top-full mt-1 w-56 rounded-lg border border-slate-600 bg-slate-800 shadow-xl z-50 overflow-hidden">
+                  {searchResults.map(item => (
+                    <button
+                      key={item.path + item.label}
+                      onMouseDown={() => { navigate(item.path); setSearchOpen(false); setSearchQ(''); }}
+                      className="flex w-full flex-col px-3 py-2 text-left hover:bg-slate-700 transition-colors"
+                    >
+                      <span className="text-xs font-medium text-white">{item.label}</span>
+                      <span className="text-[10px] text-slate-400">{item.group}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="flex items-center justify-center h-8 w-8 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <Search className="h-4 w-4" />
+            </button>
+          )}
         </div>
-      )}
+
+        {/* 모드 전환 */}
+        {canSwitchMode && (
+          <button
+            onClick={() => onModeChange(mode === 'shop' ? 'admin' : 'shop')}
+            className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-[11px] font-bold border transition-all"
+            style={isAdmin
+              ? { background: 'rgba(99,102,241,0.25)', borderColor: '#6366f1', color: '#a5b4fc' }
+              : { background: 'rgba(13,148,136,0.25)', borderColor: '#0d9488', color: '#5eead4' }
+            }
+          >
+            {isAdmin ? '⚙ 관리' : '🔧 실무'}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-// ─── SidebarLink ────────────────────────────────────────────────
-function SidebarLink({
-  item, collapsed, step, badge, theme,
-}: {
-  item: { label: string; icon: React.ElementType; path?: string; disabled?: boolean };
-  collapsed: boolean;
-  step?: string;
-  badge?: number;
-  theme: ReturnType<typeof getTheme>;
-}) {
-  const Icon = item.icon;
-
-  if (item.disabled || !item.path) {
-    return (
-      <div className={cn(
-        'flex items-center gap-2 rounded-lg px-3 py-2 text-xs opacity-30 cursor-not-allowed',
-        'text-slate-400', collapsed && 'justify-center'
-      )}>
-        <Icon className="h-4 w-4 flex-shrink-0" />
-        {!collapsed && <span>{item.label}</span>}
-      </div>
-    );
-  }
-
+// ─────────────────────────────────────────────────────────────────────────────
+// 슈퍼어드민 전용 사이드 섹션
+// ─────────────────────────────────────────────────────────────────────────────
+export function SuperAdminSidebar() {
+  const location = useLocation();
   return (
-    <NavLink
-      to={item.path}
-      className={({ isActive }) => cn(
-        'flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium transition-all relative',
-        isActive ? 'text-white' : 'text-slate-300 hover:text-white',
-        collapsed && 'justify-center'
-      )}
-      style={({ isActive }) => isActive ? btn3dStyle(true, theme.accent, theme.accentLight) : btn3dStyle(false, theme.accent, theme.accentLight)}
-      title={collapsed ? item.label : undefined}
-    >
-      {!collapsed && step && (
-        <span className={cn('text-xs font-bold w-4 text-center flex-shrink-0', theme.stepColor)}>{step}</span>
-      )}
-      <Icon className="h-4 w-4 flex-shrink-0" />
-      {!collapsed && <span className="flex-1">{item.label}</span>}
-      {!collapsed && badge !== undefined && badge > 0 && (
-        <span className="ml-auto flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
-          {badge}
-        </span>
-      )}
-      {collapsed && badge !== undefined && badge > 0 && (
-        <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
-          {badge}
-        </span>
-      )}
-    </NavLink>
+    <div className="px-1.5 py-1.5 border-t" style={{ borderColor: '#fca5a5' }}>
+      <div className="flex items-center gap-1 px-2 py-1 mb-1">
+        <ShieldAlert className="h-3 w-3 text-red-400" />
+        <span className="text-[9px] font-bold text-red-400 tracking-widest uppercase">Super Admin</span>
+      </div>
+      <NavLink
+        to="/superadmin/reset"
+        className={cn(
+          'flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors',
+          location.pathname === '/superadmin/reset'
+            ? 'bg-red-600 text-white'
+            : 'text-red-400 hover:bg-red-50 hover:text-red-600'
+        )}
+      >
+        <ShieldAlert className="h-3.5 w-3.5" />
+        시스템 초기화
+      </NavLink>
+    </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 기존 Sidebar export (AppLayout에서 사용하는 접근자)
+// mode / groups 정보 제공
+// ─────────────────────────────────────────────────────────────────────────────
+export function useSidebarState() {
+  const { user, permissions, isAdmin, isSuperAdmin, isManager } = useAuth();
+  const canSwitchMode = isAdmin || user?.allowed_modes === 'both';
+  const [mode, _setMode] = useState<SidebarMode>(
+    () => (localStorage.getItem('sidebar_mode') as SidebarMode) || 'shop'
+  );
+  const setMode = (m: SidebarMode) => { _setMode(m); localStorage.setItem('sidebar_mode', m); };
+  const currentMode: SidebarMode = canSwitchMode ? mode : 'shop';
+
+  const groups = currentMode === 'shop' ? shopTopGroups : adminTopGroups;
+
+  const MANAGER_ONLY_PATHS = [
+    '/production/production-dashboard', '/inventory/dashboard',
+    '/accounting/setup', '/accounting/revenue', '/accounting/cost', '/accounting/profit-loss',
+  ];
+
+  const canViewPath = (path: string) => {
+    if (isAdmin) return true;
+    if (!isManager && MANAGER_ONLY_PATHS.includes(path)) return false;
+    const found = permissions.find((p: any) => p.path === path);
+    return !found || found.can_read;
+  };
+
+  const filteredGroups = groups.map(g => {
+    if (g.path) return canViewPath(g.path) ? g : null;
+    if (g.children) {
+      const visible = g.children.filter(c => canViewPath(c.path));
+      return visible.length ? { ...g, children: visible } : null;
+    }
+    return g;
+  }).filter(Boolean) as TopNavGroup[];
+
+  return { currentMode, setMode, canSwitchMode, filteredGroups, isSuperAdmin };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 기존 Sidebar 컴포넌트 (AppLayout에서 import하지만 실제로는 TopNav+SubSidebar 사용)
+// AppLayout이 직접 TopNav/SubSidebar를 조립하므로 이 컴포넌트는 미사용
+// ─────────────────────────────────────────────────────────────────────────────
+export function Sidebar({ onMobileClose }: { onMobileClose?: () => void }) {
+  return null; // AppLayout에서 직접 TopNav + SubSidebar 사용
 }

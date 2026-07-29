@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
-import { Sidebar } from './Sidebar';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { TopNav, SubSidebar, SuperAdminSidebar, useSidebarState } from './Sidebar';
 import { NotificationBell } from './NotificationBell';
 import { RoutePermissionGuard } from './RoutePermissionGuard';
 import { Toaster } from 'sonner';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
-import { 
-  LogOut, User, KeyRound, Lock, ShieldAlert, 
-  ChevronDown, CheckCircle, Eye, EyeOff, X, Menu
+import {
+  LogOut, KeyRound, Lock, ShieldAlert,
+  ChevronDown, Eye, EyeOff, X
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -41,11 +41,47 @@ export function validatePasswordComplexity(password: string): string | null {
 export function AppLayout() {
   const { user, logout, refreshMe } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Sidebar state (TopNav + SubSidebar)
+  const { currentMode, setMode, canSwitchMode, filteredGroups, isSuperAdmin } = useSidebarState();
+  const [activeGroupKey, setActiveGroupKey] = useState<string>(() => {
+    return localStorage.getItem('active_group') || 'home';
+  });
+  const handleGroupChange = (key: string) => {
+    setActiveGroupKey(key);
+    localStorage.setItem('active_group', key);
+  };
+
+  // 현재 경로에 맞는 그룹 자동 선택
+  useEffect(() => {
+    const matched = filteredGroups.find(g =>
+      g.children?.some(c => location.pathname === c.path || location.pathname.startsWith(c.path + '/'))
+    );
+    if (matched) handleGroupChange(matched.key);
+  }, [location.pathname]);
+
+  const activeGroup = filteredGroups.find(g => g.key === activeGroupKey) || null;
+
+  // Badge counts
+  const [approvalCount, setApprovalCount] = useState(0);
+  const [socketWaitCount, setSocketWaitCount] = useState(0);
+  useEffect(() => {
+    if (!user) return;
+    const fetchCounts = () => {
+      api.get<{ data: { total: number } }>(`/approvals/counts?worker_id=${user.worker_id}`)
+        .then(r => setApprovalCount(r.data.total)).catch(() => {});
+      api.get<{ data: any[] }>('/socket-orders/wait?status=APPROVED')
+        .then(r => setSocketWaitCount(r.data?.length ?? 0)).catch(() => {});
+    };
+    fetchCounts();
+    const iv = setInterval(fetchCounts, 60000);
+    return () => clearInterval(iv);
+  }, [user]);
 
   // Dropdown & Modal States
   const [profileOpen, setProfileOpen] = useState(false);
   const [changePwOpen, setChangePwOpen] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Self-Service Change Password State
@@ -177,38 +213,37 @@ export function AppLayout() {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
-      {/* 모바일 사이드바 오버레이 */}
-      {mobileMenuOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-          onClick={() => setMobileMenuOpen(false)}
-        />
-      )}
+    <div className="flex flex-col h-screen overflow-hidden bg-slate-50">
+      {/* ── 상단 TopNav (로고 + 가로 탭 + 검색 + 모드전환) ── */}
+      <TopNav
+        mode={currentMode}
+        canSwitchMode={canSwitchMode}
+        onModeChange={setMode}
+        activeGroupKey={activeGroupKey}
+        onGroupChange={handleGroupChange}
+        approvalCount={approvalCount}
+        socketWaitCount={socketWaitCount}
+      />
 
-      {/* Sidebar — 데스크탑: 항상 표시, 모바일: mobileMenuOpen 시 슬라이드인 */}
-      <div className={`
-        fixed inset-y-0 left-0 z-50 lg:relative lg:z-auto lg:flex
-        transition-transform duration-300 ease-in-out
-        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-        <Sidebar onMobileClose={() => setMobileMenuOpen(false)} />
-      </div>
+      {/* ── 바디: [서브사이드바 | 헤더+메인] ── */}
+      <div className="flex flex-1 overflow-hidden min-w-0">
+        {/* 좌측 서브사이드바 */}
+        <div className="flex flex-col flex-shrink-0" style={{ background: '#f8fafc' }}>
+          <SubSidebar
+            group={activeGroup}
+            mode={currentMode}
+            approvalCount={approvalCount}
+            socketWaitCount={socketWaitCount}
+          />
+          {isSuperAdmin && <SuperAdminSidebar />}
+        </div>
 
-      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
-        {/* Top Header Bar */}
-        <header className="flex h-12 items-center justify-between border-b border-gray-200 bg-white px-3 md:px-6 gap-2 shadow-sm z-30 flex-shrink-0">
-          {/* 왼쪽: 모바일 햄버거 버튼 */}
-          <button
-            className="flex lg:hidden items-center justify-center h-8 w-8 rounded-lg hover:bg-slate-100 transition-colors"
-            onClick={() => setMobileMenuOpen(true)}
-          >
-            <Menu className="h-5 w-5 text-slate-600" />
-          </button>
-          <div className="hidden lg:block" />
-
-          {/* 오른쪽: 벨 아이콘 + 프로필 */}
-          <div className="flex items-center gap-2">
+        {/* 우측: 헤더 + 메인 */}
+        <div className="flex flex-1 flex-col overflow-hidden min-w-0">
+          {/* 우측 상단 헤더 (알림 + 사용자 프로필) */}
+          <header className="flex h-10 items-center justify-end border-b border-gray-200 bg-white px-4 gap-2 shadow-sm z-30 flex-shrink-0">
+            {/* 오른쪽: 벨 아이콘 + 프로필 */}
+            <div className="flex items-center gap-2">
             <NotificationBell />
             <div className="relative" ref={dropdownRef}>
               {/* Trigger Button */}
@@ -283,13 +318,14 @@ export function AppLayout() {
                 </div>
               )}
             </div>
-          </div>{/* end right cluster */}
-        </header>
+            </div>{/* end right cluster */}
+          </header>
 
-        {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto p-3 md:p-6 lg:p-8">
-          <RoutePermissionGuard />
-        </main>
+          {/* Main Content Area */}
+          <main className="flex-1 overflow-y-auto p-3 md:p-5">
+            <RoutePermissionGuard />
+          </main>
+        </div>
       </div>
 
       <Toaster position="top-right" richColors />
