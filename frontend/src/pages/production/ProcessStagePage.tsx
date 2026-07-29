@@ -105,6 +105,10 @@ export function ProcessStagePage() {
   const [asmWorker, setAsmWorker]       = useState('조립작업자');
   const [asmRemarks, setAsmRemarks]     = useState('');
 
+  // 제조설비 마스터 목록
+  const [mfgEquipments, setMfgEquipments] = useState<any[]>([]);
+  const [selectedMfgEqNo, setSelectedMfgEqNo] = useState<string>('');
+
   // 자동 채번 생성
   const generateMixLot = useCallback(() => {
     const d = mixDate.replace(/-/g, '').slice(2);
@@ -132,6 +136,9 @@ export function ProcessStagePage() {
         setExtLogs(logs.filter((l: any) => l.process_code === 'EXT_1' || l.process_code === 'EXT_2' || l.process_code === 'EXT'));
         setCutLogs(logs.filter((l: any) => l.process_code === 'CUT'));
       }
+      // 제조설비 목록
+      const mfgRes = await api.get<{ data: any[] }>('/equipment/manufacturing');
+      setMfgEquipments(mfgRes.data || []);
     } catch (e) {
       console.error(e);
     } finally {

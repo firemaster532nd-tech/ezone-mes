@@ -191,6 +191,8 @@ function CreateFqcModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
   const [selectedWoId, setSelectedWoId] = useState<number | ''>('');
   const [selectedFormCode, setSelectedFormCode] = useState<string>('');
   const [inspector, setInspector] = useState('');
+  const [inspectionEquipments, setInspectionEquipments] = useState<any[]>([]);
+  const [selectedEquipmentNo, setSelectedEquipmentNo] = useState<string>('');
   const [saving, setSaving] = useState(false);
 
   // 부속 자재 LOT 매핑 데이터
@@ -217,6 +219,10 @@ function CreateFqcModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     // 2. C-901 템플릿 패치
     api.get<{ data: FqcTemplate[] }>('/inspections/final-templates').then((res) => {
       setTemplates(res.data);
+    });
+    // 3. 검사설비 목록 패치
+    api.get<{ data: any[] }>('/equipment/inspection').then((res) => {
+      setInspectionEquipments(res.data || []);
     });
   }, []);
 
@@ -368,7 +374,7 @@ function CreateFqcModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6 flex-1 text-shop-sm">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* 1. 작업지시 선택 */}
             <label className="block">
               <span className="text-gray-700 font-semibold">검사 대상 조립 완료 건 *</span>
@@ -405,7 +411,24 @@ function CreateFqcModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
               </select>
             </label>
 
-            {/* 3. 검사자 */}
+            {/* 3. 사용 검사장비 (검사설비 마스터 드롭다운) */}
+            <label className="block">
+              <span className="text-gray-700 font-semibold">사용 검사장비 (검사설비)</span>
+              <select
+                value={selectedEquipmentNo}
+                onChange={(e) => setSelectedEquipmentNo(e.target.value)}
+                className="mt-1 block w-full border rounded px-3 py-2 bg-white text-xs"
+              >
+                <option value="">-- 검사장비 선택 --</option>
+                {inspectionEquipments.map((eq) => (
+                  <option key={eq.equipment_id} value={eq.manage_no}>
+                    [{eq.manage_no}] {eq.equipment_name} {eq.serial_no ? `(S/N: ${eq.serial_no})` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {/* 4. 검사자 */}
             <label className="block">
               <span className="text-gray-700 font-semibold">검사자 이름 *</span>
               <input
