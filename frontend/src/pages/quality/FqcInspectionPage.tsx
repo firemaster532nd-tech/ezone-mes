@@ -59,7 +59,7 @@ export function FqcInspectionPage() {
 
   const fetchInspections = async () => {
     try {
-      const res = await api.get<{ data: Inspection[] }>('/api/inspections?insp_type=FINAL');
+      const res = await api.get<{ data: Inspection[] }>('/inspections?insp_type=FINAL');
       setInspections(res.data);
     } catch {
       alert('완제품검사 목록 로드 실패');
@@ -73,7 +73,7 @@ export function FqcInspectionPage() {
   const handleDelete = async (insp: Inspection) => {
     if (!confirm('완제품검사 기록을 삭제하시겠습니까?')) return;
     try {
-      await api.delete(`/api/inspections/${insp.insp_id}`);
+      await api.delete(`/inspections/${insp.insp_id}`);
       fetchInspections();
     } catch {
       alert('삭제 실패');
@@ -211,11 +211,11 @@ function CreateFqcModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
 
   useEffect(() => {
     // 1. 완제품 대기 작업지시 패치
-    api.get<{ data: PendingWo[] }>('/api/inspections/final-pending').then((res) => {
+    api.get<{ data: PendingWo[] }>('/inspections/final-pending').then((res) => {
       setPendingWos(res.data);
     });
     // 2. C-901 템플릿 패치
-    api.get<{ data: FqcTemplate[] }>('/api/inspections/final-templates').then((res) => {
+    api.get<{ data: FqcTemplate[] }>('/inspections/final-templates').then((res) => {
       setTemplates(res.data);
     });
   }, []);
@@ -226,7 +226,7 @@ function CreateFqcModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
       setSocketLot(selectedWo.lot_number || '');
 
       // 최신 반제품 J-LOT 및 단열재 LOT 자동 패치
-      api.get('/api/material-lots').then((res: any) => {
+      api.get('/material-lots').then((res: any) => {
         const lotList = res.data || res || [];
         const jSockets = lotList.filter((l: any) => l.lot_number?.includes('D') && l.category === '반제품');
         const jFlashings = lotList.filter((l: any) => l.lot_number?.includes('F') && l.category === '반제품');
@@ -336,7 +336,7 @@ function CreateFqcModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
         user_remarks: remarks,
       };
 
-      await api.post('/api/inspections/final', {
+      await api.post('/inspections/final', {
         wo_id: Number(selectedWoId),
         form_code: selectedFormCode,
         inspector,
@@ -679,7 +679,7 @@ function FqcPrintModal({ inspection, onClose }: { inspection: Inspection; onClos
 
   useEffect(() => {
     setLoading(true);
-    api.get<{ data: { details: any[] } }>(`/api/inspections/${inspection.insp_id}`).then((res) => {
+    api.get<{ data: { details: any[] } }>(`/inspections/${inspection.insp_id}`).then((res) => {
       setDetails(res.data.details || []);
       setLoading(false);
     });

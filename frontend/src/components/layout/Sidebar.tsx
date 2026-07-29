@@ -213,6 +213,8 @@ export const adminTopGroups: TopNavGroup[] = [
       { label: '중간검사 (C-701)', path: '/quality/process-inspection' },
       { label: '자주검사', path: '/quality/self-inspection' },
       { label: '완제품검사 (C-901)', path: '/quality/fqc-inspection' },
+      { label: '검사설비 관리', path: '/quality/equipment/inspection' },
+      { label: '제조설비 관리', path: '/quality/equipment/manufacturing' },
       { label: 'LOT 추적', path: '/quality/lot-trace' },
       { label: '통합 LOT Matrix', path: '/quality/project-lot-matrix' },
       { label: '인정기준 검증', path: '/quality/cert-check' },

@@ -68,6 +68,7 @@ import { wmsRoutes } from './routes/wms.js';
 import { productionWorkforceRoutes } from './routes/production-workforce.js';
 import accountingRoutes from './routes/accounting.js';
 import { supportRoutes } from './routes/support.js';
+import { equipmentRoutes } from './routes/equipment.js';
 
 
 let appInstance: any = null;
@@ -153,6 +154,7 @@ export const initApp = async () => {
   await app.register(wmsRoutes);
   await app.register(productionWorkforceRoutes);
   await app.register(supportRoutes);
+  await app.register(equipmentRoutes);
 
   // ── 회계 모듈 ──
   await app.register(accountingRoutes, { prefix: '/api/accounting' });
@@ -201,7 +203,9 @@ export const initApp = async () => {
         { menu_code: 'MATERIAL_TRANSACTION', menu_name: '입출고 입력',     path: '/inventory/material-transaction', parent_menu_id: inventoryParentId, sort_order: 73 },
         { menu_code: 'MATERIAL_INIT',        menu_name: '기초재고 등록',   path: '/inventory/material-init',        parent_menu_id: inventoryParentId, sort_order: 74 },
         { menu_code: 'LABEL_PRINT',          menu_name: 'LOT 라벨 출력',   path: '/inventory/label-print',          parent_menu_id: inventoryParentId, sort_order: 75 },
-
+        // ── 설비 관리 메뉴 ──
+        { menu_code: 'EQUIPMENT_INSPECTION',    menu_name: '검사설비 관리',   path: '/quality/equipment/inspection',   parent_menu_id: null, sort_order: 63 },
+        { menu_code: 'EQUIPMENT_MANUFACTURING', menu_name: '제조설비 관리',   path: '/quality/equipment/manufacturing',parent_menu_id: null, sort_order: 64 },
       ];
 
       for (const m of newMenus) {
