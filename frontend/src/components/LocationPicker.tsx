@@ -3,10 +3,11 @@ import { api } from '@/lib/api';
 
 // ─── 타입 정의 ────────────────────────────────────────────────────────────────
 export interface LocationPickerProps {
-  value?: string; // location_code (예: 'A1-P1', 'FIELD-2F-LEFT')
+  value?: string; // location_code (예: 'A1-P1', 'FIELD-2F-LEFT', '' = 미지정)
   onChange: (locationCode: string, locationId?: number) => void;
   placeholder?: string;
   disabled?: boolean;
+  allowNone?: boolean; // 미지정 허용 여부 (기본 true)
 }
 
 interface WmsLocation {
@@ -33,12 +34,17 @@ const FIELD_OPTIONS = [
   { value: 'FIELD-1F-TENT',  label: '1공장 천막' },
 ];
 
-// ─── 컴포넌트 ─────────────────────────────────────────────────────────────────
-export function LocationPicker({ value, onChange, placeholder, disabled }: LocationPickerProps) {
-  // value에서 초기 타입 추론
-  const initType = value?.startsWith('FIELD') ? 'FIELD' : 'RACK';
+type LocType = 'RACK' | 'FIELD' | 'NONE';
 
-  const [locType, setLocType] = useState<'RACK' | 'FIELD'>(initType);
+function inferType(value?: string): LocType {
+  if (!value || value === 'NONE' || value === '미지정' || value === '') return 'NONE';
+  if (value.startsWith('FIELD')) return 'FIELD';
+  return 'RACK';
+}
+
+// ─── 컴포넌트 ─────────────────────────────────────────────────────────────────
+export function LocationPicker({ value, onChange, placeholder, disabled, allowNone = true }: LocationPickerProps) {
+  const [locType, setLocType] = useState<LocType>(inferType(value));
 
   // RACK 선택 상태
   const [rackBay, setRackBay]       = useState('A');
@@ -48,20 +54,19 @@ export function LocationPicker({ value, onChange, placeholder, disabled }: Locat
   // FIELD 선택 상태
   const [fieldCode, setFieldCode] = useState('FIELD-2F-LEFT');
 
-  // DB에서 받아온 위치 목록 (선택적으로 사용)
+  // DB에서 받아온 위치 목록
   const [locations, setLocations] = useState<WmsLocation[]>([]);
 
   // value prop에서 초기값 파싱
   useEffect(() => {
-    if (!value) return;
-    if (value.startsWith('FIELD')) {
-      setLocType('FIELD');
+    if (value === undefined) return;
+    const t = inferType(value);
+    setLocType(t);
+    if (t === 'FIELD') {
       setFieldCode(value);
-    } else {
-      // e.g. 'A1-P1'
+    } else if (t === 'RACK') {
       const match = value.match(/^([A-R])(\d)-?(P\d)?$/);
       if (match) {
-        setLocType('RACK');
         setRackBay(match[1]);
         setRackTier(Number(match[2]));
         if (match[3]) setRackPallet(match[3]);
@@ -69,13 +74,13 @@ export function LocationPicker({ value, onChange, placeholder, disabled }: Locat
     }
   }, [value]);
 
-  // API에서 위치 목록 fetch (선택적)
+  // API에서 위치 목록 fetch
   const fetchLocations = useCallback(async () => {
     try {
       const res = await api.get<{ data: WmsLocation[] }>('/wms/locations');
       if (res.data?.length) setLocations(res.data);
     } catch {
-      // 실패 시 하드코딩 값으로 fallback — 오류 무시
+      // 실패 시 하드코딩 값으로 fallback
     }
   }, []);
 
@@ -96,26 +101,37 @@ export function LocationPicker({ value, onChange, placeholder, disabled }: Locat
     onChange(code, found?.location_id);
   };
 
-  const handleTypeToggle = (t: 'RACK' | 'FIELD') => {
+  const handleTypeToggle = (t: LocType) => {
     setLocType(t);
     if (t === 'RACK') {
       notifyRack(rackBay, rackTier, rackPallet);
-    } else {
+    } else if (t === 'FIELD') {
       notifyField(fieldCode);
+    } else {
+      // NONE — 미지정
+      onChange('', undefined);
     }
   };
 
+  const currentLabel =
+    locType === 'NONE' ? '미지정 (렉 적재 안함)' :
+    locType === 'RACK'  ? computedRackCode : fieldCode;
+
+  const noneActive  = locType === 'NONE';
+  const rackActive  = locType === 'RACK';
+  const fieldActive = locType === 'FIELD';
+
   return (
     <div className="space-y-2">
-      {/* 렉/비렉 토글 */}
-      <div className="flex gap-2">
+      {/* 위치 유형 토글 */}
+      <div className="flex gap-1.5">
         <button
           type="button"
           disabled={disabled}
           onClick={() => handleTypeToggle('RACK')}
           className={[
             'flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all',
-            locType === 'RACK'
+            rackActive
               ? 'bg-slate-900 text-white border-slate-900'
               : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50',
           ].join(' ')}
@@ -128,13 +144,28 @@ export function LocationPicker({ value, onChange, placeholder, disabled }: Locat
           onClick={() => handleTypeToggle('FIELD')}
           className={[
             'flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all',
-            locType === 'FIELD'
+            fieldActive
               ? 'bg-blue-700 text-white border-blue-700'
               : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50',
           ].join(' ')}
         >
           🏭 비렉 (FIELD)
         </button>
+        {allowNone && (
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => handleTypeToggle('NONE')}
+            className={[
+              'flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all',
+              noneActive
+                ? 'bg-gray-500 text-white border-gray-500'
+                : 'bg-white text-slate-500 border-slate-300 hover:bg-slate-50',
+            ].join(' ')}
+          >
+            🚫 미지정
+          </button>
+        )}
       </div>
 
       {/* RACK 선택 UI */}
@@ -219,15 +250,22 @@ export function LocationPicker({ value, onChange, placeholder, disabled }: Locat
         </div>
       )}
 
+      {/* 미지정 안내 */}
+      {locType === 'NONE' && (
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+          📦 렉에 적재하지 않음 — 위치 지정 없이 입고 처리됩니다
+        </div>
+      )}
+
       {/* 선택된 위치 코드 표시 */}
-      <div className="text-[10px] text-slate-500 font-mono bg-slate-50 border rounded px-2 py-1">
-        📍 위치: <span className="font-black text-slate-800">
-          {locType === 'RACK' ? computedRackCode : fieldCode}
-        </span>
-        {placeholder && !value && (
-          <span className="ml-2 text-slate-400">{placeholder}</span>
-        )}
-      </div>
+      {locType !== 'NONE' && (
+        <div className="text-[10px] text-slate-500 font-mono bg-slate-50 border rounded px-2 py-1">
+          📍 위치: <span className="font-black text-slate-800">{currentLabel}</span>
+          {placeholder && !value && (
+            <span className="ml-2 text-slate-400">{placeholder}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

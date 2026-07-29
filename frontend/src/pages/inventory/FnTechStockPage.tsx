@@ -49,12 +49,31 @@ const FALLBACK_MATERIAL: MaterialStock[] = [
   { id:8, item_name:'시트(압출)',   spec:'-',       qty:31,    unit:'ea' },
 ];
 
+const FN_100_SPECS = ['몸통', '150H', '170H', '180H', '190H', '200H', '210H', '240H', '250H', '260H'];
+const FN_75_SPECS  = ['몸통'];
+const FN_50_SPECS  = ['몸통'];
+
 const DAILY_ITEMS = [
-  { item_name:'발포소켓 몸체(100)-몸통', diameter_mm:100, spec:'몸통' },
-  { item_name:'발포소켓 몸체(100)(210H)', diameter_mm:100, spec:'210H' },
-  { item_name:'발포소켓 몸체(75)',       diameter_mm:75,  spec:'몸통' },
-  { item_name:'발포소켓 몸체(50)',       diameter_mm:50,  spec:'몸통' },
+  // 100파이 — 높이별 전체
+  ...FN_100_SPECS.map(spec => ({
+    item_name: spec === '몸통' ? '발포소켓 몸체(100)-몸통' : `발포소켓 몸체(100)(${spec})`,
+    diameter_mm: 100,
+    spec,
+  })),
+  // 75파이
+  ...FN_75_SPECS.map(spec => ({
+    item_name: '발포소켓 몸체(75)',
+    diameter_mm: 75,
+    spec,
+  })),
+  // 50파이
+  ...FN_50_SPECS.map(spec => ({
+    item_name: '발포소켓 몸체(50)',
+    diameter_mm: 50,
+    spec,
+  })),
 ];
+
 
 function qtyColor(qty: number) {
   if (qty > 0) return 'text-emerald-700 font-bold';

@@ -79,15 +79,14 @@ export const shopTopGroups: TopNavGroup[] = [
   {
     key: 'process', label: '공정 단계', Icon: Factory,
     children: [
-      { label: '원재료 인수검사', path: '/quality/incoming/raw', step: '①' },
-      { label: '공정 실행 (배합)', path: '/production/process-execution', step: '②' },
-      { label: '공정 실행 (압출)', path: '/production/process-execution', step: '③' },
-      { label: '공정 실행 (재단)', path: '/production/process-execution', step: '④' },
-      { label: '부자재 인수검사', path: '/quality/incoming/sub', step: '⑤' },
-      { label: '공정 실행 (조립)', path: '/production/process-execution', step: '⑥' },
-      { label: '중간검사 (C-701)', path: '/quality/process-inspection', step: '⑦' },
+      { label: '① 원재료 인수검사', path: '/quality/incoming/raw' },
+      { label: '②~④ 공정 실행 (배합·압출·재단)', path: '/production/process-execution' },
+      { label: '⑤ 부자재 인수검사', path: '/quality/incoming/sub' },
+      { label: '⑥ 공정 실행 (조립)', path: '/production/assembly-log' },
+      { label: '⑦ 중간검사 (C-701)', path: '/quality/process-inspection' },
     ],
   },
+
   {
     key: 'inventory', label: '재고관리', Icon: Boxes,
     children: [

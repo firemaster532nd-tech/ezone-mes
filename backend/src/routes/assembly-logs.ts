@@ -82,7 +82,7 @@ export default async function assemblyLogRoutes(app: FastifyInstance) {
         RETURNING *
       `, [
         assemblyLotNumber, assembly_type, assembly_date || new Date().toISOString().slice(0, 10),
-        spec || '', input_qty || produced_qty, produced_qty, rack_location || 'A1',
+        spec || '', input_qty || produced_qty, produced_qty, rack_location || null,
         worker_name || '조립작업자', remarks || null, (req as any).user?.user_id || null
       ]);
 
@@ -104,7 +104,7 @@ export default async function assemblyLogRoutes(app: FastifyInstance) {
         ON CONFLICT (lot_number) DO UPDATE SET
           current_qty = material_lots.current_qty + EXCLUDED.current_qty,
           updated_at = NOW()
-      `, [assemblyLotNumber, itemName, spec || '', produced_qty, rack_location || 'A1']);
+      `, [assemblyLotNumber, itemName, spec || '', produced_qty, rack_location || null]);
 
       // 3. 투입 원부자재 차감
       if (Array.isArray(input_lots)) {
@@ -124,7 +124,7 @@ export default async function assemblyLogRoutes(app: FastifyInstance) {
       return {
         success: true,
         assembly_lot: assemblyLotNumber,
-        message: `조립 반제품 LOT [${assemblyLotNumber}] 생성 및 랙 [${rack_location || 'A1'}] 적재가 완료되었습니다.`,
+        message: `조립 반제품 LOT [${assemblyLotNumber}] 생성 완료 (적재위치: ${rack_location || '미지정'}).`,
         data: logRes.rows[0]
       };
     } catch (e: any) {
