@@ -138,7 +138,7 @@ export const shopTopGroups: TopNavGroup[] = [
     ],
   },
   {
-    key: 'master', label: '기초등록', Icon: Database,
+    key: 'master', label: '기초등록', Icon: Database, path: '/master/items',
     children: [
       { label: '품목 등록/관리', path: '/master/items' },
       { label: '거래처 관리', path: '/master/companies' },
@@ -147,7 +147,7 @@ export const shopTopGroups: TopNavGroup[] = [
     ],
   },
   {
-    key: 'accounting', label: '회계', Icon: TrendingUp,
+    key: 'accounting', label: '회계', Icon: TrendingUp, path: '/accounting/setup',
     children: [
       { label: '기초데이터 설정', path: '/accounting/setup' },
       { label: '매출 현황', path: '/accounting/revenue' },
@@ -253,7 +253,7 @@ export const adminTopGroups: TopNavGroup[] = [
     ],
   },
   {
-    key: 'master', label: '기초등록', Icon: Database,
+    key: 'master', label: '기초등록', Icon: Database, path: '/master/items',
     children: [
       { label: '품목 등록/관리', path: '/master/items' },
       { label: '거래처 관리', path: '/master/companies' },
@@ -262,7 +262,7 @@ export const adminTopGroups: TopNavGroup[] = [
     ],
   },
   {
-    key: 'settings', label: '설정', Icon: Settings,
+    key: 'settings', label: '설정', Icon: Settings, path: '/settings/users',
     children: [
       { label: '사용자 관리', path: '/settings/users' },
       { label: '부서 관리', path: '/settings/departments' },
@@ -273,7 +273,7 @@ export const adminTopGroups: TopNavGroup[] = [
     ],
   },
   {
-    key: 'accounting', label: '회계', Icon: TrendingUp,
+    key: 'accounting', label: '회계', Icon: TrendingUp, path: '/accounting/setup',
     children: [
       { label: '기초데이터 설정', path: '/accounting/setup' },
       { label: '매출 현황', path: '/accounting/revenue' },
@@ -482,7 +482,8 @@ export function TopNav({
               key={g.key}
               onClick={() => {
                 onGroupChange(g.key);
-                if (g.path) navigate(g.path);
+                const targetPath = g.path || (g.children && g.children.length > 0 ? g.children[0].path : null);
+                if (targetPath) navigate(targetPath);
               }}
               className={cn(
                 'relative flex items-center gap-1.5 px-3 h-full flex-shrink-0 text-xs font-medium transition-all border-b-2',
