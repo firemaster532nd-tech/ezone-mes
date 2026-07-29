@@ -782,6 +782,9 @@ function SubCreateModal({
   onCreated: () => void;
 }) {
   const [woType, setWoType] = useState<SubWoType>(defaultWoType);
+  // ★ 생성 모드: 'STOCK' (선생산 / 발주서 없음) vs 'PO' (특정 발주서 연동)
+  const [creationMode, setCreationMode] = useState<'STOCK' | 'PO'>('STOCK');
+
   const [selectedProjectId, setSelectedProjectId] = useState<number | ''>('');
   const [pos, setPos] = useState<PO[]>([]);
   const [selectedPoId, setSelectedPoId] = useState<number | ''>('');
@@ -789,6 +792,8 @@ function SubCreateModal({
   const [loadingItems, setLoadingItems] = useState(false);
   const [assemblyLots, setAssemblyLots] = useState<AssemblyLot[]>([]);
   const [selectedLotId, setSelectedLotId] = useState<number | ''>('');
+  const [customProjectName, setCustomProjectName] = useState('재고생산 (공통 부자재)');
+
   const [form, setForm] = useState({
     wo_date: new Date().toISOString().slice(0, 10),
     delivery_date: '',
@@ -798,19 +803,22 @@ function SubCreateModal({
   const [submitting, setSubmitting] = useState(false);
 
   const currentTabCfg = WO_TABS.find(t => t.type === woType)!;
-  // 소켓 인수검사 로트번호가 필요한 공정 여부
   const needsLotInput = !['FLASH_I','FLASH_Z','FLASH_L','GAP_SHEET_CUT','GAP_WOOL_CUT','GAP_ASSY'].includes(woType);
 
+  // PO 목록
   useEffect(() => {
+    if (creationMode !== 'PO') return;
     setSelectedPoId('');
     setPoItems([]);
     if (!selectedProjectId) { setPos([]); return; }
     api.get<{ data: PO[] }>(`/purchase-orders?project_id=${selectedProjectId}`)
       .then(r => setPos(r.data ?? []))
       .catch(() => setPos([]));
-  }, [selectedProjectId]);
+  }, [selectedProjectId, creationMode]);
 
+  // PO 항목 로드
   useEffect(() => {
+    if (creationMode !== 'PO') return;
     setPoItems([]);
     if (!selectedPoId || !woType) return;
     setLoadingItems(true);
@@ -818,7 +826,7 @@ function SubCreateModal({
       .then(r => setPoItems((r.data ?? []).map(item => ({ ...item, socket_lot_number: '' }))))
       .catch(() => setPoItems([]))
       .finally(() => setLoadingItems(false));
-  }, [selectedPoId, woType]);
+  }, [selectedPoId, woType, creationMode]);
 
   useEffect(() => {
     if (woType === 'THERMAL_ATTACH') {
@@ -828,47 +836,127 @@ function SubCreateModal({
     }
   }, [woType]);
 
-  const handleSubmit = async () => {
-    if (!selectedPoId) { alert('발주서를 선택하세요.'); return; }
-    if (poItems.length === 0) { alert('항목이 없습니다.'); return; }
+  // ★ 수동 항목 추가 (선생산 모드용)
+  const handleAddCustomItem = (specName?: string, defaultW?: number, defaultH?: number, defaultQty?: number) => {
+    const nextSeq = poItems.length + 1;
+    const newItem: PoItem = {
+      po_item_id: 0,
+      seq_no: nextSeq,
+      global_seq: nextSeq,
+      product_type: specName || '부자재 규격',
+      structure: specName || '부자재 규격',
+      width_mm: defaultW ?? 170,
+      height_mm: defaultH ?? 1000,
+      qty: defaultQty ?? 10,
+      division: '재고생산',
+      install_location: '창고',
+      remark: '선생산',
+      sheet_name: '재고',
+      explode_index: 1,
+      explode_total: 1,
+      socket_lot_number: '',
+    };
+    setPoItems(prev => [...prev, newItem]);
+  };
 
-    // ★ 소켓 인수검사 로트번호 필수 체크 (THERMAL_ATTACH 제외 공정들)
-    const needsLot = !['FLASH_I','FLASH_Z','FLASH_L','GAP_SHEET_CUT','GAP_WOOL_CUT','GAP_ASSY'].includes(woType);
-    if (needsLot) {
+  // ★ 표준 규격 템플릿 일괄 자동 로드
+  const handleLoadStandardTemplates = () => {
+    let templates: { spec: string; w: number; h: number; qty: number }[] = [];
+    if (woType === 'FLASH_Z') {
+      templates = [
+        { spec: 'Z형 플래싱 W170×L1000 (t0.5)', w: 170, h: 1000, qty: 100 },
+        { spec: 'Z형 플래싱 W205×L1000 (t0.5)', w: 205, h: 1000, qty: 50 },
+      ];
+    } else if (woType === 'FLASH_I') {
+      templates = [
+        { spec: 'I형 플래싱 W175×L1100 (대형)', w: 175, h: 1100, qty: 50 },
+        { spec: 'I형 플래싱 W95×L195 (소형)', w: 95, h: 195, qty: 100 },
+      ];
+    } else if (woType === 'FLASH_L') {
+      templates = [
+        { spec: 'L형 플래싱 W190×L380 (SUS304)', w: 190, h: 380, qty: 50 },
+      ];
+    } else if (woType === 'GAP_SHEET_CUT' || woType === 'GAP_ASSY') {
+      templates = [
+        { spec: 'BD CV-1S용 (t5.0×W125×L300)', w: 125, h: 300, qty: 200 },
+        { spec: 'BD RV-3S용 (t5.0×W125×L1000)', w: 125, h: 1000, qty: 100 },
+        { spec: 'HTG 입상용 (t5.0×W185×L150)', w: 185, h: 150, qty: 300 },
+      ];
+    } else {
+      templates = [
+        { spec: '100파이 표준 소켓/부자재', w: 100, h: 150, qty: 100 },
+        { spec: '75파이 표준 소켓/부자재', w: 75, h: 150, qty: 50 },
+        { spec: '50파이 표준 소켓/부자재', w: 50, h: 150, qty: 50 },
+      ];
+    }
+
+    const items: PoItem[] = templates.map((t, idx) => ({
+      po_item_id: 0,
+      seq_no: idx + 1,
+      global_seq: idx + 1,
+      product_type: t.spec,
+      structure: t.spec,
+      width_mm: t.w,
+      height_mm: t.h,
+      qty: t.qty,
+      division: '선생산',
+      install_location: '창고',
+      remark: '표준 템플릿',
+      sheet_name: '재고',
+      explode_index: 1,
+      explode_total: 1,
+      socket_lot_number: '',
+    }));
+    setPoItems(items);
+  };
+
+  const handleSubmit = async () => {
+    if (creationMode === 'PO' && !selectedPoId) {
+      alert('발주서를 선택하세요.');
+      return;
+    }
+    if (poItems.length === 0) {
+      alert('생산할 규격 항목이 최소 1개 이상 필요합니다.');
+      return;
+    }
+
+    // 소켓 로트 필수 체크 (PO 연동 시)
+    if (creationMode === 'PO' && needsLotInput) {
       const missing = poItems.filter(it => !(it.socket_lot_number ?? '').trim());
       if (missing.length > 0) {
-        alert(`❗ 소켓 인수검사 로트번호가 입력되지 않은 항목이 ${missing.length}건 있습니다.\n모든 소켓의 인수검사 로트번호를 입력하세요.`);
+        alert(`❗ 소켓 인수검사 로트번호가 입력되지 않은 항목이 ${missing.length}건 있습니다.`);
         return;
       }
     }
 
     setSubmitting(true);
     try {
-      const itemsWithCalc = poItems.map(item => {
+      const itemsWithCalc = poItems.map((item, idx) => {
         const W = item.width_mm ?? 0;
         const H = item.height_mm ?? 0;
         return {
-          po_item_id: item.po_item_id,
-          seq_no: item.global_seq,
-          product_type: item.product_type || item.structure,
-          structure: item.structure || item.product_type,
+          po_item_id: item.po_item_id || null,
+          seq_no: item.global_seq || idx + 1,
+          product_type: item.product_type || item.structure || '선생산부자재',
+          structure: item.structure || item.product_type || '선생산부자재',
           width_mm: W,
           height_mm: H,
           qty: item.qty ?? 1,
-          division: item.division,
-          install_location: item.install_location,
-          remark: item.remark,
-          explode_index: item.explode_index,
-          explode_total: item.explode_total,
+          division: item.division || '선생산',
+          install_location: item.install_location || '본재고',
+          remark: item.remark || null,
+          explode_index: item.explode_index || 1,
+          explode_total: item.explode_total || 1,
           calc_data: calcSubData(woType, W, H, item.qty ?? 1),
-          socket_lot_number: item.socket_lot_number || null, // ★ 로트번호
+          socket_lot_number: item.socket_lot_number || null,
         };
       });
 
       const payload: any = {
         wo_type: woType,
-        po_id: selectedPoId,
-        project_id: selectedProjectId || null,
+        po_id: creationMode === 'PO' ? (selectedPoId || null) : null,
+        project_id: creationMode === 'PO' ? (selectedProjectId || null) : null,
+        project_name: creationMode === 'STOCK' ? (customProjectName || '재고생산 (공통 부자재)') : undefined,
         ...form,
         delivery_date: form.delivery_date || null,
         items: itemsWithCalc,
@@ -878,10 +966,11 @@ function SubCreateModal({
       }
 
       const res = await api.post<{ data: any }>('/sub-work-orders', payload);
-      alert(`✅ ${res.data?.swo_number ?? ''} 작업지시 생성 완료`);
+      alert(`✅ ${res.data?.swo_number ?? ''} 부자재 작업지시가 생성되었습니다! (${creationMode === 'STOCK' ? '재고선생산' : '발주서연동'})`);
       onCreated();
+      onClose();
     } catch (e: any) {
-      alert(e?.body?.error || '생성 실패');
+      alert(e?.body?.error || e?.message || '생성 실패');
     } finally {
       setSubmitting(false);
     }
@@ -894,7 +983,7 @@ function SubCreateModal({
         <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-rose-700 via-rose-800 to-slate-900 rounded-t-2xl">
           <div>
             <h2 className="text-base font-bold text-white">부자재 작업지시 생성</h2>
-            <p className="text-rose-300 text-xs mt-0.5">발주서를 선택하여 공정별 작업지시를 생성합니다</p>
+            <p className="text-rose-300 text-xs mt-0.5">발주서 없이 미리 만드는 선생산 / 재고확보 작업지시 지원</p>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 text-white/70 hover:text-white">
             <X className="h-5 w-5" />
@@ -902,6 +991,40 @@ function SubCreateModal({
         </div>
 
         <div className="p-6 space-y-5 max-h-[76vh] overflow-y-auto">
+          {/* ★ 모드 선택 토글 (선생산 vs 발주서연동) */}
+          <div className="bg-slate-100 p-1.5 rounded-xl flex gap-2 border">
+            <button
+              type="button"
+              onClick={() => {
+                setCreationMode('STOCK');
+                setPoItems([]);
+              }}
+              className={`flex-1 py-2.5 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${
+                creationMode === 'STOCK'
+                  ? 'bg-emerald-600 text-white shadow-md'
+                  : 'text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <Package className="h-4 w-4" />
+              ● 선생산 / 재고 확보 (발주서 없음 - 자유 품목 입력)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCreationMode('PO');
+                setPoItems([]);
+              }}
+              className={`flex-1 py-2.5 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${
+                creationMode === 'PO'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <ClipboardList className="h-4 w-4" />
+              ○ 특정 발주서 연동 (수주 현장 연결)
+            </button>
+          </div>
+
           {/* 공정 선택 */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-2">공정 선택 *</label>
@@ -923,38 +1046,62 @@ function SubCreateModal({
             </div>
           </div>
 
-          {/* 프로젝트 + 발주서 */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">프로젝트 *</label>
-              <select
-                value={selectedProjectId}
-                onChange={e => setSelectedProjectId(e.target.value === '' ? '' : Number(e.target.value))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400"
-              >
-                <option value="">프로젝트 선택</option>
-                {projects.map(p => (
-                  <option key={p.project_id} value={p.project_id}>{p.project_name}</option>
-                ))}
-              </select>
+          {/* 모드 1: 선생산 모드 (발주서 없음) */}
+          {creationMode === 'STOCK' && (
+            <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                  <Package className="h-4 w-4 text-emerald-600" />
+                  재고 생산 목적 / 프로젝트명
+                </span>
+                <span className="text-[11px] text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200 font-medium">
+                  발주서 불필요 (자유 입력)
+                </span>
+              </div>
+              <input
+                type="text"
+                value={customProjectName}
+                onChange={e => setCustomProjectName(e.target.value)}
+                placeholder="예: 2분기 대비 100파이 소켓 500EA 사전 제작"
+                className="w-full border border-emerald-300 focus:border-emerald-500 rounded-lg px-3 py-2 text-sm font-semibold text-emerald-950 bg-white"
+              />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1">발주서 *</label>
-              <select
-                value={selectedPoId}
-                onChange={e => setSelectedPoId(e.target.value === '' ? '' : Number(e.target.value))}
-                disabled={!selectedProjectId}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400 disabled:opacity-50"
-              >
-                <option value="">발주서 선택</option>
-                {pos.map(p => (
-                  <option key={p.po_id} value={p.po_id}>
-                    {p.biz_name ? `[${p.biz_name}] ` : ''}{p.file_name}
-                  </option>
-                ))}
-              </select>
+          )}
+
+          {/* 모드 2: 발주서 연동 모드 */}
+          {creationMode === 'PO' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">프로젝트 *</label>
+                <select
+                  value={selectedProjectId}
+                  onChange={e => setSelectedProjectId(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400"
+                >
+                  <option value="">프로젝트 선택</option>
+                  {projects.map(p => (
+                    <option key={p.project_id} value={p.project_id}>{p.project_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">발주서 *</label>
+                <select
+                  value={selectedPoId}
+                  onChange={e => setSelectedPoId(e.target.value === '' ? '' : Number(e.target.value))}
+                  disabled={!selectedProjectId}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400 disabled:opacity-50"
+                >
+                  <option value="">발주서 선택</option>
+                  {pos.map(p => (
+                    <option key={p.po_id} value={p.po_id}>
+                      {p.biz_name ? `[${p.biz_name}] ` : ''}{p.file_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* THERMAL_ATTACH: Assembly Lot 선택 */}
           {woType === 'THERMAL_ATTACH' && (
@@ -976,197 +1123,283 @@ function SubCreateModal({
           )}
 
           {/* 항목 테이블 */}
-          {selectedPoId && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-gray-600">
-                  발주 항목 {loadingItems ? '(로딩중...)' : `(${poItems.length}건)`}
-                </label>
-                {!loadingItems && poItems.length === 0 && (
-                  <span className="text-xs text-amber-600 flex items-center gap-1">
-                    <AlertCircle className="h-3 w-3" />항목 없음
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-gray-600 flex items-center gap-2">
+                생산 대상 항목 ({poItems.length}건)
+                {creationMode === 'STOCK' && (
+                  <span className="text-[11px] text-emerald-600 font-normal">
+                    (선생산: 규격과 수량을 직접 추가합니다)
                   </span>
                 )}
-              </div>
-              {loadingItems ? (
-                <div className="flex items-center justify-center py-8 border rounded-xl bg-gray-50">
-                  <Loader2 className="h-6 w-6 text-gray-400 animate-spin mr-2" />
-                  <span className="text-gray-400 text-sm">항목 불러오는 중...</span>
+              </label>
+
+              {/* 선생산 모드 시 수동 추가 & 템플릿 버튼 */}
+              {creationMode === 'STOCK' && (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleLoadStandardTemplates}
+                    className="px-2.5 py-1 bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 rounded-lg text-xs font-bold transition flex items-center gap-1"
+                  >
+                    ⚡ 표준 템플릿 로드
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAddCustomItem()}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    규격 추가
+                  </button>
                 </div>
-              ) : poItems.length > 0 ? (
-                <div className="border rounded-xl overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs">
-                      <thead className="bg-gray-50 border-b">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-gray-500 font-medium">No</th>
-                          <th className="px-3 py-2 text-left text-gray-500 font-medium">구조체 / 규격</th>
-                          <th className="px-3 py-2 text-center text-gray-500 font-medium">W(mm)</th>
-                          <th className="px-3 py-2 text-center text-gray-500 font-medium">H(mm)</th>
-                          <th className="px-3 py-2 text-center text-gray-500 font-medium">수량</th>
-                          <th className="px-3 py-2 text-left text-rose-600 font-semibold bg-rose-50">
-                            ★ 소켓 인수검사 로트번호
-                          </th>
-                          <th className="px-3 py-2 text-left text-gray-500 font-medium">공정 계산</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-100">
-                        {poItems.map((item, rowIdx) => {
-                          const W = item.width_mm ?? 0;
-                          const H = item.height_mm ?? 0;
-                          const rows = calcSubData(woType, W, H, item.qty ?? 1);
-                          return (
-                            <tr
-                              key={`${item.po_item_id}-${item.explode_index}`}
-                              className={rowIdx % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-gray-50/60 hover:bg-gray-100/60'}
-                            >
-                              <td className="px-3 py-2 text-gray-400 font-mono">{item.global_seq}</td>
-                              <td className="px-3 py-2">
-                                <div className="font-semibold text-gray-800 text-xs">{item.structure || item.product_type || '-'}</div>
-                                {item.explode_total > 1 && (
-                                  <div className="text-[10px] text-blue-500 font-mono mt-0.5">
-                                    {item.explode_index}/{item.explode_total}번
-                                  </div>
-                                )}
-                                {item.install_location && (
-                                  <div className="text-[10px] text-gray-400 mt-0.5">{item.install_location}</div>
-                                )}
-                              </td>
-                              {/* 행 내 W/H 표시 */}
-                              <td className="px-3 py-2 text-center">
-                                <span className={cn('font-mono font-bold text-xs',
-                                  (item.width_mm ?? 0) > 0 ? 'text-gray-800' : 'text-gray-300'
-                                )}>
-                                  {(item.width_mm ?? 0) > 0 ? item.width_mm : '-'}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2 text-center">
-                                <span className={cn('font-mono font-bold text-xs',
-                                  (item.height_mm ?? 0) > 0 ? 'text-gray-800' : 'text-gray-300'
-                                )}>
-                                  {(item.height_mm ?? 0) > 0 ? item.height_mm : '-'}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2 text-center">
-                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-rose-100 text-rose-700 text-xs font-bold">
-                                  {item.qty ?? 1}
-                                </span>
-                              </td>
-                              {/* ★ 소켓 인수검사 로트번호 입력 */}
-                              <td className="px-2 py-1.5 bg-rose-50/40">
+              )}
+            </div>
+
+            {loadingItems ? (
+              <div className="flex items-center justify-center py-8 border rounded-xl bg-gray-50">
+                <Loader2 className="h-6 w-6 text-gray-400 animate-spin mr-2" />
+                <span className="text-gray-400 text-sm">항목 불러오는 중...</span>
+              </div>
+            ) : poItems.length > 0 ? (
+              <div className="border rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-gray-500 font-medium">No</th>
+                        <th className="px-3 py-2 text-left text-gray-500 font-medium">구조체 / 규격명</th>
+                        <th className="px-3 py-2 text-center text-gray-500 font-medium">W(mm)</th>
+                        <th className="px-3 py-2 text-center text-gray-500 font-medium">H(mm)</th>
+                        <th className="px-3 py-2 text-center text-gray-500 font-medium">수량 (EA)</th>
+                        <th className="px-3 py-2 text-left text-rose-600 font-semibold bg-rose-50">
+                          소켓 인수검사 LOT
+                        </th>
+                        <th className="px-3 py-2 text-left text-gray-500 font-medium">공정 계산</th>
+                        {creationMode === 'STOCK' && (
+                          <th className="px-2 py-2 text-center text-gray-400 font-medium">삭제</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {poItems.map((item, rowIdx) => {
+                        const W = item.width_mm ?? 0;
+                        const H = item.height_mm ?? 0;
+                        const rows = calcSubData(woType, W, H, item.qty ?? 1);
+                        return (
+                          <tr
+                            key={rowIdx}
+                            className={rowIdx % 2 === 0 ? 'bg-white hover:bg-gray-50' : 'bg-gray-50/60 hover:bg-gray-100/60'}
+                          >
+                            <td className="px-3 py-2 text-gray-400 font-mono">{rowIdx + 1}</td>
+                            <td className="px-3 py-2">
+                              {creationMode === 'STOCK' ? (
                                 <input
                                   type="text"
-                                  value={item.socket_lot_number ?? ''}
+                                  value={item.structure || ''}
                                   onChange={e => {
                                     const val = e.target.value;
                                     setPoItems(prev => prev.map((pi, idx) =>
-                                      idx === rowIdx ? { ...pi, socket_lot_number: val } : pi
+                                      idx === rowIdx ? { ...pi, structure: val, product_type: val } : pi
                                     ));
                                   }}
-                                  placeholder="예: SWO-20260602-001"
-                                  className="w-full border border-rose-200 focus:border-rose-400 rounded px-2 py-1 text-[11px] font-mono bg-white focus:outline-none focus:ring-1 focus:ring-rose-300 min-w-[150px]"
+                                  className="w-full border rounded px-2 py-1 text-xs font-semibold text-gray-800"
                                 />
-                                {!(item.socket_lot_number ?? '').trim() && needsLotInput && (
-                                  <p className="text-[9px] text-red-500 mt-0.5">로트번호 필수</p>
-                                )}
-                              </td>
-                              {/* 공정 계산 */}
-                              <td className="px-3 py-2">
-                                {W > 0 && H > 0 ? (
-                                  <div className="space-y-0.5">
-                                    {rows.map((row, i) => (
-                                      <div key={i} className="flex gap-2 text-[10px]">
-                                        <span className="text-gray-400 truncate max-w-[110px]">{row.label}</span>
-                                        <span className={cn('font-mono font-bold shrink-0', currentTabCfg.accentText)}>
-                                          {row.value}
-                                        </span>
-                                      </div>
-                                    ))}
+                              ) : (
+                                <div>
+                                  <div className="font-semibold text-gray-800 text-xs">{item.structure || item.product_type || '-'}</div>
+                                </div>
+                              )}
+                            </td>
+                            {/* W mm */}
+                            <td className="px-2 py-2 text-center">
+                              {creationMode === 'STOCK' ? (
+                                <input
+                                  type="number"
+                                  value={item.width_mm || 0}
+                                  onChange={e => {
+                                    const val = Number(e.target.value);
+                                    setPoItems(prev => prev.map((pi, idx) =>
+                                      idx === rowIdx ? { ...pi, width_mm: val } : pi
+                                    ));
+                                  }}
+                                  className="w-16 border rounded text-center py-1 font-mono font-bold text-xs"
+                                />
+                              ) : (
+                                <span className="font-mono font-bold text-xs text-gray-800">{item.width_mm || '-'}</span>
+                              )}
+                            </td>
+                            {/* H mm */}
+                            <td className="px-2 py-2 text-center">
+                              {creationMode === 'STOCK' ? (
+                                <input
+                                  type="number"
+                                  value={item.height_mm || 0}
+                                  onChange={e => {
+                                    const val = Number(e.target.value);
+                                    setPoItems(prev => prev.map((pi, idx) =>
+                                      idx === rowIdx ? { ...pi, height_mm: val } : pi
+                                    ));
+                                  }}
+                                  className="w-16 border rounded text-center py-1 font-mono font-bold text-xs"
+                                />
+                              ) : (
+                                <span className="font-mono font-bold text-xs text-gray-800">{item.height_mm || '-'}</span>
+                              )}
+                            </td>
+                            {/* 수량 */}
+                            <td className="px-2 py-2 text-center">
+                              {creationMode === 'STOCK' ? (
+                                <input
+                                  type="number"
+                                  min={1}
+                                  value={item.qty || 1}
+                                  onChange={e => {
+                                    const val = Number(e.target.value);
+                                    setPoItems(prev => prev.map((pi, idx) =>
+                                      idx === rowIdx ? { ...pi, qty: val } : pi
+                                    ));
+                                  }}
+                                  className="w-16 border rounded text-center py-1 font-mono font-bold text-xs text-rose-700 bg-rose-50"
+                                />
+                              ) : (
+                                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-rose-100 text-rose-700 text-xs font-bold">
+                                  {item.qty ?? 1}
+                                </span>
+                              )}
+                            </td>
+                            {/* 로트번호 */}
+                            <td className="px-2 py-1.5 bg-rose-50/40">
+                              <input
+                                type="text"
+                                value={item.socket_lot_number ?? ''}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setPoItems(prev => prev.map((pi, idx) =>
+                                    idx === rowIdx ? { ...pi, socket_lot_number: val } : pi
+                                  ));
+                                }}
+                                placeholder="예: SWO-20260602-001"
+                                className="w-full border border-rose-200 focus:border-rose-400 rounded px-2 py-1 text-[11px] font-mono bg-white focus:outline-none focus:ring-1 focus:ring-rose-300 min-w-[140px]"
+                              />
+                            </td>
+                            {/* 공정 계산 */}
+                            <td className="px-3 py-2">
+                              <div className="space-y-0.5">
+                                {rows.map((row, i) => (
+                                  <div key={i} className="flex gap-2 text-[10px]">
+                                    <span className="text-gray-400 truncate max-w-[110px]">{row.label}</span>
+                                    <span className={cn('font-mono font-bold shrink-0', currentTabCfg.accentText)}>
+                                      {row.value}
+                                    </span>
                                   </div>
-                                ) : (
-                                  <span className="text-[10px] text-amber-500 flex items-center gap-1">
-                                    <AlertTriangle className="h-3 w-3" /> 규격 없음
-                                  </span>
-                                )}
+                                ))}
+                              </div>
+                            </td>
+                            {creationMode === 'STOCK' && (
+                              <td className="px-2 py-2 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => setPoItems(prev => prev.filter((_, idx) => idx !== rowIdx))}
+                                  className="p-1 text-gray-400 hover:text-red-600 rounded"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
                               </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          )}
-
-          {/* 작업 기본정보 */}
-          {selectedPoId && poItems.length > 0 && (
-            <div className={cn('rounded-xl p-4 space-y-3 border', currentTabCfg.accentBg)}>
-              <h3 className={cn('text-xs font-semibold flex items-center gap-1.5', currentTabCfg.accentText)}>
-                <Info className="h-3.5 w-3.5" />작업 기본정보
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">작업일 *</label>
-                  <input
-                    type="date"
-                    value={form.wo_date}
-                    onChange={e => setForm(f => ({ ...f, wo_date: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-rose-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">납기일</label>
-                  <input
-                    type="date"
-                    value={form.delivery_date}
-                    onChange={e => setForm(f => ({ ...f, delivery_date: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-rose-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">
-                    <User className="h-3 w-3 inline mr-0.5" />작업자
-                  </label>
-                  <input
-                    type="text"
-                    value={form.worker}
-                    onChange={e => setForm(f => ({ ...f, worker: e.target.value }))}
-                    placeholder="작업자 이름"
-                    className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-rose-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-500 mb-1">비고</label>
-                  <input
-                    type="text"
-                    value={form.remarks}
-                    onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))}
-                    placeholder="비고사항"
-                    className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-rose-400"
-                  />
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
+            ) : (
+              <div className="p-8 text-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
+                <p className="text-sm font-semibold text-gray-500 mb-1">등록된 생산 항목이 없습니다</p>
+                <p className="text-xs text-gray-400 mb-3">
+                  {creationMode === 'STOCK' ? '상단의 "⚡ 표준 템플릿 로드" 또는 "➕ 규격 추가" 버튼을 눌러 생성할 품목을 추가하세요.' : '발주서를 선택하세요.'}
+                </p>
+                {creationMode === 'STOCK' && (
+                  <button
+                    type="button"
+                    onClick={handleLoadStandardTemplates}
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold"
+                  >
+                    ⚡ 표준 템플릿 자동 로드
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 작업 기본정보 */}
+          <div className={cn('rounded-xl p-4 space-y-3 border', currentTabCfg.accentBg)}>
+            <h3 className={cn('text-xs font-semibold flex items-center gap-1.5', currentTabCfg.accentText)}>
+              <Info className="h-3.5 w-3.5" />작업 기본정보
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">작업일 *</label>
+                <input
+                  type="date"
+                  value={form.wo_date}
+                  onChange={e => setForm(f => ({ ...f, wo_date: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-rose-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">목표완료일</label>
+                <input
+                  type="date"
+                  value={form.delivery_date}
+                  onChange={e => setForm(f => ({ ...f, delivery_date: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-rose-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  <User className="h-3 w-3 inline mr-0.5" />작업자
+                </label>
+                <input
+                  type="text"
+                  value={form.worker}
+                  onChange={e => setForm(f => ({ ...f, worker: e.target.value }))}
+                  placeholder="작업자 이름"
+                  className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-rose-400"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">비고</label>
+                <input
+                  type="text"
+                  value={form.remarks}
+                  onChange={e => setForm(f => ({ ...f, remarks: e.target.value }))}
+                  placeholder="비고사항"
+                  className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-rose-400"
+                />
+              </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* 푸터 */}
         <div className="flex items-center justify-between px-6 py-4 border-t bg-gray-50 rounded-b-2xl">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">취소</button>
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 font-medium">취소</button>
           <button
             onClick={handleSubmit}
-            disabled={submitting || !selectedPoId || poItems.length === 0}
+            disabled={submitting || poItems.length === 0}
             className={cn(
-              'flex items-center gap-2 px-5 py-2 text-sm rounded-lg font-medium transition-all',
-              submitting || !selectedPoId || poItems.length === 0
+              'flex items-center gap-2 px-6 py-2.5 text-sm rounded-xl font-bold transition-all shadow-md',
+              submitting || poItems.length === 0
                 ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                : 'bg-rose-700 hover:bg-rose-900 text-white',
+                : creationMode === 'STOCK'
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                  : 'bg-rose-700 hover:bg-rose-900 text-white',
             )}
           >
             {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-            {submitting ? '저장 중...' : `작업지시 생성 (${poItems.length}건)`}
+            {submitting ? '생성 중...' : `🚀 ${creationMode === 'STOCK' ? '재고선생산' : '발주서연동'} 작업지시 발행 (${poItems.length}건)`}
           </button>
         </div>
       </div>
