@@ -62,6 +62,15 @@ async function migrateWorkOrderColumns() {
       END $$;
     `);
   }
+
+  // 파이프라인 추적 컬럼 추가 (C302 LOT 계승 지원)
+  // 주의: CHECK 제약은 기존 NULL 데이터와 충돌하므로 API 레벨에서 검증
+  await pool.query(`
+    ALTER TABLE work_order ADD COLUMN IF NOT EXISTS parent_wo_id INTEGER;
+    ALTER TABLE work_order ADD COLUMN IF NOT EXISTS pipeline_seq SMALLINT DEFAULT 1;
+    ALTER TABLE work_order ADD COLUMN IF NOT EXISTS po_number VARCHAR(50);
+    ALTER TABLE work_order ADD COLUMN IF NOT EXISTS order_name VARCHAR(200);
+  `);
 }
 
 export async function workOrderRoutes(app: FastifyInstance) {
@@ -112,6 +121,39 @@ export async function workOrderRoutes(app: FastifyInstance) {
 
     const result = await pool.query(query, params);
     return { data: result.rows, total: result.rows.length };
+  });
+
+  // GET /api/work-orders/pipeline?order_id=xxx
+  // 수주별 전체 공정 파이프라인 현황 조회
+  app.get('/api/work-orders/pipeline', async (req) => {
+    const { order_id, po_number } = req.query as { order_id?: string; po_number?: string };
+    let query = `
+      SELECT wo_id, wo_number, wo_date, process_code, status,
+             planned_qty, actual_qty, lot_number, item_name, cert_name,
+             order_id, po_number, order_name, parent_wo_id, pipeline_seq,
+             started_at, completed_at
+      FROM work_order
+      WHERE 1=1
+    `;
+    const params: unknown[] = [];
+    if (order_id) {
+      params.push(parseInt(order_id));
+      query += ` AND order_id = $${params.length}`;
+    }
+    if (po_number) {
+      params.push(po_number);
+      query += ` AND po_number = $${params.length}`;
+    }
+    query += ' ORDER BY pipeline_seq ASC, wo_id ASC';
+    const { rows } = await pool.query(query, params);
+    
+    // 공정별 그룹화
+    const pipeline: Record<string, any> = {};
+    for (const wo of rows) {
+      if (!pipeline[wo.process_code]) pipeline[wo.process_code] = [];
+      pipeline[wo.process_code].push(wo);
+    }
+    return { data: rows, pipeline, total: rows.length };
   });
 
   // GET /api/work-orders/:id - 작업지시 상세

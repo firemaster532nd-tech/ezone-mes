@@ -7,6 +7,7 @@ import {
   Play, Pause, RotateCcw, CheckCircle, UserCheck, Plus,
   ChevronDown, ChevronUp, Clock, AlertTriangle, Package,
   Scale, PackageCheck, Trash2, Wrench, BarChart3,
+  CheckCircle2, Circle, PlayCircle
 } from 'lucide-react';
 
 /* ========== Types ========== */
@@ -77,6 +78,118 @@ interface WorkOrder {
   customer_name?: string;
   lot_number?: string;
   input_lot_numbers?: string;
+  order_id?: number;
+}
+
+/* ========== Pipeline Status Card ========== */
+const PROCESS_STEPS = [
+  { code: 'MIX', label: '배합', seq: 1 },
+  { code: 'EXT', label: '압출', seq: 2 },
+  { code: 'CUT', label: '재단', seq: 3 },
+  { code: 'ASM', label: '조립', seq: 4 },
+];
+
+interface PipelineWO {
+  wo_id: number;
+  wo_number: string;
+  process_code: string;
+  status: string;
+  planned_qty: number | null;
+  actual_qty: number;
+  lot_number?: string;
+  pipeline_seq?: number;
+}
+
+function PipelineStatusCard({ orderId, orderName }: { orderId: number; orderName?: string }) {
+  const [wos, setWos] = useState<PipelineWO[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!orderId) return;
+    setLoading(true);
+    api.get<{ data: PipelineWO[] }>(`/work-orders/pipeline?order_id=${orderId}`)
+      .then(r => setWos(r.data ?? []))
+      .catch(() => setWos([]))
+      .finally(() => setLoading(false));
+  }, [orderId]);
+
+  if (loading) return <div className="text-xs text-gray-400 py-2">파이프라인 로딩 중...</div>;
+  if (!wos.length) return null;
+
+  const getStepWos = (code: string) => wos.filter(w => w.process_code === code);
+  const getStepStatus = (code: string): 'completed' | 'running' | 'planned' | 'none' => {
+    const stepWos = getStepWos(code);
+    if (!stepWos.length) return 'none';
+    if (stepWos.every(w => w.status === 'COMPLETED')) return 'completed';
+    if (stepWos.some(w => w.status === 'IN_PROGRESS' || w.status === 'RUNNING')) return 'running';
+    return 'planned';
+  };
+
+  const statusIcon = (s: string) => {
+    if (s === 'completed') return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+    if (s === 'running') return <PlayCircle className="h-5 w-5 text-blue-500 animate-pulse" />;
+    if (s === 'planned') return <Clock className="h-5 w-5 text-amber-400" />;
+    return <Circle className="h-5 w-5 text-gray-300" />;
+  };
+
+  const statusBg = (s: string) => {
+    if (s === 'completed') return 'bg-green-50 border-green-300';
+    if (s === 'running') return 'bg-blue-50 border-blue-400';
+    if (s === 'planned') return 'bg-amber-50 border-amber-300';
+    return 'bg-gray-50 border-gray-200';
+  };
+
+  const statusLabel = (s: string) => {
+    if (s === 'completed') return '완료';
+    if (s === 'running') return '진행중';
+    if (s === 'planned') return '대기';
+    return '미등록';
+  };
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 mb-4">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xs font-bold text-slate-700">공정 파이프라인</span>
+        {orderName && <span className="text-xs text-slate-400">— {orderName}</span>}
+      </div>
+      <div className="flex items-center gap-0">
+        {PROCESS_STEPS.map((step, idx) => {
+          const s = getStepStatus(step.code);
+          const stepWos = getStepWos(step.code);
+          return (
+            <div key={step.code} className="flex items-center flex-1">
+              <div className={`flex-1 flex flex-col items-center gap-1 rounded-lg border px-2 py-2 transition-all ${statusBg(s)}`}>
+                <div className="flex items-center gap-1">
+                  {statusIcon(s)}
+                  <span className="text-xs font-bold text-slate-700">{step.label}</span>
+                </div>
+                <span className={`text-[10px] font-semibold ${
+                  s === 'completed' ? 'text-green-600' :
+                  s === 'running' ? 'text-blue-600' :
+                  s === 'planned' ? 'text-amber-600' : 'text-gray-400'
+                }`}>{statusLabel(s)}</span>
+                {stepWos.length > 0 && (
+                  <div className="space-y-0.5 w-full">
+                    {stepWos.map(wo => (
+                      <div key={wo.wo_id} className="text-[9px] text-slate-500 text-center truncate">
+                        {wo.wo_number}
+                        {wo.lot_number && <span className="text-slate-400 ml-1">({wo.lot_number})</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {idx < PROCESS_STEPS.length - 1 && (
+                <div className={`h-0.5 w-4 flex-shrink-0 ${
+                  s === 'completed' ? 'bg-green-400' : 'bg-gray-200'
+                }`} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 /* ========== Constants ========== */
@@ -171,6 +284,7 @@ export function ProcessExecutionPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [expandedLog, setExpandedLog] = useState<number | null>(null);
   const [events, setEvents] = useState<Record<number, ProcessEvent[]>>({});
+  const [viewMode, setViewMode] = useState<'list' | 'pipeline'>('list');
 
   // LOT density properties (keyed by log_id)
   const [lotProps, setLotProps] = useState<Record<number, LotProperty>>({});
@@ -241,6 +355,257 @@ export function ProcessExecutionPage() {
     } catch { alert('시작 실패'); }
   };
 
+  const renderLogCard = (log: ProcessLog) => {
+    const sc = statusConfig[log.status] || statusConfig.READY;
+    const isExpanded = expandedLog === log.log_id;
+    return (
+      <div key={log.log_id} className={cn('bg-white rounded-card border-2 overflow-hidden', sc.border)}>
+        {/* Header */}
+        <div className={cn('px-4 py-3 flex items-center justify-between', sc.bg)}>
+          <div className="flex items-center gap-3">
+            <ProcessBadge process={log.process_code} />
+            <span className="font-mono text-shop-sm font-medium">{log.wo_number}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={cn('w-2 h-2 rounded-full', statusDot[log.status])} />
+            <span className={cn('text-shop-sm font-semibold', sc.color)}>{sc.label}</span>
+          </div>
+        </div>
+
+        {/* Worker & Shift */}
+        <div className="px-4 py-2 flex items-center justify-between text-shop-sm border-b">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-gray-500">작업자:</span>
+            {(() => {
+              let names: string[] = [];
+              try { names = JSON.parse(log.worker_names || '[]'); } catch { names = log.worker_name ? [log.worker_name] : []; }
+              return names.length > 0 ? names.map((n, i) => (
+                <span key={i} className="inline-flex px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 text-xs font-medium">{n}</span>
+              )) : <span className="text-gray-400">-</span>;
+            })()}
+          </div>
+          <div className="flex items-center gap-1">
+            {(log.shift || '').split(',').filter(Boolean).map(s => (
+              <span key={s} className="inline-flex px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-xs font-medium">
+                {shiftLabel[s.trim()] || s}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Quantities */}
+        <div className="px-4 py-3 grid grid-cols-4 gap-2 text-center border-b">
+          <div>
+            <div className="text-xs text-gray-500">계획</div>
+            <div className="font-mono font-bold">{log.planned_qty ?? '-'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500">생산</div>
+            <div className="font-mono font-bold text-green-700">{log.produced_qty ?? 0}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500">불량</div>
+            <div className="font-mono font-bold text-red-600">{log.defect_qty ?? 0}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-500">수율</div>
+            <div className="font-mono font-bold">{yieldRate(log.produced_qty, log.defect_qty)}</div>
+          </div>
+        </div>
+
+        {/* Time */}
+        <div className="px-4 py-2 flex items-center justify-between text-shop-sm text-gray-600 border-b">
+          <span className="flex items-center gap-1">
+            <Clock size={14} /> 시작: {timeStr(log.started_at)}
+          </span>
+          {log.status === 'RUNNING' && (
+            <span className="text-green-700 font-medium">경과: {elapsed(log.started_at)}</span>
+          )}
+          {log.status === 'COMPLETED' && (
+            <span className="text-blue-700">완료: {timeStr(log.completed_at)}</span>
+          )}
+        </div>
+
+        {/* Status Badges */}
+        {(log.loss_rate != null && Number(log.loss_rate) > 0) || (log.defect_qty != null && Number(log.defect_qty) > 0) || log.status === 'COMPLETED' ? (
+          <div className="px-4 py-2 flex flex-wrap gap-1.5 border-b">
+            {log.loss_rate != null && Number(log.loss_rate) > 0 && (
+              <span className={cn(
+                'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium',
+                Number(log.loss_rate) >= 10 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+              )}>
+                <Scale size={11} /> 로스 {Number(log.loss_rate).toFixed(2)}%
+              </span>
+            )}
+            {lotProps[log.log_id]?.density != null && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-100 text-indigo-700">
+                밀도 {Number(lotProps[log.log_id].density).toFixed(2)}
+              </span>
+            )}
+            {lotProps[log.log_id]?.output_length_m != null && Number(lotProps[log.log_id].output_length_m) > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-100 text-blue-700">
+                산출 {Number(lotProps[log.log_id].output_length_m).toFixed(1)}m
+              </span>
+            )}
+            {log.defect_qty != null && Number(log.defect_qty) > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-100 text-red-700">
+                <AlertTriangle size={11} /> 불량 {Number(log.defect_qty)}ea
+              </span>
+            )}
+            {log.inventory_applied && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-100 text-green-700">
+                <PackageCheck size={11} /> 재고반영 &#10003;
+              </span>
+            )}
+            {!log.inventory_applied && log.status === 'COMPLETED' && (
+              <button
+                onClick={async () => {
+                  try {
+                    const wo = woMap[log.wo_id];
+                    await api.post('/inventory/apply-process-result', {
+                      log_id: log.log_id,
+                      wo_id: log.wo_id,
+                      process_code: log.process_code,
+                      lot_number: wo?.lot_number || '',
+                      input_items: [],
+                      output_item_id: null,
+                      output_qty: log.produced_qty || 0,
+                      loss_qty: log.weighed_loss || 0,
+                    });
+                    fetchLogs();
+                  } catch { alert('재고 반영 실패'); }
+                }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer"
+              >
+                <Package size={11} /> 재고미반영
+              </button>
+            )}
+          </div>
+        ) : null}
+
+        {/* LOT 정보 */}
+        {log.wo_id && woMap[log.wo_id] && (
+          <div className="px-4 py-2 border-b">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
+              <Package className="h-3.5 w-3.5" /> LOT 추적 정보
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-gray-400">생산 LOT:</span>
+                <span className="ml-1 font-mono font-medium">{woMap[log.wo_id]?.lot_number || '-'}</span>
+              </div>
+              <div>
+                <span className="text-gray-400">납품처:</span>
+                <span className="ml-1">{woMap[log.wo_id]?.customer_name || '-'}</span>
+              </div>
+            </div>
+            {woMap[log.wo_id]?.input_lot_numbers && (() => {
+              const raw = woMap[log.wo_id].input_lot_numbers!;
+              let lotItems: Array<{ item_name?: string; item_code?: string; lot_number?: string; qty?: number; shortage?: boolean }> = [];
+              try { const p = JSON.parse(raw); if (Array.isArray(p)) lotItems = p; } catch { /* fallback */ }
+              return (
+                <div className="mt-1">
+                  <span className="text-xs text-gray-400">투입 원료 LOT:</span>
+                  {lotItems.length > 0 ? (
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {lotItems.filter(it => it.lot_number).map((it, i) => (
+                        <span key={i} className="rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-mono text-amber-800">
+                          {it.item_name || it.item_code} → {it.lot_number}
+                        </span>
+                      ))}
+                      {lotItems.some(it => it.shortage) && (
+                        <span className="rounded bg-red-50 border border-red-200 px-1.5 py-0.5 text-[10px] text-red-600 font-medium">
+                          일부 자재 부족
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {raw.split(',').map((lot: string, i: number) => (
+                        <span key={i} className="rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-mono text-amber-800">
+                          {lot.trim()}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="px-4 py-3 flex flex-wrap gap-2">
+          {log.status === 'READY' && (
+            <button
+              onClick={() => handleStart(log)}
+              className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-md text-xs font-medium hover:bg-green-700"
+            >
+              <Play size={14} /> 시작
+            </button>
+          )}
+          {log.status === 'RUNNING' && (
+            <>
+              <button
+                onClick={() => setPauseTarget(log)}
+                className="flex items-center gap-1 px-3 py-1.5 bg-yellow-500 text-white rounded-md text-xs font-medium hover:bg-yellow-600"
+              >
+                <Pause size={14} /> 일시정지
+              </button>
+              <button
+                onClick={() => setChangeWorkerTarget(log)}
+                className="flex items-center gap-1 px-3 py-1.5 bg-purple-500 text-white rounded-md text-xs font-medium hover:bg-purple-600"
+              >
+                <UserCheck size={14} /> 작업자 변경
+              </button>
+              <button
+                onClick={() => setCompleteTarget(log)}
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-medium hover:bg-blue-700"
+              >
+                <CheckCircle size={14} /> 완료
+              </button>
+            </>
+          )}
+          {log.status === 'PAUSED' && (
+            <>
+              <button
+                onClick={async () => {
+                  try {
+                    await api.post(`/process-logs/${log.log_id}/resume`, {});
+                    fetchLogs();
+                  } catch { alert('재개 실패'); }
+                }}
+                className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-md text-xs font-medium hover:bg-green-700"
+              >
+                <RotateCcw size={14} /> 재개
+              </button>
+              <button
+                onClick={() => setCompleteTarget(log)}
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-medium hover:bg-blue-700"
+              >
+                <CheckCircle size={14} /> 완료
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => toggleEvents(log.log_id)}
+            className="flex items-center gap-1 px-3 py-1.5 border rounded-md text-xs font-medium text-gray-600 hover:bg-gray-50 ml-auto"
+          >
+            이벤트 로그
+            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+        </div>
+
+        {/* Event Timeline */}
+        {isExpanded && (
+          <div className="px-4 pb-4 border-t bg-gray-50">
+            <EventTimeline events={events[log.log_id] || []} />
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div>
       <PageHeader title="공정 실행 관리" count={logs.length} description="실시간 공정 실행 현황 및 제어">
@@ -260,6 +625,22 @@ export function ProcessExecutionPage() {
           onChange={(e) => setDateFilter(e.target.value)}
           className="rounded-md border px-3 py-1.5 text-shop-sm"
         />
+
+        {/* View Mode tabs */}
+        <div className="flex gap-1 border rounded-md overflow-hidden mr-2">
+          <button
+            onClick={() => setViewMode('list')}
+            className={cn('px-3 py-1.5 text-shop-sm font-medium transition-colors', viewMode === 'list' ? 'bg-process-mix text-white' : 'bg-white text-gray-600 hover:bg-gray-50')}
+          >
+            리스트 뷰
+          </button>
+          <button
+            onClick={() => setViewMode('pipeline')}
+            className={cn('px-3 py-1.5 text-shop-sm font-medium transition-colors', viewMode === 'pipeline' ? 'bg-process-mix text-white' : 'bg-white text-gray-600 hover:bg-gray-50')}
+          >
+            파이프라인 뷰
+          </button>
+        </div>
 
         {/* Shift tabs */}
         <div className="flex gap-1 border rounded-md overflow-hidden">
@@ -303,258 +684,42 @@ export function ProcessExecutionPage() {
         <div className="bg-white rounded-card border p-12 text-center text-gray-400">
           공정 실행 기록이 없습니다. '새 작업 시작' 버튼을 눌러 추가하세요.
         </div>
+      ) : viewMode === 'pipeline' ? (
+        <div className="space-y-4">
+          {(() => {
+            const uniqueOrders = new Map<number, string>();
+            const standaloneLogs: ProcessLog[] = [];
+            logs.forEach(log => {
+              const wo = woMap[log.wo_id];
+              const oid = wo?.order_id;
+              if (oid) {
+                uniqueOrders.set(oid, wo.customer_name || wo.item_name || '');
+              } else {
+                standaloneLogs.push(log);
+              }
+            });
+            
+            return (
+              <>
+                {Array.from(uniqueOrders.entries()).map(([oid, name]) => (
+                  <PipelineStatusCard key={oid} orderId={oid} orderName={name} />
+                ))}
+                
+                {standaloneLogs.length > 0 && (
+                  <div className="mt-8">
+                    <h3 className="text-shop-sm font-bold text-gray-600 mb-4 px-2">수주 미연결 작업</h3>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {standaloneLogs.map((log) => renderLogCard(log))}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {logs.map((log) => {
-            const sc = statusConfig[log.status] || statusConfig.READY;
-            const isExpanded = expandedLog === log.log_id;
-            return (
-              <div key={log.log_id} className={cn('bg-white rounded-card border-2 overflow-hidden', sc.border)}>
-                {/* Header */}
-                <div className={cn('px-4 py-3 flex items-center justify-between', sc.bg)}>
-                  <div className="flex items-center gap-3">
-                    <ProcessBadge process={log.process_code} />
-                    <span className="font-mono text-shop-sm font-medium">{log.wo_number}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={cn('w-2 h-2 rounded-full', statusDot[log.status])} />
-                    <span className={cn('text-shop-sm font-semibold', sc.color)}>{sc.label}</span>
-                  </div>
-                </div>
-
-                {/* Worker & Shift */}
-                <div className="px-4 py-2 flex items-center justify-between text-shop-sm border-b">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-gray-500">작업자:</span>
-                    {(() => {
-                      let names: string[] = [];
-                      try { names = JSON.parse(log.worker_names || '[]'); } catch { names = log.worker_name ? [log.worker_name] : []; }
-                      return names.length > 0 ? names.map((n, i) => (
-                        <span key={i} className="inline-flex px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 text-xs font-medium">{n}</span>
-                      )) : <span className="text-gray-400">-</span>;
-                    })()}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {(log.shift || '').split(',').filter(Boolean).map(s => (
-                      <span key={s} className="inline-flex px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-xs font-medium">
-                        {shiftLabel[s.trim()] || s}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Quantities */}
-                <div className="px-4 py-3 grid grid-cols-4 gap-2 text-center border-b">
-                  <div>
-                    <div className="text-xs text-gray-500">계획</div>
-                    <div className="font-mono font-bold">{log.planned_qty ?? '-'}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500">생산</div>
-                    <div className="font-mono font-bold text-green-700">{log.produced_qty ?? 0}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500">불량</div>
-                    <div className="font-mono font-bold text-red-600">{log.defect_qty ?? 0}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500">수율</div>
-                    <div className="font-mono font-bold">{yieldRate(log.produced_qty, log.defect_qty)}</div>
-                  </div>
-                </div>
-
-                {/* Time */}
-                <div className="px-4 py-2 flex items-center justify-between text-shop-sm text-gray-600 border-b">
-                  <span className="flex items-center gap-1">
-                    <Clock size={14} /> 시작: {timeStr(log.started_at)}
-                  </span>
-                  {log.status === 'RUNNING' && (
-                    <span className="text-green-700 font-medium">경과: {elapsed(log.started_at)}</span>
-                  )}
-                  {log.status === 'COMPLETED' && (
-                    <span className="text-blue-700">완료: {timeStr(log.completed_at)}</span>
-                  )}
-                </div>
-
-                {/* Status Badges */}
-                {(log.loss_rate != null && Number(log.loss_rate) > 0) || (log.defect_qty != null && Number(log.defect_qty) > 0) || log.status === 'COMPLETED' ? (
-                  <div className="px-4 py-2 flex flex-wrap gap-1.5 border-b">
-                    {log.loss_rate != null && Number(log.loss_rate) > 0 && (
-                      <span className={cn(
-                        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium',
-                        Number(log.loss_rate) >= 10 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
-                      )}>
-                        <Scale size={11} /> 로스 {Number(log.loss_rate).toFixed(2)}%
-                      </span>
-                    )}
-                    {lotProps[log.log_id]?.density != null && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-100 text-indigo-700">
-                        밀도 {Number(lotProps[log.log_id].density).toFixed(2)}
-                      </span>
-                    )}
-                    {lotProps[log.log_id]?.output_length_m != null && Number(lotProps[log.log_id].output_length_m) > 0 && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-100 text-blue-700">
-                        산출 {Number(lotProps[log.log_id].output_length_m).toFixed(1)}m
-                      </span>
-                    )}
-                    {log.defect_qty != null && Number(log.defect_qty) > 0 && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-100 text-red-700">
-                        <AlertTriangle size={11} /> 불량 {Number(log.defect_qty)}ea
-                      </span>
-                    )}
-                    {log.inventory_applied && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-100 text-green-700">
-                        <PackageCheck size={11} /> 재고반영 &#10003;
-                      </span>
-                    )}
-                    {!log.inventory_applied && log.status === 'COMPLETED' && (
-                      <button
-                        onClick={async () => {
-                          try {
-                            const wo = woMap[log.wo_id];
-                            await api.post('/inventory/apply-process-result', {
-                              log_id: log.log_id,
-                              wo_id: log.wo_id,
-                              process_code: log.process_code,
-                              lot_number: wo?.lot_number || '',
-                              input_items: [],
-                              output_item_id: null,
-                              output_qty: log.produced_qty || 0,
-                              loss_qty: log.weighed_loss || 0,
-                            });
-                            fetchLogs();
-                          } catch { alert('재고 반영 실패'); }
-                        }}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 cursor-pointer"
-                      >
-                        <Package size={11} /> 재고미반영
-                      </button>
-                    )}
-                  </div>
-                ) : null}
-
-                {/* LOT 정보 */}
-                {log.wo_id && woMap[log.wo_id] && (
-                  <div className="px-4 py-2 border-b">
-                    <div className="flex items-center gap-1.5 text-xs font-medium text-gray-600 mb-1">
-                      <Package className="h-3.5 w-3.5" /> LOT 추적 정보
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>
-                        <span className="text-gray-400">생산 LOT:</span>
-                        <span className="ml-1 font-mono font-medium">{woMap[log.wo_id]?.lot_number || '-'}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">납품처:</span>
-                        <span className="ml-1">{woMap[log.wo_id]?.customer_name || '-'}</span>
-                      </div>
-                    </div>
-                    {woMap[log.wo_id]?.input_lot_numbers && (() => {
-                      const raw = woMap[log.wo_id].input_lot_numbers!;
-                      let lotItems: Array<{ item_name?: string; item_code?: string; lot_number?: string; qty?: number; shortage?: boolean }> = [];
-                      try { const p = JSON.parse(raw); if (Array.isArray(p)) lotItems = p; } catch { /* fallback */ }
-                      return (
-                        <div className="mt-1">
-                          <span className="text-xs text-gray-400">투입 원료 LOT:</span>
-                          {lotItems.length > 0 ? (
-                            <div className="flex flex-wrap gap-1 mt-0.5">
-                              {lotItems.filter(it => it.lot_number).map((it, i) => (
-                                <span key={i} className="rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-mono text-amber-800">
-                                  {it.item_name || it.item_code} → {it.lot_number}
-                                </span>
-                              ))}
-                              {lotItems.some(it => it.shortage) && (
-                                <span className="rounded bg-red-50 border border-red-200 px-1.5 py-0.5 text-[10px] text-red-600 font-medium">
-                                  일부 자재 부족
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="flex flex-wrap gap-1 mt-0.5">
-                              {raw.split(',').map((lot: string, i: number) => (
-                                <span key={i} className="rounded bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-mono text-amber-800">
-                                  {lot.trim()}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                <div className="px-4 py-3 flex flex-wrap gap-2">
-                  {log.status === 'READY' && (
-                    <button
-                      onClick={() => handleStart(log)}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-md text-xs font-medium hover:bg-green-700"
-                    >
-                      <Play size={14} /> 시작
-                    </button>
-                  )}
-                  {log.status === 'RUNNING' && (
-                    <>
-                      <button
-                        onClick={() => setPauseTarget(log)}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-yellow-500 text-white rounded-md text-xs font-medium hover:bg-yellow-600"
-                      >
-                        <Pause size={14} /> 일시정지
-                      </button>
-                      <button
-                        onClick={() => setChangeWorkerTarget(log)}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-purple-500 text-white rounded-md text-xs font-medium hover:bg-purple-600"
-                      >
-                        <UserCheck size={14} /> 작업자 변경
-                      </button>
-                      <button
-                        onClick={() => setCompleteTarget(log)}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-medium hover:bg-blue-700"
-                      >
-                        <CheckCircle size={14} /> 완료
-                      </button>
-                    </>
-                  )}
-                  {log.status === 'PAUSED' && (
-                    <>
-                      <button
-                        onClick={async () => {
-                          try {
-                            await api.post(`/process-logs/${log.log_id}/resume`, {});
-                            fetchLogs();
-                          } catch { alert('재개 실패'); }
-                        }}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-md text-xs font-medium hover:bg-green-700"
-                      >
-                        <RotateCcw size={14} /> 재개
-                      </button>
-                      <button
-                        onClick={() => setCompleteTarget(log)}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-medium hover:bg-blue-700"
-                      >
-                        <CheckCircle size={14} /> 완료
-                      </button>
-                    </>
-                  )}
-                  <button
-                    onClick={() => toggleEvents(log.log_id)}
-                    className="flex items-center gap-1 px-3 py-1.5 border rounded-md text-xs font-medium text-gray-600 hover:bg-gray-50 ml-auto"
-                  >
-                    이벤트 로그
-                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  </button>
-                </div>
-
-                {/* Event Timeline */}
-                {isExpanded && (
-                  <div className="px-4 pb-4 border-t bg-gray-50">
-                    <EventTimeline events={events[log.log_id] || []} />
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {logs.map((log) => renderLogCard(log))}
         </div>
       )}
 
@@ -668,6 +833,8 @@ function CreateProcessLogModal({ onClose, onCreated }: { onClose: () => void; on
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [processBoms, setProcessBoms] = useState<ProcessBomOption[]>([]);
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
+  const [selectedOrderName, setSelectedOrderName] = useState<string>('');
 
   useEffect(() => {
     api.get<{ data: Worker[] }>('/workers?is_active=true').then((r) => setWorkers(r.data));
@@ -745,6 +912,16 @@ function CreateProcessLogModal({ onClose, onCreated }: { onClose: () => void; on
     }
   }, [form.wo_id]);
 
+  useEffect(() => {
+    if (selectedWo) {
+      setSelectedOrderId(selectedWo.order_id ?? null);
+      setSelectedOrderName(selectedWo.customer_name || selectedWo.item_name || '');
+    } else {
+      setSelectedOrderId(null);
+      setSelectedOrderName('');
+    }
+  }, [form.wo_id, selectedWo]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedShifts.length === 0 || selectedWorkerIds.length === 0) return;
@@ -792,6 +969,10 @@ function CreateProcessLogModal({ onClose, onCreated }: { onClose: () => void; on
               ))}
             </select>
           </label>
+
+          {selectedOrderId && (
+            <PipelineStatusCard orderId={selectedOrderId} orderName={selectedOrderName} />
+          )}
 
           {selectedWo?.input_lot_numbers && (() => {
             // input_lot_numbers: JSON array string 또는 comma-separated string

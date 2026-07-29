@@ -95,7 +95,7 @@ import AccountingSetupPage from '@/pages/accounting/AccountingSetupPage';
 import AccountingRevenuePage from '@/pages/accounting/AccountingRevenuePage';
 import AccountingCostPage from '@/pages/accounting/AccountingCostPage';
 import AccountingPLPage from '@/pages/accounting/AccountingPLPage';
-import { SupportPage } from '@/pages/support/SupportPage';
+import SupportPage from '@/pages/support/SupportPage';
 
 
 
