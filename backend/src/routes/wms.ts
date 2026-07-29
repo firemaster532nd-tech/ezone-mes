@@ -43,21 +43,25 @@ async function migrateWms() {
       }
     }
 
-    // 3. 비렉 위치 초기 데이터 (6곳)
+    // 3. 비렉 위치 초기 데이터 (8곳) — 야상 1·2공장 추가 (2026-07)
     const fieldLocations = [
-      { code: 'FIELD-2F-LEFT',  name: '2공장안 왼쪽필드' },
-      { code: 'FIELD-2F-RIGHT', name: '2공장안 오른쪽필드' },
-      { code: 'FIELD-2F-TENT',  name: '2공장 천막' },
-      { code: 'FIELD-1F-IN',    name: '1공장 안' },
-      { code: 'FIELD-1F-MAT',   name: '1공장 원재료창고' },
-      { code: 'FIELD-1F-TENT',  name: '1공장 천막' },
+      // 1공장
+      { code: 'FIELD-1F-IN',      name: '1공장 안' },
+      { code: 'FIELD-1F-MAT',     name: '1공장 원재료창고' },
+      { code: 'FIELD-1F-TENT',    name: '1공장앞 천막' },
+      { code: 'FIELD-1F-OUTDOOR', name: '야상 1공장 (야적)' },
+      // 2공장
+      { code: 'FIELD-2F-LEFT',    name: '2공장안 왼쪽' },
+      { code: 'FIELD-2F-RIGHT',   name: '2공장안 오른쪽' },
+      { code: 'FIELD-2F-TENT',    name: '2공장앞 천막' },
+      { code: 'FIELD-2F-OUTDOOR', name: '야상 2공장 (야적)' },
     ];
     for (let i = 0; i < fieldLocations.length; i++) {
       const { code, name } = fieldLocations[i];
       await pool.query(`
         INSERT INTO storage_locations (location_code, location_type, display_name, sort_order)
         VALUES ($1, 'FIELD', $2, $3)
-        ON CONFLICT (location_code) DO NOTHING
+        ON CONFLICT (location_code) DO UPDATE SET display_name = EXCLUDED.display_name
       `, [code, name, 200 + i]);
     }
 

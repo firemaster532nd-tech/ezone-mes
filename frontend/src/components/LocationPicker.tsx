@@ -26,12 +26,16 @@ const RACK_PALLETS = [
 ];
 
 const FIELD_OPTIONS = [
-  { value: 'FIELD-2F-LEFT',  label: '2공장안 왼쪽필드' },
-  { value: 'FIELD-2F-RIGHT', label: '2공장안 오른쪽필드' },
-  { value: 'FIELD-2F-TENT',  label: '2공장 천막' },
-  { value: 'FIELD-1F-IN',    label: '1공장 안' },
-  { value: 'FIELD-1F-MAT',   label: '1공장 원재료창고' },
-  { value: 'FIELD-1F-TENT',  label: '1공장 천막' },
+  // ─── 1공장 ───────────────────────────────────────────────────
+  { value: 'FIELD-1F-IN',      label: '1공장 안' },
+  { value: 'FIELD-1F-MAT',     label: '1공장 원재료창고' },
+  { value: 'FIELD-1F-TENT',    label: '1공장앞 천막' },
+  { value: 'FIELD-1F-OUTDOOR', label: '야상 1공장 (야적)' },
+  // ─── 2공장 ───────────────────────────────────────────────────
+  { value: 'FIELD-2F-LEFT',    label: '2공장안 왼쪽' },
+  { value: 'FIELD-2F-RIGHT',   label: '2공장안 오른쪽' },
+  { value: 'FIELD-2F-TENT',    label: '2공장앞 천막' },
+  { value: 'FIELD-2F-OUTDOOR', label: '야상 2공장 (야적)' },
 ];
 
 type LocType = 'RACK' | 'FIELD' | 'NONE';

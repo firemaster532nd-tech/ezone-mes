@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { ClipboardList, PlusCircle, CheckCircle2, Package, Layers, Calendar, User } from 'lucide-react';
+import { LocationPicker } from '@/components/LocationPicker';
 
 interface AssemblyTypeConfig {
   type: string;
@@ -60,16 +61,57 @@ const ASSEMBLY_TYPES: AssemblyTypeConfig[] = [
   }
 ];
 
-// 랙 로케이션 옵션 (54개 셀 중 대표 셀)
-const RACK_OPTIONS = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'P1', 'P2', 'P3', 'Q1', 'Q2', 'Q3', 'R1', 'R2', 'R3'];
+// ─── 플래싱 서브타입 및 규격 ──────────────────────────────────────────────────
+const FLASHING_SUBTYPES = [
+  { code: 'FZ', label: 'Z형 플래싱', color: 'bg-amber-100 text-amber-800' },
+  { code: 'FI', label: 'I형 플래싱', color: 'bg-orange-100 text-orange-800' },
+  { code: 'FL', label: 'L형 플래싱', color: 'bg-red-100 text-red-800' },
+] as const;
+
+const FLASHING_SPECS: Record<string, { value: string; label: string }[]> = {
+  FZ: [
+    { value: 'W170×L1000 (t0.5)', label: 'W170×L1000 (t0.5) — 표준' },
+    { value: 'W205×L1000 (t0.5)', label: 'W205×L1000 (t0.5)' },
+    { value: 'W250×L1000 (t0.5)', label: 'W250×L1000 (t0.5)' },
+    { value: 'W300×L1000 (t0.5)', label: 'W300×L1000 (t0.5)' },
+    { value: 'CUSTOM', label: '직접 입력' },
+  ],
+  FI: [
+    { value: 'W95×L195',   label: 'W95×L195 (소형)' },
+    { value: 'W175×L1100', label: 'W175×L1100 (대형)' },
+    { value: 'W125×L500',  label: 'W125×L500' },
+    { value: 'CUSTOM', label: '직접 입력' },
+  ],
+  FL: [
+    { value: 'W190×L380 (SUS)', label: 'W190×L380 (SUS)' },
+    { value: 'W175×L500 (SUS)', label: 'W175×L500 (SUS)' },
+    { value: 'W125×L380',      label: 'W125×L380' },
+    { value: 'CUSTOM', label: '직접 입력' },
+  ],
+};
+
+const GAP_SHEET_SPECS = [
+  { value: 't5.0×W125',          label: 't5.0×W125 (표준)' },
+  { value: 't5.0×W125×L300',     label: 't5.0×W125×L300 (BD 상하 소형)' },
+  { value: 't5.0×W125×L1000',    label: 't5.0×W125×L1000 (BD 상하 대형)' },
+  { value: 't5.0×W125×L230',     label: 't5.0×W125×L230 (BD 좌우)' },
+  { value: 't5.0×W125×L180',     label: 't5.0×W125×L180 (BD 좌우 소형)' },
+  { value: 't5.0×W185×L150',     label: 't5.0×W185×L150 (HTG 입상)' },
+  { value: 'CUSTOM', label: '직접 입력' },
+];
+
+// 랙 로케이션 옵션 (RACK_OPTIONS는 LocationPicker로 대체 — 이하 미사용)
 
 export function AssemblyLogPage() {
   const [selectedType, setSelectedType] = useState<AssemblyTypeConfig>(ASSEMBLY_TYPES[0]);
   const [assemblyDate, setAssemblyDate] = useState(new Date().toISOString().slice(0, 10));
-  const [spec, setSpec] = useState('W170×L1000');
+  // 플래싱 서브타입 (FZ/FI/FL)
+  const [flashingSubType, setFlashingSubType] = useState<'FZ'|'FI'|'FL'>('FZ');
+  const [spec, setSpec] = useState('W170×L1000 (t0.5)');
+  const [specCustom, setSpecCustom] = useState('');
   const [inputQty, setInputQty] = useState<number>(10);
   const [producedQty, setProducedQty] = useState<number>(10);
-  const [rackLocation, setRackLocation] = useState('P1');
+  const [rackLocation, setRackLocation] = useState('');
   const [workerName, setWorkerName] = useState('조립담당자');
   const [remarks, setRemarks] = useState('');
   
@@ -80,7 +122,7 @@ export function AssemblyLogPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    // 공정 타입 변경 시 투입 LOT 폼 업데이트
+    // 공정 타입 변경 시 투입 LOT 폼 및 규격 기본값 초기화
     setInputLots(
       selectedType.inputMaterials.map(matLabel => ({
         label: matLabel,
@@ -88,7 +130,23 @@ export function AssemblyLogPage() {
         qty: producedQty
       }))
     );
+    // 공정별 규격 기본값 초기화
+    if (selectedType.type === 'FLASHING') {
+      setSpec(FLASHING_SPECS[flashingSubType]?.[0]?.value ?? '');
+    } else if (selectedType.type === 'GAP_SHEET') {
+      setSpec(GAP_SHEET_SPECS[0].value);
+    } else {
+      setSpec('');
+    }
   }, [selectedType, producedQty]);
+
+  // 플래싱 서브타입 변경 시 규격 기본값 업데이트
+  useEffect(() => {
+    if (selectedType.type === 'FLASHING') {
+      setSpec(FLASHING_SPECS[flashingSubType]?.[0]?.value ?? '');
+      setSpecCustom('');
+    }
+  }, [flashingSubType]);
 
   useEffect(() => {
     fetchLogs();
@@ -115,13 +173,16 @@ export function AssemblyLogPage() {
 
     try {
       setSubmitting(true);
+      const finalSpec = (spec === 'CUSTOM') ? specCustom : spec;
       const res = await api.post('/api/production/assembly-logs', {
-        assembly_type: selectedType.type,
+        assembly_type: selectedType.type === 'FLASHING'
+          ? `FLASHING_${flashingSubType}`  // e.g. FLASHING_FZ
+          : selectedType.type,
         assembly_date: assemblyDate,
-        spec,
+        spec: finalSpec,
         input_qty: inputQty,
         produced_qty: producedQty,
-        rack_location: rackLocation,
+        rack_location: rackLocation || null,
         input_lots: inputLots,
         worker_name: workerName,
         remarks
@@ -218,49 +279,138 @@ export function AssemblyLogPage() {
               </div>
             </div>
 
+            {/* 조립 규격 — 공정별 드롭다운 */}
             <div className="grid grid-cols-3 gap-4">
-              <div>
+              <div className={selectedType.type === 'FLASHING' ? 'col-span-3' : ''}>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">조립 규격 (Spec)</label>
-                <input
-                  type="text"
-                  value={spec}
-                  onChange={e => setSpec(e.target.value)}
-                  placeholder="예: W170×L1000 또는 100H"
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                  required
-                />
+
+                {/* 플래싱 전용: Z/I/L 서브타입 선택 */}
+                {selectedType.type === 'FLASHING' && (
+                  <div className="mb-2">
+                    <div className="flex gap-2 mb-2">
+                      {FLASHING_SUBTYPES.map(ft => (
+                        <button
+                          key={ft.code}
+                          type="button"
+                          onClick={() => setFlashingSubType(ft.code)}
+                          className={`flex-1 py-2 rounded-lg text-sm font-bold border transition ${
+                            flashingSubType === ft.code
+                              ? `${ft.color} ring-2 ring-offset-1 ring-amber-400`
+                              : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                          }`}
+                        >
+                          {ft.label}
+                        </button>
+                      ))}
+                    </div>
+                    <select
+                      value={spec}
+                      onChange={e => setSpec(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
+                    >
+                      {FLASHING_SPECS[flashingSubType]?.map(s => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
+                    </select>
+                    {spec === 'CUSTOM' && (
+                      <input
+                        type="text"
+                        value={specCustom}
+                        onChange={e => setSpecCustom(e.target.value)}
+                        placeholder="규격 직접 입력 (예: W180×L1200)"
+                        className="mt-1 w-full px-3 py-2 border border-amber-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* 틈새복합시트 전용 규격 드롭다운 */}
+                {selectedType.type === 'GAP_SHEET' && (
+                  <div>
+                    <select
+                      value={spec}
+                      onChange={e => setSpec(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
+                    >
+                      {GAP_SHEET_SPECS.map(s => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
+                    </select>
+                    {spec === 'CUSTOM' && (
+                      <input
+                        type="text"
+                        value={specCustom}
+                        onChange={e => setSpecCustom(e.target.value)}
+                        placeholder="규격 직접 입력"
+                        className="mt-1 w-full px-3 py-2 border border-sky-300 rounded-lg text-sm"
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* 기타 공정: 자유 텍스트 */}
+                {selectedType.type !== 'FLASHING' && selectedType.type !== 'GAP_SHEET' && (
+                  <input
+                    type="text"
+                    value={spec}
+                    onChange={e => setSpec(e.target.value)}
+                    placeholder="예: 100H, W170×L1000"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                  />
+                )}
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">생산수량 (EA)</label>
-                <input
-                  type="number"
-                  value={producedQty}
-                  onChange={e => {
-                    const q = parseInt(e.target.value) || 0;
-                    setProducedQty(q);
-                    setInputQty(q);
-                  }}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
-                  min={1}
-                  required
-                />
+
+              {/* 생산수량 */}
+              {selectedType.type !== 'FLASHING' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">생산수량 (EA)</label>
+                  <input
+                    type="number"
+                    value={producedQty}
+                    onChange={e => {
+                      const q = parseInt(e.target.value) || 0;
+                      setProducedQty(q);
+                      setInputQty(q);
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                    min={1}
+                    required
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* 플래싱일 때 수량을 별도 줄로 */}
+            {selectedType.type === 'FLASHING' && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">생산수량 (EA)</label>
+                  <input
+                    type="number"
+                    value={producedQty}
+                    onChange={e => {
+                      const q = parseInt(e.target.value) || 0;
+                      setProducedQty(q);
+                      setInputQty(q);
+                    }}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                    min={1}
+                    required
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center">
-                  <Package className="w-3.5 h-3.5 mr-1 text-slate-400" /> 입고 랙 위치 (Rack)
-                </label>
-                <select
-                  value={rackLocation}
-                  onChange={e => setRackLocation(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
-                >
-                  {RACK_OPTIONS.map(r => (
-                    <option key={r} value={r}>
-                      {r} 랙 셀 (2파레트 수용)
-                    </option>
-                  ))}
-                </select>
-              </div>
+            )}
+
+            {/* 입고 위치 — LocationPicker */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center">
+                <Package className="w-3.5 h-3.5 mr-1 text-slate-400" /> 입고 위치 (적재장소)
+              </label>
+              <LocationPicker
+                value={rackLocation}
+                onChange={(code) => setRackLocation(code)}
+                allowNone={true}
+              />
             </div>
 
             {/* Input Materials LOT Matrix */}
