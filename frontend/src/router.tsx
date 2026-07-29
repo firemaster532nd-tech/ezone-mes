@@ -25,6 +25,7 @@ import { UsersPage } from '@/pages/settings/UsersPage';
 import { DepartmentsPage } from '@/pages/settings/DepartmentsPage';
 import { PermissionsPage } from '@/pages/settings/PermissionsPage';
 import { ProcessExecutionPage } from '@/pages/production/ProcessExecutionPage';
+import { ProcessStagePage } from '@/pages/production/ProcessStagePage';
 import { ProductionDashboardPage } from '@/pages/production/ProductionDashboardPage';
 import { DailyWorkforcePage } from '@/pages/production/DailyWorkforcePage';
 import { YieldDashboardPage } from '@/pages/production/YieldDashboardPage';
@@ -134,6 +135,7 @@ export const router = createBrowserRouter([
       { path: 'production/work-orders', element: <WorkOrdersPage /> },
       { path: 'production/daily-log', element: <DailyLogPage /> },
       { path: 'production/process-execution', element: <ProcessExecutionPage /> },
+      { path: 'production/process-stages', element: <ProcessStagePage /> },
       { path: 'production/production-dashboard', element: <ProductionDashboardPage /> },
       { path: 'production/tbm', element: <TbmPage /> },
       { path: 'production/tbm-print/:id', element: <TbmPrintPage /> },
