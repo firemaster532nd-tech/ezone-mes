@@ -90,15 +90,65 @@ const FLASHING_SPECS: Record<string, { value: string; label: string }[]> = {
   ],
 };
 
-const GAP_SHEET_SPECS = [
-  { value: 't5.0×W125',          label: 't5.0×W125 (표준)' },
-  { value: 't5.0×W125×L300',     label: 't5.0×W125×L300 (BD 상하 소형)' },
-  { value: 't5.0×W125×L1000',    label: 't5.0×W125×L1000 (BD 상하 대형)' },
-  { value: 't5.0×W125×L230',     label: 't5.0×W125×L230 (BD 좌우)' },
-  { value: 't5.0×W125×L180',     label: 't5.0×W125×L180 (BD 좌우 소형)' },
-  { value: 't5.0×W185×L150',     label: 't5.0×W185×L150 (HTG 입상)' },
-  { value: 'CUSTOM', label: '직접 입력' },
-];
+// ─── 틈새복합시트 3종 서브타입 ──────────────────────────────────────────────────
+const GAP_SHEET_SUBTYPES = [
+  {
+    code: 'BD_CV1S',
+    label: 'BD CV-1S용',
+    desc: '버스덝트 수직 1소켓 (200A)',
+    color: 'bg-sky-100 text-sky-800',
+    bom: [
+      '차열시트 t5.0×W125×L300 ×4새트 (상하)',
+      '세라믹 96K t25 H150 L300 ×2 (상하)',
+      '차열시트 t5.0×W125×L230 ×4세트 (좌우)',
+      '세라믹 96K t25 H150 L230 ×2 (좌우)',
+      'SUS304 플래싱 W190×L380 ×4개',
+    ],
+  },
+  {
+    code: 'BD_RV3S',
+    label: 'BD RV-3S용',
+    desc: '버스덝트 수직 3소켓 (025M)',
+    color: 'bg-purple-100 text-purple-800',
+    bom: [
+      '차열시트 t5.0×W125×L1000 ×4세트 (상하)',
+      '세라믹 96K t25 H150 L1000 ×2 (상하)',
+      '차열시트 t5.0×W125×L180 ×4세트 (좌우/틈새)',
+      '세라믹 96K t25 H150 L180 ×2 (좌우)',
+      '아연도금 플래싱 W175×L1100(상하)·4 + W95×L195(좌우)·4',
+    ],
+  },
+  {
+    code: 'HTG',
+    label: '입상(HTG)용',
+    desc: 'HTG 입상형 관통 구조',
+    color: 'bg-emerald-100 text-emerald-800',
+    bom: [
+      '차열시트 t5.0×W185×L150',
+      '세라믹 96K t25 H150',
+    ],
+  },
+] as const;
+
+type GapSheetSubType = 'BD_CV1S' | 'BD_RV3S' | 'HTG';
+
+const GAP_SHEET_SPECS: Record<GapSheetSubType, { value: string; label: string }[]> = {
+  BD_CV1S: [
+    { value: 't5.0×W125×L300 (상하)', label: 't5.0×W125×L300 — 상하 차열시트' },
+    { value: 't5.0×W125×L230 (좌우)', label: 't5.0×W125×L230 — 좌우 차열시트' },
+    { value: 'CUSTOM', label: '직접 입력' },
+  ],
+  BD_RV3S: [
+    { value: 't5.0×W125×L1000 (상하)', label: 't5.0×W125×L1000 — 상하 차열시트' },
+    { value: 't5.0×W125×L180 (좌우/틈새)', label: 't5.0×W125×L180 — 좌우/틈새 차열시트' },
+    { value: 'CUSTOM', label: '직접 입력' },
+  ],
+  HTG: [
+    { value: 't5.0×W185×L150', label: 't5.0×W185×L150 — 입상 표준' },
+    { value: 't5.0×W125×L150', label: 't5.0×W125×L150' },
+    { value: 'CUSTOM', label: '직접 입력' },
+  ],
+};
 
 // 랙 로케이션 옵션 (RACK_OPTIONS는 LocationPicker로 대체 — 이하 미사용)
 
@@ -107,6 +157,8 @@ export function AssemblyLogPage() {
   const [assemblyDate, setAssemblyDate] = useState(new Date().toISOString().slice(0, 10));
   // 플래싱 서브타입 (FZ/FI/FL)
   const [flashingSubType, setFlashingSubType] = useState<'FZ'|'FI'|'FL'>('FZ');
+  // 틈새복합시트 서브타입 (BD_CV1S/BD_RV3S/HTG)
+  const [gapSheetSubType, setGapSheetSubType] = useState<GapSheetSubType>('BD_CV1S');
   const [spec, setSpec] = useState('W170×L1000 (t0.5)');
   const [specCustom, setSpecCustom] = useState('');
   const [inputQty, setInputQty] = useState<number>(10);
@@ -134,7 +186,7 @@ export function AssemblyLogPage() {
     if (selectedType.type === 'FLASHING') {
       setSpec(FLASHING_SPECS[flashingSubType]?.[0]?.value ?? '');
     } else if (selectedType.type === 'GAP_SHEET') {
-      setSpec(GAP_SHEET_SPECS[0].value);
+      setSpec(GAP_SHEET_SPECS[gapSheetSubType]?.[0]?.value ?? '');
     } else {
       setSpec('');
     }
@@ -147,6 +199,14 @@ export function AssemblyLogPage() {
       setSpecCustom('');
     }
   }, [flashingSubType]);
+
+  // 틈새복합시트 서브타입 변경 시 규격 기본값 업데이트
+  useEffect(() => {
+    if (selectedType.type === 'GAP_SHEET') {
+      setSpec(GAP_SHEET_SPECS[gapSheetSubType]?.[0]?.value ?? '');
+      setSpecCustom('');
+    }
+  }, [gapSheetSubType]);
 
   useEffect(() => {
     fetchLogs();
@@ -174,10 +234,12 @@ export function AssemblyLogPage() {
     try {
       setSubmitting(true);
       const finalSpec = (spec === 'CUSTOM') ? specCustom : spec;
+      const assemblyTypeStr =
+        selectedType.type === 'FLASHING' ? `FLASHING_${flashingSubType}` :
+        selectedType.type === 'GAP_SHEET' ? `GAP_SHEET_${gapSheetSubType}` :
+        selectedType.type;
       const res = await api.post('/api/production/assembly-logs', {
-        assembly_type: selectedType.type === 'FLASHING'
-          ? `FLASHING_${flashingSubType}`  // e.g. FLASHING_FZ
-          : selectedType.type,
+        assembly_type: assemblyTypeStr,
         assembly_date: assemblyDate,
         spec: finalSpec,
         input_qty: inputQty,
@@ -324,15 +386,46 @@ export function AssemblyLogPage() {
                   </div>
                 )}
 
-                {/* 틈새복합시트 전용 규격 드롭다운 */}
+                {/* 틈새복합시트 3종 서브타입 선택 */}
                 {selectedType.type === 'GAP_SHEET' && (
                   <div>
+                    {/* 서브타입 선택 */}
+                    <div className="flex gap-2 mb-2">
+                      {GAP_SHEET_SUBTYPES.map(st => (
+                        <button
+                          key={st.code}
+                          type="button"
+                          onClick={() => setGapSheetSubType(st.code as GapSheetSubType)}
+                          className={`flex-1 py-2 rounded-lg text-xs font-bold border transition ${
+                            gapSheetSubType === st.code
+                              ? `${st.color} ring-2 ring-offset-1 ring-sky-400`
+                              : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'
+                          }`}
+                        >
+                          <div>{st.label}</div>
+                          <div className="text-[10px] font-normal opacity-70 mt-0.5">{st.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                    {/* BOM 구성 안내 */}
+                    {(() => {
+                      const st = GAP_SHEET_SUBTYPES.find(s => s.code === gapSheetSubType);
+                      return st ? (
+                        <div className="mb-2 p-2 bg-sky-50 border border-sky-100 rounded-lg">
+                          <p className="text-[10px] font-bold text-sky-700 mb-1">📋 {st.label} BOM 구성</p>
+                          {st.bom.map((b, i) => (
+                            <p key={i} className="text-[10px] text-sky-600">• {b}</p>
+                          ))}
+                        </div>
+                      ) : null;
+                    })()}
+                    {/* 규격 드롭다운 */}
                     <select
                       value={spec}
                       onChange={e => setSpec(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-sky-500 bg-white"
                     >
-                      {GAP_SHEET_SPECS.map(s => (
+                      {GAP_SHEET_SPECS[gapSheetSubType]?.map(s => (
                         <option key={s.value} value={s.value}>{s.label}</option>
                       ))}
                     </select>
