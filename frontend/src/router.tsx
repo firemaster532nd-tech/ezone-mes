@@ -95,6 +95,7 @@ import AccountingSetupPage from '@/pages/accounting/AccountingSetupPage';
 import AccountingRevenuePage from '@/pages/accounting/AccountingRevenuePage';
 import AccountingCostPage from '@/pages/accounting/AccountingCostPage';
 import AccountingPLPage from '@/pages/accounting/AccountingPLPage';
+import { SupportPage } from '@/pages/support/SupportPage';
 
 
 
@@ -226,6 +227,8 @@ export const router = createBrowserRouter([
       // 공지/쪽지함
       { path: 'announcements',         element: <AnnouncementsPage /> },
       { path: 'announcements/:id',     element: <AnnouncementsPage /> },
+      // 고객센터
+      { path: 'support',               element: <SupportPage /> },
       // 슈퍼관리자 전용
       { path: 'superadmin/reset', element: <SuperAdminResetPage /> },
       // 회계 모듈

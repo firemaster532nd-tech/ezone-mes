@@ -67,6 +67,7 @@ import assemblyLogRoutes from './routes/assembly-logs.js';
 import { wmsRoutes } from './routes/wms.js';
 import { productionWorkforceRoutes } from './routes/production-workforce.js';
 import accountingRoutes from './routes/accounting.js';
+import { supportRoutes } from './routes/support.js';
 
 
 let appInstance: any = null;
@@ -151,6 +152,7 @@ export const initApp = async () => {
   await app.register(assemblyLogRoutes);
   await app.register(wmsRoutes);
   await app.register(productionWorkforceRoutes);
+  await app.register(supportRoutes);
 
   // ── 회계 모듈 ──
   await app.register(accountingRoutes, { prefix: '/api/accounting' });
