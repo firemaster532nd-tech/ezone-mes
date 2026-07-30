@@ -92,36 +92,26 @@ import { generateStandardLotLabelHtml, generateSerializedLotLabelBatchHtml, gene
 // ─── LOT 라벨 인쇄 모달 ───────────────────────────────────────────────────────
 function LabelModal({ lot, onClose }: { lot: MaterialLot; onClose: () => void }) {
   const [qrUrl, setQrUrl] = useState<string>('');
-  const [printCount, setPrintCount] = useState<number>(1);
+  const totalQty = Math.max(1, Math.round(Number(lot.qty_current || 1)));
+  const [printCount, setPrintCount] = useState<number>(totalQty);
 
   useEffect(() => {
     generateQrDataUrl(lot.lot_number, 200).then(setQrUrl);
   }, [lot.lot_number]);
 
   const doPrint = async () => {
-    const totalQty = Number(lot.qty_current || 1);
     const count = Math.max(1, printCount);
     
-    const labelHtml = count === 1
-      ? await generateStandardLotLabelHtml(
-          lot.lot_number,
-          lot.item_name,
-          fmtSpec(lot),
-          lot.location || '-',
-          totalQty.toLocaleString(),
-          lot.unit,
-          fmtDate(lot.received_date)
-        )
-      : await generateSerializedLotLabelBatchHtml(
-          lot.lot_number,
-          lot.item_name,
-          fmtSpec(lot),
-          lot.location || '-',
-          totalQty,
-          lot.unit,
-          fmtDate(lot.received_date),
-          count
-        );
+    const labelHtml = await generateSerializedLotLabelBatchHtml(
+      lot.lot_number,
+      lot.item_name,
+      fmtSpec(lot),
+      lot.location || '-',
+      totalQty,
+      lot.unit,
+      fmtDate(lot.received_date),
+      count
+    );
 
     const w = window.open('', '_blank', 'width=500,height=600');
     if (!w) return;

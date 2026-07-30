@@ -207,9 +207,6 @@ export async function generateStandardLotLabelHtml(
 </div>`;
 }
 
-/**
- * 총 수량(N)에 대해 1/N, 2/N ... N/N 개별 순번 부여 일괄 라벨 HTML 생성
- */
 export async function generateSerializedLotLabelBatchHtml(
   lotNo: string,
   itemName: string,
@@ -221,10 +218,11 @@ export async function generateSerializedLotLabelBatchHtml(
   printCountOverride?: number
 ): Promise<string> {
   const cards: string[] = [];
-  const printCount = printCountOverride && printCountOverride > 0 ? printCountOverride : Math.max(1, totalQty);
+  const count = printCountOverride && printCountOverride > 0 ? printCountOverride : Math.max(1, totalQty);
+  const denom = totalQty > 0 ? Math.round(totalQty) : count;
   
-  for (let i = 1; i <= printCount; i++) {
-    const seqBadge = `${i}/${printCount}`;
+  for (let i = 1; i <= count; i++) {
+    const seqBadge = `${i}/${denom}`;
     // 사규 C302 LOT 부여 규칙 준수: LOT 번호에 임의 접미사(-001)나 랙 표시 결합 금지
     const cardHtml = await generateStandardLotLabelHtml(
       lotNo,
