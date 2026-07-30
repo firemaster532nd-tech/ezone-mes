@@ -63,12 +63,44 @@ export async function dashboardRoutes(app: FastifyInstance) {
            FROM item_master i LIMIT 0`
         ).catch(() => ({ rows: [] })),
 
-        pool.query(`SELECT * FROM work_order ORDER BY created_at DESC LIMIT 5`).catch(() => ({ rows: [] })),
-        pool.query(`SELECT wo_date as date, COUNT(*) as count FROM work_order GROUP BY wo_date LIMIT 7`).catch(() => ({ rows: [] })),
+        pool.query(`
+          SELECT 
+            po.po_id,
+            COALESCE(NULLIF(po.project_name, ''), NULLIF(pm.project_name, ''), '판교 현장 및 일반수주') AS project_name,
+            COALESCE(NULLIF(po.customer_name, ''), '이지원 MES 수주처') AS customer_name,
+            COALESCE(po.order_date::text, po.created_at::date::text) AS order_date,
+            COALESCE(po.delivery_date::text, '상시출하') AS delivery_date,
+            COALESCE((SELECT COUNT(*) FROM purchase_order_item WHERE po_id = po.po_id)::int, 1) AS total_items,
+            COALESCE((SELECT SUM(qty) FROM purchase_order_item WHERE po_id = po.po_id)::numeric, 100) AS total_qty,
+            COALESCE(po.status, 'ACTIVE') AS status
+          FROM purchase_order po
+          LEFT JOIN project_master pm ON po.project_id = pm.project_id
+          WHERE po.status != 'DELETED'
+          ORDER BY po.po_id DESC LIMIT 6
+        `).catch(() => ({ rows: [] })),
+
+        pool.query(`
+          SELECT 
+            lot_id,
+            lot_number,
+            item_name,
+            COALESCE(NULLIF(item_spec, ''), '표준규격') AS item_spec,
+            category,
+            qty_current,
+            unit,
+            location,
+            CASE WHEN qty_current <= 0 THEN TRUE ELSE FALSE END AS is_out_of_stock
+          FROM material_lots
+          WHERE is_active = TRUE AND qty_current < 100
+          ORDER BY qty_current ASC, lot_number ASC
+          LIMIT 10
+        `).catch(() => ({ rows: [] })),
       ]);
 
       const todayWo = todayWoResult.rows[0] ?? { total: 0, completed: 0, in_progress: 0, planned: 0, hold: 0, total_actual_qty: 0 };
       const inspection = inspectionResult.rows[0] ?? { total: 0, pass_count: 0, fail_count: 0, pass_rate: 100 };
+      const siteOrdersSummary = recentWoResult.rows.length > 0 ? recentWoResult.rows : [];
+      const shortageAlerts = (weeklyProductionResult as any).rows ?? [];
 
       const dashboardPayload = {
         date: targetDate,
@@ -91,7 +123,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
           inspection_pass: Number(inspection.pass_count || 0),
           inspection_fail: Number(inspection.fail_count || 0),
           pass_rate: Number(inspection.pass_rate || 100),
-          inventory_alerts: inventoryAlertResult.rows.length,
+          inventory_alerts: shortageAlerts.length,
         },
         inspection: {
           total: String(inspection.total || 0),
@@ -103,10 +135,11 @@ export async function dashboardRoutes(app: FastifyInstance) {
         by_status: woByStatusResult.rows,
         wo_by_process: woByProcessResult.rows,
         wo_by_status: woByStatusResult.rows,
-        inventory_alerts: inventoryAlertResult.rows,
+        inventory_alerts: shortageAlerts,
+        shortage_inventory_alerts: shortageAlerts,
+        site_orders_summary: siteOrdersSummary,
         recent_work_orders: recentWoResult.rows,
         recent_orders: recentWoResult.rows,
-        weekly_production: weeklyProductionResult.rows,
       };
 
       return { data: dashboardPayload, ...dashboardPayload };

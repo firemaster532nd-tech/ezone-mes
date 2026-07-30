@@ -65,12 +65,41 @@ interface DashboardData {
     pass_rate: string;
   };
   inventory_alerts: Array<{
-    item_id: number;
-    item_code: string;
+    item_id?: number;
+    lot_id?: number;
+    lot_number?: string;
+    item_code?: string;
     item_name: string;
-    item_category: string;
-    safety_stock: string;
-    balance: string;
+    item_spec?: string;
+    item_category?: string;
+    category?: string;
+    safety_stock?: string;
+    balance?: string;
+    qty_current?: number;
+    unit?: string;
+    location?: string;
+    is_out_of_stock?: boolean;
+  }>;
+  shortage_inventory_alerts?: Array<{
+    lot_id: number;
+    lot_number: string;
+    item_name: string;
+    item_spec: string;
+    category: string;
+    qty_current: number;
+    unit: string;
+    location: string;
+    is_out_of_stock: boolean;
+  }>;
+  site_orders_summary?: Array<{
+    po_id: number;
+    project_name: string;
+    customer_name: string;
+    order_date: string;
+    delivery_date: string;
+    total_items: number;
+    total_qty: number;
+    status: string;
   }>;
   recent_orders: Array<{
     wo_id: number;
@@ -200,44 +229,110 @@ export function DashboardPage() {
         />
       </div>
 
-      {/* 시스템 알림 */}
-      {alerts && (
-        <div className="mb-6 bg-white rounded-card border p-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            {!(alerts.failed_inspections_count > 0 ||
-               alerts.pending_approvals_count > 0 ||
-               alerts.safety_stock_alerts_count > 0 ||
-               alerts.stalled_processes_count > 0) ? (
-              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-50 text-green-700 text-xs font-medium">
-                ✅ 알림 없음
-              </span>
+      {/* ════ 🏢 현장별 발주서 접수 현황 & 🚨 재고 부족/품절 경고 위젯 ════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* 현장별 발주서 수주 현황 */}
+        <div className="bg-white rounded-card border p-4 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between border-b pb-3 mb-3">
+              <h3 className="text-shop-base font-bold text-slate-800 flex items-center gap-2">
+                <span className="text-xl">🏢</span> 현장별 발주서(수주) 접수 현황
+              </h3>
+              <button onClick={() => navigate('/sales/orders')} className="text-xs text-blue-600 font-bold hover:underline flex items-center gap-1">
+                전체 수주서 보기 <ChevronRight size={14} />
+              </button>
+            </div>
+            {data.site_orders_summary && data.site_orders_summary.length > 0 ? (
+              <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+                {data.site_orders_summary.map((order, idx) => (
+                  <div key={idx} className="p-3 bg-slate-50 hover:bg-blue-50/50 border border-slate-200 rounded-lg transition-colors flex items-center justify-between">
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="bg-blue-900 text-white font-bold text-xs px-2 py-0.5 rounded shadow-sm flex items-center gap-1">
+                          🏢 {order.project_name || '판교 현장 및 일반수주'}
+                        </span>
+                        <span className="text-xs text-slate-500 font-medium">| {order.customer_name || '이지원 MES 수주처'}</span>
+                      </div>
+                      <div className="text-xs text-slate-600 font-medium flex items-center gap-3">
+                        <span>📦 총 {order.total_items || 1}개 품목 ({Number(order.total_qty || 100).toLocaleString()} EA)</span>
+                        <span>📅 접수: {order.order_date || '-'}</span>
+                      </div>
+                    </div>
+                    <div className="text-right flex-shrink-0 ml-3">
+                      <span className="inline-block px-2 py-1 bg-emerald-100 text-emerald-800 font-bold text-xs rounded-full">
+                        {order.status || 'ACTIVE'}
+                      </span>
+                      <p className="text-[11px] text-slate-500 font-medium mt-1">납기: <span className="font-bold text-blue-700">{order.delivery_date || '상시출하'}</span></p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             ) : (
-              <>
-                {alerts.failed_inspections_count > 0 && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-red-100 text-red-700 text-xs font-medium">
-                    <AlertCircle size={12} /> 검사 불합격 {alerts.failed_inspections_count}건
-                  </span>
-                )}
-                {alerts.pending_approvals_count > 0 && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-orange-100 text-orange-700 text-xs font-medium">
-                    <AlertTriangle size={12} /> 결재 대기 {alerts.pending_approvals_count}건
-                  </span>
-                )}
-                {alerts.safety_stock_alerts_count > 0 && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-yellow-100 text-yellow-700 text-xs font-medium">
-                    <Package size={12} /> 안전재고 미달 {alerts.safety_stock_alerts_count}건
-                  </span>
-                )}
-                {alerts.stalled_processes_count > 0 && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-orange-100 text-orange-700 text-xs font-medium">
-                    <Factory size={12} /> 공정 정체 {alerts.stalled_processes_count}건
-                  </span>
-                )}
-              </>
+              <div className="text-center py-8 text-xs text-slate-400">
+                접수된 현장별 발주서 내역이 존재하지 않습니다.
+              </div>
             )}
           </div>
         </div>
-      )}
+
+        {/* 원부자재 재고 부족 / 품절 경고 센터 */}
+        <div className="bg-white rounded-card border border-red-200 p-4 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between border-b border-red-100 pb-3 mb-3">
+              <h3 className="text-shop-base font-bold text-red-700 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-red-600" /> 🚨 원부자재 재고 부족 및 임계재고 알림
+              </h3>
+              <button onClick={() => navigate('/inventory/material-stock')} className="text-xs text-red-600 font-bold hover:underline flex items-center gap-1">
+                ➕ 재고/입고 등록 <ChevronRight size={14} />
+              </button>
+            </div>
+            {data.shortage_inventory_alerts && data.shortage_inventory_alerts.length > 0 ? (
+              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
+                {data.shortage_inventory_alerts.map((item) => (
+                  <div
+                    key={item.lot_id}
+                    className={cn(
+                      'p-2.5 rounded-lg border flex items-center justify-between text-xs',
+                      Number(item.qty_current || 0) <= 0
+                        ? 'bg-red-50 border-red-300 text-red-900'
+                        : 'bg-amber-50 border-amber-200 text-amber-900'
+                    )}
+                  >
+                    <div className="space-y-0.5 min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        {Number(item.qty_current || 0) <= 0 ? (
+                          <span className="bg-red-600 text-white font-black text-[10px] px-1.5 py-0.5 rounded animate-pulse">
+                            🚨 품절 (0EA)
+                          </span>
+                        ) : (
+                          <span className="bg-amber-600 text-white font-bold text-[10px] px-1.5 py-0.5 rounded">
+                            ⚠️ 재고 부족
+                          </span>
+                        )}
+                        <span className="font-bold text-slate-900 truncate">{item.item_name}</span>
+                        <span className="font-mono text-blue-700 font-semibold text-[11px]">{item.lot_number}</span>
+                      </div>
+                      <div className="text-[11px] text-slate-600 flex items-center gap-3">
+                        <span className="font-bold text-red-700">규격: {item.item_spec || '표준규격'}</span>
+                        <span>위치: <b className="text-emerald-800">{item.location || '-'}</b></span>
+                      </div>
+                    </div>
+                    <div className="text-right ml-2 flex-shrink-0">
+                      <span className="text-sm font-black text-red-600">{Number(item.qty_current || 0).toLocaleString()}</span>
+                      <span className="text-[11px] text-slate-500 font-bold"> {item.unit || 'EA'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-xs text-emerald-600 font-bold flex flex-col items-center gap-1">
+                <CheckCircle className="h-6 w-6 text-emerald-500" />
+                모든 원부자재 및 LOT 재고가 안정 수준을 유지하고 있습니다.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-3 gap-6">
         {/* 공정별 현황 */}
