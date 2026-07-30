@@ -81,18 +81,21 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
         pool.query(`
           SELECT 
-            lot_id,
-            lot_number,
+            MIN(lot_id) AS lot_id,
+            STRING_AGG(lot_number, ', ' ORDER BY lot_number) AS lot_numbers,
             item_name,
             COALESCE(NULLIF(item_spec, ''), '표준규격') AS item_spec,
             category,
-            qty_current,
+            SUM(qty_current)::numeric AS qty_current,
+            COUNT(lot_id)::int AS lot_count,
             unit,
-            location,
-            CASE WHEN qty_current <= 0 THEN TRUE ELSE FALSE END AS is_out_of_stock
+            STRING_AGG(DISTINCT location, ', ') AS location,
+            CASE WHEN SUM(qty_current) <= 0 THEN TRUE ELSE FALSE END AS is_out_of_stock
           FROM material_lots
-          WHERE is_active = TRUE AND qty_current < 100
-          ORDER BY qty_current ASC, lot_number ASC
+          WHERE is_active = TRUE
+          GROUP BY category, item_name, COALESCE(NULLIF(item_spec, ''), '표준규격'), unit
+          HAVING SUM(qty_current) < 100 OR SUM(qty_current) <= 0
+          ORDER BY qty_current ASC, item_name ASC
           LIMIT 10
         `).catch(() => ({ rows: [] })),
       ]);

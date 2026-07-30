@@ -280,7 +280,7 @@ export function DashboardPage() {
           <div>
             <div className="flex items-center justify-between border-b border-red-100 pb-3 mb-3">
               <h3 className="text-shop-base font-bold text-red-700 flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-red-600" /> 🚨 원부자재 재고 부족 및 임계재고 알림
+                <AlertTriangle className="h-5 w-5 text-red-600" /> 🚨 규격(Spec)별 원부자재 합산 재고부족 알림
               </h3>
               <button onClick={() => navigate('/inventory/material-stock')} className="text-xs text-red-600 font-bold hover:underline flex items-center gap-1">
                 ➕ 재고/입고 등록 <ChevronRight size={14} />
@@ -288,9 +288,9 @@ export function DashboardPage() {
             </div>
             {data.shortage_inventory_alerts && data.shortage_inventory_alerts.length > 0 ? (
               <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                {data.shortage_inventory_alerts.map((item) => (
+                {data.shortage_inventory_alerts.map((item, idx) => (
                   <div
-                    key={item.lot_id}
+                    key={item.lot_id || idx}
                     className={cn(
                       'p-2.5 rounded-lg border flex items-center justify-between text-xs',
                       Number(item.qty_current || 0) <= 0
@@ -302,22 +302,25 @@ export function DashboardPage() {
                       <div className="flex items-center gap-2">
                         {Number(item.qty_current || 0) <= 0 ? (
                           <span className="bg-red-600 text-white font-black text-[10px] px-1.5 py-0.5 rounded animate-pulse">
-                            🚨 품절 (0EA)
+                            🚨 규격 품절 (0EA)
                           </span>
                         ) : (
                           <span className="bg-amber-600 text-white font-bold text-[10px] px-1.5 py-0.5 rounded">
-                            ⚠️ 재고 부족
+                            ⚠️ 규격 재고부족
                           </span>
                         )}
                         <span className="font-bold text-slate-900 truncate">{item.item_name}</span>
-                        <span className="font-mono text-blue-700 font-semibold text-[11px]">{item.lot_number}</span>
+                        <span className="font-bold text-red-700 bg-red-100/80 px-1.5 py-0.5 rounded text-[11px]">
+                          규격: {item.item_spec || '표준규격'}
+                        </span>
                       </div>
                       <div className="text-[11px] text-slate-600 flex items-center gap-3">
-                        <span className="font-bold text-red-700">규격: {item.item_spec || '표준규격'}</span>
+                        <span>보유 LOT: <b className="text-blue-800">{item.lot_numbers || item.lot_number || '-'} ({item.lot_count || 1}개 LOT)</b></span>
                         <span>위치: <b className="text-emerald-800">{item.location || '-'}</b></span>
                       </div>
                     </div>
                     <div className="text-right ml-2 flex-shrink-0">
+                      <p className="text-[10px] text-slate-500 font-semibold">규격 합산 총재고</p>
                       <span className="text-sm font-black text-red-600">{Number(item.qty_current || 0).toLocaleString()}</span>
                       <span className="text-[11px] text-slate-500 font-bold"> {item.unit || 'EA'}</span>
                     </div>
@@ -327,7 +330,7 @@ export function DashboardPage() {
             ) : (
               <div className="text-center py-8 text-xs text-emerald-600 font-bold flex flex-col items-center gap-1">
                 <CheckCircle className="h-6 w-6 text-emerald-500" />
-                모든 원부자재 및 LOT 재고가 안정 수준을 유지하고 있습니다.
+                모든 규격(Spec)별 원부자재 합산 재고가 안정 수준을 유지하고 있습니다.
               </div>
             )}
           </div>
