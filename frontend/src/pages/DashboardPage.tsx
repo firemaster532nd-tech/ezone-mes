@@ -340,13 +340,13 @@ export function DashboardPage() {
           <h3 className="text-shop-base font-bold mb-3 flex items-center gap-2">
             <TrendingUp size={16} /> 공정별 작업현황
           </h3>
-          {data.by_process.length === 0 ? (
+          {!(data.by_process && data.by_process.length > 0) ? (
             <div className="text-center text-gray-400 py-8 text-shop-sm">오늘 작업지시 없음</div>
           ) : (
             <div className="space-y-3">
               {data.by_process.map((p) => {
-                const count = parseInt(p.count);
-                const maxCount = Math.max(...data.by_process.map((x) => parseInt(x.count)));
+                const count = parseInt(p.count || '0', 10);
+                const maxCount = Math.max(...data.by_process.map((x) => parseInt(x.count || '0', 10)), 1);
                 const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
                 return (
                   <div key={p.process_code}>
@@ -390,8 +390,8 @@ export function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {data.recent_orders.map((wo) => (
-                <tr key={wo.wo_id} className="border-b hover:bg-blue-50">
+              {(data.recent_orders || []).map((wo, idx) => (
+                <tr key={wo.wo_id || wo.wo_number || idx} className="border-b hover:bg-blue-50">
                   <td className="px-2 py-2 font-mono text-xs">{wo.wo_number}</td>
                   <td className="px-2 py-2"><ProcessBadge process={wo.process_code as any} /></td>
                   <td className="px-2 py-2 truncate max-w-[120px]">{wo.item_name || '-'}</td>
@@ -408,19 +408,19 @@ export function DashboardPage() {
       </div>
 
       {/* 안전재고 미달 */}
-      {data.inventory_alerts.length > 0 && (
+      {data.inventory_alerts && data.inventory_alerts.length > 0 && (
         <div className="mt-6 bg-white rounded-card border p-4">
           <h3 className="text-shop-base font-bold mb-3 flex items-center gap-2 text-amber-600">
             <Package size={16} /> 안전재고 미달 품목
           </h3>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {data.inventory_alerts.map((item) => (
-              <div key={item.item_id} className="border border-amber-200 bg-amber-50 rounded-lg p-3">
+            {data.inventory_alerts.map((item, idx) => (
+              <div key={item.item_id || item.lot_id || idx} className="border border-amber-200 bg-amber-50 rounded-lg p-3">
                 <div className="text-shop-sm font-medium">{item.item_name}</div>
-                <div className="text-xs text-gray-500">{item.item_code}</div>
+                <div className="text-xs text-gray-500">{item.item_code || item.lot_number}</div>
                 <div className="mt-2 flex justify-between text-shop-sm">
-                  <span>현재: <b className="text-red-600">{parseFloat(item.balance).toLocaleString()}</b></span>
-                  <span>안전: <b>{parseFloat(item.safety_stock).toLocaleString()}</b></span>
+                  <span>현재: <b className="text-red-600">{parseFloat(item.balance || String(item.qty_current || 0)).toLocaleString()}</b></span>
+                  <span>안전: <b>{parseFloat(item.safety_stock || '10').toLocaleString()}</b></span>
                 </div>
               </div>
             ))}
@@ -429,7 +429,7 @@ export function DashboardPage() {
       )}
 
       {/* 주간 생산 추이 (테이블 기반) */}
-      {data.weekly_production.length > 0 && (
+      {data.weekly_production && data.weekly_production.length > 0 && (
         <div className="mt-6 bg-white rounded-card border p-4">
           <h3 className="text-shop-base font-bold mb-3">주간 생산 추이 (최근 7일)</h3>
           <table className="w-full text-shop-sm border">
@@ -447,7 +447,7 @@ export function DashboardPage() {
                   <td className="px-3 py-2">{wp.wo_date?.slice(0, 10)}</td>
                   <td className="px-3 py-2"><ProcessBadge process={wp.process_code as any} /></td>
                   <td className="px-3 py-2 text-right font-mono">{wp.wo_count}</td>
-                  <td className="px-3 py-2 text-right font-mono">{parseFloat(wp.total_qty).toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right font-mono">{parseFloat(wp.total_qty || '0').toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -873,11 +873,14 @@ function DeliveryCalendar() {
                 dow === 0 ? 'text-red-400' : dow === 6 ? 'text-blue-400' : 'text-slate-500'
               }`}>{day}</div>
               <div className="space-y-0.5">
-                {entries.slice(0, 3).map((e, ei) => (
-                  <div key={ei} className={`text-[9px] text-white px-1 py-0.5 rounded truncate font-semibold ${projectColorMap[e.project_id] || 'bg-indigo-500'}`}>
-                    {e.project_name.length > 6 ? e.project_name.slice(0, 6) + '…' : e.project_name} {e.round_no}차
-                  </div>
-                ))}
+                {entries.slice(0, 3).map((e, ei) => {
+                  const pName = e.project_name || '프로젝트';
+                  return (
+                    <div key={ei} className={`text-[9px] text-white px-1 py-0.5 rounded truncate font-semibold ${projectColorMap[e.project_id] || 'bg-indigo-500'}`}>
+                      {pName.length > 6 ? pName.slice(0, 6) + '…' : pName} {e.round_no}차
+                    </div>
+                  );
+                })}
                 {entries.length > 3 && <div className="text-[9px] text-slate-400 pl-1">+{entries.length - 3}건</div>}
               </div>
             </div>
@@ -892,7 +895,7 @@ function DeliveryCalendar() {
             {selectedEntries.map(e => (
               <div key={e.order_id} className="flex items-center gap-3 bg-slate-50 rounded-lg px-3 py-2 text-xs">
                 <span className={`px-2 py-0.5 rounded-full text-white text-[10px] font-bold ${projectColorMap[e.project_id] || 'bg-indigo-500'}`}>{e.round_no}차</span>
-                <span className="font-bold text-slate-700 flex-1">{e.project_name}</span>
+                <span className="font-bold text-slate-700 flex-1">{e.project_name || '프로젝트'}</span>
                 <span className="text-slate-400">{e.project_customer || e.customer_name}</span>
                 <span className="text-xs font-mono text-slate-500">{e.order_number}</span>
                 {e.delivery_date && <span className="text-blue-600 font-mono">납기: {e.delivery_date}</span>}
