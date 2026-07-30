@@ -184,7 +184,7 @@ export async function generateStandardLotLabelHtml(
   <div class="header">
     <span class="company">(주)이지원</span>
     <span class="title">🏷️ 원부자재 LOT 라벨</span>
-    ${seqBadge ? `<span class="seq-badge" style="background:#1e3a8a;color:#fff;padding:1px 6px;border-radius:4px;font-size:7pt;font-weight:bold;">${seqBadge}</span>` : `<span class="date">${receivedDate || new Date().toISOString().slice(0, 10)}</span>`}
+    ${seqBadge ? `<span class="seq-badge" style="background:#1d4ed8;color:#ffffff;padding:2px 8px;border-radius:4px;font-size:8.5pt;font-weight:900;letter-spacing:0.5px;">${seqBadge}</span>` : `<span class="date">${receivedDate || new Date().toISOString().slice(0, 10)}</span>`}
   </div>
   <div class="body-row">
     <div class="qr-box">
@@ -198,7 +198,7 @@ export async function generateStandardLotLabelHtml(
     </div>
   </div>
   <div class="qty-bar">
-    <span>재고 수량 / 발행:</span> <strong>${seqBadge ? `${seqBadge} (${qtyStr} ${unit})` : `${qtyStr} ${unit}`}</strong>
+    <span>재고 수량 / 발행 순번:</span> <strong>${seqBadge ? `<span style="color:#1d4ed8;font-weight:900;font-size:9pt;">${seqBadge}</span> (총 ${qtyStr} ${unit})` : `${qtyStr} ${unit}`}</strong>
   </div>
   <div class="barcode-box">
     ${barcodeSvg}

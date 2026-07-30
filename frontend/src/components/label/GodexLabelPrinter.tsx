@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Printer, Barcode, Wifi, WifiOff, AlertCircle, CheckCircle, Package } from 'lucide-react';
-import { generateStandardLotLabelHtml } from '@/lib/barcodeGenerator';
+import { generateStandardLotLabelHtml, generateSerializedLotLabelBatchHtml } from '@/lib/barcodeGenerator';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // QZ Tray 타입 선언
@@ -245,14 +245,16 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
       labelData.length_mm ? `${labelData.length_mm}L` : '',
     ].filter(Boolean).join(' ');
 
-    const labelHtml = await generateStandardLotLabelHtml(
+    const count = copies > 0 ? copies : Math.max(1, Number(labelData.qty_current || 1));
+    const labelHtml = await generateSerializedLotLabelBatchHtml(
       labelData.lot_number,
       labelData.item_name || '품목명 미지정',
       spec,
       labelData.location_name || labelData.location || '-',
-      String(labelData.qty_current || 1),
+      Number(labelData.qty_current || 1),
       labelData.unit || 'EA',
-      labelData.received_date
+      labelData.received_date,
+      count
     );
 
     win.document.write(`
