@@ -45,7 +45,33 @@ export default async function googleSheetsSyncRoutes(app: FastifyInstance) {
       const parsedRows: SheetRow[] = [];
       let currentCategory = '기타부자재';
 
+      // 1-1. 헤더 행 및 LOT 컬럼 인덱스 자동 감지
+      let lotColIdx = -1;
+      let nameColIdx = -1;
+      let specColIdx = -1;
+      let qtyColIdx = -1;
+      let headerRowIdx = -1;
+
+      for (let i = 0; i < Math.min(lines.length, 20); i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const cols = line.split(',').map(c => c.replace(/^"|"$/g, '').trim().replace(/\s+/g, ''));
+        
+        cols.forEach((col, idx) => {
+          if (col.includes('LOT') || col.includes('로트')) lotColIdx = idx;
+          if (col.includes('품목') || col.includes('품명') || col.includes('자재명')) nameColIdx = idx;
+          if (col.includes('규격') || col.includes('SPEC')) specColIdx = idx;
+          if (col.includes('현재고') || col.includes('재고') || col.includes('수량')) qtyColIdx = idx;
+        });
+
+        if (nameColIdx !== -1 || lotColIdx !== -1) {
+          headerRowIdx = i;
+          break;
+        }
+      }
+
       for (let i = 0; i < lines.length; i++) {
+        if (i === headerRowIdx) continue;
         const line = lines[i].trim();
         if (!line) continue;
 
@@ -60,26 +86,33 @@ export default async function googleSheetsSyncRoutes(app: FastifyInstance) {
         }
 
         // 헤더 행 무시 (재 고 수 불 표, 품 목, 규 격 등)
-        if (col0.includes('재 고 수 불 표') || col0 === '품 목' || col0.includes('규 격')) {
+        if (col0.includes('재 고 수 불 표') || col0 === '품 목' || col0.includes('규 격') || col0 === 'No.' || col0 === 'No') {
           continue;
         }
 
-        const spec = cols[1] || '';
+        const name = nameColIdx !== -1 && cols[nameColIdx] ? cols[nameColIdx] : col0;
+        const spec = specColIdx !== -1 && cols[specColIdx] ? cols[specColIdx] : (cols[1] || '');
+        const actualLot = lotColIdx !== -1 && cols[lotColIdx] ? cols[lotColIdx] : '';
+
         const in_qty = parseFloat((cols[2] || '0').replace(/,/g, '')) || 0;
         const init_qty = parseFloat((cols[3] || '0').replace(/,/g, '')) || 0;
         const out_qty = parseFloat((cols[4] || '0').replace(/,/g, '')) || 0;
-        const current_qty = parseFloat((cols[5] || '0').replace(/,/g, '')) || 0;
+        let current_qty = parseFloat((cols[5] || '0').replace(/,/g, '')) || 0;
 
-        if (col0 && (init_qty !== 0 || in_qty !== 0 || out_qty !== 0 || current_qty !== 0)) {
+        if (qtyColIdx !== -1 && cols[qtyColIdx]) {
+          current_qty = parseFloat(cols[qtyColIdx].replace(/,/g, '')) || current_qty;
+        }
+
+        if (name && (actualLot || init_qty !== 0 || in_qty !== 0 || out_qty !== 0 || current_qty !== 0)) {
           parsedRows.push({
-
             category: currentCategory,
-            name: col0,
+            name,
             spec,
             in_qty,
             init_qty,
             out_qty,
-            current_qty
+            current_qty,
+            lot_number: actualLot
           });
         }
       }
@@ -92,7 +125,9 @@ export default async function googleSheetsSyncRoutes(app: FastifyInstance) {
         await client.query('BEGIN');
 
         for (const row of parsedRows) {
-          const lotNumber = `GS-LOT-${row.name.replace(/\s+/g, '')}-${row.spec.replace(/[^a-zA-Z0-9]/g, '')}`;
+          const lotNumber = (row as any).lot_number && (row as any).lot_number.length >= 3
+            ? (row as any).lot_number
+            : `GS-LOT-${row.name.replace(/\s+/g, '')}-${row.spec.replace(/[^a-zA-Z0-9]/g, '')}`;
           
           // LOT 수불 등록 또는 업데이트
           await client.query(`

@@ -200,9 +200,11 @@ export function InventoryImportPage() {
       if (clean.includes('일자') || clean.includes('날짜')) defaultMapping.txn_date = h;
       else if (clean === '구분' || clean.includes('입출고')) defaultMapping.txn_type = h;
       else if (clean.includes('수량')) defaultMapping.qty = h;
-      else if (clean.includes('조립LOT') || clean === '조립LOT번호') defaultMapping.lot_number = h;
-      else if (clean.includes('소켓LOT') || clean.includes('소켓/플래싱LOT') || clean.includes('시트LOT')) defaultMapping.source_lot = h;
-      else if (clean.includes('출하LOT')) defaultMapping.linked_lot = h;
+      else if (clean.includes('LOT') || clean.includes('로트')) {
+        if (!defaultMapping.lot_number) {
+          defaultMapping.lot_number = h;
+        }
+      }
       else if (clean.includes('출하처') || clean.includes('용도') || clean.includes('현장명')) defaultMapping.purpose = h;
       else if (clean === '작업자') defaultMapping.issuer_name = h;
       else if (clean === '담당자' || clean === '검증자' || clean === '확인자') defaultMapping.verifier_name = h;
