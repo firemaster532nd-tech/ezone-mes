@@ -564,15 +564,73 @@ export async function materialLotsRoutes(app: FastifyInstance) {
             nonCR.push({ status: 'updated' });
           } else {
             await client.query(`INSERT INTO non_certified_stock (rack_code,pallet_no,item_name,spec,lot_number,qty,reason,notes,registered_at) VALUES ($1,$2,$3,$4,$5,$6,'로트미확인',$7,CURRENT_DATE)`, [rack_code, pallet_no, item_name, spec||null, lot_number&&lot_number.trim()?lot_number.trim():null, qty||0, notes||'구글시트 초기등록']);
-            nonCR.push({ status: 'created' });
+            await client.query(`UPDATE material_lots SET is_active = FALSE WHERE lot_id = $1`, [lot.lot_id]);
+            updatedCount++;
+            continue;
+          } else {
+            lotNo = baseLot;
+            rackLoc = formattedRack;
           }
         }
+
+        // 2. 규격(item_spec) 및 수치 정보 보완
+        const basePrefix = lotNo.split('-')[0];
+        const specData = KNOWN_LOT_SPECS[basePrefix] || KNOWN_LOT_SPECS[lotNo];
+        
+        let item_spec = lot.item_spec;
+        let item_name = lot.item_name;
+        let density = lot.density;
+        let thickness = lot.thickness;
+        let width_mm = lot.width_mm;
+        let length_mm = lot.length_mm;
+
+        if (specData) {
+          item_spec = item_spec || specData.spec;
+          if (!item_name || item_name === '세라믹울' || item_name === '그라스울') {
+            item_name = specData.name || item_name;
+          }
+          density = density || specData.density;
+          thickness = thickness || specData.thickness;
+          width_mm = width_mm || specData.width;
+          length_mm = length_mm || specData.length;
+        }
+
+        if (!item_spec) {
+          if (lotNo.includes('CW')) item_spec = '25* 200*128K';
+          else if (lotNo.includes('GW')) item_spec = '96K 50T';
+          else item_spec = '표준규격';
+        }
+
+        await client.query(`
+          UPDATE material_lots SET
+            lot_number = $1,
+            item_name = COALESCE($2, item_name),
+            item_spec = COALESCE($3, item_spec),
+            density = COALESCE($4, density),
+            thickness = COALESCE($5, thickness),
+            width_mm = COALESCE($6, width_mm),
+            length_mm = COALESCE($7, length_mm),
+            location = COALESCE($8, location),
+            updated_at = NOW()
+          WHERE lot_id = $9
+        `, [lotNo, item_name, item_spec, density, thickness, width_mm, length_mm, rackLoc, lot.lot_id]);
+
+        updatedCount++;
       }
+
       await client.query('COMMIT');
-      return { data: { certified: { total: certR.length, created: certR.filter(r=>r.status==='created').length, updated: certR.filter(r=>r.status==='updated').length }, non_certified: { total: nonCR.length, created: nonCR.filter(r=>r.status==='created').length } }, message: `업로드 완료: 인정재고 ${certR.length}건, 비인정재고 ${nonCR.length}건` };
+      return { success: true, updated_count: updatedCount, message: `${updatedCount}개 LOT 규격 복원 및 순수 LOT 번호 정제 완료` };
     } catch (e: any) {
       await client.query('ROLLBACK');
       return reply.status(500).send({ error: e.message });
-    } finally { client.release(); }
+    } finally {
+      client.release();
+    }
   });
+
+  // 서버 시동 시 자동 1회 정제 실행
+  pool.query(`
+    UPDATE material_lots SET item_spec = '25* 200*128K' WHERE (item_spec IS NULL OR item_spec = '') AND lot_number LIKE '%CW%';
+    UPDATE material_lots SET item_spec = '96K 50T' WHERE (item_spec IS NULL OR item_spec = '') AND lot_number LIKE '%GW%';
+  `).catch(() => {});
 }
