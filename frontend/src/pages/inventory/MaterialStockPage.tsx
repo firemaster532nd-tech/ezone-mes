@@ -214,19 +214,49 @@ body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:0;mar
   );
 }
 
+function matchesCategory(lotCategory: string | undefined, filterCat: string): boolean {
+  if (!filterCat || filterCat === '전체') return true;
+  if (!lotCategory) return false;
+  
+  const c = lotCategory.trim().toLowerCase();
+  const f = filterCat.trim().toLowerCase();
+
+  if (c === f || c.includes(f) || f.includes(c)) return true;
+
+  if (f.includes('원자재') || f.includes('배합')) {
+    return c.includes('원자재') || c.includes('원재료') || c.includes('rm') || c.includes('배합') || c.includes('컴파운드');
+  }
+  if (f.includes('차열')) {
+    return c.includes('차열') || c.includes('보온재');
+  }
+  if (f.includes('반제품')) {
+    return c.includes('반제품') || c.includes('조립') || c.includes('틈새') || c.includes('플래싱') || c.includes('sa');
+  }
+  if (f.includes('부자재')) {
+    return c.includes('부자재') || c.includes('sm') || c.includes('소켓') || c.includes('강판') || c.includes('그라스울') || c.includes('세라믹울');
+  }
+
+  return false;
+}
+
 // ─── 탭1: 전체 LOT 재고현황 ──────────────────────────────────────────────────
 function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading: boolean; onRefresh: () => void }) {
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('전체');
+  const [includeZero, setIncludeZero] = useState(true);
   const [printLot, setPrintLot] = useState<MaterialLot | null>(null);
 
   const filtered = lots.filter(l =>
-    (cat === '전체' || l.category === cat) &&
+    matchesCategory(l.category, cat) &&
+    (includeZero || Number(l.qty_current || 0) > 0) &&
     (!search || l.lot_number.toLowerCase().includes(search.toLowerCase()) || l.item_name.toLowerCase().includes(search.toLowerCase()))
   );
 
   const catTotals: Record<string, number> = {};
-  for (const l of lots) catTotals[l.category] = (catTotals[l.category] || 0) + Number(l.qty_current || 0);
+  for (const l of lots) {
+    const k = l.category || '기타부자재';
+    catTotals[k] = (catTotals[k] || 0) + Number(l.qty_current || 0);
+  }
 
   return (
     <div className="space-y-4">
@@ -234,14 +264,20 @@ function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading:
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
           <div className="p-2.5 bg-slate-900 text-white rounded-lg"><Package className="h-5 w-5"/></div>
-          <div><p className="text-xs text-slate-500 font-bold">전체 LOT</p><p className="text-xl font-black">{lots.length}개</p></div>
+          <div><p className="text-xs text-slate-500 font-bold">전체 보유 LOT</p><p className="text-xl font-black">{lots.length}개</p></div>
         </div>
-        {[['세라믹울','amber'],['그라스울','sky'],['그라스울보드','emerald']].map(([c,color]) => (
-          <div key={c} className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
-            <div className={`p-2.5 bg-${color}-600 text-white rounded-lg`}><BarChart3 className="h-5 w-5"/></div>
-            <div><p className="text-xs text-slate-500 font-bold">{c}</p><p className="text-xl font-black">{(catTotals[c] || 0).toLocaleString()}</p></div>
-          </div>
-        ))}
+        <div className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
+          <div className="p-2.5 bg-blue-600 text-white rounded-lg"><BarChart3 className="h-5 w-5"/></div>
+          <div><p className="text-xs text-slate-500 font-bold">조회된 LOT</p><p className="text-xl font-black text-blue-700">{filtered.length}개</p></div>
+        </div>
+        <div className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
+          <div className="p-2.5 bg-emerald-600 text-white rounded-lg"><BarChart3 className="h-5 w-5"/></div>
+          <div><p className="text-xs text-slate-500 font-bold">총 보유 수량</p><p className="text-xl font-black text-emerald-700">{filtered.reduce((a, l) => a + Number(l.qty_current || 0), 0).toLocaleString()}</p></div>
+        </div>
+        <div className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
+          <div className="p-2.5 bg-amber-500 text-white rounded-lg"><BarChart3 className="h-5 w-5"/></div>
+          <div><p className="text-xs text-slate-500 font-bold">금일 입고 LOT</p><p className="text-xl font-black text-amber-700">{lots.filter(l => Number(l.today_in || 0) > 0).length}개</p></div>
+        </div>
       </div>
 
       {/* 필터 */}
@@ -251,16 +287,27 @@ function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading:
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="LOT번호 / 품목명 검색"
             className="pl-9 pr-3 py-2 text-sm border rounded-lg focus:border-blue-500 outline-none w-52"/>
         </div>
-        <div className="flex gap-1 flex-wrap">
+        <div className="flex gap-1 flex-wrap items-center">
           {['전체', ...CATEGORIES].map(c => (
             <button key={c} onClick={() => setCat(c)}
-              className={cn('px-2.5 py-1.5 rounded-lg text-xs font-bold',
+              className={cn('px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors',
                 cat === c ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}>
               {c}
             </button>
           ))}
         </div>
-        <button onClick={onRefresh} className="ml-auto flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm text-slate-600 hover:bg-slate-50">
+
+        <label className="flex items-center gap-1.5 text-xs font-bold text-slate-600 ml-2 cursor-pointer bg-slate-100 px-2.5 py-1.5 rounded-lg hover:bg-slate-200">
+          <input
+            type="checkbox"
+            checked={includeZero}
+            onChange={e => setIncludeZero(e.target.checked)}
+            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+          />
+          수량 0인 LOT 포함
+        </label>
+
+        <button onClick={onRefresh} className="ml-auto flex items-center gap-1.5 px-3 py-2 border rounded-lg text-sm text-slate-600 hover:bg-slate-50 font-semibold">
           <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')}/> 새로고침
         </button>
       </div>

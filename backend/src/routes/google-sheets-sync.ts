@@ -2,7 +2,9 @@ import { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 
-const GOOGLE_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/1dUrjgHuUFRr0I6yi5EGYYdHH2AWCz2PRfEVPPX_51vg/export?format=csv';
+const DEFAULT_SHEET_ID = '1dUrjgHuUFRr0I6yi5EGYYdHH2AWCz2PRfEVPPX_51vg';
+const DEFAULT_GID = '2113952191';
+const GOOGLE_SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${DEFAULT_SHEET_ID}/export?format=csv&gid=${DEFAULT_GID}`;
 
 interface SheetRow {
   category: string;
@@ -23,7 +25,7 @@ export default async function googleSheetsSyncRoutes(app: FastifyInstance) {
       );
       return {
         last_sync: res.rows[0]?.setting_value || null,
-        sheet_url: 'https://docs.google.com/spreadsheets/d/1dUrjgHuUFRr0I6yi5EGYYdHH2AWCz2PRfEVPPX_51vg/edit?usp=sharing'
+        sheet_url: `https://docs.google.com/spreadsheets/d/${DEFAULT_SHEET_ID}/edit?gid=${DEFAULT_GID}#gid=${DEFAULT_GID}`
       };
     } catch (e: any) {
       return { last_sync: null, error: e.message };
@@ -33,8 +35,21 @@ export default async function googleSheetsSyncRoutes(app: FastifyInstance) {
   // ── POST /api/inventory/sync-google-sheets (구글 시트 즉시 수신 및 재고 동기화) ──
   app.post('/api/inventory/sync-google-sheets', { preHandler: requireAuth }, async (req, reply) => {
     try {
-      // 1. 구글 시트 CSV 데이터 수신
-      const response = await fetch(GOOGLE_SHEET_CSV_URL);
+      // 1. 구글 시트 CSV 데이터 수신 (URL 또는 gid 전달 시 자동 파싱)
+      const bodyUrl = (req.body as any)?.url || (req.body as any)?.sheet_url;
+      let targetFetchUrl = GOOGLE_SHEET_CSV_URL;
+
+      if (bodyUrl) {
+        const match = String(bodyUrl).match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+        if (match) {
+          const id = match[1];
+          const gidMatch = String(bodyUrl).match(/gid=([0-9]+)/);
+          const gidParam = gidMatch ? `&gid=${gidMatch[1]}` : `&gid=${DEFAULT_GID}`;
+          targetFetchUrl = `https://docs.google.com/spreadsheets/d/${id}/export?format=csv${gidParam}`;
+        }
+      }
+
+      const response = await fetch(targetFetchUrl);
       if (!response.ok) {
         throw new Error(`Google Sheets HTTP Error: ${response.status}`);
       }
@@ -85,36 +100,49 @@ export default async function googleSheetsSyncRoutes(app: FastifyInstance) {
           continue;
         }
 
-        // 헤더 행 무시 (재 고 수 불 표, 품 목, 규 격 등)
-        if (col0.includes('재 고 수 불 표') || col0 === '품 목' || col0.includes('규 격') || col0 === 'No.' || col0 === 'No') {
+        // 헤더 행 무시
+        if (col0.includes('재 고 수 불 표') || col0 === '품 목' || col0.includes('규 격') || col0 === 'No.' || col0 === 'No' || col0 === 'K') {
           continue;
         }
 
-        const name = nameColIdx !== -1 && cols[nameColIdx] ? cols[nameColIdx] : col0;
-        const spec = specColIdx !== -1 && cols[specColIdx] ? cols[specColIdx] : (cols[1] || '');
-        const actualLot = lotColIdx !== -1 && cols[lotColIdx] ? cols[lotColIdx] : '';
+        // 7번 컬럼 또는 자동 감지된 컬럼에서 LOT NO 추출
+        const actualLot = (lotColIdx !== -1 && cols[lotColIdx]) ? cols[lotColIdx] : (cols[7] || '');
+        if (!actualLot || actualLot.length < 3 || actualLot === 'LOT NO') continue;
 
-        const in_qty = parseFloat((cols[2] || '0').replace(/,/g, '')) || 0;
-        const init_qty = parseFloat((cols[3] || '0').replace(/,/g, '')) || 0;
-        const out_qty = parseFloat((cols[4] || '0').replace(/,/g, '')) || 0;
-        let current_qty = parseFloat((cols[5] || '0').replace(/,/g, '')) || 0;
+        const density = parseFloat(cols[0] || cols[1] || '0') || null;
+        const thickness = parseFloat(cols[2] || '0') || null;
+        const width_mm = parseFloat(cols[3] || '0') || null;
+        const length_mm = parseFloat(cols[4] || '0') || null;
+        const spec = cols[5] || (specColIdx !== -1 ? cols[specColIdx] : '');
+        let name = cols[6] || (nameColIdx !== -1 ? cols[nameColIdx] : col0);
 
-        if (qtyColIdx !== -1 && cols[qtyColIdx]) {
-          current_qty = parseFloat(cols[qtyColIdx].replace(/,/g, '')) || current_qty;
+        if (!name || name === actualLot) {
+          name = spec ? `세라믹울/그라스울 (${spec})` : `자재 LOT ${actualLot}`;
         }
 
-        if (name && (actualLot || init_qty !== 0 || in_qty !== 0 || out_qty !== 0 || current_qty !== 0)) {
-          parsedRows.push({
-            category: currentCategory,
-            name,
-            spec,
-            in_qty,
-            init_qty,
-            out_qty,
-            current_qty,
-            lot_number: actualLot
-          });
+        const init_qty = parseFloat((cols[8] || '0').replace(/,/g, '')) || 0;
+        const in_qty = parseFloat((cols[9] || '0').replace(/,/g, '')) || 0;
+        const out_qty = parseFloat((cols[10] || '0').replace(/,/g, '')) || 0;
+        let current_qty = parseFloat((cols[11] || '0').replace(/,/g, '')) || 0;
+
+        if (current_qty === 0 && (init_qty > 0 || in_qty > 0)) {
+          current_qty = (init_qty + in_qty) - out_qty;
         }
+
+        parsedRows.push({
+          category: currentCategory,
+          name,
+          spec,
+          density,
+          thickness,
+          width_mm,
+          length_mm,
+          in_qty,
+          init_qty,
+          out_qty,
+          current_qty,
+          lot_number: actualLot
+        } as any);
       }
 
       // 2. DB 재고 수불 및 LOT 업데이트 (UPSERT)
@@ -124,24 +152,37 @@ export default async function googleSheetsSyncRoutes(app: FastifyInstance) {
       try {
         await client.query('BEGIN');
 
-        for (const row of parsedRows) {
-          const lotNumber = (row as any).lot_number && (row as any).lot_number.length >= 3
-            ? (row as any).lot_number
-            : `GS-LOT-${row.name.replace(/\s+/g, '')}-${row.spec.replace(/[^a-zA-Z0-9]/g, '')}`;
+        for (const row of parsedRows as any[]) {
+          const lotNumber = row.lot_number;
           
           // LOT 수불 등록 또는 업데이트
           await client.query(`
             INSERT INTO material_lots
-              (lot_number, item_name, category, item_spec, init_qty, current_qty, location, remark, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, '본재고', '구글스프레드시트 동기화', NOW())
-            ON CONFLICT (lot_number) DO UPDATE SET
+              (lot_number, item_name, category, item_spec, density, thickness, width_mm, length_mm, init_qty, current_qty, location, notes, is_active, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, '본재고', '구글스프레드시트 gid=2113952191 연동', TRUE, NOW())
+            ON CONFLICT (lot_number) WHERE (is_active = TRUE) DO UPDATE SET
               item_name = EXCLUDED.item_name,
               category = EXCLUDED.category,
               item_spec = EXCLUDED.item_spec,
+              density = EXCLUDED.density,
+              thickness = EXCLUDED.thickness,
+              width_mm = EXCLUDED.width_mm,
+              length_mm = EXCLUDED.length_mm,
               init_qty = EXCLUDED.init_qty,
               current_qty = EXCLUDED.current_qty,
               updated_at = NOW()
-          `, [lotNumber, `${row.name} (${row.spec})`, row.category, row.spec, row.init_qty + row.in_qty, row.current_qty]);
+          `, [
+            lotNumber,
+            row.name,
+            row.category || '세라믹울',
+            row.spec,
+            row.density,
+            row.thickness,
+            row.width_mm,
+            row.length_mm,
+            row.init_qty + row.in_qty,
+            row.current_qty
+          ]);
 
           updatedCount++;
         }
