@@ -85,35 +85,49 @@ function fmtLoc(loc?: string) {
   return m ? `${m[1]}-P${m[2]}(${m[2] === '1' ? '우' : '좌'})` : loc;
 }
 
-import { generateStandardLotLabelHtml, generateQrDataUrl, generateCode128Svg } from '@/lib/barcodeGenerator';
+import { generateStandardLotLabelHtml, generateSerializedLotLabelBatchHtml, generateQrDataUrl, generateCode128Svg } from '@/lib/barcodeGenerator';
 
 // ─── LOT 라벨 인쇄 모달 ───────────────────────────────────────────────────────
 function LabelModal({ lot, onClose }: { lot: MaterialLot; onClose: () => void }) {
   const [qrUrl, setQrUrl] = useState<string>('');
+  const [printCount, setPrintCount] = useState<number>(1);
 
   useEffect(() => {
     generateQrDataUrl(lot.lot_number, 200).then(setQrUrl);
   }, [lot.lot_number]);
 
   const doPrint = async () => {
-    const qtyStr = Number(lot.qty_current).toLocaleString();
-    const labelHtml = await generateStandardLotLabelHtml(
-      lot.lot_number,
-      lot.item_name,
-      fmtSpec(lot),
-      lot.location || '-',
-      qtyStr,
-      lot.unit,
-      fmtDate(lot.received_date)
-    );
+    const totalQty = Number(lot.qty_current || 1);
+    const count = Math.max(1, printCount);
+    
+    const labelHtml = count === 1
+      ? await generateStandardLotLabelHtml(
+          lot.lot_number,
+          lot.item_name,
+          fmtSpec(lot),
+          lot.location || '-',
+          totalQty.toLocaleString(),
+          lot.unit,
+          fmtDate(lot.received_date)
+        )
+      : await generateSerializedLotLabelBatchHtml(
+          lot.lot_number,
+          lot.item_name,
+          fmtSpec(lot),
+          lot.location || '-',
+          totalQty,
+          lot.unit,
+          fmtDate(lot.received_date),
+          count
+        );
 
-    const w = window.open('', '_blank', 'width=450,height=380');
+    const w = window.open('', '_blank', 'width=500,height=600');
     if (!w) return;
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>라벨</title>
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>라벨 출력 (${count}매)</title>
 <style>
 @page{size:80mm 60mm;margin:0}
 body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:0;margin:0;background:#fff;}
-.label-card{width:80mm;height:60mm;padding:3mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:1px solid #ddd;}
+.label-card{width:80mm;height:60mm;padding:3mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:1px solid #ddd;page-break-after:always;}
 .header{display:flex;justify-content:space-between;border-bottom:0.4mm solid #1a237e;padding-bottom:1mm;font-size:7pt;font-weight:bold;}
 .company{color:#c00;}.title{color:#1a237e;}.date{color:#666;font-size:6pt;}
 .body-row{display:flex;gap:3mm;align-items:center;flex:1;margin-top:1.5mm;}
@@ -135,9 +149,9 @@ body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:0;mar
   };
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-80 p-5 space-y-4">
+      <div className="bg-white rounded-xl shadow-xl w-84 p-5 space-y-4">
         <div className="flex justify-between items-center">
-          <h3 className="font-bold text-sm text-slate-800 flex items-center gap-1.5"><Printer className="h-4 w-4 text-blue-600"/>LOT 라벨 인쇄 (QR + 바코드)</h3>
+          <h3 className="font-bold text-sm text-slate-800 flex items-center gap-1.5"><Printer className="h-4 w-4 text-blue-600"/>LOT 라벨 발행 (순번 1/N~N/N)</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-lg leading-none">&times;</button>
         </div>
         {/* 라벨 실물 미리보기 (80×60mm 비율) */}
@@ -145,7 +159,7 @@ body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:0;mar
           <div className="flex justify-between items-center border-b pb-1 text-[9px]">
             <span className="font-bold text-rose-600">(주)이지원</span>
             <span className="font-bold text-indigo-900">🏷️ 원부자재 LOT 라벨</span>
-            <span className="text-slate-400 text-[8px]">{fmtDate(lot.received_date)}</span>
+            <span className="bg-blue-900 text-white font-bold text-[8px] px-1.5 py-0.5 rounded">1/{printCount}</span>
           </div>
           <div className="flex gap-2 text-[9px] items-center">
             {qrUrl ? (
@@ -154,21 +168,46 @@ body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:0;mar
               <div className="h-16 w-16 bg-slate-100 animate-pulse rounded"/>
             )}
             <div className="flex-1 space-y-0.5 overflow-hidden">
-              <p className="font-black text-[10px] text-indigo-700 font-mono tracking-tight">{lot.lot_number}</p>
+              <p className="font-black text-[10px] text-indigo-700 font-mono tracking-tight">{lot.lot_number}{printCount > 1 ? '-001' : ''}</p>
               <p className="font-bold text-slate-900 truncate">{lot.item_name}</p>
-              <p className="text-slate-500 text-[8px] truncate">규격: {fmtSpec(lot)}</p>
+              <p className="text-red-700 font-bold text-[8.5px] truncate">규격: {fmtSpec(lot)}</p>
               <p className="text-emerald-700 text-[8px] font-semibold">위치: {lot.location || '-'}</p>
-              <p className="font-bold text-slate-800 text-[9px]">수량: {Number(lot.qty_current).toLocaleString()} {lot.unit}</p>
+              <p className="font-bold text-slate-800 text-[9px]">총 수량: {Number(lot.qty_current).toLocaleString()} {lot.unit}</p>
             </div>
           </div>
           <div className="border-t border-dashed border-slate-300 pt-1 text-center">
-            <div dangerouslySetInnerHTML={{ __html: generateCode128Svg(lot.lot_number, 24) }} />
-            <div className="font-mono text-[8px] text-slate-500 font-bold tracking-wider mt-0.5">{lot.lot_number}</div>
+            <div dangerouslySetInnerHTML={{ __html: generateCode128Svg(printCount > 1 ? `${lot.lot_number}-001` : lot.lot_number, 24) }} />
+            <div className="font-mono text-[8px] text-slate-500 font-bold tracking-wider mt-0.5">{printCount > 1 ? `${lot.lot_number}-001` : lot.lot_number}</div>
           </div>
         </div>
-        <p className="text-center text-[11px] text-slate-500 font-semibold">규격: 80×60mm (2D QR + 1D Code128 바코드)</p>
+
+        {/* 인쇄 매수 및 1/N 순번 설정 컨트롤 */}
+        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
+          <div className="flex justify-between items-center text-xs">
+            <label className="font-bold text-slate-700">라벨 출력 매수 (순번 1/{printCount}):</label>
+            <button
+              type="button"
+              onClick={() => setPrintCount(Math.max(1, Number(lot.qty_current || 1)))}
+              className="text-[11px] text-blue-700 bg-blue-50 hover:bg-blue-100 font-bold px-2 py-0.5 rounded border border-blue-200"
+            >
+              총 수량({lot.qty_current}개) 매수 자동 적용
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={1000}
+              value={printCount}
+              onChange={e => setPrintCount(Math.max(1, parseInt(e.target.value || '1', 10)))}
+              className="flex-1 px-3 py-1.5 border rounded-md text-sm font-bold font-mono text-center focus:ring-2 focus:ring-blue-500"
+            />
+            <span className="text-xs font-bold text-slate-600">장 (1/{printCount} ~ {printCount}/{printCount})</span>
+          </div>
+        </div>
+
         <button onClick={doPrint} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2 shadow">
-          <Printer className="h-4 w-4"/> 라벨 출력 (QR + 바코드)
+          <Printer className="h-4 w-4"/> 라벨 {printCount}장 순번 출력 (1/{printCount}~{printCount}/{printCount})
         </button>
       </div>
     </div>

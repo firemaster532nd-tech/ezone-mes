@@ -342,7 +342,7 @@ async function render(){
     div.innerHTML = `
       <div class="lbl-head">
         <span class="lbl-company">${company}</span>
-        <span class="lbl-type-badge ${getLotTypeBadgeClass()}">${getLotTypeLabel()}</span>
+        <span class="lbl-type-badge ${getLotTypeBadgeClass()}">${sn}/${qty} (${getLotTypeLabel()})</span>
       </div>
       <div class="lbl-body">
         <div class="lbl-codes">
@@ -361,17 +361,17 @@ async function render(){
             <span class="lbl-field-key">품목</span>
             <span class="lbl-field-val">${itemName}</span>
           </div>
-          ${specHtml}
+          ${specHtml || `<div class="lbl-field"><span class="lbl-field-key">규격</span><span class="lbl-field-val spec-val">${spec || '규격 미기재'}</span></div>`}
           <div class="lbl-field">
-            <span class="lbl-field-key">수량</span>
-            <span class="lbl-field-val qty-val">1 <small style="font-size:9px;font-weight:600;color:#64748b">${LOT.unit}</small></span>
+            <span class="lbl-field-key">순번</span>
+            <span class="lbl-field-val qty-val" style="font-weight:900;color:#1d4ed8">${sn} / ${qty}</span>
           </div>
         </div>
       </div>
       <div class="lbl-foot">
         <span class="lbl-date">입고: ${LOT.lotDate}</span>
         ${loc ? `<span class="lbl-location">📍 ${loc}</span>` : '<span></span>'}
-        <span class="lbl-serial">${sn} / ${qty}</span>
+        <span class="lbl-serial" style="font-weight:bold;color:#1d4ed8;">발행: ${sn} / ${qty}</span>
       </div>`;
 
     area.appendChild(div);

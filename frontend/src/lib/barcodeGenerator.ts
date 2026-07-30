@@ -154,7 +154,8 @@ export async function generateStandardLotLabelHtml(
   location: string,
   qtyStr: string,
   unit: string,
-  receivedDate?: string
+  receivedDate?: string,
+  seqBadge?: string
 ): Promise<string> {
   const qrDataUrl = await generateQrDataUrl(lotNo, 220);
   const barcodeSvg = generateCode128Svg(lotNo, 32);
@@ -163,8 +164,8 @@ export async function generateStandardLotLabelHtml(
 <div class="label-card">
   <div class="header">
     <span class="company">(주)이지원</span>
-    <span class="title">🏷️ 표준 자재/제품 LOT 라벨</span>
-    <span class="date">${receivedDate || new Date().toISOString().slice(0, 10)}</span>
+    <span class="title">🏷️ 원부자재 LOT 라벨</span>
+    ${seqBadge ? `<span class="seq-badge" style="background:#1e3a8a;color:#fff;padding:1px 6px;border-radius:4px;font-size:7pt;font-weight:bold;">${seqBadge}</span>` : `<span class="date">${receivedDate || new Date().toISOString().slice(0, 10)}</span>`}
   </div>
   <div class="body-row">
     <div class="qr-box">
@@ -173,16 +174,51 @@ export async function generateStandardLotLabelHtml(
     <div class="info-box">
       <div class="lot-number">${lotNo}</div>
       <div class="field"><span class="lbl">품명:</span> <span class="val item-val">${itemName}</span></div>
-      <div class="field"><span class="lbl">규격:</span> <span class="val">${spec || '-'}</span></div>
+      <div class="field"><span class="lbl" style="font-weight:bold;color:#b91c1c;">규격:</span> <span class="val spec-val" style="font-weight:bold;color:#0f172a;">${spec || '규격 미기재'}</span></div>
       <div class="field"><span class="lbl">위치:</span> <span class="val loc-val">${location || '-'}</span></div>
     </div>
   </div>
   <div class="qty-bar">
-    <span>재고 수량:</span> <strong>${qtyStr} ${unit}</strong>
+    <span>재고 수량 / 발행:</span> <strong>${seqBadge ? `${seqBadge} (${qtyStr} ${unit})` : `${qtyStr} ${unit}`}</strong>
   </div>
   <div class="barcode-box">
     ${barcodeSvg}
     <div class="barcode-text">${lotNo}</div>
   </div>
 </div>`;
+}
+
+/**
+ * 총 수량(N)에 대해 1/N, 2/N ... N/N 개별 순번 부여 일괄 라벨 HTML 생성
+ */
+export async function generateSerializedLotLabelBatchHtml(
+  lotNo: string,
+  itemName: string,
+  spec: string,
+  location: string,
+  totalQty: number,
+  unit: string,
+  receivedDate?: string,
+  printCountOverride?: number
+): Promise<string> {
+  const cards: string[] = [];
+  const printCount = printCountOverride && printCountOverride > 0 ? printCountOverride : Math.max(1, totalQty);
+  
+  for (let i = 1; i <= printCount; i++) {
+    const seqBadge = `${i}/${printCount}`;
+    const seqLot = printCount === 1 ? lotNo : `${lotNo}-${String(i).padStart(3, '0')}`;
+    const cardHtml = await generateStandardLotLabelHtml(
+      seqLot,
+      itemName,
+      spec,
+      location,
+      totalQty.toLocaleString(),
+      unit,
+      receivedDate,
+      seqBadge
+    );
+    cards.push(cardHtml);
+  }
+
+  return cards.join('');
 }
