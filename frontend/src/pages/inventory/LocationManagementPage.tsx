@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { WmsInventoryModal } from '@/components/WmsInventoryModal';
 import { RackTransferModal } from '@/components/RackTransferModal';
+import { generateRackLocationLabelHtml, generateRackLotLabelHtml } from '@/lib/barcodeGenerator';
 
 // ─── 랙 로케이션 마스터 ────────────────────────────────────────────────────────
 export const ZONE_1_COLS = ['O','N','M','L','K','J','I','H','G','F','E','D','C','B','A'];
@@ -200,101 +201,85 @@ function GraphicRackMap({
 }
 
 // ─── 메인 페이지 ────────────────────────────────────────────────────────────
-// ─── 파레트 위치 라벨 일괄 인쇄 ────────────────────────────────────────
-function printAllPalletLabels(zones: { title: string; cols: string[] }[], tiers: number[]) {
+// ─── 랙/파레트 위치 라벨 일괄 인쇄 (80×60mm) ──────────────────────────────
+async function printAllPalletLabels() {
+  const rows = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R'];
+  const levels = [1, 2, 3];
   const allLocations: { code: string; p: 1 | 2 }[] = [];
-  for (const z of zones) {
-    for (const col of z.cols) {
-      for (const tier of tiers) {
-        const code = `${col}${tier}`;
-        allLocations.push({ code, p: 1 });
-        allLocations.push({ code, p: 2 });
-      }
+
+  for (const r of rows) {
+    for (const l of levels) {
+      const code = `${r}${l}`;
+      allLocations.push({ code, p: 1 });
+      allLocations.push({ code, p: 2 });
     }
   }
 
-  const labelHtml = allLocations.map(({ code, p }) => {
-    const locFull = `${code}-P${p}`;
-    const side    = p === 1 ? '오른쪽' : '왼쪽';
-    const qrUrl   = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(locFull)}&margin=0`;
-    return `
-<div class="label">
-  <div class="top"><span class="co">(주)이지원</span><span class="title">낙 위치 라벨</span></div>
-  <div class="row">
-    <div class="qr"><img src="${qrUrl}"/></div>
-    <div class="info">
-      <div class="loc">${locFull}</div>
-      <div class="side">${side} 파레트 (P${p})</div>
-      <div class="zone">낙: ${code}</div>
-    </div>
-  </div>
-  <div class="scan">📱 스캔 후 입고 등록</div>
-</div>`;
-  }).join('');
+  const labelCards = await Promise.all(
+    allLocations.map(({ code, p }) => {
+      const locFull = `${code}-P${p}`;
+      const sideText = p === 1 ? '오른쪽 파레트 (P1)' : '왼쪽 파레트 (P2)';
+      return generateRackLocationLabelHtml(locFull, sideText, code);
+    })
+  );
 
   const w = window.open('', '_blank', 'width=900,height=700');
   if (!w) { alert('팝업 차단 해제 후 다시 시도하세요.'); return; }
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>파레트 위치 라벨 일괄</title>
 <style>
 @page{size:80mm 60mm;margin:0}
-body{margin:0;padding:0;font-family:'Malgun Gothic',sans-serif}
-.label{width:80mm;height:60mm;padding:3mm;box-sizing:border-box;page-break-after:always;display:flex;flex-direction:column;justify-content:space-between}
-.top{display:flex;justify-content:space-between;border-bottom:0.3mm solid #333;padding-bottom:1mm;margin-bottom:1.5mm;font-size:6.5pt}
-.co{font-weight:bold;color:#c00}.title{font-weight:bold}
-.row{display:flex;gap:3mm;align-items:center;flex:1}
-.qr img{width:24mm;height:24mm;border:0.2mm solid #ccc}
-.info{flex:1}
-.info .loc{font-size:16pt;font-weight:900;font-family:monospace;color:#1a237e;line-height:1}
-.info .side{font-size:7pt;color:#555;margin-top:1mm;font-weight:bold}
-.info .zone{font-size:6.5pt;color:#888;margin-top:0.5mm}
-.scan{font-size:6pt;color:#999;text-align:center;border-top:0.2mm dashed #ccc;padding-top:1mm;margin-top:1mm}
-</style></head><body>${labelHtml}</body></html>`);
+body{margin:0;padding:0;font-family:'Malgun Gothic',sans-serif;background:#fff;}
+.label-card{width:80mm;height:60mm;padding:3mm;box-sizing:border-box;page-break-after:always;display:flex;flex-direction:column;justify-content:space-between;border:1px solid #ddd;}
+.header{display:flex;justify-content:space-between;border-bottom:0.4mm solid #1a237e;padding-bottom:1mm;font-size:7pt;font-weight:bold;}
+.company{color:#c00;}.title{color:#1a237e;}
+.body-row{display:flex;gap:3mm;align-items:center;flex:1;margin-top:1.5mm;}
+.qr-box .qr-img{width:22mm;height:22mm;border:0.2mm solid #ddd;}
+.info-box{flex:1;}
+.loc-code{font-size:15pt;font-weight:900;font-family:monospace;color:#1a237e;line-height:1.1;}
+.side-badge{font-size:8pt;color:#15803d;font-weight:bold;margin-top:1mm;}
+.rack-zone{font-size:7pt;color:#666;margin-top:0.5mm;}
+.barcode-box{text-align:center;border-top:0.2mm dashed #bbb;padding-top:1mm;margin-top:1mm;}
+.barcode-box svg{width:60mm;height:10mm;margin:0 auto;display:block;}
+.barcode-text{font-size:6pt;font-family:monospace;color:#555;letter-spacing:1px;margin-top:0.5mm;}
+</style></head><body>${labelCards.join('')}</body></html>`);
   w.document.close();
-  setTimeout(() => { w.print(); w.close(); }, 1000);
+  setTimeout(() => { w.print(); w.close(); }, 500);
 }
 
 // ─── 랙 LOT 라벨 인쇄 (80×60mm) ────────────────────────────────────────────
-function printRackLabel(locationCode: string, slotNo: 1 | 2, slot: PalletSlot) {
+async function printRackLabel(locationCode: string, slotNo: 1 | 2, slot: PalletSlot) {
   const locFull = `${locationCode}-P${slotNo}`;
   const lotNo   = slot.lot_number || '-';
   const item    = slot.item_name  || '-';
-  const qty     = Number(slot.qty || 0).toLocaleString();
-  const side    = slotNo === 1 ? '오른쪽(P1)' : '왼쪽(P2)';
-  const qrData  = encodeURIComponent(lotNo !== '-' ? lotNo : locFull);
-  const qrUrl   = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${qrData}&margin=0`;
+  const qty     = `${Number(slot.qty || 0).toLocaleString()} EA`;
+  const sideText= slotNo === 1 ? 'P1 오른쪽' : 'P2 왼쪽';
+
+  const labelHtml = await generateRackLotLabelHtml(locFull, sideText, lotNo, item, qty);
 
   const w = window.open('', '_blank', 'width=450,height=380');
   if (!w) return;
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>랙 라벨</title>
 <style>
 @page{size:80mm 60mm;margin:0}
-body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:3mm;box-sizing:border-box;font-size:8pt;margin:0}
-.top{display:flex;justify-content:space-between;border-bottom:0.3mm solid #333;padding-bottom:1.5mm;margin-bottom:2mm;font-size:7pt}
-.co{font-weight:bold;color:#c00}.title{font-weight:bold}
-.row{display:flex;gap:3mm;align-items:flex-start}
-.qr img{width:22mm;height:22mm;border:0.2mm solid #ccc}
-.info .loc{font-size:12pt;font-weight:900;font-family:monospace;color:#1a237e}
-.info .side{font-size:7pt;color:#555;margin-bottom:1mm}
-.info .field{font-size:6.5pt;margin-top:1.5mm}
-.info .lbl{color:#888}
-.info .val{font-weight:bold}
-.qty{border:0.4mm solid #333;text-align:center;padding:1.5mm;margin-top:2mm;font-size:11pt;font-weight:900}
-.qty small{display:block;font-size:6pt;color:#555;font-weight:400;margin-bottom:0.5mm}
-</style></head><body>
-<div class="top"><span class="co">(주)이지원</span><span class="title">랙 위치 LOT 라벨</span><span>${new Date().toLocaleDateString('ko-KR')}</span></div>
-<div class="row">
-  <div class="qr"><img src="${qrUrl}"/></div>
-  <div class="info">
-    <div class="loc">${locFull}</div>
-    <div class="side">${side} 파레트</div>
-    <div class="field"><span class="lbl">LOT: </span><span class="val">${lotNo}</span></div>
-    <div class="field"><span class="lbl">품목: </span><span class="val">${item}</span></div>
-  </div>
-</div>
-<div class="qty"><small>수량</small>${qty}</div>
-</body></html>`);
+body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:0;margin:0;background:#fff;}
+.label-card{width:80mm;height:60mm;padding:3mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:1px solid #ddd;}
+.header{display:flex;justify-content:space-between;border-bottom:0.4mm solid #1a237e;padding-bottom:1mm;font-size:7pt;font-weight:bold;}
+.company{color:#c00;}.title{color:#1a237e;}.date{color:#666;font-size:6pt;}
+.body-row{display:flex;gap:3mm;align-items:center;flex:1;margin-top:1.5mm;}
+.qr-box .qr-img{width:22mm;height:22mm;border:0.2mm solid #ddd;}
+.info-box{flex:1;}
+.loc-code{font-size:10pt;font-weight:900;font-family:monospace;color:#1a237e;}
+.field{font-size:7pt;margin-top:0.5mm;}
+.field .lbl{color:#777;}
+.field .val{font-weight:bold;color:#111;}
+.lot-val{font-family:monospace;color:#1d4ed8;}
+.qty-val{font-size:9pt;color:#047857;}
+.barcode-box{text-align:center;border-top:0.2mm dashed #bbb;padding-top:1mm;margin-top:1mm;}
+.barcode-box svg{width:60mm;height:10mm;margin:0 auto;display:block;}
+.barcode-text{font-size:6pt;font-family:monospace;color:#555;letter-spacing:1px;margin-top:0.5mm;}
+</style></head><body>${labelHtml}</body></html>`);
   w.document.close();
-  setTimeout(() => { w.print(); w.close(); }, 700);
+  setTimeout(() => { w.print(); w.close(); }, 500);
 }
 
 export function LocationManagementPage() {

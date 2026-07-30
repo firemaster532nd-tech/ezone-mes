@@ -85,41 +85,53 @@ function fmtLoc(loc?: string) {
   return m ? `${m[1]}-P${m[2]}(${m[2] === '1' ? '우' : '좌'})` : loc;
 }
 
+import { generateStandardLotLabelHtml, generateQrDataUrl } from '@/lib/barcodeGenerator';
+
 // ─── LOT 라벨 인쇄 모달 ───────────────────────────────────────────────────────
 function LabelModal({ lot, onClose }: { lot: MaterialLot; onClose: () => void }) {
-  const qr = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(lot.lot_number)}&margin=0`;
-  const doPrint = () => {
+  const [qrUrl, setQrUrl] = useState<string>('');
+
+  useEffect(() => {
+    generateQrDataUrl(lot.lot_number, 200).then(setQrUrl);
+  }, [lot.lot_number]);
+
+  const doPrint = async () => {
+    const qtyStr = Number(lot.qty_current).toLocaleString();
+    const labelHtml = await generateStandardLotLabelHtml(
+      lot.lot_number,
+      lot.item_name,
+      fmtSpec(lot),
+      lot.location || '-',
+      qtyStr,
+      lot.unit,
+      fmtDate(lot.received_date)
+    );
+
     const w = window.open('', '_blank', 'width=450,height=380');
     if (!w) return;
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>라벨</title>
 <style>
 @page{size:80mm 60mm;margin:0}
-body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:3mm;box-sizing:border-box;font-size:8pt}
-.top{display:flex;justify-content:space-between;border-bottom:0.3mm solid #333;padding-bottom:1.5mm;margin-bottom:1.5mm;font-size:7pt}
-.co{font-weight:bold;color:#c00}.title{font-weight:bold}
-.row{display:flex;gap:2mm}
-.qr img{width:20mm;height:20mm}
-.info .lot{font-size:9pt;font-weight:900;word-break:break-all}
-.info .field{font-size:6.5pt;margin-top:1mm}
-.info .lbl{color:#666}
-.qty{border:0.4mm solid #333;text-align:center;padding:1mm;margin-top:1.5mm;font-size:11pt;font-weight:900}
-.qty small{display:block;font-size:6pt;color:#555;font-weight:400}
-</style></head><body>
-<div class="top"><span class="co">(주)이지원</span><span class="title">원자재 LOT 라벨</span></div>
-<div class="row">
-  <div class="qr"><img src="${qr}"/></div>
-  <div class="info">
-    <div class="lot">${lot.lot_number}</div>
-    <div class="field"><span class="lbl">품목: </span>${lot.item_name}</div>
-    <div class="field"><span class="lbl">규격: </span>${fmtSpec(lot)}</div>
-    <div class="field"><span class="lbl">위치: </span>${lot.location || '-'}</div>
-    <div class="field"><span class="lbl">입고일: </span>${fmtDate(lot.received_date)}</div>
-  </div>
-</div>
-<div class="qty"><small>현재 수량</small>${Number(lot.qty_current).toLocaleString()} ${lot.unit}</div>
-</body></html>`);
+body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:0;margin:0;background:#fff;}
+.label-card{width:80mm;height:60mm;padding:3mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:1px solid #ddd;}
+.header{display:flex;justify-content:space-between;border-bottom:0.4mm solid #1a237e;padding-bottom:1mm;font-size:7pt;font-weight:bold;}
+.company{color:#c00;}.title{color:#1a237e;}.date{color:#666;font-size:6pt;}
+.body-row{display:flex;gap:3mm;align-items:center;flex:1;margin-top:1.5mm;}
+.qr-box .qr-img{width:22mm;height:22mm;border:0.2mm solid #ddd;}
+.info-box{flex:1;}
+.lot-number{font-size:10pt;font-weight:900;font-family:monospace;color:#1d4ed8;}
+.field{font-size:7pt;margin-top:0.5mm;}
+.field .lbl{color:#777;}
+.field .val{font-weight:bold;color:#111;}
+.item-val{color:#0f172a;}
+.loc-val{color:#065f46;}
+.qty-bar{background:#f1f5f9;border:0.2mm solid #cbd5e1;padding:1mm 2mm;font-size:8pt;margin-top:1mm;display:flex;justify-content:space-between;}
+.barcode-box{text-align:center;border-top:0.2mm dashed #bbb;padding-top:1mm;margin-top:1mm;}
+.barcode-box svg{width:60mm;height:10mm;margin:0 auto;display:block;}
+.barcode-text{font-size:6pt;font-family:monospace;color:#555;letter-spacing:1px;margin-top:0.5mm;}
+</style></head><body>${labelHtml}</body></html>`);
     w.document.close();
-    setTimeout(() => { w.print(); w.close(); }, 700);
+    setTimeout(() => { w.print(); w.close(); }, 500);
   };
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -131,17 +143,17 @@ body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:3mm;b
         {/* 미리보기 */}
         <div className="border-2 border-dashed border-slate-300 rounded-lg p-3 bg-slate-50" style={{aspectRatio:'80/60'}}>
           <div className="flex gap-2 h-full text-[9px]">
-            <img src={qr} alt="QR" className="h-full aspect-square"/>
+            {qrUrl && <img src={qrUrl} alt="QR" className="h-full aspect-square border"/>}
             <div className="flex-1 space-y-0.5 overflow-hidden">
-              <p className="font-black text-[8px] break-all">{lot.lot_number}</p>
-              <p>{lot.item_name}</p>
+              <p className="font-black text-[8px] break-all text-blue-700 font-mono">{lot.lot_number}</p>
+              <p className="font-bold">{lot.item_name}</p>
               <p className="text-slate-500">{fmtSpec(lot)}</p>
               <p className="text-slate-500">{lot.location || '-'}</p>
               <p className="font-bold text-emerald-700">{Number(lot.qty_current).toLocaleString()} {lot.unit}</p>
             </div>
           </div>
         </div>
-        <p className="text-center text-[11px] text-slate-400">용지: 80×60mm</p>
+        <p className="text-center text-[11px] text-slate-400">용지: 80×60mm (QR + Code128 바코드)</p>
         <button onClick={doPrint} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2">
           <Printer className="h-4 w-4"/>인쇄
         </button>

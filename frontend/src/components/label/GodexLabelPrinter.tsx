@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Printer, Barcode, Wifi, WifiOff, AlertCircle, CheckCircle, Package } from 'lucide-react';
+import { generateStandardLotLabelHtml } from '@/lib/barcodeGenerator';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // QZ Tray 타입 선언
@@ -232,13 +233,10 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
     } catch (e: any) {
       setPrintResult('error');
       alert('인쇄 실패: ' + (e.message || e));
-    } finally {
-      setPrinting(false);
     }
   };
-
-  const handleBrowserPrint = () => {
-    const win = window.open('', '_blank', 'width=400,height=300');
+  const handleBrowserPrint = async () => {
+    const win = window.open('', '_blank', 'width=450,height=380');
     if (!win) return;
     const spec = [
       labelData.density ? `${labelData.density}K` : '',
@@ -247,26 +245,38 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
       labelData.length_mm ? `${labelData.length_mm}L` : '',
     ].filter(Boolean).join(' ');
 
+    const labelHtml = await generateStandardLotLabelHtml(
+      labelData.lot_number,
+      labelData.item_name || '품목명 미지정',
+      spec,
+      labelData.location_name || labelData.location || '-',
+      String(labelData.qty_current || 1),
+      labelData.unit || 'EA',
+      labelData.received_date
+    );
+
     win.document.write(`
-      <html><head><title>LOT 라벨</title>
+      <!DOCTYPE html><html><head><meta charset="utf-8"><title>LOT 라벨</title>
       <style>
-        @page { size: 60mm 40mm; margin: 0; }
-        body { font-family: monospace; font-size: 9pt; padding: 3mm; width: 60mm; height: 40mm; box-sizing: border-box; }
-        .lot { font-size: 7pt; letter-spacing: 2px; text-align: center; }
-        .item { font-size: 10pt; font-weight: bold; }
-        .small { font-size: 8pt; }
-        hr { border-top: 1px solid #000; margin: 1mm 0; }
-      </style></head><body>
-      <div class="small">${labelData.category || ''}</div>
-      <div class="item">${(labelData.item_name || '').slice(0,24)}</div>
-      <div class="small">규격: ${spec}</div>
-      <div class="small">수량: ${labelData.qty_current} ${labelData.unit || 'EA'}</div>
-      <div class="small">입고: ${labelData.received_date || ''}</div>
-      <div class="small" style="font-weight:bold;">위치: ${labelData.location_name || labelData.location || '위치 미지정'}</div>
-      <hr/>
-      <div style="font-size:28pt;text-align:center;letter-spacing:-1px;">*${labelData.lot_number}*</div>
-      <div class="lot">${labelData.lot_number}</div>
-      </body></html>
+        @page { size: 80mm 60mm; margin: 0; }
+        body { font-family: 'Malgun Gothic', sans-serif; width: 80mm; height: 60mm; padding: 0; margin: 0; background: #fff; }
+        .label-card{width:80mm;height:60mm;padding:3mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:1px solid #ddd;}
+        .header{display:flex;justify-content:space-between;border-bottom:0.4mm solid #1a237e;padding-bottom:1mm;font-size:7pt;font-weight:bold;}
+        .company{color:#c00;}.title{color:#1a237e;}.date{color:#666;font-size:6pt;}
+        .body-row{display:flex;gap:3mm;align-items:center;flex:1;margin-top:1.5mm;}
+        .qr-box .qr-img{width:22mm;height:22mm;border:0.2mm solid #ddd;}
+        .info-box{flex:1;}
+        .lot-number{font-size:10pt;font-weight:900;font-family:monospace;color:#1d4ed8;}
+        .field{font-size:7pt;margin-top:0.5mm;}
+        .field .lbl{color:#777;}
+        .field .val{font-weight:bold;color:#111;}
+        .item-val{color:#0f172a;}
+        .loc-val{color:#065f46;}
+        .qty-bar{background:#f1f5f9;border:0.2mm solid #cbd5e1;padding:1mm 2mm;font-size:8pt;margin-top:1mm;display:flex;justify-content:space-between;}
+        .barcode-box{text-align:center;border-top:0.2mm dashed #bbb;padding-top:1mm;margin-top:1mm;}
+        .barcode-box svg{width:60mm;height:10mm;margin:0 auto;display:block;}
+        .barcode-text{font-size:6pt;font-family:monospace;color:#555;letter-spacing:1px;margin-top:0.5mm;}
+      </style></head><body>${labelHtml}</body></html>
     `);
     win.document.close();
     win.focus();
