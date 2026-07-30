@@ -85,7 +85,7 @@ function fmtLoc(loc?: string) {
   return m ? `${m[1]}-P${m[2]}(${m[2] === '1' ? '우' : '좌'})` : loc;
 }
 
-import { generateStandardLotLabelHtml, generateQrDataUrl } from '@/lib/barcodeGenerator';
+import { generateStandardLotLabelHtml, generateQrDataUrl, generateCode128Svg } from '@/lib/barcodeGenerator';
 
 // ─── LOT 라벨 인쇄 모달 ───────────────────────────────────────────────────────
 function LabelModal({ lot, onClose }: { lot: MaterialLot; onClose: () => void }) {
@@ -135,27 +135,40 @@ body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:0;mar
   };
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-72 p-5 space-y-4">
-        <div className="flex justify-between">
-          <h3 className="font-bold flex items-center gap-1.5"><Printer className="h-4 w-4 text-blue-600"/>LOT 라벨 인쇄</h3>
+      <div className="bg-white rounded-xl shadow-xl w-80 p-5 space-y-4">
+        <div className="flex justify-between items-center">
+          <h3 className="font-bold text-sm text-slate-800 flex items-center gap-1.5"><Printer className="h-4 w-4 text-blue-600"/>LOT 라벨 인쇄 (QR + 바코드)</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-lg leading-none">&times;</button>
         </div>
-        {/* 미리보기 */}
-        <div className="border-2 border-dashed border-slate-300 rounded-lg p-3 bg-slate-50" style={{aspectRatio:'80/60'}}>
-          <div className="flex gap-2 h-full text-[9px]">
-            {qrUrl && <img src={qrUrl} alt="QR" className="h-full aspect-square border"/>}
+        {/* 라벨 실물 미리보기 (80×60mm 비율) */}
+        <div className="border-2 border-slate-800 rounded-lg p-3 bg-white flex flex-col justify-between shadow-sm space-y-2">
+          <div className="flex justify-between items-center border-b pb-1 text-[9px]">
+            <span className="font-bold text-rose-600">(주)이지원</span>
+            <span className="font-bold text-indigo-900">🏷️ 원부자재 LOT 라벨</span>
+            <span className="text-slate-400 text-[8px]">{fmtDate(lot.received_date)}</span>
+          </div>
+          <div className="flex gap-2 text-[9px] items-center">
+            {qrUrl ? (
+              <img src={qrUrl} alt="QR" className="h-16 w-16 aspect-square border border-slate-200 p-0.5 rounded flex-shrink-0"/>
+            ) : (
+              <div className="h-16 w-16 bg-slate-100 animate-pulse rounded"/>
+            )}
             <div className="flex-1 space-y-0.5 overflow-hidden">
-              <p className="font-black text-[8px] break-all text-blue-700 font-mono">{lot.lot_number}</p>
-              <p className="font-bold">{lot.item_name}</p>
-              <p className="text-slate-500">{fmtSpec(lot)}</p>
-              <p className="text-slate-500">{lot.location || '-'}</p>
-              <p className="font-bold text-emerald-700">{Number(lot.qty_current).toLocaleString()} {lot.unit}</p>
+              <p className="font-black text-[10px] text-indigo-700 font-mono tracking-tight">{lot.lot_number}</p>
+              <p className="font-bold text-slate-900 truncate">{lot.item_name}</p>
+              <p className="text-slate-500 text-[8px] truncate">규격: {fmtSpec(lot)}</p>
+              <p className="text-emerald-700 text-[8px] font-semibold">위치: {lot.location || '-'}</p>
+              <p className="font-bold text-slate-800 text-[9px]">수량: {Number(lot.qty_current).toLocaleString()} {lot.unit}</p>
             </div>
           </div>
+          <div className="border-t border-dashed border-slate-300 pt-1 text-center">
+            <div dangerouslySetInnerHTML={{ __html: generateCode128Svg(lot.lot_number, 24) }} />
+            <div className="font-mono text-[8px] text-slate-500 font-bold tracking-wider mt-0.5">{lot.lot_number}</div>
+          </div>
         </div>
-        <p className="text-center text-[11px] text-slate-400">용지: 80×60mm (QR + Code128 바코드)</p>
-        <button onClick={doPrint} className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2">
-          <Printer className="h-4 w-4"/>인쇄
+        <p className="text-center text-[11px] text-slate-500 font-semibold">규격: 80×60mm (2D QR + 1D Code128 바코드)</p>
+        <button onClick={doPrint} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2 shadow">
+          <Printer className="h-4 w-4"/> 라벨 출력 (QR + 바코드)
         </button>
       </div>
     </div>
