@@ -564,16 +564,55 @@ export async function materialLotsRoutes(app: FastifyInstance) {
             nonCR.push({ status: 'updated' });
           } else {
             await client.query(`INSERT INTO non_certified_stock (rack_code,pallet_no,item_name,spec,lot_number,qty,reason,notes,registered_at) VALUES ($1,$2,$3,$4,$5,$6,'로트미확인',$7,CURRENT_DATE)`, [rack_code, pallet_no, item_name, spec||null, lot_number&&lot_number.trim()?lot_number.trim():null, qty||0, notes||'구글시트 초기등록']);
-            await client.query(`UPDATE material_lots SET is_active = FALSE WHERE lot_id = $1`, [lot.lot_id]);
-            updatedCount++;
-            continue;
-          } else {
-            lotNo = baseLot;
-            rackLoc = formattedRack;
+            nonCR.push({ status: 'created' });
           }
         }
+      }
+      await client.query('COMMIT');
+      return { certResults: certR, nonCertResults: nonCR };
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      return reply.status(500).send({ error: e.message });
+    } finally {
+      client.release();
+    }
+  });
 
-        // 2. 규격(item_spec) 및 수치 정보 보완
+  // ── POST /api/material-lots/fix-specs-and-lots (사규 C302 LOT 번호 정제 및 규격 복원) ──
+  app.post('/api/material-lots/fix-specs-and-lots', async (req, reply) => {
+    const KNOWN_LOT_SPECS: Record<string, { spec: string; name?: string; density?: number; thickness?: number; width?: number; length?: number }> = {
+      '260227CW005': { spec: '25* 150*100K', name: '100K 25T 150W 7400L', density: 100, thickness: 25, width: 150, length: 7400 },
+      '260227CW004': { spec: '25* 200*100K', name: '100K 25T 200W 7400L', density: 100, thickness: 25, width: 200, length: 7400 },
+      '260203CW001': { spec: '25* 300*100K', name: '100K 25T 300W 7400L', density: 100, thickness: 25, width: 300, length: 7400 },
+      '260227CW003': { spec: '25* 300*100K', name: '100K 25T 300W 7400L', density: 100, thickness: 25, width: 300, length: 7400 },
+      '260203CW004': { spec: '38* 600*100K', name: '100K 38T 600W 4800L', density: 100, thickness: 38, width: 600, length: 4800 },
+      '260203CW002': { spec: '25* 200*128K', name: '128K 25T 200W 7400L', density: 128, thickness: 25, width: 200, length: 7400 },
+      '260514CW002': { spec: '25* 200*128K', name: '128K 25T 200W 7400L', density: 128, thickness: 25, width: 200, length: 7400 },
+      '260722CW001': { spec: '25* 200*128K', name: '128K 25T 200W 7400L', density: 128, thickness: 25, width: 200, length: 7400 },
+      '260630CW002': { spec: '25* 200*128K', name: '128K 25T 200W 7400L', density: 128, thickness: 25, width: 200, length: 7400 },
+      '260203CW003': { spec: '25* 150*96K',  name: '96K 25T 150W 7400L',  density: 96,  thickness: 25, width: 150, length: 7400 },
+      '260203CW005': { spec: '25* 200*128K', name: '128K 25T 200W 7400L', density: 128, thickness: 25, width: 200, length: 7400 },
+      '260203CW006': { spec: '25* 200*128K', name: '128K 25T 200W 7400L', density: 128, thickness: 25, width: 200, length: 7400 },
+      '260203CW007': { spec: '25* 200*128K', name: '128K 25T 200W 7400L', density: 128, thickness: 25, width: 200, length: 7400 },
+      '260203CW008': { spec: '25* 200*128K', name: '128K 25T 200W 7400L', density: 128, thickness: 25, width: 200, length: 7400 },
+      '260610CW002': { spec: '25* 200*128K', name: '128K 25T 200W 7400L', density: 128, thickness: 25, width: 200, length: 7400 },
+      '260630CW001': { spec: '25* 200*128K', name: '128K 25T 200W 7400L', density: 128, thickness: 25, width: 200, length: 7400 },
+      '260630CW003': { spec: '25* 200*128K', name: '128K 25T 200W 7400L', density: 128, thickness: 25, width: 200, length: 7400 },
+      '260722CW003': { spec: '25* 200*128K', name: '128K 25T 200W 7400L', density: 128, thickness: 25, width: 200, length: 7400 },
+      '260402GW002': { spec: '96K 50T 500W 1000L', name: '그라스울 96K', density: 96, thickness: 50, width: 500, length: 1000 },
+      '251001GW001': { spec: '48K 50T 500W 1000L', name: '그라스울보드 48K', density: 48, thickness: 50, width: 500, length: 1000 }
+    };
+
+    const client = await pool.connect();
+    let updatedCount = 0;
+    try {
+      await client.query('BEGIN');
+      const { rows: lots } = await client.query(`SELECT * FROM material_lots WHERE is_active = TRUE`);
+
+      for (const lot of lots) {
+        let lotNo = lot.lot_number;
+        let rackLoc = lot.location;
+
         const basePrefix = lotNo.split('-')[0];
         const specData = KNOWN_LOT_SPECS[basePrefix] || KNOWN_LOT_SPECS[lotNo];
         
@@ -603,23 +642,21 @@ export async function materialLotsRoutes(app: FastifyInstance) {
 
         await client.query(`
           UPDATE material_lots SET
-            lot_number = $1,
-            item_name = COALESCE($2, item_name),
-            item_spec = COALESCE($3, item_spec),
-            density = COALESCE($4, density),
-            thickness = COALESCE($5, thickness),
-            width_mm = COALESCE($6, width_mm),
-            length_mm = COALESCE($7, length_mm),
-            location = COALESCE($8, location),
+            item_name = COALESCE($1, item_name),
+            item_spec = COALESCE($2, item_spec),
+            density = COALESCE($3, density),
+            thickness = COALESCE($4, thickness),
+            width_mm = COALESCE($5, width_mm),
+            length_mm = COALESCE($6, length_mm),
             updated_at = NOW()
-          WHERE lot_id = $9
-        `, [lotNo, item_name, item_spec, density, thickness, width_mm, length_mm, rackLoc, lot.lot_id]);
+          WHERE lot_id = $7
+        `, [item_name, item_spec, density, thickness, width_mm, length_mm, lot.lot_id]);
 
         updatedCount++;
       }
 
       await client.query('COMMIT');
-      return { success: true, updated_count: updatedCount, message: `${updatedCount}개 LOT 규격 복원 및 순수 LOT 번호 정제 완료` };
+      return { success: true, updated_count: updatedCount, message: `${updatedCount}개 LOT 규격 복원 완료` };
     } catch (e: any) {
       await client.query('ROLLBACK');
       return reply.status(500).send({ error: e.message });
