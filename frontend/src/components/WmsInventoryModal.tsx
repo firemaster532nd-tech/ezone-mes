@@ -11,16 +11,17 @@ export interface WmsInventoryModalProps {
 }
 
 type InputMethod = 'pallet' | 'single';
-type Category = 'non_certified' | 'sub_material' | 'semi_finished' | 'finished' | 'return';
+type Category = 'raw_material' | 'sub_material' | 'semi_finished' | 'finished' | 'non_certified' | 'return';
 type StockStatus = 'normal' | 'ready_to_ship';
 type UnitType = 'EA' | '롤' | 'kg' | 'm' | '본';
 
 const CATEGORY_OPTIONS: { value: Category; label: string }[] = [
-  { value: 'non_certified',  label: '비인정' },
-  { value: 'sub_material',   label: '부자재' },
-  { value: 'semi_finished',  label: '반제품' },
-  { value: 'finished',       label: '완제품' },
-  { value: 'return',         label: '반품' },
+  { value: 'raw_material',   label: '🧪 원자재 (배합원료 4종)' },
+  { value: 'sub_material',   label: '📦 부자재 (소켓/강판/그라스울/세라믹울/차열시트)' },
+  { value: 'semi_finished',  label: '🧩 반제품 (조립소켓/틈새시트/플래싱)' },
+  { value: 'finished',       label: '🏭 완제품 (덕트 내화채움구조체)' },
+  { value: 'non_certified',  label: '⚠️ 비인정' },
+  { value: 'return',         label: '🔄 반품' },
 ];
 
 const UNIT_OPTIONS: UnitType[] = ['EA', '롤', 'kg', 'm', '본'];

@@ -135,14 +135,25 @@ export function InitialMaterialPage() {
               name="category"
               value={formData.category}
               onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 font-semibold"
             >
-              <option value="세라믹울">세라믹울</option>
-              <option value="차열재">차열재</option>
-              <option value="그라스울">그라스울</option>
-              <option value="그라스울보드">그라스울보드</option>
-              <option value="소켓">소켓</option>
-              <option value="기타부자재">기타부자재</option>
+              <optgroup label="🧪 원자재 (배합원료 4종)">
+                <option value="원자재(배합원료)">원자재 (배합원료 4종: 난연MB, 가조제, 수지, 첨가제)</option>
+              </optgroup>
+              <optgroup label="📦 부자재">
+                <option value="소켓">소켓 (부자재)</option>
+                <option value="강판">강판 (부자재)</option>
+                <option value="그라스울">그라스울 (부자재)</option>
+                <option value="그라스울보드">그라스울보드 (부자재)</option>
+                <option value="세라믹울">세라믹울 (부자재)</option>
+                <option value="차열재">차열재 / 차열시트 (부자재)</option>
+                <option value="기타부자재">기타 부자재</option>
+              </optgroup>
+              <optgroup label="🧩 반제품">
+                <option value="조립소켓">조립 소켓 (반제품 J-LOT)</option>
+                <option value="틈새시트">틈새시트 (반제품)</option>
+                <option value="플래싱">방화 플래싱 (반제품)</option>
+              </optgroup>
             </select>
           </div>
           

@@ -62,7 +62,7 @@ interface LedgerRow {
 }
 
 // ─── 유틸 ─────────────────────────────────────────────────────────────────────
-const CATEGORIES = ['세라믹울', '그라스울', '그라스울보드', '차열재', '소켓', '반제품', '기타부자재'];
+const CATEGORIES = ['원자재(배합원료)', '세라믹울', '그라스울', '그라스울보드', '차열재/차열시트', '소켓', '강판', '반제품(조립소켓/틈새시트/플래싱)', '기타부자재'];
 
 const TXN_LABEL: Record<string, { text: string; color: string; emoji: string }> = {
   IN:   { text: '입고',     color: 'text-emerald-700 bg-emerald-50 border-emerald-200', emoji: '📥' },
@@ -827,8 +827,8 @@ export function MaterialStockPage() {
   return (
     <div className="p-6 space-y-5 bg-slate-50 min-h-screen">
       <PageHeader
-        title="📦 원자재 통합 재고관리"
-        description={`전체 LOT 재고현황 · 수불대장 · 이력조회 · 수동 수불 입력${lastUpdated ? ` · 🕐 ${lastUpdated.toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'})} 업데이트 · 매일 16:00 자동갱신` : ''}`}
+        title="📦 원부자재 통합 재고관리"
+        description={`배합원료 4종(원자재) 및 소켓·강판·그라스울·세라믹울·차열시트(부자재)의 통합 LOT 재고 관리 및 QR+Code128 바코드 인쇄${lastUpdated ? ` · 🕐 ${lastUpdated.toLocaleTimeString('ko-KR', {hour:'2-digit',minute:'2-digit'})} 업데이트` : ''}`}
       />
 
       {/* 탭 */}
