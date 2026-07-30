@@ -225,9 +225,9 @@ export async function generateSerializedLotLabelBatchHtml(
   
   for (let i = 1; i <= printCount; i++) {
     const seqBadge = `${i}/${printCount}`;
-    const seqLot = printCount === 1 ? lotNo : `${lotNo}-${String(i).padStart(3, '0')}`;
+    // 사규 C302 LOT 부여 규칙 준수: LOT 번호에 임의 접미사(-001)나 랙 표시 결합 금지
     const cardHtml = await generateStandardLotLabelHtml(
-      seqLot,
+      lotNo,
       itemName,
       spec,
       location,

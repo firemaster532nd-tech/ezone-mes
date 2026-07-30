@@ -315,8 +315,8 @@ async function render(){
 
   for(let i=0; i<qty; i++){
     const sn      = serial0 + i;
-    // QR/바코드 데이터: 수량이 1장이면 시리얼 없이, 여러 장이면 -001/-002... 붙임
-    const qrData  = qty===1 ? LOT.number : `${LOT.number}-${String(sn).padStart(3,'0')}`;
+    // 사규 C302 LOT 규격 준수: LOT 번호 뒤에 임의 접미사(-001)나 랙 위치 결합 금지
+    const qrData  = LOT.number;
     const isHold  = loc.startsWith('H-');
 
     const div = document.createElement('div');

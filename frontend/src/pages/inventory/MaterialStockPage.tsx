@@ -75,9 +75,11 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 const firstOfMonth = () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); };
 
 function fmtDate(s?: string) { return s ? s.slice(0, 10) : '-'; }
-function fmtSpec(l: { density?: number; thickness?: number; width_mm?: number; length_mm?: number }) {
-  return [l.density && `${l.density}K`, l.thickness && `${l.thickness}T`, l.width_mm && `${l.width_mm}W`, l.length_mm && `${l.length_mm}L`]
-    .filter(Boolean).join(' ') || '-';
+function fmtSpec(l: { density?: number; thickness?: number; width_mm?: number; length_mm?: number; item_spec?: string }) {
+  if (l.item_spec && l.item_spec.trim()) return l.item_spec.trim();
+  const nums = [l.density && `${l.density}K`, l.thickness && `${l.thickness}T`, l.width_mm && `${l.width_mm}W`, l.length_mm && `${l.length_mm}L`]
+    .filter(Boolean).join(' ');
+  return nums || '-';
 }
 function fmtLoc(loc?: string) {
   if (!loc) return '-';
@@ -168,7 +170,7 @@ body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:0;mar
               <div className="h-16 w-16 bg-slate-100 animate-pulse rounded"/>
             )}
             <div className="flex-1 space-y-0.5 overflow-hidden">
-              <p className="font-black text-[10px] text-indigo-700 font-mono tracking-tight">{lot.lot_number}{printCount > 1 ? '-001' : ''}</p>
+              <p className="font-black text-[10px] text-indigo-700 font-mono tracking-tight">{lot.lot_number}</p>
               <p className="font-bold text-slate-900 truncate">{lot.item_name}</p>
               <p className="text-red-700 font-bold text-[8.5px] truncate">규격: {fmtSpec(lot)}</p>
               <p className="text-emerald-700 text-[8px] font-semibold">위치: {lot.location || '-'}</p>
@@ -176,8 +178,8 @@ body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:0;mar
             </div>
           </div>
           <div className="border-t border-dashed border-slate-300 pt-1 text-center">
-            <div dangerouslySetInnerHTML={{ __html: generateCode128Svg(printCount > 1 ? `${lot.lot_number}-001` : lot.lot_number, 24) }} />
-            <div className="font-mono text-[8px] text-slate-500 font-bold tracking-wider mt-0.5">{printCount > 1 ? `${lot.lot_number}-001` : lot.lot_number}</div>
+            <div dangerouslySetInnerHTML={{ __html: generateCode128Svg(lot.lot_number, 24) }} />
+            <div className="font-mono text-[8px] text-slate-500 font-bold tracking-wider mt-0.5">{lot.lot_number}</div>
           </div>
         </div>
 
@@ -338,7 +340,7 @@ function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading:
                   <td className="px-3 py-2 font-mono text-xs font-bold text-blue-700 whitespace-nowrap">{lot.lot_number}</td>
                   <td className="px-3 py-2 font-medium whitespace-nowrap">{lot.item_name}</td>
                   <td className="px-3 py-2"><span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[11px] font-bold">{lot.category}</span></td>
-                  <td className="px-3 py-2 text-xs font-mono text-slate-500 whitespace-nowrap">{fmtSpec(lot)}</td>
+                  <td className="px-3 py-2 text-xs font-mono font-bold text-red-700 whitespace-nowrap bg-red-50/30">{fmtSpec(lot)}</td>
                   <td className="px-3 py-2 text-xs text-slate-500">{lot.unit}</td>
                   <td className="px-3 py-2"><span className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-mono font-bold">{fmtLoc(lot.location)}</span></td>
                   <td className="px-3 py-2 text-right font-black text-slate-900">{Number(lot.qty_current || 0).toLocaleString()}</td>
