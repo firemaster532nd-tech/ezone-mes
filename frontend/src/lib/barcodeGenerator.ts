@@ -113,10 +113,19 @@ export async function generateRackLotLabelHtml(
   sideText: string,
   lotNo: string,
   itemName: string,
-  qty: string
+  qty: string,
+  spec?: string
 ): Promise<string> {
   const codeText = lotNo !== '-' ? lotNo : locFull;
-  const qrDataUrl = await generateQrDataUrl(codeText, 220);
+  const qrPayload = [
+    `LOT: ${lotNo}`,
+    `제품명: ${itemName || '-'}`,
+    `규격: ${spec || '규격 미기재'}`,
+    `위치: ${locFull} (${sideText})`,
+    `수량: ${qty}`
+  ].join('\n');
+
+  const qrDataUrl = await generateQrDataUrl(qrPayload, 220);
   const barcodeSvg = generateCode128Svg(codeText, 32);
 
   return `
@@ -134,6 +143,7 @@ export async function generateRackLotLabelHtml(
       <div class="loc-code">${locFull} (${sideText})</div>
       <div class="field"><span class="lbl">LOT:</span> <span class="val lot-val">${lotNo}</span></div>
       <div class="field"><span class="lbl">품목:</span> <span class="val">${itemName}</span></div>
+      <div class="field"><span class="lbl" style="font-weight:bold;color:#b91c1c;">규격:</span> <span class="val spec-val font-bold">${spec || '규격 미기재'}</span></div>
       <div class="field"><span class="lbl">수량:</span> <span class="val qty-val">${qty}</span></div>
     </div>
   </div>
@@ -157,7 +167,16 @@ export async function generateStandardLotLabelHtml(
   receivedDate?: string,
   seqBadge?: string
 ): Promise<string> {
-  const qrDataUrl = await generateQrDataUrl(lotNo, 220);
+  // QR 스캔 시 [LOT번호 / 제품명 / 규격 / 위치] 4가지 정보가 100% 한눈에 반환되는 구조화된 텍스트 생성
+  const qrPayload = [
+    `LOT: ${lotNo}`,
+    `제품명: ${itemName || '-'}`,
+    `규격: ${spec || '규격 미기재'}`,
+    `위치: ${location || '-'}`,
+    `수량: ${qtyStr} ${unit}`
+  ].join('\n');
+
+  const qrDataUrl = await generateQrDataUrl(qrPayload, 220);
   const barcodeSvg = generateCode128Svg(lotNo, 32);
 
   return `

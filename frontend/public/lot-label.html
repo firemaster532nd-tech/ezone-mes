@@ -375,7 +375,8 @@ async function render(){
       </div>`;
 
     area.appendChild(div);
-    await genQR(qrData, div.querySelector(`#qc-${i}`));
+    const richQrPayload = `LOT: ${qrData}\n제품명: ${itemName}\n규격: ${spec || '규격 미기재'}\n위치: ${loc || '-'}\n수량: ${LOT.qty || 1} ${LOT.unit || 'EA'}`;
+    await genQR(richQrPayload, div.querySelector(`#qc-${i}`));
     genBarcode(qrData, div.querySelector(`#bc-${i}`));
   }
 }
