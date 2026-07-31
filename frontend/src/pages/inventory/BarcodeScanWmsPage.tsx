@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { Camera, Keyboard, RefreshCw, Scan, CheckCircle2, Zap, ArrowRightLeft, Smartphone } from 'lucide-react';
+import { 
+  Camera, Scan, CheckCircle2, Zap, Building2, Package, Check, AlertCircle, FileText, Printer, ArrowRight
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Html5Qrcode } from 'html5-qrcode';
@@ -20,6 +23,18 @@ interface ScannedLot {
   length_mm?: number;
 }
 
+interface PendingSiteOrder {
+  po_id: number;
+  po_number: string;
+  customer_name: string;
+  project_name: string;
+  site_name: string;
+  item_name: string;
+  spec: string;
+  ordered_qty: number;
+  unit: string;
+}
+
 type TxnMode = 'OUT' | 'IN' | 'MOVE';
 
 const MODE_CFG: Record<TxnMode, { label: string; emoji: string; active: string; light: string; border: string; text: string }> = {
@@ -28,30 +43,43 @@ const MODE_CFG: Record<TxnMode, { label: string; emoji: string; active: string; 
   MOVE: { label: '위치이동', emoji: '🚚', active: 'bg-amber-500 text-white border-amber-500 shadow-md',   light: 'bg-amber-50 border-amber-200', border: 'border-amber-500', text: 'text-amber-700' },
 };
 
-interface RecentTxn {
+interface ScanHistoryItem {
+  seq: number;
   lot_number: string;
   item_name: string;
-  mode: TxnMode;
+  spec: string;
   qty: number;
+  unit: string;
+  mode: TxnMode;
+  location?: string;
+  projectName?: string;
   time: string;
 }
 
-function fmtSpec(l: ScannedLot) {
-  return [l.density && `${l.density}K`, l.thickness && `${l.thickness}T`, l.width_mm && `${l.width_mm}W`, l.length_mm && `${l.length_mm}L`]
-    .filter(Boolean).join(' ') || '-';
+function fmtSpec(l: Partial<ScannedLot>) {
+  const parts = [l.density && `${l.density}K`, l.thickness && `${l.thickness}T`, l.width_mm && `${l.width_mm}W`, l.length_mm && `${l.length_mm}L`].filter(Boolean);
+  return parts.length > 0 ? parts.join(' ') : '-';
 }
 
 export default function BarcodeScanWmsPage() {
+  const navigate = useNavigate();
   const [mode, setMode] = useState<TxnMode>('OUT');
   const [scanInput, setScanInput] = useState('');
   const [scannedLot, setScannedLot] = useState<ScannedLot | null>(null);
   const [searching, setSearching] = useState(false);
   const [qty, setQty] = useState('');
   const [locationTo, setLocationTo] = useState('');
-  const [projectName, setProjectName] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [recent, setRecent] = useState<RecentTxn[]>([]);
-  
+
+  // 1. 발주서/현장 목록 및 선택된 목표 수량 관리
+  const [pendingOrders, setPendingOrders] = useState<PendingSiteOrder[]>([]);
+  const [selectedSiteKey, setSelectedSiteKey] = useState<string>(''); // project_name
+  const [targetOrderQty, setTargetOrderQty] = useState<number>(0);
+
+  // 2. 실시간 스캔 카운터 및 세션 이력 (찍을 때마다 로트번호, 품목명, 규격, 수량 카운팅)
+  const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>([]);
+  const [completionModalOpen, setCompletionModalOpen] = useState(false);
+
   // 동시에 가동되는 스캔 모드 상태
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState('');
@@ -61,21 +89,43 @@ export default function BarcodeScanWmsPage() {
   const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
   const lastScannedCodeRef = useRef<string>('');
 
-  // 1. 모바일 기기 자동 감지
+  // 등록된 발주서/현장 목록 불러오기
+  useEffect(() => {
+    api.get<{ data: PendingSiteOrder[] }>('/shipment-orders/pending')
+      .then(res => {
+        const list = res.data || [];
+        setPendingOrders(list);
+      })
+      .catch(() => {});
+  }, []);
+
+  // 현장 선택 변경 시 목표 수량 계산
+  const handleSiteSelect = (siteKey: string) => {
+    setSelectedSiteKey(siteKey);
+    if (!siteKey) {
+      setTargetOrderQty(0);
+      return;
+    }
+    const filtered = pendingOrders.filter(p => (p.project_name || p.site_name || p.customer_name) === siteKey);
+    const totalQty = filtered.reduce((sum, p) => sum + (Number(p.ordered_qty) || 0), 0);
+    setTargetOrderQty(totalQty || 10); // default to 10 if not specified
+    toast.info(`📋 [${siteKey}] 현장이 선택되었습니다. 목표 출하 수량: ${totalQty || 10} EA`);
+  };
+
+  // 모바일 기기 감지
   useEffect(() => {
     const checkMobile = () => {
       const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
-      const mobileRegex = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i;
-      const isMobileDevice = mobileRegex.test(userAgent) || window.innerWidth < 768;
+      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent) || window.innerWidth < 768;
       setIsMobile(isMobileDevice);
       if (isMobileDevice) {
-        setCameraActive(true); // 모바일은 카메라 스캐너 자동 활성화
+        setCameraActive(true); // 모바일은 카메라 스캐너 자동 가동
       }
     };
     checkMobile();
   }, []);
 
-  // 2. 바코드 스캐너 키보드 포커스 유지 (카메라와 동시 가동)
+  // 키보드 바코드 스캐너 포커스 유지
   const focusScannerInput = useCallback(() => {
     if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
       inputRef.current?.focus();
@@ -87,13 +137,13 @@ export default function BarcodeScanWmsPage() {
     return () => clearInterval(interval);
   }, [focusScannerInput]);
 
-  // 3. LOT 바코드 인식 처리
+  // 바코드 스캔 수행
   const handleScan = useCallback(async (lotNo: string) => {
     const code = lotNo.trim();
     if (!code || code === lastScannedCodeRef.current) return;
     
     lastScannedCodeRef.current = code;
-    setTimeout(() => { lastScannedCodeRef.current = ''; }, 3000); // 3초 중복 스캔 방지
+    setTimeout(() => { lastScannedCodeRef.current = ''; }, 2500);
 
     setSearching(true);
     try {
@@ -103,24 +153,21 @@ export default function BarcodeScanWmsPage() {
       
       if (matched) {
         setScannedLot(matched);
-        setQty(''); 
-        setLocationTo(''); 
-        setProjectName('');
-        toast.success(`✅ [인식완료] ${matched.lot_number} (${matched.item_name})`);
-        setTimeout(() => document.getElementById('wms-qty')?.focus(), 200);
+        setQty('1'); // 기본 1개 세팅으로 빠른 1초 수불 처리 가능
+        toast.success(`✅ [${matched.lot_number}] ${matched.item_name} (${fmtSpec(matched)}) 스캔됨`);
+        setTimeout(() => document.getElementById('wms-qty')?.focus(), 150);
       } else {
-        toast.error(`❌ 바코드 [${code}] 에 해당하는 재고/LOT를 찾을 수 없습니다.`);
+        toast.error(`❌ LOT [${code}] 에 해당하는 재고를 찾을 수 없습니다.`);
         setScanInput('');
       }
-    } catch (e) {
-      console.error(e);
-      toast.error('LOT 바코드 조회 중 오류가 발생했습니다.');
+    } catch {
+      toast.error('LOT 조회 중 오류가 발생했습니다.');
     } finally {
       setSearching(false);
     }
   }, []);
 
-  // 4. 모바일/웹캠 카메라 스캐너 동시 가동 (Html5Qrcode)
+  // 카메라 스캐너 동시 가동 Engine
   useEffect(() => {
     if (!cameraActive) {
       if (html5QrcodeRef.current) {
@@ -145,18 +192,17 @@ export default function BarcodeScanWmsPage() {
           { facingMode: 'environment' },
           {
             fps: 15,
-            qrbox: { width: 250, height: 150 },
+            qrbox: { width: 260, height: 160 },
             aspectRatio: 1.777,
           },
           (decodedText) => {
             setScanInput(decodedText);
             handleScan(decodedText);
           },
-          () => {} // silent error ignore
+          () => {}
         );
       } catch (err: any) {
-        console.error('Camera start error:', err);
-        setCameraError(`카메라 시작 오류: ${err?.message || '카메라 권한을 확인해주세요.'}`);
+        setCameraError(`카메라 시작 실패: ${err?.message || '카메라 권한을 확인해 주세요.'}`);
       }
     };
 
@@ -172,12 +218,13 @@ export default function BarcodeScanWmsPage() {
     };
   }, [cameraActive, handleScan]);
 
-  // 5. 입고/출고/위치이동 수불 처리
+  // 수불 처리 및 실시간 카운팅 저장
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!scannedLot) return;
-    if (!qty || Number(qty) <= 0) {
-      toast.error('처리할 수량을 입력하세요.');
+    const processQty = Number(qty) || 1;
+    if (processQty <= 0) {
+      toast.error('처리 수량을 입력하세요.');
       return;
     }
     if (mode === 'MOVE' && !locationTo) {
@@ -190,41 +237,46 @@ export default function BarcodeScanWmsPage() {
       await api.post('/material-transactions', {
         lot_id: scannedLot.lot_id,
         txn_type: mode,
-        qty: Number(qty),
+        qty: processQty,
         location_to: locationTo || undefined,
-        project_name: projectName || undefined,
+        project_name: selectedSiteKey || undefined,
         source_type: 'BARCODE_SCAN',
         notes: `바코드 스캔 ${MODE_CFG[mode].label}`,
       });
 
-      const processedQty = Number(qty);
-      setRecent((prev) => [{
+      const nextSeq = scanHistory.length + 1;
+      const historyItem: ScanHistoryItem = {
+        seq: nextSeq,
         lot_number: scannedLot.lot_number,
         item_name: scannedLot.item_name,
+        spec: fmtSpec(scannedLot),
+        qty: processQty,
+        unit: scannedLot.unit,
         mode,
-        qty: processedQty,
+        location: locationTo || scannedLot.location,
+        projectName: selectedSiteKey,
         time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      }, ...prev.slice(0, 9)]);
+      };
 
-      // 로컬 재고 수량 즉시 변경 반영
-      setScannedLot((prev) => prev ? {
-        ...prev,
-        qty_current: prev.qty_current + (mode === 'IN' ? processedQty : mode === 'OUT' ? -processedQty : 0),
-        location: mode === 'MOVE' ? locationTo : prev.location,
-      } : null);
+      const updatedHistory = [historyItem, ...scanHistory];
+      setScanHistory(updatedHistory);
 
-      toast.success(`${MODE_CFG[mode].emoji} ${MODE_CFG[mode].label} 정상 완료! [${scannedLot.lot_number}] ${processedQty}${scannedLot.unit}`);
-      
+      // 총 스캔 누적 수량 계산
+      const currentTotalQty = updatedHistory.reduce((sum, h) => sum + h.qty, 0);
+
+      toast.success(`🎉 [#${nextSeq}번째 ${MODE_CFG[mode].label} 완료] ${scannedLot.lot_number} | ${scannedLot.item_name} (${processQty}${scannedLot.unit})`);
+
+      // 발주서 목표 수량이 지정되어 있고, 누적 스캔 수량이 목표 수량에 달성되면 완료 알림 모달 팝업!
+      if (mode === 'OUT' && targetOrderQty > 0 && currentTotalQty >= targetOrderQty) {
+        setCompletionModalOpen(true);
+      }
+
+      // 다음 스캔 초기화
       setQty('');
       setLocationTo('');
-      setProjectName('');
-
-      // 다음 스캔을 위한 초기화
-      setTimeout(() => {
-        setScannedLot(null);
-        setScanInput('');
-        inputRef.current?.focus();
-      }, 1500);
+      setScannedLot(null);
+      setScanInput('');
+      setTimeout(() => inputRef.current?.focus(), 100);
     } catch (err: any) {
       toast.error(err?.body?.message || '수불 처리 실패');
     } finally {
@@ -232,16 +284,22 @@ export default function BarcodeScanWmsPage() {
     }
   };
 
+  // unique site keys for dropdown
+  const uniqueSites = Array.from(new Set(pendingOrders.map(p => p.project_name || p.site_name || p.customer_name).filter(Boolean)));
+  const totalScannedCount = scanHistory.length;
+  const totalScannedQty = scanHistory.reduce((sum, h) => sum + h.qty, 0);
+  const progressPercent = targetOrderQty > 0 ? Math.min(100, Math.round((totalScannedQty / targetOrderQty) * 100)) : 0;
+
   return (
-    <div className="p-4 md:p-6 space-y-4 bg-slate-50 min-h-screen max-w-2xl mx-auto">
+    <div className="p-4 md:p-6 space-y-4 bg-slate-50 min-h-screen max-w-2xl mx-auto pb-24">
       <PageHeader 
-        title="📱 바코드 스캔 WMS (입고 · 출고 · 위치이동)" 
-        description="실시간 하드웨어 바코드 스캐너 & 카메라 스캐너 동시 가동 시스템"
+        title="📱 WMS 바코드 스캔 수불 시스템" 
+        description="발주서/현장 연동 · 실시간 수량 카운팅 & 달성 알림"
       />
 
-      {/* 🔘 1. 상단 필수 기능 선택 버튼 (출고 / 입고 / 위치이동) - 언제나 클릭 가능 */}
-      <div className="bg-white rounded-2xl p-2.5 border shadow-sm space-y-1.5">
-        <p className="text-[11px] font-bold text-slate-500 px-1">▼ 실행할 작업 선택 (버튼 클릭 후 스캔)</p>
+      {/* 🔘 1. 작업 선택 (출고 / 입고 / 위치이동) - 언제나 클릭 가능 */}
+      <div className="bg-white rounded-2xl p-3 border shadow-sm space-y-2">
+        <p className="text-xs font-bold text-slate-600 px-1">▼ 1. 실행할 물류 작업 선택</p>
         <div className="grid grid-cols-3 gap-2">
           {(['OUT', 'IN', 'MOVE'] as TxnMode[]).map((m) => (
             <button
@@ -263,9 +321,59 @@ export default function BarcodeScanWmsPage() {
         </div>
       </div>
 
-      {/* 📷 2. 동시 가동되는 스캔 시스템 (카메라 + 물리 바코드 스캐너 포커스) */}
+      {/* 📋 2. 출고 선택 시 등록된 발주서 / 현장 선택 연동 */}
+      {mode === 'OUT' && (
+        <div className="bg-white rounded-2xl p-4 border shadow-sm space-y-2">
+          <label className="block text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+            <Building2 className="h-4 w-4 text-red-600" />
+            <span>📋 출하 현장 / 등록 발주서 선택</span>
+          </label>
+          <select
+            value={selectedSiteKey}
+            onChange={(e) => handleSiteSelect(e.target.value)}
+            className="w-full border-2 border-slate-300 rounded-xl p-3 text-xs font-bold bg-slate-50 text-slate-800 outline-none focus:border-red-500"
+          >
+            <option value="">-- 출하할 현장/발주서를 선택하세요 --</option>
+            {uniqueSites.map((site) => (
+              <option key={site} value={site}>
+                🏢 {site}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* 📊 3. 실시간 스캔 진행 카운터 (목표 수량 vs 현재 찍은 수량) */}
+      <div className="bg-white rounded-2xl p-4 border shadow-sm space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
+            <span className="text-lg">🔢</span> 실시간 스캔 진행 현황
+          </span>
+          <span className="text-xs font-mono font-black text-blue-900 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
+            총 {totalScannedCount}건 스캔 완료 ({totalScannedQty} EA)
+          </span>
+        </div>
+
+        {targetOrderQty > 0 && (
+          <div className="space-y-1 pt-1">
+            <div className="flex justify-between text-xs font-bold">
+              <span className="text-slate-600">발주서 목표 달성률</span>
+              <span className={cn(progressPercent >= 100 ? 'text-emerald-600 font-black' : 'text-blue-700 font-black')}>
+                {totalScannedQty} / {targetOrderQty} EA ({progressPercent}%)
+              </span>
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border">
+              <div 
+                className={cn('h-full transition-all duration-300', progressPercent >= 100 ? 'bg-emerald-500' : 'bg-blue-600')}
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 📷 4. 동시 가동되는 스캔 시스템 (카메라 + 물리 바코드 스캐너 포커스) */}
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden space-y-3 p-4">
-        {/* 스캐너 포커스 안내 및 토글 바 */}
         <div className="flex items-center justify-between border-b pb-3">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
             <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
@@ -285,10 +393,9 @@ export default function BarcodeScanWmsPage() {
           </button>
         </div>
 
-        {/* 카메라 비디오 바코드 라이브 뷰어 */}
         {cameraActive && (
-          <div className="relative bg-slate-900 rounded-xl overflow-hidden min-h-[200px]">
-            <div id="reader-container" className="w-full max-h-64 object-cover" />
+          <div className="relative bg-slate-900 rounded-xl overflow-hidden min-h-[180px]">
+            <div id="reader-container" className="w-full max-h-60 object-cover" />
             {cameraError && (
               <div className="absolute inset-0 bg-slate-900/90 text-white text-xs p-4 flex flex-col items-center justify-center text-center gap-2">
                 <p className="text-amber-400 font-bold">⚠️ {cameraError}</p>
@@ -298,7 +405,6 @@ export default function BarcodeScanWmsPage() {
           </div>
         )}
 
-        {/* 하드웨어 바코드 스캐너 자동 포커스 입력창 */}
         <div className="relative">
           <div className="absolute left-3 top-1/2 -translate-y-1/2">
             {searching ? <RefreshCw className="h-5 w-5 text-blue-500 animate-spin" /> : <Scan className="h-5 w-5 text-slate-400" />}
@@ -321,27 +427,22 @@ export default function BarcodeScanWmsPage() {
         </div>
       </div>
 
-      {/* 📦 3. LOT 인식 후 수불 입력 폼 */}
+      {/* 📦 5. LOT 인식 후 1초 수불 입력 폼 */}
       {scannedLot ? (
-        <div className={cn('rounded-2xl border-2 p-5 space-y-4 shadow-sm', MODE_CFG[mode].light, MODE_CFG[mode].border)}>
+        <div className={cn('rounded-2xl border-2 p-5 space-y-4 shadow-sm bg-white', MODE_CFG[mode].border)}>
           <div className="flex items-start justify-between border-b pb-3">
             <div>
-              <span className={cn('text-xs font-bold px-2 py-0.5 rounded text-white bg-slate-800')}>
-                {MODE_CFG[mode].emoji} {MODE_CFG[mode].label} 대상 선택됨
+              <span className="text-xs font-bold px-2 py-0.5 rounded text-white bg-slate-800">
+                #{scanHistory.length + 1}번째 스캔 대상
               </span>
               <p className="text-xl font-black font-mono text-slate-900 mt-1">{scannedLot.lot_number}</p>
-              <p className="text-sm font-bold text-slate-700">{scannedLot.item_name}</p>
-              <p className="text-xs text-slate-500 mt-0.5">규격: {fmtSpec(scannedLot)}</p>
+              <p className="text-sm font-bold text-slate-800">{scannedLot.item_name}</p>
+              <p className="text-xs text-slate-500 font-medium">규격: {fmtSpec(scannedLot)}</p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-slate-500 font-bold">현재 보유 재고</p>
+              <p className="text-xs text-slate-500 font-bold">현재 재고</p>
               <p className="text-3xl font-black text-slate-900">{Number(scannedLot.qty_current).toLocaleString()}</p>
               <p className="text-xs font-bold text-slate-500">{scannedLot.unit}</p>
-              {scannedLot.location && (
-                <span className="text-xs font-mono bg-white px-2 py-0.5 rounded border mt-1 inline-block text-slate-700 font-bold">
-                  📍 {scannedLot.location}
-                </span>
-              )}
             </div>
           </div>
 
@@ -357,20 +458,10 @@ export default function BarcodeScanWmsPage() {
                 step="any"
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
-                placeholder={`${MODE_CFG[mode].label}할 수량 입력`}
+                placeholder="수량 입력"
                 required
-                className={cn(
-                  'w-full border-2 rounded-xl px-4 py-3 text-2xl font-black text-center outline-none bg-white transition-all',
-                  mode === 'OUT' ? 'border-red-300 focus:border-red-600 text-red-700' :
-                  mode === 'IN' ? 'border-emerald-300 focus:border-emerald-600 text-emerald-700' :
-                  'border-amber-300 focus:border-amber-600 text-amber-700'
-                )}
+                className="w-full border-2 border-slate-300 rounded-xl px-4 py-3 text-2xl font-black text-center outline-none focus:border-blue-600"
               />
-              {qty && Number(qty) > 0 && (
-                <p className={cn('text-center text-xs font-bold mt-1.5', MODE_CFG[mode].text)}>
-                  예상 잔고: {(scannedLot.qty_current + (mode === 'IN' ? Number(qty) : mode === 'OUT' ? -Number(qty) : 0)).toLocaleString()} {scannedLot.unit}
-                </p>
-              )}
             </div>
 
             {(mode === 'MOVE' || mode === 'IN') && (
@@ -381,21 +472,9 @@ export default function BarcodeScanWmsPage() {
                 <input
                   value={locationTo}
                   onChange={(e) => setLocationTo(e.target.value)}
-                  placeholder="예: A1-P1, H3-P2"
+                  placeholder="예: A1-P1"
                   required={mode === 'MOVE'}
-                  className="w-full border-2 border-slate-300 rounded-xl px-4 py-2.5 text-sm font-mono outline-none focus:border-blue-500 bg-white"
-                />
-              </div>
-            )}
-
-            {mode === 'OUT' && (
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">출하 현장명/고객사 (선택)</label>
-                <input
-                  value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
-                  placeholder="예: 고양캐피탈랜드데이터센터, 판교현장 등"
-                  className="w-full border-2 border-slate-300 rounded-xl px-4 py-2.5 text-sm outline-none focus:border-blue-500 bg-white"
+                  className="w-full border-2 border-slate-300 rounded-xl px-4 py-2.5 text-sm font-mono outline-none"
                 />
               </div>
             )}
@@ -411,55 +490,103 @@ export default function BarcodeScanWmsPage() {
               )}
             >
               <Zap className="h-5 w-5" />
-              {submitting ? '처리 중...' : `${MODE_CFG[mode].emoji} ${MODE_CFG[mode].label} 실행 완료`}
+              {submitting ? '처리 중...' : `[#${scanHistory.length + 1}번째] ${MODE_CFG[mode].emoji} ${MODE_CFG[mode].label} 확인`}
             </button>
           </form>
-
-          <button
-            type="button"
-            onClick={() => {
-              setScannedLot(null);
-              setScanInput('');
-              inputRef.current?.focus();
-            }}
-            className="w-full py-2 text-xs text-slate-500 hover:text-slate-700 font-bold text-center border-t pt-2"
-          >
-            ✕ 취소하고 다른 바코드 스캔하기
-          </button>
         </div>
-      ) : (
-        <div className="bg-white rounded-2xl border p-6 text-center space-y-2 shadow-sm">
-          <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto text-slate-500">
-            <Scan className="h-6 w-6" />
-          </div>
-          <p className="font-bold text-sm text-slate-700">스캐너로 바코드를 찍거나 라벨을 카메라에 보여주세요</p>
-          <p className="text-xs text-slate-400">선택된 모드({MODE_CFG[mode].emoji} {MODE_CFG[mode].label})로 즉시 바코드 조회가 실행됩니다.</p>
-        </div>
-      )}
+      ) : null}
 
-      {/* 📋 4. 현재 세션 처리 이력 내역 */}
-      {recent.length > 0 && (
-        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-          <div className="px-4 py-2.5 bg-slate-50 border-b flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-            <span className="text-xs font-bold text-slate-700">이번 세션 수불 처리 내역 ({recent.length}건)</span>
+      {/* 📜 6. 실시간 스캔 카운팅 리스트 (찍을 때마다 카운팅 번호, LOT번호, 품목명, 규격, 수량 표시) */}
+      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden space-y-0">
+        <div className="px-4 py-3 bg-slate-800 text-white flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+            <span className="text-xs font-black">실시간 스캔 처리 카운팅 내역 ({scanHistory.length}건)</span>
           </div>
-          <div className="divide-y divide-slate-100">
-            {recent.map((r, i) => (
-              <div key={i} className="px-4 py-2.5 flex items-center gap-3">
-                <span className="text-lg">{MODE_CFG[r.mode].emoji}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-mono font-bold text-slate-800 truncate">{r.lot_number}</p>
-                  <p className="text-[11px] text-slate-500 truncate">{r.item_name}</p>
+          {scanHistory.length > 0 && (
+            <button
+              onClick={() => setScanHistory([])}
+              className="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-0.5 rounded font-bold"
+            >
+              초기화
+            </button>
+          )}
+        </div>
+
+        {scanHistory.length > 0 ? (
+          <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+            {scanHistory.map((item) => (
+              <div key={item.seq} className="p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-black bg-blue-900 text-white px-2 py-1 rounded-lg">
+                    #{item.seq}번째
+                  </span>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-sm text-slate-900">{item.lot_number}</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                        {item.mode}
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-700">{item.item_name}</p>
+                    <p className="text-[11px] text-slate-400">규격: {item.spec} {item.location && `| 위치: ${item.location}`}</p>
+                  </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className={cn('text-sm font-black', MODE_CFG[r.mode].text)}>
-                    {r.mode === 'OUT' ? '-' : '+'}{r.qty.toLocaleString()}
+
+                <div className="text-right">
+                  <p className="text-base font-black text-emerald-700">
+                    {item.qty} {item.unit}
                   </p>
-                  <p className="text-[10px] text-slate-400">{r.time}</p>
+                  <p className="text-[10px] text-slate-400 font-mono">{item.time}</p>
                 </div>
               </div>
             ))}
+          </div>
+        ) : (
+          <div className="p-8 text-center text-xs text-slate-400 space-y-1">
+            <p>아직 스캔된 항목이 없습니다.</p>
+            <p className="text-[11px] text-slate-300">스캐너나 카메라로 찍으면 실시간 카운팅 순번과 품목 정보가 표시됩니다.</p>
+          </div>
+        )}
+      </div>
+
+      {/* 🎉 7. 수량 100% 달성 알림 모달 (Completion Alert Modal) */}
+      {completionModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-center">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-3xl font-black">
+              🎉
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-lg font-black text-slate-900">출하 수량 100% 달성 완료!</h3>
+              <p className="text-xs font-bold text-emerald-700">
+                선택하신 현장 [{selectedSiteKey}] 의 총 발주 수량 ({targetOrderQty} EA) 스캔이 완수되었습니다.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 border p-3 rounded-xl text-xs space-y-1 text-left">
+              <p className="text-slate-600 font-bold">총 스캔 처리: <span className="text-blue-900 font-black">{totalScannedQty} EA ({totalScannedCount}건)</span></p>
+              <p className="text-slate-600 font-bold">출하 현장: <span className="text-slate-800 font-black">{selectedSiteKey}</span></p>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              <button
+                onClick={() => {
+                  setCompletionModalOpen(false);
+                  navigate('/shipment/statements');
+                }}
+                className="w-full py-3 bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1.5"
+              >
+                <FileText size={16} />
+                <span>📄 출하 거래명세표 작성/출력으로 이동</span>
+              </button>
+              <button
+                onClick={() => setCompletionModalOpen(false)}
+                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+              >
+                닫고 계속 스캔하기
+              </button>
+            </div>
           </div>
         </div>
       )}
