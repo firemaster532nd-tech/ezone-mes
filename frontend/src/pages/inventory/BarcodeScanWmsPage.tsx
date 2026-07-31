@@ -35,12 +35,13 @@ interface PendingSiteOrder {
   unit: string;
 }
 
-type TxnMode = 'OUT' | 'IN' | 'MOVE';
+type TxnMode = 'OUT' | 'STAGING' | 'IN' | 'MOVE';
 
 const MODE_CFG: Record<TxnMode, { label: string; emoji: string; active: string; light: string; border: string; text: string }> = {
-  OUT:  { label: '출고',     emoji: '📤', active: 'bg-red-600 text-white border-red-600 shadow-md',     light: 'bg-red-50 border-red-200', border: 'border-red-500', text: 'text-red-700' },
-  IN:   { label: '입고',     emoji: '📥', active: 'bg-emerald-600 text-white border-emerald-600 shadow-md', light: 'bg-emerald-50 border-emerald-200', border: 'border-emerald-500', text: 'text-emerald-700' },
-  MOVE: { label: '위치이동', emoji: '🚚', active: 'bg-amber-500 text-white border-amber-500 shadow-md',   light: 'bg-amber-50 border-amber-200', border: 'border-amber-500', text: 'text-amber-700' },
+  OUT:     { label: '출고확정',    emoji: '📤', active: 'bg-red-600 text-white border-red-600 shadow-md',     light: 'bg-red-50 border-red-200', border: 'border-red-500', text: 'text-red-700' },
+  STAGING: { label: '출하대기',    emoji: '📦', active: 'bg-indigo-600 text-white border-indigo-600 shadow-md', light: 'bg-indigo-50 border-indigo-200', border: 'border-indigo-500', text: 'text-indigo-700' },
+  IN:      { label: '입고',        emoji: '📥', active: 'bg-emerald-600 text-white border-emerald-600 shadow-md', light: 'bg-emerald-50 border-emerald-200', border: 'border-emerald-500', text: 'text-emerald-700' },
+  MOVE:    { label: '위치이동',    emoji: '🚚', active: 'bg-amber-500 text-white border-amber-500 shadow-md',   light: 'bg-amber-50 border-amber-200', border: 'border-amber-500', text: 'text-amber-700' },
 };
 
 interface ScanHistoryItem {
@@ -300,8 +301,8 @@ export default function BarcodeScanWmsPage() {
       {/* 🔘 1. 작업 선택 (출고 / 입고 / 위치이동) - 언제나 클릭 가능 */}
       <div className="bg-white rounded-2xl p-3 border shadow-sm space-y-2">
         <p className="text-xs font-bold text-slate-600 px-1">▼ 1. 실행할 물류 작업 선택</p>
-        <div className="grid grid-cols-3 gap-2">
-          {(['OUT', 'IN', 'MOVE'] as TxnMode[]).map((m) => (
+        <div className="grid grid-cols-4 gap-1.5">
+          {(['OUT', 'STAGING', 'IN', 'MOVE'] as TxnMode[]).map((m) => (
             <button
               key={m}
               type="button"
@@ -310,12 +311,12 @@ export default function BarcodeScanWmsPage() {
                 toast.info(`${MODE_CFG[m].emoji} [${MODE_CFG[m].label}] 모드로 전환되었습니다.`);
               }}
               className={cn(
-                'py-3.5 px-2 rounded-xl font-bold text-sm flex flex-col items-center justify-center gap-1 border-2 transition-all cursor-pointer',
+                'py-3 px-1 rounded-xl font-bold text-xs flex flex-col items-center justify-center gap-1 border-2 transition-all cursor-pointer',
                 mode === m ? MODE_CFG[m].active : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
               )}
             >
-              <span className="text-xl">{MODE_CFG[m].emoji}</span>
-              <span>{MODE_CFG[m].label}</span>
+              <span className="text-lg">{MODE_CFG[m].emoji}</span>
+              <span className="truncate max-w-[70px] text-[11px]">{MODE_CFG[m].label}</span>
             </button>
           ))}
         </div>

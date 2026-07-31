@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { Printer, X, FileText, LayoutList, AlertTriangle } from 'lucide-react';
+import QRCode from 'qrcode';
 
 const TOKEN_KEY = 'ezone_mes_token';
 
@@ -106,19 +107,39 @@ function PageTypeA({ data, copyLabel, columnMode }: { data: StatementDetail; cop
   const MIN_ROWS = 22;
   const padCount = Math.max(0, MIN_ROWS - data.items.length);
 
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (data?.statement_number) {
+      QRCode.toDataURL(`STMT-${data.statement_number}`, { width: 100, margin: 1 })
+        .then(url => setQrDataUrl(url))
+        .catch(() => {});
+    }
+  }, [data?.statement_number]);
+
   return (
     <div className="a4-page bg-white font-sans text-[11px]"
          style={{ width:'210mm', height:'297mm', padding:'10mm 10mm 8mm 10mm',
                   boxSizing:'border-box', overflow:'hidden', position:'relative' }}>
 
-      {/* 사본 구분 레이블 */}
+      {/* 사본 구분 레이블 & 통합 QR코드 (우측 상단 마스터 바코드) */}
       <div className="flex items-center justify-between mb-1">
         <span className="border border-black px-3 py-0.5 text-[10px] font-bold bg-yellow-50">
           {copyLabel}
         </span>
-        <span className="border border-black px-2 py-0.5 text-[9px] font-mono">
-          No. {data.statement_number}
-        </span>
+
+        {/* 통합 출하 마스터 QR코드 이미지 */}
+        <div className="flex items-center gap-2">
+          {qrDataUrl && (
+            <div className="flex flex-col items-center border border-black p-0.5 bg-white">
+              <img src={qrDataUrl} alt="통합 QR" className="w-[50px] h-[50px] object-contain" />
+              <span className="text-[7px] font-mono font-bold text-slate-800">통합출하 QR</span>
+            </div>
+          )}
+          <span className="border border-black px-2 py-0.5 text-[9px] font-mono font-bold">
+            No. {data.statement_number}
+          </span>
+        </div>
       </div>
 
       {/* 제목 */}

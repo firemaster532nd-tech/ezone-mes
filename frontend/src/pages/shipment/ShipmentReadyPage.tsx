@@ -842,35 +842,70 @@ export function ShipmentReadyPage() {
                 <div className="space-y-2">
                   {Object.entries(
                     shipmentReadyItems.reduce((acc: Record<string, any[]>, item) => {
-                      const site = item.shipment_site_name || '사이트없음';
+                      const site = item.shipment_site_name || item.site_name || '일반 현장';
                       if (!acc[site]) acc[site] = [];
                       acc[site].push(item);
                       return acc;
                     }, {})
-                  ).map(([site, items]) => (
-                    <div key={site} className="border rounded-xl overflow-hidden">
-                      <div className="bg-amber-50 px-3 py-2 flex items-center justify-between">
-                        <span className="font-bold text-sm text-amber-800">{site}</span>
-                        <span className="text-xs text-amber-600">{items.length}개 품목</span>
-                      </div>
-                      <div className="divide-y">
-                        {items.map((item: any) => (
-                          <div key={item.id} className="px-3 py-2.5 grid grid-cols-5 gap-2 text-xs items-center">
-                            <div className="col-span-2">
-                              <p className="font-semibold text-gray-800">{item.item_name}</p>
-                              <p className="text-gray-400 font-mono text-[10px]">{item.lot_number || '-'}</p>
-                            </div>
-                            <div className="text-gray-600">{item.spec || '-'}</div>
-                            <div className="font-bold text-emerald-700">{Number(item.qty).toLocaleString()} {item.unit}</div>
-                            <div className="flex items-center gap-1">
-                              <MapPin className="h-3 w-3 text-slate-400" />
-                              <span className="text-slate-500 text-[10px]">{item.location_code || '위치미지정'}</span>
-                            </div>
+                  ).map(([site, items]) => {
+                    const firstDate = items[0]?.order_date || items[0]?.created_at?.slice(0, 10) || new Date().toISOString().slice(0, 10);
+                    return (
+                      <div key={site} className="border-2 border-amber-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                        <div className="bg-amber-50/90 px-4 py-3 border-b border-amber-200 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-sm text-slate-900">🏢 {site}</span>
+                            <span className="text-xs font-mono font-bold text-slate-500">📅 발주일자: {firstDate}</span>
+                            <span className="bg-amber-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-full">
+                              총 {items.length}개 품목 출하대기
+                            </span>
                           </div>
-                        ))}
+                          <div className="flex items-center gap-2 text-xs">
+                            <a 
+                              href="/inventory/location" 
+                              className="px-2.5 py-1 bg-white border border-amber-300 text-amber-900 font-bold rounded-lg hover:bg-amber-100 flex items-center gap-1 shadow-xs"
+                            >
+                              <MapPin size={12} /> 📍 렉위치 맵 보기
+                            </a>
+                            <a 
+                              href="/shipment/statements" 
+                              className="px-2.5 py-1 bg-blue-900 text-white font-bold rounded-lg hover:bg-blue-800 flex items-center gap-1 shadow-xs"
+                            >
+                              📄 거래명세표 발행 (통합 QR/바코드 인쇄)
+                            </a>
+                          </div>
+                        </div>
+
+                        <div className="divide-y divide-slate-100">
+                          {items.map((item: any) => (
+                            <div key={item.id} className="px-4 py-3 grid grid-cols-1 md:grid-cols-6 gap-2 text-xs items-center hover:bg-slate-50">
+                              <div className="col-span-2">
+                                <div className="flex items-center gap-1.5 mb-0.5">
+                                  <span className={cn(
+                                    'text-[9px] font-black px-1.5 py-0.5 rounded',
+                                    item.item_name?.includes('세라믹') ? 'bg-amber-100 text-amber-900' :
+                                    item.item_name?.includes('그라스') ? 'bg-emerald-100 text-emerald-900' :
+                                    item.item_name?.includes('소켓') ? 'bg-indigo-100 text-indigo-900' : 'bg-slate-100 text-slate-800'
+                                  )}>
+                                    {item.item_name?.includes('세라믹') ? '세라믹울' : item.item_name?.includes('그라스') ? '그라스울' : item.item_name?.includes('소켓') ? '소켓' : '구조체'}
+                                  </span>
+                                  <span className="font-bold text-slate-800 text-xs">{item.item_name}</span>
+                                </div>
+                                <p className="text-slate-400 font-mono text-[11px]">LOT: {item.lot_number || '-'}</p>
+                              </div>
+                              <div className="text-slate-600 font-medium">{item.spec || item.item_spec || '-'}</div>
+                              <div className="font-black text-emerald-700 text-sm">{Number(item.qty || 0).toLocaleString()} {item.unit || 'EA'}</div>
+                              <div className="flex items-center gap-1 col-span-2">
+                                <MapPin className="h-3.5 w-3.5 text-indigo-600" />
+                                <span className="font-mono font-bold text-indigo-900 bg-indigo-50 border px-2 py-0.5 rounded text-[11px]">
+                                  📍 {item.location_code || item.location || '위치 미지정'}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
