@@ -238,6 +238,31 @@ export function DashboardPage() {
     <div>
       <PageHeader title="대시보드" description={`${data.date || ''} 기준 생산현황`} />
 
+      {/* 📱 LOT 바코드 스캔 WMS 1초 원클릭 바로가기 퀵 배너 */}
+      <div className="mb-4 bg-gradient-to-r from-emerald-700 via-teal-700 to-slate-800 rounded-2xl p-4 text-white shadow-md flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center text-2xl font-bold">
+            📱
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="font-extrabold text-base tracking-wide">LOT 바코드 스캔 WMS</h3>
+              <span className="bg-emerald-400 text-slate-950 font-black text-[10px] px-2 py-0.5 rounded-full">실시간 가동</span>
+            </div>
+            <p className="text-xs text-slate-200 mt-0.5">
+              하드웨어 바코드 스캐너 & 스마트폰 모바일 카메라 동시 가동 (입고 · 출고 · 위치이동 1초 처리)
+            </p>
+          </div>
+        </div>
+        <button
+          onClick={() => navigate('/inventory/barcode-wms')}
+          className="bg-white hover:bg-emerald-50 text-emerald-900 font-extrabold text-xs px-4 py-2.5 rounded-xl shadow transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
+        >
+          <span>스캐너 바로가기</span>
+          <span>→</span>
+        </button>
+      </div>
+
       {/* ════ A: 전체 파이프라인 플로우차트 ════ */}
       {workflow && workflow.pipeline && <PipelineFlow pipeline={workflow.pipeline} />}
 
