@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { 
-  Camera, Scan, CheckCircle2, Zap, Building2, Package, Check, AlertCircle, FileText, Printer, ArrowRight
+  Camera, Scan, CheckCircle2, Zap, Building2, Search, ArrowRight, FileText
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -72,12 +72,13 @@ export default function BarcodeScanWmsPage() {
   const [locationTo, setLocationTo] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // 1. 발주서/현장 목록 및 선택된 목표 수량 관리
+  // 1. 발주서/현장 목록 및 키워드 검색기
   const [pendingOrders, setPendingOrders] = useState<PendingSiteOrder[]>([]);
   const [selectedSiteKey, setSelectedSiteKey] = useState<string>(''); // project_name
+  const [siteSearchTerm, setSiteSearchTerm] = useState<string>(''); // 검색 키워드
   const [targetOrderQty, setTargetOrderQty] = useState<number>(0);
 
-  // 2. 실시간 스캔 카운터 및 세션 이력 (찍을 때마다 로트번호, 품목명, 규격, 수량 카운팅)
+  // 2. 실시간 스캔 카운터 및 세션 이력
   const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>([]);
   const [completionModalOpen, setCompletionModalOpen] = useState(false);
 
@@ -90,14 +91,36 @@ export default function BarcodeScanWmsPage() {
   const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
   const lastScannedCodeRef = useRef<string>('');
 
-  // 등록된 발주서/현장 목록 불러오기
+  // 등록된 발주서/현장 목록 불러오기 (다중 엔드포인트 세이프 폴백)
   useEffect(() => {
-    api.get<{ data: PendingSiteOrder[] }>('/shipment-orders/pending')
-      .then(res => {
-        const list = res.data || [];
-        setPendingOrders(list);
-      })
-      .catch(() => {});
+    Promise.all([
+      api.get<{ data: PendingSiteOrder[] }>('/shipment-orders/pending').catch(() => null),
+      api.get<{ data: any[] }>('/purchase-orders').catch(() => null),
+    ]).then(([pendingRes, poRes]) => {
+      const pList: PendingSiteOrder[] = pendingRes?.data?.data || [];
+      const poList: any[] = poRes?.data?.data || [];
+
+      // Combine both
+      const combined: PendingSiteOrder[] = [...pList];
+      poList.forEach(po => {
+        const site = po.project_name || po.construction_site || po.contractor;
+        if (site && !combined.some(c => c.project_name === site || c.site_name === site)) {
+          combined.push({
+            po_id: po.po_id,
+            po_number: `PO-${po.po_id}`,
+            customer_name: po.contractor || '고객사',
+            project_name: site,
+            site_name: site,
+            item_name: '내화채움구조 세트',
+            spec: '표준 규격',
+            ordered_qty: 10,
+            unit: 'EA'
+          });
+        }
+      });
+
+      setPendingOrders(combined);
+    });
   }, []);
 
   // 현장 선택 변경 시 목표 수량 계산
@@ -109,8 +132,8 @@ export default function BarcodeScanWmsPage() {
     }
     const filtered = pendingOrders.filter(p => (p.project_name || p.site_name || p.customer_name) === siteKey);
     const totalQty = filtered.reduce((sum, p) => sum + (Number(p.ordered_qty) || 0), 0);
-    setTargetOrderQty(totalQty || 10); // default to 10 if not specified
-    toast.info(`📋 [${siteKey}] 현장이 선택되었습니다. 목표 출하 수량: ${totalQty || 10} EA`);
+    setTargetOrderQty(totalQty || 10);
+    toast.info(`📋 [${siteKey}] 현장이 선택되었습니다. 목표 수량: ${totalQty || 10} EA`);
   };
 
   // 모바일 기기 감지
@@ -120,15 +143,16 @@ export default function BarcodeScanWmsPage() {
       const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent) || window.innerWidth < 768;
       setIsMobile(isMobileDevice);
       if (isMobileDevice) {
-        setCameraActive(true); // 모바일은 카메라 스캐너 자동 가동
+        setCameraActive(true);
       }
     };
     checkMobile();
   }, []);
 
-  // 키보드 바코드 스캐너 포커스 유지
+  // 키보드 바코드 스캐너 포커스 유지 (SELECT 콤보박스 선택 중일 때는 포커스 뺏지 않도록 방지!)
   const focusScannerInput = useCallback(() => {
-    if (document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+    const tag = document.activeElement?.tagName;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
       inputRef.current?.focus();
     }
   }, []);
@@ -154,7 +178,7 @@ export default function BarcodeScanWmsPage() {
       
       if (matched) {
         setScannedLot(matched);
-        setQty('1'); // 기본 1개 세팅으로 빠른 1초 수불 처리 가능
+        setQty('1');
         toast.success(`✅ [${matched.lot_number}] ${matched.item_name} (${fmtSpec(matched)}) 스캔됨`);
         setTimeout(() => document.getElementById('wms-qty')?.focus(), 150);
       } else {
@@ -262,17 +286,14 @@ export default function BarcodeScanWmsPage() {
       const updatedHistory = [historyItem, ...scanHistory];
       setScanHistory(updatedHistory);
 
-      // 총 스캔 누적 수량 계산
       const currentTotalQty = updatedHistory.reduce((sum, h) => sum + h.qty, 0);
 
       toast.success(`🎉 [#${nextSeq}번째 ${MODE_CFG[mode].label} 완료] ${scannedLot.lot_number} | ${scannedLot.item_name} (${processQty}${scannedLot.unit})`);
 
-      // 발주서 목표 수량이 지정되어 있고, 누적 스캔 수량이 목표 수량에 달성되면 완료 알림 모달 팝업!
       if (mode === 'OUT' && targetOrderQty > 0 && currentTotalQty >= targetOrderQty) {
         setCompletionModalOpen(true);
       }
 
-      // 다음 스캔 초기화
       setQty('');
       setLocationTo('');
       setScannedLot(null);
@@ -285,8 +306,12 @@ export default function BarcodeScanWmsPage() {
     }
   };
 
-  // unique site keys for dropdown
+  // unique site keys & filtered sites
   const uniqueSites = Array.from(new Set(pendingOrders.map(p => p.project_name || p.site_name || p.customer_name).filter(Boolean)));
+  const filteredSites = uniqueSites.filter(site => 
+    !siteSearchTerm.trim() || site.toLowerCase().includes(siteSearchTerm.toLowerCase())
+  );
+
   const totalScannedCount = scanHistory.length;
   const totalScannedQty = scanHistory.reduce((sum, h) => sum + h.qty, 0);
   const progressPercent = targetOrderQty > 0 ? Math.min(100, Math.round((totalScannedQty / targetOrderQty) * 100)) : 0;
@@ -298,7 +323,7 @@ export default function BarcodeScanWmsPage() {
         description="발주서/현장 연동 · 실시간 수량 카운팅 & 달성 알림"
       />
 
-      {/* 🔘 1. 작업 선택 (출고 / 입고 / 위치이동) - 언제나 클릭 가능 */}
+      {/* 🔘 1. 작업 선택 (출고확정 / 출하대기 / 입고 / 위치이동) */}
       <div className="bg-white rounded-2xl p-3 border shadow-sm space-y-2">
         <p className="text-xs font-bold text-slate-600 px-1">▼ 1. 실행할 물류 작업 선택</p>
         <div className="grid grid-cols-4 gap-1.5">
@@ -334,16 +359,30 @@ export default function BarcodeScanWmsPage() {
               총 {uniqueSites.length}개 현장 등록됨
             </span>
           </div>
+
+          {/* 🔍 검색 필터 입력창 */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              value={siteSearchTerm}
+              onChange={(e) => setSiteSearchTerm(e.target.value)}
+              placeholder="🔍 현장명/발주서 키워드 검색 (예: 고양, 아라월평, 판교)"
+              className="w-full pl-9 pr-3 py-2 border rounded-xl text-xs font-bold bg-slate-50 text-slate-800 outline-none focus:border-blue-500"
+            />
+          </div>
+
+          {/* 현장 선택 드롭다운 (포커스 뺏김 현원 방지!) */}
           <select
             value={selectedSiteKey}
             onChange={(e) => handleSiteSelect(e.target.value)}
             className={cn(
-              'w-full border-2 rounded-xl p-3 text-xs font-bold bg-slate-50 text-slate-800 outline-none transition-colors',
+              'w-full border-2 rounded-xl p-3 text-xs font-bold bg-white text-slate-900 outline-none transition-colors cursor-pointer',
               mode === 'OUT' ? 'border-red-300 focus:border-red-500' : 'border-indigo-300 focus:border-indigo-500'
             )}
           >
             <option value="">-- {MODE_CFG[mode].label} 처리할 현장/발주서를 선택하세요 --</option>
-            {uniqueSites.map((site) => (
+            {filteredSites.map((site) => (
               <option key={site} value={site}>
                 🏢 {site}
               </option>
@@ -377,7 +416,7 @@ export default function BarcodeScanWmsPage() {
         </div>
       )}
 
-      {/* 📊 3. 실시간 스캔 진행 카운터 (목표 수량 vs 현재 찍은 수량) */}
+      {/* 📊 3. 실시간 스캔 진행 카운터 */}
       <div className="bg-white rounded-2xl p-4 border shadow-sm space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
@@ -406,7 +445,7 @@ export default function BarcodeScanWmsPage() {
         )}
       </div>
 
-      {/* 📷 4. 동시 가동되는 스캔 시스템 (카메라 + 물리 바코드 스캐너 포커스) */}
+      {/* 📷 4. 동시 가동되는 스캔 시스템 */}
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden space-y-3 p-4">
         <div className="flex items-center justify-between border-b pb-3">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
@@ -418,7 +457,7 @@ export default function BarcodeScanWmsPage() {
             type="button"
             onClick={() => setCameraActive(!cameraActive)}
             className={cn(
-              'px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-colors',
+              'px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-colors cursor-pointer',
               cameraActive ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'bg-slate-100 border-slate-300 text-slate-600'
             )}
           >
@@ -441,7 +480,7 @@ export default function BarcodeScanWmsPage() {
 
         <div className="relative">
           <div className="absolute left-3 top-1/2 -translate-y-1/2">
-            {searching ? <RefreshCw className="h-5 w-5 text-blue-500 animate-spin" /> : <Scan className="h-5 w-5 text-slate-400" />}
+            {searching ? <Scan className="h-5 w-5 text-blue-500 animate-spin" /> : <Scan className="h-5 w-5 text-slate-400" />}
           </div>
           <input
             ref={inputRef}
@@ -461,7 +500,7 @@ export default function BarcodeScanWmsPage() {
         </div>
       </div>
 
-      {/* 📦 5. LOT 인식 후 1초 수불 입력 폼 */}
+      {/* 📦 5. LOT 인식 후 수불 입력 폼 */}
       {scannedLot ? (
         <div className={cn('rounded-2xl border-2 p-5 space-y-4 shadow-sm bg-white', MODE_CFG[mode].border)}>
           <div className="flex items-start justify-between border-b pb-3">
@@ -498,15 +537,15 @@ export default function BarcodeScanWmsPage() {
               />
             </div>
 
-            {(mode === 'MOVE' || mode === 'IN') && (
+            {(mode === 'MOVE' || mode === 'IN' || mode === 'STAGING') && (
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  {mode === 'MOVE' ? '이동 후 렉/위치 코드 (예: A1-P1) *' : '적재 렉/위치 코드 (선택)'}
+                  {mode === 'MOVE' ? '이동 후 렉/위치 코드 (예: A1-P1) *' : '적재/보관 렉/공장구역 코드 (선택)'}
                 </label>
                 <input
                   value={locationTo}
                   onChange={(e) => setLocationTo(e.target.value)}
-                  placeholder="예: A1-P1"
+                  placeholder="예: A1-P1 또는 FIELD-1F-MAIN"
                   required={mode === 'MOVE'}
                   className="w-full border-2 border-slate-300 rounded-xl px-4 py-2.5 text-sm font-mono outline-none"
                 />
@@ -519,6 +558,7 @@ export default function BarcodeScanWmsPage() {
               className={cn(
                 'w-full py-4 rounded-xl text-white text-base font-black flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 disabled:opacity-60 cursor-pointer',
                 mode === 'OUT' ? 'bg-red-600 hover:bg-red-700' :
+                mode === 'STAGING' ? 'bg-indigo-600 hover:bg-indigo-700' :
                 mode === 'IN' ? 'bg-emerald-600 hover:bg-emerald-700' :
                 'bg-amber-500 hover:bg-amber-600'
               )}
@@ -530,7 +570,7 @@ export default function BarcodeScanWmsPage() {
         </div>
       ) : null}
 
-      {/* 📜 6. 실시간 스캔 카운팅 리스트 (찍을 때마다 카운팅 번호, LOT번호, 품목명, 규격, 수량 표시) */}
+      {/* 📜 6. 실시간 스캔 카운팅 리스트 */}
       <div className="bg-white rounded-2xl border shadow-sm overflow-hidden space-y-0">
         <div className="px-4 py-3 bg-slate-800 text-white flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -584,7 +624,7 @@ export default function BarcodeScanWmsPage() {
         )}
       </div>
 
-      {/* 🎉 7. 수량 100% 달성 알림 모달 (Completion Alert Modal) */}
+      {/* 🎉 7. 수량 100% 달성 알림 모달 */}
       {completionModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-center">

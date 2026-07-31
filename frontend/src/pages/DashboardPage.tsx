@@ -254,13 +254,17 @@ export function DashboardPage() {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => navigate('/inventory/barcode-wms')}
-          className="bg-white hover:bg-emerald-50 text-emerald-900 font-extrabold text-xs px-4 py-2.5 rounded-xl shadow transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95"
+        <a
+          href="/inventory/barcode-wms"
+          onClick={(e) => {
+            e.preventDefault();
+            navigate('/inventory/barcode-wms');
+          }}
+          className="bg-white hover:bg-emerald-50 text-emerald-900 font-extrabold text-xs px-4 py-2.5 rounded-xl shadow transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap active:scale-95 border-2 border-white"
         >
-          <span>스캐너 바로가기</span>
+          <span>📱 스캐너 바로가기</span>
           <span>→</span>
-        </button>
+        </a>
       </div>
 
       {/* ════ A: 전체 파이프라인 플로우차트 ════ */}

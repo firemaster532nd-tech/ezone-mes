@@ -210,6 +210,9 @@ export const router = createBrowserRouter([
       { path: 'inventory/material-init',        element: <InitialMaterialPage /> },
       { path: 'inventory/label-print',          element: <LabelPrintPage /> },
       { path: 'inventory/barcode-wms',          element: <BarcodeScanWmsPage /> },
+      { path: 'inventory/barcode',              element: <BarcodeScanWmsPage /> },
+      { path: 'wms/scan',                       element: <BarcodeScanWmsPage /> },
+      { path: 'barcode',                        element: <BarcodeScanWmsPage /> },
 
 
       // 마스터관리
