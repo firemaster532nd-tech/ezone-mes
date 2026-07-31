@@ -1,63 +1,139 @@
 import type { FastifyInstance } from 'fastify';
+import { ImapFlow } from 'imapflow';
+import nodemailer from 'nodemailer';
 import { pool } from '../db/pool.js';
+
+const GMAIL_USER = process.env.GMAIL_USER || 'firemaster532nd@gmail.com';
+const GMAIL_PASS = process.env.GMAIL_APP_PASS || 'ugyzfvyiealkgiav';
 
 export async function ensureWebmailTables() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS webmail_message (
       mail_id SERIAL PRIMARY KEY,
-      sender_name VARCHAR(100) NOT NULL,
-      sender_email VARCHAR(150) NOT NULL,
-      recipient_name VARCHAR(100) NOT NULL,
-      recipient_email VARCHAR(150) NOT NULL,
-      subject VARCHAR(300) NOT NULL,
+      sender_name VARCHAR(150) NOT NULL,
+      sender_email VARCHAR(200) NOT NULL,
+      recipient_name VARCHAR(150) NOT NULL,
+      recipient_email VARCHAR(200) NOT NULL,
+      subject VARCHAR(500) NOT NULL,
       body TEXT NOT NULL,
       is_read BOOLEAN NOT NULL DEFAULT FALSE,
       received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
-
-  // Initial seed data if empty
-  const { rows } = await pool.query('SELECT COUNT(*)::int AS cnt FROM webmail_message');
-  if (rows[0].cnt === 0) {
-    await pool.query(`
-      INSERT INTO webmail_message (sender_name, sender_email, recipient_name, recipient_email, subject, body, is_read, received_at)
-      VALUES 
-      ('국세청 홈택스', 'tax@hometax.go.kr', '이지원 MES 관리자', 'ezone@ezone.kr', '[국세청] 전자세금계산서 정기 이관 완료 안내', '안녕하세요 이지원 MES 담당자님, 2026년 7월분 전자세금계산서 국세청 정기 데이터 이관이 정상 처리되었습니다.', FALSE, NOW() - INTERVAL '2 hours'),
-      ('포스코이앤씨 구매팀', 'po_buy@poscoenc.com', '이동민 파트장', 'ezone@ezone.kr', '[발주문의] 고양 캐피탈랜드 데이터센터 내화채움 자재 납기 확인 건', '안녕하세요 이동민 파트장님, 8월 10일 자재 입고 건 관련하여 시공 출하 스케줄 최종 조율 요청드립니다.', FALSE, NOW() - INTERVAL '5 hours'),
-      ('신영부동산신탁', 'order@shinyoung.co.kr', '김정용 책임', 'ezone@ezone.kr', '[입고확인] 신대1지구 B1블럭 덕트 내화채움구조체 납품 확인서', '품질관리서 및 밀시트 LOT 매칭 서류 첨부하여 전달해 드립니다. 확인 부탁드립니다.', TRUE, NOW() - INTERVAL '1 day')
-    `);
-  }
 }
 
 export async function webmailRoutes(app: FastifyInstance) {
   await ensureWebmailTables();
 
-  // GET /api/webmail - 메인 이메일 목록
-  app.get('/api/webmail', async (request) => {
-    const { rows } = await pool.query(`
-      SELECT * FROM webmail_message 
-      ORDER BY received_at DESC 
-      LIMIT 20
-    `);
-    const unreadCountResult = await pool.query('SELECT COUNT(*)::int AS cnt FROM webmail_message WHERE is_read = FALSE');
+  // Helper to fetch real Gmail inbox via IMAP
+  const fetchRealGmailInbox = async () => {
+    const client = new ImapFlow({
+      host: 'imap.gmail.com',
+      port: 993,
+      secure: true,
+      auth: { user: GMAIL_USER, pass: GMAIL_PASS },
+      logger: false,
+    });
+
+    try {
+      await client.connect();
+      const lock = await client.getMailboxLock('INBOX');
+      const messages: any[] = [];
+      try {
+        const status = await client.status('INBOX', { messages: true, unread: true });
+        const total = status.messages || 0;
+        const startSeq = Math.max(1, total - 9); // fetch last 10 emails
+
+        for await (const msg of client.fetch(`${startSeq}:*`, { envelope: true, bodyStructure: true })) {
+          const env = msg.envelope;
+          const senderObj = env.from?.[0] || { name: '알 수 없음', address: '' };
+          messages.push({
+            mail_id: msg.uid,
+            sender_name: senderObj.name || senderObj.address || '구글 메일 수신',
+            sender_email: senderObj.address || GMAIL_USER,
+            recipient_name: '이지원 MES',
+            recipient_email: GMAIL_USER,
+            subject: env.subject || '(제목 없음)',
+            body: `[구글 메일 실시간 동기화] ${env.subject}\n수신일시: ${env.date?.toLocaleString('ko-KR')}`,
+            is_read: false,
+            received_at: env.date ? new Date(env.date).toISOString() : new Date().toISOString(),
+          });
+        }
+      } finally {
+        lock.release();
+      }
+      await client.logout();
+      return messages.reverse(); // newest first
+    } catch (err) {
+      console.error('Failed to sync live Gmail via IMAP:', err);
+      return null;
+    }
+  };
+
+  // GET /api/webmail - 메인 구글 메일 목록 (실시간 Gmail IMAP 동기화 + DB 캐시)
+  app.get('/api/webmail', async () => {
+    const liveMails = await fetchRealGmailInbox();
+    if (liveMails && liveMails.length > 0) {
+      return {
+        data: liveMails,
+        unread_count: liveMails.length,
+        source: 'GMAIL_LIVE',
+        account: GMAIL_USER,
+      };
+    }
+
+    // DB Fallback if IMAP temporary offline
+    const { rows } = await pool.query('SELECT * FROM webmail_message ORDER BY received_at DESC LIMIT 20');
     return {
       data: rows,
-      unread_count: unreadCountResult.rows[0]?.cnt || 0,
+      unread_count: rows.filter(r => !r.is_read).length,
+      source: 'DB_CACHE',
+      account: GMAIL_USER,
     };
   });
 
-  // POST /api/webmail/send - 이메일 작성 및 발송
+  // POST /api/webmail/send - 구글 메일 SMTP 실체 메일 발송
   app.post('/api/webmail/send', async (request, reply) => {
     const body = request.body as any;
     const { recipient_name, recipient_email, subject, body_text } = body;
 
-    const { rows } = await pool.query(`
-      INSERT INTO webmail_message (sender_name, sender_email, recipient_name, recipient_email, subject, body, is_read, received_at)
-      VALUES ('이지원 MES', 'admin@ezone.kr', $1, $2, $3, $4, TRUE, NOW())
-      RETURNING *
-    `, [recipient_name || '수신자', recipient_email || 'client@ezone.kr', subject, body_text]);
+    const targetEmail = recipient_email || GMAIL_USER;
+    const mailSubject = subject || '[이지원 MES] 업무 메일 안내';
+    const mailContent = body_text || '안녕하세요, 이지원 MES 시스템에서 발송된 업무 안내입니다.';
 
-    return reply.status(201).send({ success: true, message: '이메일이 정상 발송되었습니다.', data: rows[0] });
+    // 1. Send via real Gmail SMTP
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: GMAIL_USER, pass: GMAIL_PASS },
+    });
+
+    try {
+      const info = await transporter.sendMail({
+        from: `"이지원 MES" <${GMAIL_USER}>`,
+        to: targetEmail,
+        subject: mailSubject,
+        text: mailContent,
+      });
+
+      // 2. Save in DB audit log
+      const { rows } = await pool.query(`
+        INSERT INTO webmail_message (sender_name, sender_email, recipient_name, recipient_email, subject, body, is_read, received_at)
+        VALUES ('이지원 MES', $1, $2, $3, $4, $5, TRUE, NOW())
+        RETURNING *
+      `, [GMAIL_USER, recipient_name || '수신자', targetEmail, mailSubject, mailContent]);
+
+      return reply.status(201).send({
+        success: true,
+        message: `구글 메일이 성공적으로 실시간 발송되었습니다. (MessageID: ${info.messageId})`,
+        data: rows[0],
+      });
+    } catch (err: any) {
+      console.error('Failed to send email via Gmail SMTP:', err);
+      return reply.status(500).send({
+        success: false,
+        message: `구글 메일 발송 중 오류가 발생했습니다: ${err.message}`,
+      });
+    }
   });
 
   // PATCH /api/webmail/:id/read - 읽음 처리

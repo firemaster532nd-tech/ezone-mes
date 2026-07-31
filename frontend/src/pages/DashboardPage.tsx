@@ -169,6 +169,36 @@ export function DashboardPage() {
   const [activityLog, setActivityLog] = useState<ActivityLogEntry[]>([]);
   const [workflow, setWorkflow] = useState<WorkflowData | null>(null);
 
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailRecipient, setEmailRecipient] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+
+  const handleSendGmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSendingEmail(true);
+    try {
+      await api.post('/webmail/send', {
+        recipient_email: emailRecipient,
+        subject: emailSubject,
+        body_text: emailBody,
+      });
+      alert(`[구글 메일 실시간 발송 완료]\n\n수신: ${emailRecipient}\n제목: ${emailSubject}`);
+      setIsEmailModalOpen(false);
+      setEmailRecipient('');
+      setEmailSubject('');
+      setEmailBody('');
+      // Reload dashboard data
+      const res = await api.get<{ data: DashboardData }>('/dashboard');
+      setData(res.data);
+    } catch (err: any) {
+      alert(`메일 발송 오류: ${err.message || '서버 오류'}`);
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
   useEffect(() => {
     api.get<{ data: DashboardData }>('/dashboard').then((res) => setData(res.data));
     api.get<{ data: AlertsData }>('/dashboard/alerts').then((res) => setAlerts(res.data)).catch(() => {});
@@ -330,7 +360,7 @@ export function DashboardPage() {
           </div>
           <div className="pt-2 border-t mt-2 flex justify-between items-center text-xs">
             <span className="text-slate-400 text-[11px]">외부/고객사 업무 메일</span>
-            <button onClick={() => alert('메일 작성 모달을 엽니다.')} className="text-emerald-600 font-bold hover:underline">
+            <button onClick={() => setIsEmailModalOpen(true)} className="text-emerald-600 font-bold hover:underline">
               + 메일작성
             </button>
           </div>
@@ -1056,6 +1086,81 @@ function DeliveryCalendar() {
                 {e.delivery_date && <span className="text-blue-600 font-mono">납기: {e.delivery_date}</span>}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* 📧 구글 메일 작성 및 실시간 발송 모달 */}
+      {isEmailModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span className="text-xl">📧</span> 구글 메일(Gmail) 실시간 작성 및 발송
+              </h3>
+              <button onClick={() => setIsEmailModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold text-lg">
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSendGmail} className="space-y-3 text-xs">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2.5 text-emerald-900 font-medium">
+                <p><strong>발신 계정:</strong> firemaster532nd@gmail.com (이지원 MES 구글 통합 계정)</p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">수신자 이메일 주소</label>
+                <input 
+                  type="email" 
+                  required
+                  placeholder="example@client.com" 
+                  value={emailRecipient}
+                  onChange={(e) => setEmailRecipient(e.target.value)}
+                  className="w-full border rounded-lg p-2.5 text-xs font-mono focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">메일 제목</label>
+                <input 
+                  type="text" 
+                  required
+                  placeholder="[이지원 MES] 내화채움구조 견적/발주서 안내" 
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  className="w-full border rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">메일 본문 내용</label>
+                <textarea 
+                  required
+                  rows={5}
+                  placeholder="안녕하세요, 이지원 MES 업무 안내드립니다..." 
+                  value={emailBody}
+                  onChange={(e) => setEmailBody(e.target.value)}
+                  className="w-full border rounded-lg p-2.5 text-xs focus:ring-2 focus:ring-emerald-500 resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button 
+                  type="button" 
+                  onClick={() => setIsEmailModalOpen(false)}
+                  className="px-4 py-2 border rounded-lg text-slate-600 font-bold hover:bg-slate-100"
+                >
+                  취소
+                </button>
+                <button 
+                  type="submit" 
+                  disabled={isSendingEmail}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSendingEmail ? '구글 메일 전송 중...' : '🚀 구글 메일 실시간 발송'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
