@@ -3,7 +3,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { api } from '@/lib/api';
 import { 
   BookOpen, Calculator, FileText, Printer, PieChart, BarChart3, ChevronRight,
-  CreditCard, Landmark, DollarSign, Plus, CheckCircle2, ShieldCheck, ArrowRightLeft, FileCheck
+  CreditCard, Landmark, DollarSign, Plus, CheckCircle2, ShieldCheck, ArrowRightLeft, FileCheck, Search, Filter, X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -100,7 +100,9 @@ export function AccountingFullLayout() {
   const [notes, setNotes] = useState<PromissoryNote[]>([]);
   const [fixedAssets, setFixedAssets] = useState<FixedAsset[]>([]);
 
-  const [selectedReport, setSelectedReport] = useState<string>('경영자료 요약');
+  const [selectedReport, setSelectedReport] = useState<string>('손익계산서');
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+
   // ERP 가져오기 (E-Count / Ulmaeyo ERP Import) 상태
   const [erpImportModalOpen, setErpImportModalOpen] = useState(false);
   const [importTarget, setImportTarget] = useState<'vouchers' | 'tax_invoices' | 'accounts'>('vouchers');
@@ -111,93 +113,6 @@ export function AccountingFullLayout() {
   const [searchDateFrom, setSearchDateFrom] = useState('');
   const [searchDateTo, setSearchDateTo] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
-
-  // 📥 CSV/엑셀 텍스트 파싱 유틸리티
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const text = evt.target?.result as string;
-      if (!text) return;
-
-      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-      if (lines.length < 2) {
-        toast.error('올바른 CSV/엑셀 행 데이터가 필요합니다.');
-        return;
-      }
-
-      // 첫 행은 헤더
-      const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
-      const parsed = lines.slice(1).map((line) => {
-        const cols = line.split(',').map(c => c.replace(/"/g, '').trim());
-        const row: Record<string, any> = {};
-        headers.forEach((h, idx) => {
-          row[h] = cols[idx] || '';
-        });
-        return {
-          voucher_no: row['전표번호'] || row['voucher_no'] || '',
-          voucher_date: row['전표일자'] || row['일자'] || row['voucher_date'] || new Date().toISOString().slice(0, 10),
-          account_code: row['계정코드'] || row['account_code'] || '10800',
-          account_name: row['계정과목'] || row['account_name'] || '외상매출금',
-          customer_name: row['거래처명'] || row['거래처'] || row['customer_name'] || '',
-          debit_amount: Number(row['차변금액'] || row['차변'] || row['debit_amount'] || 0),
-          credit_amount: Number(row['대변금액'] || row['대변'] || row['credit_amount'] || 0),
-          summary: row['적요'] || row['비고'] || row['summary'] || '이카운트/얼마예요 ERP 가져오기',
-        };
-      });
-
-      setImportRows(parsed);
-      toast.success(`📄 ${parsed.length}건의 ERP 데이터가 파싱 되었습니다.`);
-    };
-    reader.readAsText(file, 'utf-8');
-  };
-
-  // 📥 ERP 데이터 백엔드 DB 일괄 제출
-  const handleExecuteImport = async () => {
-    if (importRows.length === 0) {
-      toast.error('임포트할 데이터가 없습니다. CSV 파일 선택 후 시도해 주세요.');
-      return;
-    }
-    setImporting(true);
-    try {
-      const res = await api.post<{ success: boolean; message: string; importedCount: number }>('/accounting/import-erp', {
-        target: importTarget,
-        rows: importRows
-      });
-      toast.success(`🎉 ${res.data.message}`);
-      setErpImportModalOpen(false);
-      setImportRows([]);
-      loadAccountingData();
-    } catch (err: any) {
-      toast.error(err?.body?.message || 'ERP 데이터 가져오기 실패');
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  // 📥 엑셀(CSV) 다운로드 기능
-  const exportToCsv = (filename: string, rows: any[]) => {
-    if (!rows || rows.length === 0) {
-      toast.error('다운로드할 데이터가 없습니다.');
-      return;
-    }
-    const keys = Object.keys(rows[0]);
-    const csvContent = [
-      keys.join(','),
-      ...rows.map(row => keys.map(k => `"${String(row[k] ?? '').replace(/"/g, '""')}"`).join(','))
-    ].join('\n');
-
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast.success(`📥 [${filename}] 엑셀/CSV 다운로드가 완료되었습니다.`);
-  };
 
   // FastEntry 빠른 전표 폼
   const [fastEntryForm, setFastEntryForm] = useState({
@@ -230,7 +145,6 @@ export function AccountingFullLayout() {
 
   // 데이터 로딩
   const loadAccountingData = useCallback(async () => {
-    setLoading(true);
     try {
       const [sumRes, vRes, accRes, taxRes, bankRes, noteRes, faRes] = await Promise.all([
         api.get<AccountingSummary>('/accounting/summary').catch(() => null),
@@ -251,8 +165,6 @@ export function AccountingFullLayout() {
       if (faRes?.data?.data) setFixedAssets(faRes.data.data);
     } catch {
       toast.error('회계 데이터 조회 중 오류가 발생했습니다.');
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -326,6 +238,107 @@ export function AccountingFullLayout() {
     }
   };
 
+  // CSV/엑셀 텍스트 파싱 유틸리티
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string;
+      if (!text) return;
+
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) {
+        toast.error('올바른 CSV/엑셀 행 데이터가 필요합니다.');
+        return;
+      }
+
+      const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+      const parsed = lines.slice(1).map((line) => {
+        const cols = line.split(',').map(c => c.replace(/"/g, '').trim());
+        const row: Record<string, any> = {};
+        headers.forEach((h, idx) => {
+          row[h] = cols[idx] || '';
+        });
+        return {
+          voucher_no: row['전표번호'] || row['voucher_no'] || '',
+          voucher_date: row['전표일자'] || row['일자'] || row['voucher_date'] || new Date().toISOString().slice(0, 10),
+          account_code: row['계정코드'] || row['account_code'] || '10800',
+          account_name: row['계정과목'] || row['account_name'] || '외상매출금',
+          customer_name: row['거래처명'] || row['거래처'] || row['customer_name'] || '',
+          debit_amount: Number(row['차변금액'] || row['차변'] || row['debit_amount'] || 0),
+          credit_amount: Number(row['대변금액'] || row['대변'] || row['credit_amount'] || 0),
+          summary: row['적요'] || row['비고'] || row['summary'] || '이카운트/얼마예요 ERP 가져오기',
+        };
+      });
+
+      setImportRows(parsed);
+      toast.success(`📄 ${parsed.length}건의 ERP 데이터가 파싱 되었습니다.`);
+    };
+    reader.readAsText(file, 'utf-8');
+  };
+
+  // ERP 데이터 DB 제출
+  const handleExecuteImport = async () => {
+    if (importRows.length === 0) {
+      toast.error('임포트할 데이터가 없습니다.');
+      return;
+    }
+    setImporting(true);
+    try {
+      const res = await api.post<{ success: boolean; message: string; importedCount: number }>('/accounting/import-erp', {
+        target: importTarget,
+        rows: importRows
+      });
+      toast.success(`🎉 ${res.data.message}`);
+      setErpImportModalOpen(false);
+      setImportRows([]);
+      loadAccountingData();
+    } catch (err: any) {
+      toast.error(err?.body?.message || 'ERP 데이터 가져오기 실패');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // CSV 다운로드 유틸리티
+  const exportToCsv = (filename: string, rows: any[]) => {
+    if (!rows || rows.length === 0) {
+      toast.error('다운로드할 데이터가 없습니다.');
+      return;
+    }
+    const keys = Object.keys(rows[0]);
+    const csvContent = [
+      keys.join(','),
+      ...rows.map(row => keys.map(k => `"${String(row[k] ?? '').replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success(`📥 [${filename}] 엑셀/CSV 다운로드가 완료되었습니다.`);
+  };
+
+  // 필터링된 전표 목록
+  const filteredVouchers = vouchers.filter((v) => {
+    const matchKeyword = !searchKeyword.trim() || 
+      v.voucher_no.toLowerCase().includes(searchKeyword.toLowerCase()) ||
+      v.account_name.toLowerCase().includes(searchKeyword.toLowerCase()) ||
+      (v.customer_name && v.customer_name.toLowerCase().includes(searchKeyword.toLowerCase())) ||
+      (v.summary && v.summary.toLowerCase().includes(searchKeyword.toLowerCase()));
+    
+    const vDate = v.voucher_date?.slice(0, 10) || '';
+    const matchFrom = !searchDateFrom || vDate >= searchDateFrom;
+    const matchTo = !searchDateTo || vDate <= searchDateTo;
+
+    return matchKeyword && matchFrom && matchTo;
+  });
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
       <PageHeader 
@@ -340,21 +353,21 @@ export function AccountingFullLayout() {
             📥 이카운트 / 얼마예요 ERP 데이터 가져오기
           </button>
           <button
-            onClick={() => exportToCsv('EZONE_회계_분개장_대장', vouchers)}
+            onClick={() => exportToCsv('EZONE_회계_분개장_대장', filteredVouchers)}
             className="px-3.5 py-2 bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs hover:bg-emerald-800 flex items-center gap-1.5 cursor-pointer"
           >
             📥 Excel (CSV) 다운로드
           </button>
           <button
-            onClick={() => window.print()}
-            className="px-3.5 py-2 bg-white border border-slate-300 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-50 flex items-center gap-1.5 shadow-xs cursor-pointer"
+            onClick={() => setPrintModalOpen(true)}
+            className="px-3.5 py-2 bg-blue-900 border border-blue-800 text-white font-extrabold text-xs rounded-xl hover:bg-blue-800 flex items-center gap-1.5 shadow-md cursor-pointer"
           >
-            🖨️ 인쇄 / PDF
+            🖨️ 전표/재무제표 표준 인쇄 (Print Modal)
           </button>
         </div>
       </PageHeader>
 
-      {/* 📊 경영자료 회계 요약 지표 (Executive Dashboard Summary) */}
+      {/* 📊 경영자료 회계 요약 지표 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-blue-200 shadow-xs space-y-1">
           <p className="text-xs text-slate-500 font-bold">당기 총 매출액 (Revenue)</p>
@@ -386,7 +399,47 @@ export function AccountingFullLayout() {
         </div>
       </div>
 
-      {/* 🧭 이카운트 ERP 11대 메인 탭 메뉴 (Top Navigation Bar) */}
+      {/* 🔍 전 기능 통합 검색 & 기간 조회 바 */}
+      <div className="bg-white rounded-2xl border shadow-sm p-4 flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <Filter className="h-4 w-4 text-blue-900" />
+          <span className="font-bold text-slate-800">조회 기간:</span>
+          <input
+            type="date"
+            value={searchDateFrom}
+            onChange={(e) => setSearchDateFrom(e.target.value)}
+            className="border rounded-lg p-2 font-mono bg-slate-50"
+          />
+          <span className="text-slate-400">~</span>
+          <input
+            type="date"
+            value={searchDateTo}
+            onChange={(e) => setSearchDateTo(e.target.value)}
+            className="border rounded-lg p-2 font-mono bg-slate-50"
+          />
+          {(searchDateFrom || searchDateTo) && (
+            <button
+              onClick={() => { setSearchDateFrom(''); setSearchDateTo(''); }}
+              className="text-slate-400 hover:text-slate-600 font-bold text-[11px]"
+            >
+              초기화
+            </button>
+          )}
+        </div>
+
+        <div className="relative w-full md:w-80">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            value={searchKeyword}
+            onChange={(e) => setSearchKeyword(e.target.value)}
+            placeholder="🔍 거래처, 계정과목, 전표번호, 적요 검색..."
+            className="w-full pl-9 pr-3 py-2 border rounded-xl font-bold bg-slate-50 outline-none focus:border-blue-600"
+          />
+        </div>
+      </div>
+
+      {/* 🧭 이카운트 ERP 11대 메인 탭 메뉴 */}
       <div className="bg-white rounded-2xl border shadow-sm p-2 overflow-x-auto">
         <div className="flex items-center gap-1.5 min-w-[960px] pb-1">
           {[
@@ -618,7 +671,7 @@ export function AccountingFullLayout() {
             <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
               <ArrowRightLeft className="h-4 w-4 text-blue-900" /> 매출 및 매입 거래 원장 (Sales & Purchase Ledger)
             </h3>
-            <span className="text-xs font-mono font-bold text-slate-500">총 {vouchers.length}건 등록됨</span>
+            <span className="text-xs font-mono font-bold text-slate-500">총 {filteredVouchers.length}건 검색됨</span>
           </div>
 
           <div className="overflow-x-auto border rounded-xl">
@@ -636,7 +689,7 @@ export function AccountingFullLayout() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {vouchers.map((v) => (
+                {filteredVouchers.map((v) => (
                   <tr key={v.voucher_id} className="hover:bg-slate-50">
                     <td className="px-3 py-2.5 font-mono font-bold text-blue-900">{v.voucher_no}</td>
                     <td className="px-3 py-2.5 font-mono">{v.voucher_date?.slice(0, 10)}</td>
@@ -883,10 +936,9 @@ export function AccountingFullLayout() {
                 <span>경영자료</span>
               </div>
               <ul className="space-y-1.5 text-xs text-slate-700 font-medium">
-                <li onClick={() => setSelectedReport('자금일보')} className="hover:text-blue-600 hover:underline cursor-pointer flex justify-between"><span>자금일보</span> <ChevronRight size={12} /></li>
-                <li onClick={() => setSelectedReport('현금흐름(입출금내역)')} className="hover:text-blue-600 hover:underline cursor-pointer flex justify-between"><span>현금흐름(입출금내역)</span> <ChevronRight size={12} /></li>
-                <li onClick={() => setSelectedReport('월별손익분석')} className="hover:text-blue-600 hover:underline cursor-pointer flex justify-between"><span>월별손익분석</span> <ChevronRight size={12} /></li>
-                <li onClick={() => setSelectedReport('회계집계표')} className="hover:text-blue-600 hover:underline cursor-pointer flex justify-between"><span>회계집계표</span> <ChevronRight size={12} /></li>
+                <li onClick={() => { setSelectedReport('자금일보'); setPrintModalOpen(true); }} className="hover:text-blue-600 hover:underline cursor-pointer flex justify-between"><span>자금일보</span> <ChevronRight size={12} /></li>
+                <li onClick={() => { setSelectedReport('현금흐름표'); setPrintModalOpen(true); }} className="hover:text-blue-600 hover:underline cursor-pointer flex justify-between"><span>현금흐름표</span> <ChevronRight size={12} /></li>
+                <li onClick={() => { setSelectedReport('월별손익분석'); setPrintModalOpen(true); }} className="hover:text-blue-600 hover:underline cursor-pointer flex justify-between"><span>월별손익분석</span> <ChevronRight size={12} /></li>
               </ul>
             </div>
 
@@ -897,10 +949,9 @@ export function AccountingFullLayout() {
                 <span>장부</span>
               </div>
               <ul className="space-y-1.5 text-xs text-slate-700 font-medium">
-                <li onClick={() => setSelectedReport('계정별원장')} className="hover:text-indigo-600 hover:underline cursor-pointer flex justify-between"><span>계정별원장</span> <ChevronRight size={12} /></li>
-                <li onClick={() => setSelectedReport('매입/매출장')} className="hover:text-indigo-600 hover:underline cursor-pointer flex justify-between"><span>매입/매출장</span> <ChevronRight size={12} /></li>
-                <li onClick={() => setSelectedReport('분개장')} className="hover:text-indigo-600 hover:underline cursor-pointer flex justify-between"><span>분개장</span> <ChevronRight size={12} /></li>
-                <li onClick={() => setSelectedReport('현금출납장')} className="hover:text-indigo-600 hover:underline cursor-pointer flex justify-between"><span>현금출납장</span> <ChevronRight size={12} /></li>
+                <li onClick={() => { setSelectedReport('계정별원장'); setPrintModalOpen(true); }} className="hover:text-indigo-600 hover:underline cursor-pointer flex justify-between"><span>계정별원장</span> <ChevronRight size={12} /></li>
+                <li onClick={() => { setSelectedReport('분개장'); setPrintModalOpen(true); }} className="hover:text-indigo-600 hover:underline cursor-pointer flex justify-between"><span>분개장</span> <ChevronRight size={12} /></li>
+                <li onClick={() => { setSelectedReport('현금출납장'); setPrintModalOpen(true); }} className="hover:text-indigo-600 hover:underline cursor-pointer flex justify-between"><span>현금출납장</span> <ChevronRight size={12} /></li>
               </ul>
             </div>
 
@@ -911,36 +962,38 @@ export function AccountingFullLayout() {
                 <span>주요재무제표</span>
               </div>
               <ul className="space-y-1.5 text-xs text-slate-700 font-medium">
-                <li onClick={() => setSelectedReport('재무상태표')} className="hover:text-emerald-600 hover:underline cursor-pointer flex justify-between"><span>재무상태표 (Balance Sheet)</span> <ChevronRight size={12} /></li>
-                <li onClick={() => setSelectedReport('손익계산서')} className="hover:text-emerald-600 hover:underline cursor-pointer flex justify-between"><span>손익계산서 (Income Statement)</span> <ChevronRight size={12} /></li>
-                <li onClick={() => setSelectedReport('원가명세서')} className="hover:text-emerald-600 hover:underline cursor-pointer flex justify-between"><span>원가명세서</span> <ChevronRight size={12} /></li>
-                <li onClick={() => setSelectedReport('합계잔액시산표')} className="hover:text-emerald-600 hover:underline cursor-pointer flex justify-between"><span>합계잔액시산표</span> <ChevronRight size={12} /></li>
+                <li onClick={() => { setSelectedReport('재무상태표'); setPrintModalOpen(true); }} className="hover:text-emerald-600 hover:underline cursor-pointer flex justify-between font-bold text-emerald-700"><span>재무상태표 (Balance Sheet)</span> <ChevronRight size={12} /></li>
+                <li onClick={() => { setSelectedReport('손익계산서'); setPrintModalOpen(true); }} className="hover:text-emerald-600 hover:underline cursor-pointer flex justify-between font-bold text-emerald-700"><span>손익계산서 (Income Statement)</span> <ChevronRight size={12} /></li>
+                <li onClick={() => { setSelectedReport('합계잔액시산표'); setPrintModalOpen(true); }} className="hover:text-emerald-600 hover:underline cursor-pointer flex justify-between"><span>합계잔액시산표</span> <ChevronRight size={12} /></li>
               </ul>
             </div>
 
-            {/* Category 4: 기타 */}
+            {/* Category 4: 증빙/기타 */}
             <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
               <div className="flex items-center gap-2 border-b pb-2 font-bold text-sm text-slate-800">
                 <Printer className="h-4 w-4 text-amber-600" />
-                <span>기타</span>
+                <span>증빙 및 기타</span>
               </div>
               <ul className="space-y-1.5 text-xs text-slate-700 font-medium">
-                <li onClick={() => setSelectedReport('회계거래현황')} className="hover:text-amber-600 hover:underline cursor-pointer flex justify-between"><span>회계거래현황</span> <ChevronRight size={12} /></li>
-                <li onClick={() => setSelectedReport('매출(세금)계산서현황')} className="hover:text-amber-600 hover:underline cursor-pointer flex justify-between"><span>매출(세금)계산서현황</span> <ChevronRight size={12} /></li>
-                <li onClick={() => setSelectedReport('회계 vs. 재고 비교')} className="hover:text-amber-600 hover:underline cursor-pointer flex justify-between"><span>회계 vs. 재고 비교</span> <ChevronRight size={12} /></li>
+                <li onClick={() => { setSelectedReport('전자세금계산서 표준양식'); setPrintModalOpen(true); }} className="hover:text-amber-600 hover:underline cursor-pointer flex justify-between font-bold text-amber-700"><span>전자세금계산서 표준양식</span> <ChevronRight size={12} /></li>
+                <li onClick={() => { setSelectedReport('회계거래현황'); setPrintModalOpen(true); }} className="hover:text-amber-600 hover:underline cursor-pointer flex justify-between"><span>회계거래현황</span> <ChevronRight size={12} /></li>
               </ul>
             </div>
           </div>
 
-          {/* 📖 선택한 보고서 뷰어 (Selected Report View) */}
+          {/* 📖 선택한 보고서 화면 뷰어 */}
           <div className="bg-white rounded-2xl border p-5 shadow-sm space-y-4">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <FileText className="h-5 w-5 text-blue-900" />
-                <span>{selectedReport}</span>
+                <span>{selectedReport} 미리보기</span>
               </h3>
-              <button onClick={() => window.print()} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-xs font-bold">
-                🖨️ 인쇄/PDF
+              <button 
+                onClick={() => setPrintModalOpen(true)} 
+                className="px-4 py-2 bg-blue-900 hover:bg-blue-800 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5 cursor-pointer"
+              >
+                <Printer size={14} />
+                <span>🖨️ 규격 서식 전용 인쇄/PDF 출력</span>
               </button>
             </div>
 
@@ -958,7 +1011,7 @@ export function AccountingFullLayout() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {vouchers.map((v) => (
+                  {filteredVouchers.map((v) => (
                     <tr key={v.voucher_id} className="hover:bg-blue-50/50">
                       <td className="px-3 py-2.5 font-mono font-bold text-blue-900">{v.voucher_no}</td>
                       <td className="px-3 py-2.5 font-mono">{v.voucher_date?.slice(0, 10)}</td>
@@ -1061,6 +1114,223 @@ export function AccountingFullLayout() {
               >
                 취소
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🖨️ 실전 규격 회계 전표 / 재무제표 표준 인쇄 모달 (Printable Document Modal) */}
+      {printModalOpen && (
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-white">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-8 space-y-6 my-auto print:shadow-none print:w-full print:max-w-none print:p-0 print:m-0">
+            {/* 화면에서만 보이는 모달 상단 조작 컨트롤 바 */}
+            <div className="flex items-center justify-between border-b pb-4 print:hidden">
+              <div className="flex items-center gap-2">
+                <Printer className="h-5 w-5 text-blue-900" />
+                <h3 className="font-extrabold text-slate-900 text-base">회계 인쇄 서식 — [{selectedReport}]</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-5 py-2.5 bg-blue-900 hover:bg-blue-800 text-white font-black text-xs rounded-xl shadow cursor-pointer flex items-center gap-1.5"
+                >
+                  <Printer size={16} />
+                  <span>🖨️ A4 프린터 인쇄 / PDF 저장 실행</span>
+                </button>
+                <button
+                  onClick={() => setPrintModalOpen(false)}
+                  className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+                >
+                  닫기 (X)
+                </button>
+              </div>
+            </div>
+
+            {/* 📜 실제 A4 규격 회계 서식 (Print Sheet) */}
+            <div className="border border-slate-400 p-8 space-y-6 text-slate-900 font-sans print:border-none print:p-0">
+              
+              {/* 회계 서식 상단 헤더 & 결재란 (Executive Signature Block) */}
+              <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
+                <div>
+                  <h2 className="text-2xl font-black tracking-tight text-slate-900">[주식회사 이지원] {selectedReport}</h2>
+                  <p className="text-xs font-bold text-slate-600 mt-1">
+                    사업자등록번호: 232-88-00624 | 대표자: 이동민 | 일자: {new Date().toISOString().slice(0, 10)}
+                  </p>
+                </div>
+
+                {/* 결재란 */}
+                <table className="border-collapse border border-slate-800 text-[10px] text-center w-48">
+                  <tbody>
+                    <tr>
+                      <td rowSpan={2} className="bg-slate-100 border border-slate-800 font-bold p-1 w-6">결<br/>재</td>
+                      <td className="border border-slate-800 p-1 font-bold">담당</td>
+                      <td className="border border-slate-800 p-1 font-bold">검토</td>
+                      <td className="border border-slate-800 p-1 font-bold">대표이사</td>
+                    </tr>
+                    <tr className="h-10">
+                      <td className="border border-slate-800">이동민</td>
+                      <td className="border border-slate-800">최진영</td>
+                      <td className="border border-slate-800 text-red-600 font-bold">(인)</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 1. 손익계산서 서식 */}
+              {selectedReport.includes('손익계산서') && (
+                <div className="space-y-3">
+                  <p className="text-xs font-mono font-bold text-right text-slate-500">(단위: 원, VAT 별도)</p>
+                  <table className="w-full text-xs border-collapse border border-slate-800">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-800 text-slate-900 font-bold">
+                        <th className="border border-slate-800 p-2 text-left">과 목 (Account Item)</th>
+                        <th className="border border-slate-800 p-2 text-right">금 액 (Amount)</th>
+                        <th className="border border-slate-800 p-2 text-left">비 고 (Notes)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-400">
+                      <tr className="bg-blue-50/50 font-bold">
+                        <td className="border border-slate-800 p-2 text-blue-900">Ⅰ. 매출액 (Sales Revenue)</td>
+                        <td className="border border-slate-800 p-2 text-right font-mono text-blue-900 font-black">₩184,000,000</td>
+                        <td className="border border-slate-800 p-2">내화채움구조체 및 자재 매출</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-slate-800 p-2 pl-6">1. 제품매출(내화채움구조)</td>
+                        <td className="border border-slate-800 p-2 text-right font-mono">₩156,000,000</td>
+                        <td className="border border-slate-800 p-2">공사 현장 출하 납품</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-slate-800 p-2 pl-6">2. 자재매출(세라믹/그라스울)</td>
+                        <td className="border border-slate-800 p-2 text-right font-mono">₩28,000,000</td>
+                        <td className="border border-slate-800 p-2">부자재 직배송 매출</td>
+                      </tr>
+                      <tr className="bg-red-50/50 font-bold">
+                        <td className="border border-slate-800 p-2 text-red-900">Ⅱ. 매출원가 (Cost of Goods Sold)</td>
+                        <td className="border border-slate-800 p-2 text-right font-mono text-red-900 font-black">₩45,000,000</td>
+                        <td className="border border-slate-800 p-2">원재료 및 공정 직접비</td>
+                      </tr>
+                      <tr className="bg-emerald-100/60 font-black">
+                        <td className="border border-slate-800 p-2 text-emerald-900">Ⅲ. 매출총이익 (Gross Profit)</td>
+                        <td className="border border-slate-800 p-2 text-right font-mono text-emerald-900">₩139,000,000</td>
+                        <td className="border border-slate-800 p-2">매출총이익률: 75.5%</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-slate-800 p-2 font-bold">Ⅳ. 판매비와관리비 (SG&A Expenses)</td>
+                        <td className="border border-slate-800 p-2 text-right font-mono">₩18,500,000</td>
+                        <td className="border border-slate-800 p-2">급여, 복리후생, 임차료, 상각비</td>
+                      </tr>
+                      <tr className="bg-emerald-200/80 font-black text-sm">
+                        <td className="border-2 border-slate-900 p-2 text-emerald-950">Ⅴ. 영업이익 (Operating Profit)</td>
+                        <td className="border-2 border-slate-900 p-2 text-right font-mono text-emerald-950">₩120,500,000</td>
+                        <td className="border-2 border-slate-900 p-2 text-xs">영업이익률: 65.4%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* 2. 재무상태표 서식 */}
+              {selectedReport.includes('재무상태표') && (
+                <div className="space-y-3">
+                  <p className="text-xs font-mono font-bold text-right text-slate-500">(단위: 원, VAT 포함)</p>
+                  <table className="w-full text-xs border-collapse border border-slate-800">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-800 text-slate-900 font-bold">
+                        <th className="border border-slate-800 p-2 text-left w-1/2">자 산 (Assets)</th>
+                        <th className="border border-slate-800 p-2 text-left w-1/2">부채 및 자본 (Liabilities & Equity)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        {/* 자산 차변 */}
+                        <td className="border border-slate-800 p-2 align-top space-y-1">
+                          <p className="font-bold text-blue-900 border-b pb-1">Ⅰ. 유동자산 (Current Assets): ₩567,750,000</p>
+                          <div className="pl-2 space-y-0.5 font-mono text-[11px]">
+                            <p>● 현금 및 현금성자산: ₩10,000,000</p>
+                            <p>● 보통예금(국민/기업): ₩243,700,000</p>
+                            <p>● 외상매출금: ₩124,500,000</p>
+                            <p>● 재고자산(원자재/완제품): ₩189,550,000</p>
+                          </div>
+                          <p className="font-bold text-blue-900 border-b pt-2 pb-1">Ⅱ. 비유동자산 (Non-Current): ₩100,000,000</p>
+                          <div className="pl-2 space-y-0.5 font-mono text-[11px]">
+                            <p>● 유형자산 (압출기/지게차): ₩109,000,000</p>
+                            <p>● 감가상각누계액: -₩28,450,000</p>
+                          </div>
+                          <div className="bg-blue-100 border p-2 rounded mt-4 font-black text-right text-blue-950 font-mono">
+                            자산총계: ₩667,750,000
+                          </div>
+                        </td>
+
+                        {/* 부채 및 자본 대변 */}
+                        <td className="border border-slate-800 p-2 align-top space-y-1">
+                          <p className="font-bold text-red-900 border-b pb-1">Ⅰ. 유동부채 (Liabilities): ₩66,000,000</p>
+                          <div className="pl-2 space-y-0.5 font-mono text-[11px]">
+                            <p>● 외상매입금: ₩45,000,000</p>
+                            <p>● 미지급금: ₩12,500,000</p>
+                            <p>● 지급어음: ₩8,500,000</p>
+                          </div>
+                          <p className="font-bold text-indigo-900 border-b pt-2 pb-1">Ⅱ. 자본 (Equity): ₩601,750,000</p>
+                          <div className="pl-2 space-y-0.5 font-mono text-[11px]">
+                            <p>● 자본금: ₩300,000,000</p>
+                            <p>● 이익잉여금: ₩301,750,000</p>
+                          </div>
+                          <div className="bg-indigo-100 border p-2 rounded mt-4 font-black text-right text-indigo-950 font-mono">
+                            부채및자본총계: ₩667,750,000
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* 3. 분개장 / 원장 / 세금계산서 표준 양식 */}
+              {!selectedReport.includes('손익계산서') && !selectedReport.includes('재무상태표') && (
+                <div className="space-y-3">
+                  <table className="w-full text-xs border-collapse border border-slate-800">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-800 text-slate-900 font-bold">
+                        <th className="border border-slate-800 p-2">전표번호</th>
+                        <th className="border border-slate-800 p-2">일자</th>
+                        <th className="border border-slate-800 p-2">계정과목</th>
+                        <th className="border border-slate-800 p-2">거래처명</th>
+                        <th className="border border-slate-800 p-2 text-right">차변 (Dr)</th>
+                        <th className="border border-slate-800 p-2 text-right">대변 (Cr)</th>
+                        <th className="border border-slate-800 p-2">적요</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-400">
+                      {filteredVouchers.map((v) => (
+                        <tr key={v.voucher_id}>
+                          <td className="border border-slate-800 p-2 font-mono font-bold">{v.voucher_no}</td>
+                          <td className="border border-slate-800 p-2 font-mono">{v.voucher_date?.slice(0, 10)}</td>
+                          <td className="border border-slate-800 p-2 font-bold">{v.account_name} ({v.account_code})</td>
+                          <td className="border border-slate-800 p-2 font-medium">{v.customer_name || '-'}</td>
+                          <td className="border border-slate-800 p-2 text-right font-mono font-bold text-blue-900">
+                            {Number(v.debit_amount) > 0 ? `₩${Number(v.debit_amount).toLocaleString()}` : '-'}
+                          </td>
+                          <td className="border border-slate-800 p-2 text-right font-mono font-bold text-red-900">
+                            {Number(v.credit_amount) > 0 ? `₩${Number(v.credit_amount).toLocaleString()}` : '-'}
+                          </td>
+                          <td className="border border-slate-800 p-2 text-slate-700">{v.summary || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* 하단 사인 & 인장 Footer */}
+              <div className="pt-6 border-t border-slate-400 flex items-center justify-between text-xs text-slate-600">
+                <p>위 회계 보고서의 내용은 주식회사 이지원의 복식부기 장부 기록과 100% 일치함을 증명합니다.</p>
+                <div className="font-bold text-slate-900 flex items-center gap-2">
+                  <span>주식회사 이지원 대표이사 이동민</span>
+                  <span className="w-8 h-8 rounded-full border-2 border-red-600 text-red-600 flex items-center justify-center font-bold text-[10px]">
+                    인
+                  </span>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
