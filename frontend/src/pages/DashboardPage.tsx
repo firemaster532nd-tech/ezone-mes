@@ -199,8 +199,25 @@ export function DashboardPage() {
     }
   };
 
+  const [selectedEmailDetail, setSelectedEmailDetail] = useState<any | null>(null);
+
   useEffect(() => {
-    api.get<{ data: DashboardData }>('/dashboard').then((res) => setData(res.data));
+    api.get<{ data: DashboardData }>('/dashboard').then((res) => {
+      const dbData = res.data;
+      setData(dbData);
+      // Fetch live Gmail inbox
+      api.get<{ data: any[] }>('/webmail').then((mailRes) => {
+        if (mailRes.data && mailRes.data.length > 0) {
+          setData((prev) => prev ? {
+            ...prev,
+            groupware: {
+              ...prev.groupware,
+              emails: mailRes.data,
+            }
+          } : prev);
+        }
+      }).catch(() => {});
+    });
     api.get<{ data: AlertsData }>('/dashboard/alerts').then((res) => setAlerts(res.data)).catch(() => {});
     api.get<{ data: ActivityLogEntry[] }>('/dashboard/activity-log').then((res) => setActivityLog(res.data)).catch(() => {});
     api.get<{ data: WorkflowData }>('/dashboard/workflow').then((res) => setWorkflow(res.data)).catch(() => {});
@@ -345,10 +362,10 @@ export function DashboardPage() {
             <div className="space-y-2 min-h-[140px]">
               {data.groupware?.emails && data.groupware.emails.length > 0 ? (
                 data.groupware.emails.slice(0, 4).map((e, idx) => (
-                  <div key={idx} className="text-xs hover:bg-slate-50 p-1.5 rounded cursor-pointer transition-colors" onClick={() => alert(`[이메일] ${e.subject}\n발신자: ${e.sender_name} (${e.sender_email})\n\n내용:\n${e.body}`)}>
+                  <div key={idx} className="text-xs hover:bg-slate-50 p-1.5 rounded cursor-pointer transition-colors" onClick={() => setSelectedEmailDetail(e)}>
                     <div className="flex items-center justify-between mb-0.5">
                       <span className="font-bold text-slate-800 text-[11px] truncate max-w-[140px]">{e.sender_name}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">{e.received_at?.slice(5, 10)}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">{e.received_at?.slice(0, 10)}</span>
                     </div>
                     <p className="text-[11px] text-slate-600 truncate">{e.subject}</p>
                   </div>
@@ -1161,6 +1178,56 @@ function DeliveryCalendar() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 📖 구글 수신 메일 상세 읽기 모달 */}
+      {selectedEmailDetail && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span className="text-xl">📧</span> 수신 메일 상세 내용
+              </h3>
+              <button onClick={() => setSelectedEmailDetail(null)} className="text-slate-400 hover:text-slate-600 font-bold text-lg">
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="bg-slate-50 border p-3 rounded-xl space-y-1">
+                <p className="text-slate-500 font-bold">발신자: <span className="text-slate-800 font-black">{selectedEmailDetail.sender_name}</span> ({selectedEmailDetail.sender_email})</p>
+                <p className="text-slate-500 font-bold">수신일시: <span className="text-slate-700 font-mono">{selectedEmailDetail.received_at?.slice(0, 19).replace('T', ' ')}</span></p>
+                <p className="text-slate-500 font-bold">제목: <span className="text-blue-900 font-black text-sm">{selectedEmailDetail.subject}</span></p>
+              </div>
+
+              <div className="border rounded-xl p-4 bg-white min-h-[120px] font-sans text-slate-800 leading-relaxed whitespace-pre-wrap">
+                {selectedEmailDetail.body}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t pt-3">
+              <button 
+                onClick={() => {
+                  const replyEmail = selectedEmailDetail.sender_email;
+                  setSelectedEmailDetail(null);
+                  setEmailRecipient(replyEmail);
+                  setEmailSubject(`RE: ${selectedEmailDetail.subject}`);
+                  setEmailBody(`\n\n----- Original Message -----\nFrom: ${selectedEmailDetail.sender_name} <${selectedEmailDetail.sender_email}>\nSubject: ${selectedEmailDetail.subject}`);
+                  setIsEmailModalOpen(true);
+                }}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs"
+              >
+                ↩️ 이 메일에 답장하기
+              </button>
+              <button 
+                onClick={() => setSelectedEmailDetail(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg text-xs"
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
       )}
