@@ -13,7 +13,8 @@ export async function dashboardRoutes(app: FastifyInstance) {
         woByProcessResult,
         woByStatusResult,
         inspectionResult,
-        inventoryAlertResult,
+        purchaseOrdersResult,
+        shortageAlertsResult,
         recentWoResult,
         weeklyProductionResult,
       ] = await Promise.all([
@@ -58,25 +59,20 @@ export async function dashboardRoutes(app: FastifyInstance) {
            WHERE inspected_at >= NOW() - interval '30 days'`
         ).catch(() => ({ rows: [{ total: 0, pass_count: 0, fail_count: 0, pass_rate: 100 }] })),
 
-        pool.query(
-          `SELECT i.item_id, i.item_code, i.item_name, i.item_category, i.safety_stock
-           FROM item_master i LIMIT 0`
-        ).catch(() => ({ rows: [] })),
-
         pool.query(`
           SELECT 
             po.po_id,
-            COALESCE(NULLIF(po.project_name, ''), NULLIF(pm.project_name, ''), '판교 현장 및 일반수주') AS project_name,
-            COALESCE(NULLIF(po.customer_name, ''), '이지원 MES 수주처') AS customer_name,
+            COALESCE(NULLIF(po.project_name, ''), NULLIF(pm.project_name, ''), '일반 현장 수주') AS project_name,
+            COALESCE(NULLIF(po.submitter, ''), NULLIF(po.contractor, ''), NULLIF(pm.customer_name, ''), '이지원 MES 발주처') AS customer_name,
             COALESCE(po.order_date::text, po.created_at::date::text) AS order_date,
             COALESCE(po.delivery_date::text, '상시출하') AS delivery_date,
-            COALESCE((SELECT COUNT(*) FROM purchase_order_item WHERE po_id = po.po_id)::int, 1) AS total_items,
-            COALESCE((SELECT SUM(qty) FROM purchase_order_item WHERE po_id = po.po_id)::numeric, 100) AS total_qty,
+            COALESCE((SELECT COUNT(*) FROM purchase_order_item WHERE po_id = po.po_id)::int, 0) AS total_items,
+            COALESCE((SELECT SUM(qty) FROM purchase_order_item WHERE po_id = po.po_id)::numeric, 0) AS total_qty,
             COALESCE(po.status, 'ACTIVE') AS status
           FROM purchase_order po
           LEFT JOIN project_master pm ON po.project_id = pm.project_id
           WHERE po.status != 'DELETED'
-          ORDER BY po.po_id DESC LIMIT 6
+          ORDER BY po.po_id DESC LIMIT 10
         `).catch(() => ({ rows: [] })),
 
         pool.query(`
@@ -90,20 +86,29 @@ export async function dashboardRoutes(app: FastifyInstance) {
             COUNT(lot_id)::int AS lot_count,
             unit,
             STRING_AGG(DISTINCT location, ', ') AS location,
-            CASE WHEN SUM(qty_current) <= 0 THEN TRUE ELSE FALSE END AS is_out_of_stock
+            CASE WHEN SUM(qty_current) <= 0 THEN TRUE ELSE FALSE END AS is_out_of_stock,
+            CASE 
+              WHEN item_spec LIKE '%200*128K%' OR item_name LIKE '%200W%' THEN 1
+              WHEN item_spec LIKE '%400*128K%' OR item_name LIKE '%400W%' THEN 2
+              WHEN item_spec LIKE '%600*128K%' OR item_name LIKE '%600W%' THEN 3
+              ELSE 9
+            END AS priority_order
           FROM material_lots
           WHERE is_active = TRUE
           GROUP BY category, item_name, COALESCE(NULLIF(item_spec, ''), '표준규격'), unit
-          HAVING SUM(qty_current) < 100 OR SUM(qty_current) <= 0
-          ORDER BY qty_current ASC, item_name ASC
+          HAVING item_spec LIKE '%128K%' OR SUM(qty_current) < 100 OR SUM(qty_current) <= 0
+          ORDER BY priority_order ASC, qty_current ASC, item_name ASC
           LIMIT 10
         `).catch(() => ({ rows: [] })),
+
+        pool.query(`SELECT * FROM work_order ORDER BY created_at DESC LIMIT 5`).catch(() => ({ rows: [] })),
+        pool.query(`SELECT wo_date as date, COUNT(*) as count FROM work_order GROUP BY wo_date LIMIT 7`).catch(() => ({ rows: [] })),
       ]);
 
       const todayWo = todayWoResult.rows[0] ?? { total: 0, completed: 0, in_progress: 0, planned: 0, hold: 0, total_actual_qty: 0 };
       const inspection = inspectionResult.rows[0] ?? { total: 0, pass_count: 0, fail_count: 0, pass_rate: 100 };
-      const siteOrdersSummary = recentWoResult.rows.length > 0 ? recentWoResult.rows : [];
-      const shortageAlerts = (weeklyProductionResult as any).rows ?? [];
+      const siteOrdersSummary = purchaseOrdersResult.rows;
+      const shortageAlerts = shortageAlertsResult.rows;
 
       const dashboardPayload = {
         date: targetDate,
