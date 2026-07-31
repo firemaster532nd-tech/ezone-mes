@@ -192,8 +192,68 @@ function GraphicRackMap({
     </div>
   );
 
+  const FACTORY_ZONES_3 = [
+    { code: 'FIELD-1F-MAIN',     label: '1공장 메인',        emoji: '🏭', desc: '1공장 메인 생산/작업장' },
+    { code: 'FIELD-1F-MAT',      label: '1공장 창고',        emoji: '📦', desc: '1공장 원/부자재 창고' },
+    { code: 'FIELD-1F-TENT',     label: '1공장 천막안',      emoji: '🎪', desc: '1공장 천막 야외 보관장' },
+    { code: 'FIELD-2F-CUTTING',  label: '2공장 재단실구역',  emoji: '✂️', desc: '2공장 차열시트/세라믹울 재단구역' },
+    { code: 'FIELD-2F-CENTER',   label: '2공장 중앙구역',    emoji: '🏢', desc: '2공장 중앙 스테이징 필드' },
+    { code: 'FIELD-2F-RACKS',    label: '2공장 렉구역',      emoji: '🏗️', desc: '2공장 메인 A~R 렉 주변 구역' },
+    { code: 'FIELD-2F-PAINTING', label: '2공장 도색실',      emoji: '🎨', desc: '2공장 플래싱/금속 도색구역' },
+    { code: 'FIELD-2F-TENT',     label: '2공장 천막안',      emoji: '⛺', desc: '2공장 천막 출하대기구역' },
+  ];
+
   return (
-    <div>
+    <div className="space-y-6">
+      {/* 3구역: 8대 세분화 공장 구역 시각화 맵 */}
+      <div className="bg-white rounded-xl border border-blue-300 shadow-sm overflow-hidden">
+        <div className="px-4 py-2.5 bg-blue-900 text-white font-bold flex justify-between items-center text-sm">
+          <div className="flex items-center gap-2">
+            <Package className="h-4 w-4 text-blue-300" />
+            <span>🏭 3구역: 8대 세분화 공장 구역 맵 (1공장/2공장 메인 및 작업구역)</span>
+          </div>
+          <span className="text-xs text-blue-200 font-normal">비렉 / 공장 필드 적재 구역 (8개 공장 구역)</span>
+        </div>
+
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 bg-slate-50">
+          {FACTORY_ZONES_3.map((z) => {
+            // Find items stored in this zone
+            const itemsInZone = Object.values(statusMap).filter(
+              c => c.location_code === z.code || c.location_code?.startsWith(z.code)
+            );
+            const activePallets = itemsInZone.reduce(
+              (acc, c) => acc + (c.pallet1.type !== 'empty' ? 1 : 0) + (c.pallet2.type !== 'empty' ? 1 : 0), 0
+            );
+
+            return (
+              <div
+                key={z.code}
+                className="bg-white border-2 border-slate-200 hover:border-blue-500 rounded-xl p-3.5 space-y-2 shadow-xs transition-all cursor-pointer"
+                onClick={() => onSelectCell(z.code)}
+              >
+                <div className="flex items-center justify-between border-b pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xl">{z.emoji}</span>
+                    <div>
+                      <p className="font-extrabold text-xs text-slate-900">{z.label}</p>
+                      <p className="text-[10px] text-slate-400 font-mono">{z.code}</p>
+                    </div>
+                  </div>
+                  <span className={cn(
+                    'text-[10px] font-bold px-2 py-0.5 rounded-full',
+                    activePallets > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-500'
+                  )}>
+                    {activePallets > 0 ? `${activePallets}개 적재` : '공실'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 line-clamp-1">{z.desc}</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 2구역 & 1구역 랙 맵 */}
       {renderZoneRack('🏬 2구역 랙 맵 (P~R칸, 왼쪽 구역)', '3칸 × 3층 = 총 9개 셀 (18 파레트 용량)', ZONE_2_COLS, 'bg-indigo-900')}
       {renderZoneRack('🏢 1구역 랙 맵 (O→A칸, 오른쪽 구역)', '15칸 × 3층 = 총 45개 셀 (90 파레트 용량)', ZONE_1_COLS, 'bg-slate-900')}
     </div>
