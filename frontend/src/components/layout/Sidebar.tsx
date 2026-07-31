@@ -1,4 +1,4 @@
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate, Link } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, Package, ShieldCheck,
   Truck, Settings, Factory, Database,
@@ -521,14 +521,14 @@ export function TopNav({
       {/* 우측: 📱 바코드 스캔 바로가기 + 검색 + 모드 전환 */}
       <div className="flex items-center gap-1.5 px-2 flex-shrink-0" style={{ height: '100%' }}>
         {/* 📱 바코드 스캔 WMS 상단 헤더 바로가기 퀵 버튼 */}
-        <button
-          onClick={() => navigate('/inventory/barcode-wms')}
+        <Link
+          to="/inventory/barcode-wms"
           className="flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] px-2.5 py-1 rounded-lg shadow-sm transition-all cursor-pointer whitespace-nowrap"
           title="LOT 바코드 스캔 WMS (입고·출고·위치이동) 바로가기"
         >
           <span>📱</span>
           <span>바코드 스캔</span>
-        </button>
+        </Link>
 
         {/* 검색 */}
         <div className="relative">
