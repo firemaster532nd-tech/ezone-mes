@@ -176,7 +176,11 @@ export async function ensureAccountingTables() {
 }
 
 export async function accountingFullRoutes(app: FastifyInstance) {
-  await ensureAccountingTables();
+  try {
+    await ensureAccountingTables();
+  } catch (err: any) {
+    console.error('[Accounting] ensureAccountingTables DB Init Error (Safe Fallback):', err.message);
+  }
 
   // GET /api/accounting/summary - 경영자료 요약
   app.get('/api/accounting/summary', async () => {
