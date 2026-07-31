@@ -723,19 +723,141 @@ export function LocationManagementPage() {
         onSelectCell={handleSelectCell}
       />
 
-      {/* 셀 선택 모달 */}
+      {/* 셀 / 공장 구역 선택 모달 */}
       {cellModalOpen && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-xl w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b pb-3">
-              <div className="flex items-center gap-2">
-                <span className="bg-slate-900 text-white text-sm font-black font-mono px-2.5 py-1 rounded">{activeCellCode} 랙 셀</span>
-                <h3 className="font-bold text-slate-800 text-base">2파레트 적재 현황</h3>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto">
+            {/* 3구역 (8대 공장/비렉 구역) 선택 시 전용 상세 모달 */}
+            {activeCellCode.startsWith('FIELD-') ? (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center border-b pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-blue-900 text-white text-xs font-black font-mono px-3 py-1 rounded-lg">
+                      3구역 🏭 {activeCellCode}
+                    </span>
+                    <h3 className="font-extrabold text-slate-900 text-base">공장 작업구역 자재 & 발주서 적재 관리</h3>
+                  </div>
+                  <button onClick={() => setCellModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* 현재 이 3구역에 보관 중인 자재/LOT 내역 */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1">
+                      <Package className="h-4 w-4 text-blue-600" />
+                      <span>현재 구역 보관 자재/LOT 목록</span>
+                    </span>
+                    <span className="text-xs text-slate-500 font-mono font-bold">
+                      위치: {activeCellCode}
+                    </span>
+                  </div>
+
+                  {availableLots.filter(l => l.location === activeCellCode || l.location?.startsWith(activeCellCode)).length > 0 ? (
+                    <div className="divide-y border rounded-xl overflow-hidden bg-slate-50">
+                      {availableLots
+                        .filter(l => l.location === activeCellCode || l.location?.startsWith(activeCellCode))
+                        .map((lot) => (
+                          <div key={lot.lot_id} className="p-3 bg-white flex items-center justify-between hover:bg-slate-50 transition-colors">
+                            <div className="space-y-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className={cn(
+                                  'text-[9px] font-black px-1.5 py-0.5 rounded',
+                                  lot.item_name?.includes('세라믹') ? 'bg-amber-100 text-amber-900' :
+                                  lot.item_name?.includes('그라스') ? 'bg-emerald-100 text-emerald-900' :
+                                  lot.item_name?.includes('소켓') ? 'bg-indigo-100 text-indigo-900' : 'bg-slate-100 text-slate-800'
+                                )}>
+                                  {lot.item_name?.includes('세라믹') ? '세라믹울' : lot.item_name?.includes('그라스') ? '그라스울' : lot.item_name?.includes('소켓') ? '소켓' : '구조체'}
+                                </span>
+                                <span className="font-mono font-extrabold text-sm text-slate-900">{lot.lot_number}</span>
+                              </div>
+                              <p className="text-xs font-bold text-slate-800">{lot.item_name}</p>
+                            </div>
+                            <div className="text-right space-y-1">
+                              <p className="text-sm font-black text-indigo-900">{Number(lot.remaining_qty).toLocaleString()} EA</p>
+                              <a href="/shipment/statements" className="text-[10px] text-blue-600 font-bold hover:underline block">
+                                📄 거래명세표 발행 →
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <div className="p-6 text-center text-xs text-slate-400 border-2 border-dashed rounded-xl bg-slate-50 space-y-1">
+                      <p className="font-bold">현재 [{activeCellCode}] 구역에 적재된 자재가 없습니다.</p>
+                      <p className="text-[11px] text-slate-400">아래 폼에서 보유 재고 LOT를 선택하여 이 구역에 즉시 배치할 수 있습니다.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* 폼: 이 구역에 자재 배치 */}
+                <form onSubmit={handleAssignToPallet} className="bg-slate-50 border-2 border-blue-200 p-4 rounded-xl space-y-3">
+                  <span className="text-xs font-extrabold text-blue-900 flex items-center gap-1">
+                    <Plus className="h-4 w-4 text-blue-600" />
+                    <span>➕ [{activeCellCode}] 구역에 자재/LOT 배치하기</span>
+                  </span>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">1. 보유 재고 LOT 선택 *</label>
+                    <select
+                      value={selectedLotId}
+                      onChange={(e) => handleSelectAvailableLot(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 text-xs font-mono font-bold bg-white"
+                    >
+                      <option value="">-- 배치할 LOT 선택 --</option>
+                      {availableLots.map((l) => (
+                        <option key={l.lot_id} value={l.lot_id}>
+                          [{l.lot_number}] {l.item_name} ({l.remaining_qty} EA)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">LOT 번호 *</label>
+                      <input
+                        value={inputLotNo}
+                        onChange={(e) => setInputLotNo(e.target.value)}
+                        placeholder="예: 260227CW005"
+                        required
+                        className="w-full border rounded-lg px-3 py-2 text-xs font-mono font-bold bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">수량 *</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={inputQty}
+                        onChange={(e) => setInputQty(Number(e.target.value))}
+                        required
+                        className="w-full border rounded-lg px-3 py-2 text-xs font-bold bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                    <span>[{activeCellCode}] 구역에 배치 저장</span>
+                  </button>
+                </form>
               </div>
-              <button onClick={() => setCellModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex justify-between items-center border-b pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-slate-900 text-white text-sm font-black font-mono px-2.5 py-1 rounded">{activeCellCode} 랙 셀</span>
+                    <h3 className="font-bold text-slate-800 text-base">2파레트 적재 현황</h3>
+                  </div>
+                  <button onClick={() => setCellModalOpen(false)} className="text-slate-400 hover:text-slate-600">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
 
             {/* P2(왼쪽) / P1(오른쪽) 현황 카드 */}
             <div className="grid grid-cols-2 gap-3">
@@ -879,10 +1001,12 @@ export function LocationManagementPage() {
                 className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-all shadow">
                 {activeCellCode} 랙 [P{targetSlotNo} 파레트] 배치
               </button>
-            </form>
-          </div>
+              </form>
+            </div>
+          )}
         </div>
-      )}
+      </div>
+    )}
 
       {/* 재고 등록 모달 */}
       {inventoryModalOpen && (

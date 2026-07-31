@@ -322,25 +322,58 @@ export default function BarcodeScanWmsPage() {
         </div>
       </div>
 
-      {/* 📋 2. 출고 선택 시 등록된 발주서 / 현장 선택 연동 */}
-      {mode === 'OUT' && (
-        <div className="bg-white rounded-2xl p-4 border shadow-sm space-y-2">
-          <label className="block text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-            <Building2 className="h-4 w-4 text-red-600" />
-            <span>📋 출하 현장 / 등록 발주서 선택</span>
-          </label>
+      {/* 📋 2. 출고/출하대기 선택 시 등록된 발주서 / 현장 선택 연동 */}
+      {(mode === 'OUT' || mode === 'STAGING') && (
+        <div className="bg-white rounded-2xl p-4 border shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+              <Building2 className={cn('h-4 w-4', mode === 'OUT' ? 'text-red-600' : 'text-indigo-600')} />
+              <span>📋 {MODE_CFG[mode].label} 현장 / 등록 발주서 선택</span>
+            </label>
+            <span className="text-[11px] font-bold text-slate-500">
+              총 {uniqueSites.length}개 현장 등록됨
+            </span>
+          </div>
           <select
             value={selectedSiteKey}
             onChange={(e) => handleSiteSelect(e.target.value)}
-            className="w-full border-2 border-slate-300 rounded-xl p-3 text-xs font-bold bg-slate-50 text-slate-800 outline-none focus:border-red-500"
+            className={cn(
+              'w-full border-2 rounded-xl p-3 text-xs font-bold bg-slate-50 text-slate-800 outline-none transition-colors',
+              mode === 'OUT' ? 'border-red-300 focus:border-red-500' : 'border-indigo-300 focus:border-indigo-500'
+            )}
           >
-            <option value="">-- 출하할 현장/발주서를 선택하세요 --</option>
+            <option value="">-- {MODE_CFG[mode].label} 처리할 현장/발주서를 선택하세요 --</option>
             {uniqueSites.map((site) => (
               <option key={site} value={site}>
                 🏢 {site}
               </option>
             ))}
           </select>
+
+          {/* 선택된 발주서/현장의 등록 품목 상세 내역 */}
+          {selectedSiteKey && (
+            <div className="bg-slate-50 border rounded-xl p-3 space-y-2 text-xs">
+              <div className="flex items-center justify-between border-b pb-1.5">
+                <span className="font-extrabold text-slate-800">📋 [{selectedSiteKey}] 발주 품목 명세</span>
+                <span className="font-mono font-bold text-indigo-700">목표: {targetOrderQty} EA</span>
+              </div>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                {pendingOrders
+                  .filter(p => (p.project_name || p.site_name || p.customer_name) === selectedSiteKey)
+                  .map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between bg-white border p-2 rounded-lg text-[11px]">
+                      <div>
+                        <span className="font-bold text-slate-900">{item.item_name}</span>
+                        <span className="text-slate-400 font-mono ml-2">규격: {item.spec || '-'}</span>
+                      </div>
+                      <span className="font-black text-blue-900 bg-blue-50 px-2 py-0.5 rounded font-mono">
+                        {item.ordered_qty} {item.unit || 'EA'}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
