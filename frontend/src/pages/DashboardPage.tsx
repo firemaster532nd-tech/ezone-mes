@@ -229,6 +229,158 @@ export function DashboardPage() {
         />
       </div>
 
+      {/* ════ C: 이카운트 ERP 스타일 그룹웨어 4종 통합 위젯 (공지사항·쪽지함·이메일·전자결재) ════ */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">
+        {/* 1. 공지사항 위젯 */}
+        <div className="bg-white rounded-card border border-slate-200 p-4 shadow-sm flex flex-col justify-between hover:border-blue-300 transition-all">
+          <div>
+            <div className="flex items-center justify-between border-b pb-2.5 mb-2.5">
+              <h3 className="text-shop-base font-bold text-slate-800 flex items-center gap-1.5">
+                <span className="text-lg">📢</span> 공지사항
+              </h3>
+              <span className="text-[11px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">
+                최신 {data.groupware?.notices?.length || 0}건
+              </span>
+            </div>
+            <div className="space-y-2 min-h-[140px]">
+              {data.groupware?.notices && data.groupware.notices.length > 0 ? (
+                data.groupware.notices.slice(0, 4).map((n, idx) => (
+                  <div key={idx} className="text-xs flex items-center justify-between hover:bg-slate-50 p-1.5 rounded cursor-pointer transition-colors" onClick={() => alert(`[공지사항] ${n.title}\n\n${n.body}`)}>
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      <span className="text-blue-500 font-bold">•</span>
+                      <span className="font-semibold text-slate-700 truncate">{n.title}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono ml-2 flex-shrink-0">{n.created_at?.slice(0, 10)}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-slate-400 text-center py-8">등록된 공지사항이 없습니다.</div>
+              )}
+            </div>
+          </div>
+          <div className="pt-2 border-t mt-2 flex justify-between items-center text-xs">
+            <span className="text-slate-400 text-[11px]">사내 주요 전달사항</span>
+            <button onClick={() => alert('공지사항 작성 화면으로 이동합니다.')} className="text-blue-600 font-bold hover:underline">
+              + 공지등록
+            </button>
+          </div>
+        </div>
+
+        {/* 2. 쪽지함 위젯 */}
+        <div className="bg-white rounded-card border border-slate-200 p-4 shadow-sm flex flex-col justify-between hover:border-indigo-300 transition-all">
+          <div>
+            <div className="flex items-center justify-between border-b pb-2.5 mb-2.5">
+              <h3 className="text-shop-base font-bold text-slate-800 flex items-center gap-1.5">
+                <span className="text-lg">✉️</span> 쪽지함
+              </h3>
+              <span className="text-[11px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-full">
+                수신 {data.groupware?.messages?.length || 0}건
+              </span>
+            </div>
+            <div className="space-y-2 min-h-[140px]">
+              {data.groupware?.messages && data.groupware.messages.length > 0 ? (
+                data.groupware.messages.slice(0, 4).map((m, idx) => (
+                  <div key={idx} className="text-xs flex items-center justify-between hover:bg-slate-50 p-1.5 rounded cursor-pointer transition-colors" onClick={() => alert(`[쪽지] ${m.title}\n\n${m.body}`)}>
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                      <span className="text-indigo-500 font-bold">📩</span>
+                      <span className="font-semibold text-slate-700 truncate">{m.title}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono ml-2 flex-shrink-0">{m.created_at?.slice(5, 10)}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-slate-400 text-center py-8">받은 쪽지가 없습니다.</div>
+              )}
+            </div>
+          </div>
+          <div className="pt-2 border-t mt-2 flex justify-between items-center text-xs">
+            <span className="text-slate-400 text-[11px]">사내 빠른 소통 쪽지</span>
+            <button onClick={() => alert('쪽지 보내기 화면으로 이동합니다.')} className="text-indigo-600 font-bold hover:underline">
+              + 쪽지쓰기
+            </button>
+          </div>
+        </div>
+
+        {/* 3. 이메일 (Webmail) 위젯 */}
+        <div className="bg-white rounded-card border border-slate-200 p-4 shadow-sm flex flex-col justify-between hover:border-emerald-300 transition-all">
+          <div>
+            <div className="flex items-center justify-between border-b pb-2.5 mb-2.5">
+              <h3 className="text-shop-base font-bold text-slate-800 flex items-center gap-1.5">
+                <span className="text-lg">📧</span> 이메일 (Webmail)
+              </h3>
+              <span className="text-[11px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                최신 {data.groupware?.emails?.length || 0}건
+              </span>
+            </div>
+            <div className="space-y-2 min-h-[140px]">
+              {data.groupware?.emails && data.groupware.emails.length > 0 ? (
+                data.groupware.emails.slice(0, 4).map((e, idx) => (
+                  <div key={idx} className="text-xs hover:bg-slate-50 p-1.5 rounded cursor-pointer transition-colors" onClick={() => alert(`[이메일] ${e.subject}\n발신자: ${e.sender_name} (${e.sender_email})\n\n내용:\n${e.body}`)}>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="font-bold text-slate-800 text-[11px] truncate max-w-[140px]">{e.sender_name}</span>
+                      <span className="text-[10px] text-slate-400 font-mono">{e.received_at?.slice(5, 10)}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 truncate">{e.subject}</p>
+                  </div>
+                ))
+              ) : (
+                <div className="text-xs text-slate-400 text-center py-8">수신 메일이 없습니다.</div>
+              )}
+            </div>
+          </div>
+          <div className="pt-2 border-t mt-2 flex justify-between items-center text-xs">
+            <span className="text-slate-400 text-[11px]">외부/고객사 업무 메일</span>
+            <button onClick={() => alert('메일 작성 모달을 엽니다.')} className="text-emerald-600 font-bold hover:underline">
+              + 메일작성
+            </button>
+          </div>
+        </div>
+
+        {/* 4. 전자결재 진행상태 위젯 */}
+        <div className="bg-white rounded-card border border-slate-200 p-4 shadow-sm flex flex-col justify-between hover:border-amber-300 transition-all">
+          <div>
+            <div className="flex items-center justify-between border-b pb-2.5 mb-2.5">
+              <h3 className="text-shop-base font-bold text-slate-800 flex items-center gap-1.5">
+                <span className="text-lg">📑</span> 전자결재 진행상태
+              </h3>
+              <button onClick={() => navigate('/approval')} className="text-xs text-amber-700 font-bold hover:underline">
+                결재함 →
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 mb-3 text-center">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-1.5">
+                <p className="text-[10px] text-amber-700 font-bold">결재 대기</p>
+                <p className="text-base font-black text-amber-900">{data.groupware?.approval_counts?.pending_count || 0}건</p>
+              </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-1.5">
+                <p className="text-[10px] text-blue-700 font-bold">진행 중</p>
+                <p className="text-base font-black text-blue-900">{data.groupware?.approval_counts?.in_progress_count || 0}건</p>
+              </div>
+            </div>
+            <div className="space-y-1.5 max-h-[90px] overflow-y-auto">
+              {data.groupware?.approvals && data.groupware.approvals.length > 0 ? (
+                data.groupware.approvals.slice(0, 3).map((ap, idx) => (
+                  <div key={idx} className="text-xs flex items-center justify-between p-1 bg-slate-50 rounded" onClick={() => navigate('/approval')}>
+                    <span className="font-medium text-slate-700 truncate max-w-[150px]">{ap.doc_title}</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                      {ap.status}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-[11px] text-slate-400 text-center py-2">대기 중인 결재 문서가 없습니다.</div>
+              )}
+            </div>
+          </div>
+          <div className="pt-2 border-t mt-2 flex justify-between items-center text-xs">
+            <span className="text-slate-400 text-[11px]">결재/승인 워크플로우</span>
+            <button onClick={() => navigate('/approval')} className="text-amber-700 font-bold hover:underline">
+              + 결재 작성
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* ════ 🏢 현장별 발주서 접수 현황 & 🚨 재고 부족/품절 경고 위젯 ════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* 현장별 발주서 수주 현황 */}

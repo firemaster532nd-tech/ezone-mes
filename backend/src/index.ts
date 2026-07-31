@@ -22,6 +22,8 @@ import { tbmRoutes } from './routes/tbm.js';
 import { workerRoutes } from './routes/workers.js';
 import { processExecutionRoutes } from './routes/process-execution.js';
 import { productionStatsRoutes } from './routes/production-stats.js';
+import { webmailRoutes } from './routes/webmail.js';
+import { accountingFullRoutes } from './routes/accounting-full.js';
 import { approvalRoutes } from './routes/approvals.js';
 import { reportRoutes } from './routes/reports.js';
 import { compoundingRoutes } from './routes/compounding.js';
@@ -96,7 +98,8 @@ export const initApp = async () => {
   await app.register(inventoryRoutes);
   await app.register(inspectionRoutes);
   await app.register(selfInspectionRoutes);
-  await app.register(processInspectionRoutes);
+  await app.register(webmailRoutes);
+  await app.register(accountingFullRoutes);
   await app.register(certCheckRoutes);
   await app.register(dashboardRoutes);
   await app.register(shipmentRoutes);

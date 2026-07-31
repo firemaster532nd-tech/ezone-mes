@@ -17,6 +17,11 @@ export async function dashboardRoutes(app: FastifyInstance) {
         shortageAlertsResult,
         recentWoResult,
         weeklyProductionResult,
+        noticesResult,
+        messagesResult,
+        webmailsResult,
+        approvalsResult,
+        approvalCountsResult,
       ] = await Promise.all([
         pool.query(
           `SELECT
@@ -103,12 +108,26 @@ export async function dashboardRoutes(app: FastifyInstance) {
 
         pool.query(`SELECT * FROM work_order ORDER BY created_at DESC LIMIT 5`).catch(() => ({ rows: [] })),
         pool.query(`SELECT wo_date as date, COUNT(*) as count FROM work_order GROUP BY wo_date LIMIT 7`).catch(() => ({ rows: [] })),
+        // Groupware 4종
+        pool.query(`SELECT * FROM announcement WHERE msg_type = 'NOTICE' OR msg_type IS NULL ORDER BY announcement_id DESC LIMIT 5`).catch(() => ({ rows: [] })),
+        pool.query(`SELECT * FROM announcement WHERE msg_type = 'MESSAGE' ORDER BY announcement_id DESC LIMIT 5`).catch(() => ({ rows: [] })),
+        pool.query(`SELECT * FROM webmail_message ORDER BY received_at DESC LIMIT 5`).catch(() => ({ rows: [] })),
+        pool.query(`SELECT * FROM approval ORDER BY approval_id DESC LIMIT 5`).catch(() => ({ rows: [] })),
+        pool.query(`
+          SELECT 
+            COUNT(*) FILTER (WHERE status = 'PENDING') AS pending_count,
+            COUNT(*) FILTER (WHERE status = 'IN_PROGRESS') AS in_progress_count,
+            COUNT(*) FILTER (WHERE status = 'APPROVED') AS approved_count,
+            COUNT(*) FILTER (WHERE status = 'REJECTED') AS rejected_count
+          FROM approval
+        `).catch(() => ({ rows: [{ pending_count: 0, in_progress_count: 0, approved_count: 0, rejected_count: 0 }] })),
       ]);
 
       const todayWo = todayWoResult.rows[0] ?? { total: 0, completed: 0, in_progress: 0, planned: 0, hold: 0, total_actual_qty: 0 };
       const inspection = inspectionResult.rows[0] ?? { total: 0, pass_count: 0, fail_count: 0, pass_rate: 100 };
       const siteOrdersSummary = purchaseOrdersResult.rows;
       const shortageAlerts = shortageAlertsResult.rows;
+      const apCounts = approvalCountsResult.rows[0] ?? { pending_count: 0, in_progress_count: 0, approved_count: 0, rejected_count: 0 };
 
       const dashboardPayload = {
         date: targetDate,
@@ -138,6 +157,13 @@ export async function dashboardRoutes(app: FastifyInstance) {
           pass_count: String(inspection.pass_count || 0),
           fail_count: String(inspection.fail_count || 0),
           pass_rate: String(inspection.pass_rate || 100),
+        },
+        groupware: {
+          notices: noticesResult.rows,
+          messages: messagesResult.rows,
+          emails: webmailsResult.rows,
+          approvals: approvalsResult.rows,
+          approval_counts: apCounts,
         },
         by_process: woByProcessResult.rows,
         by_status: woByStatusResult.rows,
