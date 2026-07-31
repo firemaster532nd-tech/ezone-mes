@@ -101,7 +101,103 @@ export function AccountingFullLayout() {
   const [fixedAssets, setFixedAssets] = useState<FixedAsset[]>([]);
 
   const [selectedReport, setSelectedReport] = useState<string>('경영자료 요약');
-  const [loading, setLoading] = useState(false);
+  // ERP 가져오기 (E-Count / Ulmaeyo ERP Import) 상태
+  const [erpImportModalOpen, setErpImportModalOpen] = useState(false);
+  const [importTarget, setImportTarget] = useState<'vouchers' | 'tax_invoices' | 'accounts'>('vouchers');
+  const [importRows, setImportRows] = useState<any[]>([]);
+  const [importing, setImporting] = useState(false);
+
+  // 전 기능 조회 및 기간 검색 필터
+  const [searchDateFrom, setSearchDateFrom] = useState('');
+  const [searchDateTo, setSearchDateTo] = useState('');
+  const [searchKeyword, setSearchKeyword] = useState('');
+
+  // 📥 CSV/엑셀 텍스트 파싱 유틸리티
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string;
+      if (!text) return;
+
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) {
+        toast.error('올바른 CSV/엑셀 행 데이터가 필요합니다.');
+        return;
+      }
+
+      // 첫 행은 헤더
+      const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+      const parsed = lines.slice(1).map((line) => {
+        const cols = line.split(',').map(c => c.replace(/"/g, '').trim());
+        const row: Record<string, any> = {};
+        headers.forEach((h, idx) => {
+          row[h] = cols[idx] || '';
+        });
+        return {
+          voucher_no: row['전표번호'] || row['voucher_no'] || '',
+          voucher_date: row['전표일자'] || row['일자'] || row['voucher_date'] || new Date().toISOString().slice(0, 10),
+          account_code: row['계정코드'] || row['account_code'] || '10800',
+          account_name: row['계정과목'] || row['account_name'] || '외상매출금',
+          customer_name: row['거래처명'] || row['거래처'] || row['customer_name'] || '',
+          debit_amount: Number(row['차변금액'] || row['차변'] || row['debit_amount'] || 0),
+          credit_amount: Number(row['대변금액'] || row['대변'] || row['credit_amount'] || 0),
+          summary: row['적요'] || row['비고'] || row['summary'] || '이카운트/얼마예요 ERP 가져오기',
+        };
+      });
+
+      setImportRows(parsed);
+      toast.success(`📄 ${parsed.length}건의 ERP 데이터가 파싱 되었습니다.`);
+    };
+    reader.readAsText(file, 'utf-8');
+  };
+
+  // 📥 ERP 데이터 백엔드 DB 일괄 제출
+  const handleExecuteImport = async () => {
+    if (importRows.length === 0) {
+      toast.error('임포트할 데이터가 없습니다. CSV 파일 선택 후 시도해 주세요.');
+      return;
+    }
+    setImporting(true);
+    try {
+      const res = await api.post<{ success: boolean; message: string; importedCount: number }>('/accounting/import-erp', {
+        target: importTarget,
+        rows: importRows
+      });
+      toast.success(`🎉 ${res.data.message}`);
+      setErpImportModalOpen(false);
+      setImportRows([]);
+      loadAccountingData();
+    } catch (err: any) {
+      toast.error(err?.body?.message || 'ERP 데이터 가져오기 실패');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // 📥 엑셀(CSV) 다운로드 기능
+  const exportToCsv = (filename: string, rows: any[]) => {
+    if (!rows || rows.length === 0) {
+      toast.error('다운로드할 데이터가 없습니다.');
+      return;
+    }
+    const keys = Object.keys(rows[0]);
+    const csvContent = [
+      keys.join(','),
+      ...rows.map(row => keys.map(k => `"${String(row[k] ?? '').replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success(`📥 [${filename}] 엑셀/CSV 다운로드가 완료되었습니다.`);
+  };
 
   // FastEntry 빠른 전표 폼
   const [fastEntryForm, setFastEntryForm] = useState({
@@ -235,7 +331,28 @@ export function AccountingFullLayout() {
       <PageHeader 
         title="회계 관리 (Accounting ERP Suite)" 
         description="이카운트 ERP 규격 11대 회계 모듈 종합 관리 — 세금계산서 · 장부 · 분개전표 · 손익계산서 · 재무상태표" 
-      />
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setErpImportModalOpen(true)}
+            className="px-3.5 py-2 bg-indigo-900 text-white font-bold text-xs rounded-xl shadow-xs hover:bg-indigo-800 flex items-center gap-1.5 cursor-pointer"
+          >
+            📥 이카운트 / 얼마예요 ERP 데이터 가져오기
+          </button>
+          <button
+            onClick={() => exportToCsv('EZONE_회계_분개장_대장', vouchers)}
+            className="px-3.5 py-2 bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs hover:bg-emerald-800 flex items-center gap-1.5 cursor-pointer"
+          >
+            📥 Excel (CSV) 다운로드
+          </button>
+          <button
+            onClick={() => window.print()}
+            className="px-3.5 py-2 bg-white border border-slate-300 text-slate-700 font-bold text-xs rounded-xl hover:bg-slate-50 flex items-center gap-1.5 shadow-xs cursor-pointer"
+          >
+            🖨️ 인쇄 / PDF
+          </button>
+        </div>
+      </PageHeader>
 
       {/* 📊 경영자료 회계 요약 지표 (Executive Dashboard Summary) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -858,6 +975,92 @@ export function AccountingFullLayout() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📥 이카운트 / 얼마예요 ERP 데이터 가져오기 모달 */}
+      {erpImportModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📥</span>
+                <h3 className="font-extrabold text-slate-900 text-base">이카운트 / 얼마예요 ERP 엑셀·CSV 데이터 가져오기</h3>
+              </div>
+              <button onClick={() => setErpImportModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold">
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-extrabold text-slate-800 mb-1">1. 가져올 ERP 데이터 유형 선택</label>
+                <select
+                  value={importTarget}
+                  onChange={(e) => setImportTarget(e.target.value as any)}
+                  className="w-full border-2 border-slate-300 rounded-xl p-2.5 font-bold bg-slate-50 text-slate-900"
+                >
+                  <option value="vouchers">분개전표 / 회계원장 (vouchers)</option>
+                  <option value="tax_invoices">전자세금계산서 (tax_invoices)</option>
+                  <option value="accounts">계정과목 마스터 (accounts)</option>
+                </select>
+              </div>
+
+              <div className="border-2 border-dashed border-indigo-300 bg-indigo-50/50 rounded-2xl p-5 text-center space-y-2">
+                <p className="font-bold text-indigo-900 text-sm">2. 이카운트/얼마예요에서 엑셀(CSV)로 다운로드받은 파일 선택</p>
+                <p className="text-[11px] text-indigo-600">지원 컬럼: 전표일자, 계정코드, 계정과목, 거래처명, 차변금액, 대변금액, 적요</p>
+                <input
+                  type="file"
+                  accept=".csv,.txt"
+                  onChange={handleFileSelect}
+                  className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-indigo-900 file:text-white hover:file:bg-indigo-800"
+                />
+              </div>
+
+              {/* 임포트 데이터 미리보기 표 */}
+              {importRows.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-800">📋 파싱 완료된 데이터 미리보기 ({importRows.length}건)</span>
+                    <span className="text-emerald-600 font-bold">✓ DB 저장 가능</span>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto border rounded-xl divide-y bg-slate-50">
+                    {importRows.slice(0, 10).map((r, idx) => (
+                      <div key={idx} className="p-2 flex items-center justify-between text-[11px]">
+                        <div>
+                          <span className="font-mono font-bold text-blue-900">{r.voucher_date}</span>
+                          <span className="font-bold text-slate-800 ml-2">{r.account_name} ({r.account_code})</span>
+                          <span className="text-slate-600 ml-2">{r.customer_name}</span>
+                        </div>
+                        <div className="font-mono font-bold text-slate-900">
+                          Dr: ₩{r.debit_amount?.toLocaleString()} / Cr: ₩{r.credit_amount?.toLocaleString()}
+                        </div>
+                      </div>
+                    ))}
+                    {importRows.length > 10 && (
+                      <p className="text-[10px] text-slate-400 text-center py-1">외 {importRows.length - 10}건의 행 생략됨...</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 flex gap-2">
+              <button
+                onClick={handleExecuteImport}
+                disabled={importing || importRows.length === 0}
+                className="flex-1 py-3 bg-indigo-900 hover:bg-indigo-800 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow cursor-pointer"
+              >
+                {importing ? '임포트 중...' : `🎉 파싱된 ${importRows.length}건 ERP 데이터 DB로 임포트 실행`}
+              </button>
+              <button
+                onClick={() => setErpImportModalOpen(false)}
+                className="py-3 px-5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+              >
+                취소
+              </button>
             </div>
           </div>
         </div>

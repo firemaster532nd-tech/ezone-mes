@@ -311,4 +311,60 @@ export async function accountingFullRoutes(app: FastifyInstance) {
     `, [asset_code, asset_name, acquisition_date, cost, useful_life_years || 5, cost]);
     return reply.status(201).send({ success: true, data: rows[0] });
   });
+
+  // POST /api/accounting/import-erp - 이카운트/얼마예요 ERP 엑셀/CSV 데이터 일괄 임포트
+  app.post('/api/accounting/import-erp', async (request, reply) => {
+    const { target, rows } = request.body as { target: 'vouchers' | 'tax_invoices' | 'accounts' | 'fixed_assets'; rows: any[] };
+    if (!rows || !Array.isArray(rows) || rows.length === 0) {
+      return reply.status(400).send({ success: false, message: '임포트할 데이터 행이 없습니다.' });
+    }
+
+    const client = await pool.connect();
+    let importedCount = 0;
+
+    try {
+      await client.query('BEGIN');
+
+      if (target === 'vouchers') {
+        for (const r of rows) {
+          const v_no = r.voucher_no || `JV${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+          await client.query(`
+            INSERT INTO journal_voucher (voucher_no, voucher_date, account_code, account_name, customer_name, debit_amount, credit_amount, summary)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (voucher_no) DO UPDATE SET summary = EXCLUDED.summary
+          `, [v_no, r.voucher_date || new Date().toISOString().slice(0, 10), r.account_code || '10800', r.account_name || '외상매출금', r.customer_name || '', r.debit_amount || 0, r.credit_amount || 0, r.summary || '이카운트/얼마예요 ERP 임포트']);
+          importedCount++;
+        }
+      } else if (target === 'tax_invoices') {
+        for (const r of rows) {
+          const inv_no = r.invoice_no || `TI-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+          const supply = Number(r.supply_amount) || 0;
+          const tax = Number(r.tax_amount) || Math.round(supply * 0.1);
+          await client.query(`
+            INSERT INTO tax_invoice (invoice_no, invoice_type, issue_date, supplier_name, supplier_biz_no, buyer_name, buyer_biz_no, supply_amount, tax_amount, total_amount, item_description)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            ON CONFLICT (invoice_no) DO NOTHING
+          `, [inv_no, r.invoice_type || 'SALES', r.issue_date || new Date().toISOString().slice(0, 10), r.supplier_name || '(주)이지원', r.supplier_biz_no || '232-88-00624', r.buyer_name || '거래처', r.buyer_biz_no || '101-81-00000', supply, tax, supply + tax, r.item_description || '이카운트/얼마예요 ERP 세금계산서 임포트']);
+          importedCount++;
+        }
+      } else if (target === 'accounts') {
+        for (const r of rows) {
+          await client.query(`
+            INSERT INTO account_code (account_code, account_name, category, type)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (account_code) DO NOTHING
+          `, [r.account_code, r.account_name, r.category || '자산', r.type || '당좌자산']);
+          importedCount++;
+        }
+      }
+
+      await client.query('COMMIT');
+      return reply.send({ success: true, message: `성공적으로 ${importedCount}건의 ${target} 데이터가 ERP 임포트되었습니다.`, importedCount });
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      return reply.status(500).send({ success: false, message: `ERP 데이터 임포트 오류: ${err.message}` });
+    } finally {
+      client.release();
+    }
+  });
 }
