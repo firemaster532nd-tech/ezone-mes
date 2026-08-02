@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Package, Factory, Search, Grid3X3 } from 'lucide-react';
+import { Barcode, FileCheck, Search, Factory, Grid3X3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface NavTab {
@@ -21,7 +21,7 @@ export function MobileBottomNav() {
   const location = useLocation();
 
   const getActive = (tab: NavTab) => {
-    if (tab.key === 'home') return location.pathname === '/mobile' || location.pathname === '/';
+    if (tab.key === 'scan') return location.pathname.startsWith('/inventory/barcode-wms');
     return location.pathname.startsWith(tab.path);
   };
 

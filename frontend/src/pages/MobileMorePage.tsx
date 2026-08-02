@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { MobileBottomNav } from '@/components/layout/MobileBottomNav';
 import {
   Factory, Package, Search, FileCheck, ClipboardList, Barcode,
-  Calculator, ShipWheel, TrendingUp, Settings, ChevronRight, Layers
+  Calculator, Truck, TrendingUp, Settings, ChevronRight, Layers
 } from 'lucide-react';
 
 interface MenuSection {
@@ -16,7 +16,7 @@ const MENU_SECTIONS: MenuSection[] = [
     items: [
       { label: '바코드 스캔 (WMS)', icon: <Barcode size={18} />, path: '/inventory/barcode-wms' },
       { label: '재고 현황', icon: <Package size={18} />, path: '/inventory' },
-      { label: '출하 대기', icon: <ShipWheel size={18} />, path: '/shipment/orders' },
+      { label: '출하 대기', icon: <Truck size={18} />, path: '/shipment/orders' },
     ],
   },
   {
