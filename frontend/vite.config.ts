@@ -40,7 +40,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB (기본 2MB → 번들 사이즈 대응)
+        maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10MB (Vercel 빌드 환경 대응)
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
