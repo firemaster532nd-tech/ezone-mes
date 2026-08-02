@@ -3,13 +3,14 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { TopNav, SubSidebar, SuperAdminSidebar, useSidebarState } from './Sidebar';
 import { NotificationBell } from './NotificationBell';
 import { RoutePermissionGuard } from './RoutePermissionGuard';
+import { MobileBottomNav } from './MobileBottomNav';
 import { Toaster } from 'sonner';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
 import { useIsMobile } from '@/hooks/useMobile';
 import {
   LogOut, KeyRound, Lock, ShieldAlert,
-  ChevronDown, Eye, EyeOff, X
+  ChevronDown, Eye, EyeOff, X, Home
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -45,12 +46,18 @@ export function AppLayout() {
   const location = useLocation();
   const isMobile = useIsMobile();
 
-  // 모바일 접속 시 자동 리다이렉트 (PC 전환 링크 동작 위해 세션 저장)
+  // 모바일 접속 시 루트/대시보드에서만 /mobile 홈으로 리다이렉트
+  // (개별 페이지 이동 시에는 리다이렉트 안함 — 버튼 동작 보장)
   useEffect(() => {
-    if (isMobile && !location.pathname.startsWith('/mobile') && !sessionStorage.getItem('prefer_desktop')) {
+    const ROOT_PATHS = ['/', '/dashboard'];
+    if (
+      isMobile &&
+      ROOT_PATHS.includes(location.pathname) &&
+      !sessionStorage.getItem('prefer_desktop')
+    ) {
       navigate('/mobile', { replace: true });
     }
-  }, [isMobile]);
+  }, [isMobile, location.pathname]);
 
   // Sidebar state (TopNav + SubSidebar)
   const { currentMode, setMode, canSwitchMode, filteredGroups, isSuperAdmin } = useSidebarState();
@@ -220,6 +227,45 @@ export function AppLayout() {
       setForcePwLoading(false);
     }
   };
+
+  // 모바일 레이아웃 — 사이드바 없이 컨텐츠 + 하단 탭 바
+  if (isMobile && !sessionStorage.getItem('prefer_desktop')) {
+    return (
+      <div className="flex flex-col min-h-screen bg-slate-900">
+        {/* 모바일 상단 헤더 (간소화) */}
+        <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-sm border-b border-slate-700/50 flex items-center justify-between px-4 h-12 flex-shrink-0">
+          <button
+            onClick={() => navigate('/mobile')}
+            className="flex items-center gap-2"
+          >
+            <img src="/icons/icon-192x192.png" alt="로고" className="w-7 h-7 rounded-lg" />
+            <span className="text-white font-black text-sm">이지원 MES</span>
+          </button>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <button
+              onClick={handleLogout}
+              className="p-1.5 text-slate-400 hover:text-red-400 transition-colors"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
+        </header>
+
+        {/* 컨텐츠 영역 (하단 탭바 높이만큼 padding) */}
+        <div className="flex-1 overflow-auto pb-20">
+          <RoutePermissionGuard>
+            <Outlet />
+          </RoutePermissionGuard>
+        </div>
+
+        {/* 하단 탭 내비게이션 */}
+        <MobileBottomNav />
+
+        <Toaster richColors position="top-center" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-slate-50">
