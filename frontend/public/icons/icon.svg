@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#0f172a"/>
+  <!-- Hexagon -->
+  <polygon points="256,60 400,148 400,324 256,412 112,324 112,148" fill="#1e3a5f" stroke="#f59e0b" stroke-width="8"/>
+  <!-- E letter -->
+  <rect x="175" y="170" width="165" height="28" rx="6" fill="#f59e0b"/>
+  <rect x="175" y="242" width="130" height="28" rx="6" fill="#f59e0b"/>
+  <rect x="175" y="314" width="165" height="28" rx="6" fill="#f59e0b"/>
+  <rect x="175" y="170" width="28" height="172" rx="6" fill="#f59e0b"/>
+  <!-- Bottom text -->
+  <text x="256" y="460" font-family="Arial, sans-serif" font-size="36" font-weight="bold" fill="#94a3b8" text-anchor="middle">이지원 MES</text>
+</svg>

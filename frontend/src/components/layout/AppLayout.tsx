@@ -6,6 +6,7 @@ import { RoutePermissionGuard } from './RoutePermissionGuard';
 import { Toaster } from 'sonner';
 import { useAuth } from '@/lib/auth';
 import { api } from '@/lib/api';
+import { useIsMobile } from '@/hooks/useMobile';
 import {
   LogOut, KeyRound, Lock, ShieldAlert,
   ChevronDown, Eye, EyeOff, X
@@ -42,6 +43,14 @@ export function AppLayout() {
   const { user, logout, refreshMe } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const isMobile = useIsMobile();
+
+  // 모바일 접속 시 자동 리다이렉트 (PC 전환 링크 동작 위해 세션 저장)
+  useEffect(() => {
+    if (isMobile && !location.pathname.startsWith('/mobile') && !sessionStorage.getItem('prefer_desktop')) {
+      navigate('/mobile', { replace: true });
+    }
+  }, [isMobile]);
 
   // Sidebar state (TopNav + SubSidebar)
   const { currentMode, setMode, canSwitchMode, filteredGroups, isSuperAdmin } = useSidebarState();

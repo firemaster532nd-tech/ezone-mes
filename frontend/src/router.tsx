@@ -100,7 +100,8 @@ import AccountingRevenuePage from '@/pages/accounting/AccountingRevenuePage';
 import AccountingCostPage from '@/pages/accounting/AccountingCostPage';
 import AccountingPLPage from '@/pages/accounting/AccountingPLPage';
 import SupportPage from '@/pages/support/SupportPage';
-
+import { MobileHomePage } from '@/pages/MobileHomePage';
+import { MobileMorePage } from '@/pages/MobileMorePage';
 
 
 // ─── 라우트 에러 바운더리 ───
@@ -120,6 +121,10 @@ function RouteErrorBoundary() {
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   { path: '/auth/force-change-password', element: <ForceChangePasswordPage /> },
+
+  // ── 모바일 전용 화면 (AuthGuard 내에서 직접 접근) ──
+  { path: '/mobile', element: <AuthGuard><MobileHomePage /></AuthGuard> },
+  { path: '/mobile/more', element: <AuthGuard><MobileMorePage /></AuthGuard> },
 
   // ══ 인쇄 전용 페이지 (새 탭/팝업용 — token을 URL 쿼리로 전달) ══
   // 출차증 인쇄 (AuthGuard 없이 독립 렌더링)
