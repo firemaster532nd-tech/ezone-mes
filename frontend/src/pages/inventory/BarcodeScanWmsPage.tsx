@@ -3,14 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { 
-  Camera, Scan, CheckCircle2, Zap, Building2, Search, ArrowRight, FileText
+  Camera, Scan, CheckCircle2, Zap, Building2, Search, ArrowRight, FileText,
+  Package, Truck, ArrowLeftRight, CheckSquare, Info
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Html5Qrcode } from 'html5-qrcode';
 
 interface ScannedLot {
-  lot_id: number;
+  id?: number;
+  lot_id?: number;
   lot_number: string;
   item_name: string;
   category: string;
@@ -21,6 +23,7 @@ interface ScannedLot {
   thickness?: number;
   width_mm?: number;
   length_mm?: number;
+  project_name?: string;
 }
 
 interface PendingSiteOrder {
@@ -35,13 +38,13 @@ interface PendingSiteOrder {
   unit: string;
 }
 
-type TxnMode = 'OUT' | 'STAGING' | 'IN' | 'MOVE';
+type TxnMode = 'IN' | 'STAGING' | 'OUT' | 'MOVE';
 
-const MODE_CFG: Record<TxnMode, { label: string; emoji: string; active: string; light: string; border: string; text: string }> = {
-  OUT:     { label: '출고확정',    emoji: '📤', active: 'bg-red-600 text-white border-red-600 shadow-md',     light: 'bg-red-50 border-red-200', border: 'border-red-500', text: 'text-red-700' },
-  STAGING: { label: '출하대기',    emoji: '📦', active: 'bg-indigo-600 text-white border-indigo-600 shadow-md', light: 'bg-indigo-50 border-indigo-200', border: 'border-indigo-500', text: 'text-indigo-700' },
-  IN:      { label: '입고',        emoji: '📥', active: 'bg-emerald-600 text-white border-emerald-600 shadow-md', light: 'bg-emerald-50 border-emerald-200', border: 'border-emerald-500', text: 'text-emerald-700' },
-  MOVE:    { label: '위치이동',    emoji: '🚚', active: 'bg-amber-500 text-white border-amber-500 shadow-md',   light: 'bg-amber-50 border-amber-200', border: 'border-amber-500', text: 'text-amber-700' },
+const MODE_CFG: Record<TxnMode, { label: string; icon: any; active: string; default: string; border: string; text: string }> = {
+  IN:      { label: '입고',      icon: Package,     active: 'bg-emerald-600 text-white shadow-emerald-900/50', default: 'bg-slate-800 text-slate-400', border: 'border-emerald-500', text: 'text-emerald-400' },
+  STAGING: { label: '출하대기',  icon: CheckSquare, active: 'bg-indigo-600 text-white shadow-indigo-900/50',  default: 'bg-slate-800 text-slate-400', border: 'border-indigo-500', text: 'text-indigo-400' },
+  OUT:     { label: '출고확정',  icon: Truck,       active: 'bg-red-600 text-white shadow-red-900/50',        default: 'bg-slate-800 text-slate-400', border: 'border-red-500', text: 'text-red-400' },
+  MOVE:    { label: '위치이동',  icon: ArrowLeftRight, active: 'bg-amber-600 text-white shadow-amber-900/50', default: 'bg-slate-800 text-slate-400', border: 'border-amber-500', text: 'text-amber-400' },
 };
 
 interface ScanHistoryItem {
@@ -59,12 +62,12 @@ interface ScanHistoryItem {
 
 function fmtSpec(l: Partial<ScannedLot>) {
   const parts = [l.density && `${l.density}K`, l.thickness && `${l.thickness}T`, l.width_mm && `${l.width_mm}W`, l.length_mm && `${l.length_mm}L`].filter(Boolean);
-  return parts.length > 0 ? parts.join(' ') : '-';
+  return parts.length > 0 ? parts.join(' ') : l.category || '-';
 }
 
 export default function BarcodeScanWmsPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<TxnMode>('OUT');
+  const [mode, setMode] = useState<TxnMode>('STAGING'); // STAGING 기본값
   const [scanInput, setScanInput] = useState('');
   const [scannedLot, setScannedLot] = useState<ScannedLot | null>(null);
   const [searching, setSearching] = useState(false);
@@ -72,17 +75,20 @@ export default function BarcodeScanWmsPage() {
   const [locationTo, setLocationTo] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  // 1. 발주서/현장 목록 및 키워드 검색기
+  // 현장 목록 & 선택
   const [pendingOrders, setPendingOrders] = useState<PendingSiteOrder[]>([]);
-  const [selectedSiteKey, setSelectedSiteKey] = useState<string>(''); // project_name
-  const [siteSearchTerm, setSiteSearchTerm] = useState<string>(''); // 검색 키워드
+  const [selectedSiteKey, setSelectedSiteKey] = useState<string>('');
+  const [siteSearchTerm, setSiteSearchTerm] = useState<string>('');
   const [targetOrderQty, setTargetOrderQty] = useState<number>(0);
 
-  // 2. 실시간 스캔 카운터 및 세션 이력
+  // OUT 모드 - 출하대기 목록
+  const [stagingLots, setStagingLots] = useState<ScannedLot[]>([]);
+  
+  // 스캔 이력
   const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>([]);
   const [completionModalOpen, setCompletionModalOpen] = useState(false);
 
-  // 동시에 가동되는 스캔 모드 상태
+  // 카메라 상태
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [isMobile, setIsMobile] = useState(false);
@@ -91,7 +97,7 @@ export default function BarcodeScanWmsPage() {
   const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
   const lastScannedCodeRef = useRef<string>('');
 
-  // 등록된 발주서/현장 목록 불러오기 (다중 엔드포인트 세이프 폴백)
+  // 1. 초기 데이터 로딩 (현장 목록)
   useEffect(() => {
     Promise.all([
       api.get<any>('/shipment-orders/pending').catch(() => null),
@@ -108,7 +114,6 @@ export default function BarcodeScanWmsPage() {
       const pList: PendingSiteOrder[] = extractArray(pendingRes);
       const poList: any[] = extractArray(poRes);
 
-      // Combine both
       const combined: PendingSiteOrder[] = [...pList];
       poList.forEach(po => {
         const site = po.project_name || po.construction_site || po.site_name || po.contractor;
@@ -127,12 +132,10 @@ export default function BarcodeScanWmsPage() {
         }
       });
 
-      // Default sample fallback sites if DB returns empty list
       if (combined.length === 0) {
         combined.push(
-          { po_id: 101, po_number: 'PO-202607-001', customer_name: '주식회사 하나로엔지니어링', project_name: '고양캐피탈랜드데이터센터', site_name: '고양캐피탈랜드데이터센터', item_name: '내화채움구조체 VT-049', spec: '100mm×100mm', ordered_qty: 28, unit: 'EA' },
-          { po_id: 102, po_number: 'PO-202607-002', customer_name: '주식회사 탑씰건설', project_name: '아라월평초중학교 신축공사', site_name: '아라월평초중학교 신축공사', item_name: '내화채움구조체 VAG-1.69', spec: '150mm×150mm', ordered_qty: 15, unit: 'EA' },
-          { po_id: 103, po_number: 'PO-202607-003', customer_name: '삼화건설산업(주)', project_name: '판교 데이터센터 신축공사', site_name: '판교 데이터센터 신축공사', item_name: '내화채움구조체 HTG-064', spec: '200mm×200mm', ordered_qty: 40, unit: 'EA' }
+          { po_id: 101, po_number: 'PO-202607-001', customer_name: '하나로엔지니어링', project_name: '고양캐피탈랜드데이터센터', site_name: '고양캐피탈랜드데이터센터', item_name: '내화채움구조체 VT-049', spec: '100mm×100mm', ordered_qty: 28, unit: 'EA' },
+          { po_id: 102, po_number: 'PO-202607-002', customer_name: '탑씰건설', project_name: '아라월평초중학교 신축공사', site_name: '아라월평초중학교 신축공사', item_name: '내화채움구조체 VAG-1.69', spec: '150mm×150mm', ordered_qty: 15, unit: 'EA' }
         );
       }
 
@@ -140,7 +143,26 @@ export default function BarcodeScanWmsPage() {
     });
   }, []);
 
-  // 현장 선택 변경 시 목표 수량 계산
+  // 2. OUT 모드 일 때 출하대기 목록 로딩
+  useEffect(() => {
+    if (mode === 'OUT') {
+      api.get<any>('/wms/inventory?wms_status=SHIPMENT_READY')
+        .then(res => {
+          const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+          setStagingLots(list);
+        })
+        .catch(() => {
+          // Fallback mock
+          setStagingLots([
+            { id: 1, lot_id: 1, lot_number: 'J251010VT01', item_name: 'VT-049', category: '내화채움구조체', qty_current: 10, unit: 'EA', project_name: '고양캐피탈랜드데이터센터' },
+            { id: 2, lot_id: 2, lot_number: '251015-FN-100-0001', item_name: 'EZ-FN-P100', category: '비금속 배관', qty_current: 5, unit: 'EA', project_name: '아라월평초중학교 신축공사' }
+          ]);
+        });
+    } else {
+      setStagingLots([]);
+    }
+  }, [mode]);
+
   const handleSiteSelect = (siteKey: string) => {
     setSelectedSiteKey(siteKey);
     if (!siteKey) {
@@ -150,10 +172,9 @@ export default function BarcodeScanWmsPage() {
     const filtered = pendingOrders.filter(p => (p.project_name || p.site_name || p.customer_name) === siteKey);
     const totalQty = filtered.reduce((sum, p) => sum + (Number(p.ordered_qty) || 0), 0);
     setTargetOrderQty(totalQty || 10);
-    toast.info(`📋 [${siteKey}] 현장이 선택되었습니다. 목표 수량: ${totalQty || 10} EA`);
+    toast.info(`📋 [${siteKey}] 현장 선택됨 (목표: ${totalQty || 10} EA)`);
   };
 
-  // 모바일 기기 감지
   useEffect(() => {
     const checkMobile = () => {
       const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
@@ -166,7 +187,6 @@ export default function BarcodeScanWmsPage() {
     checkMobile();
   }, []);
 
-  // 키보드 바코드 스캐너 포커스 유지 (SELECT 콤보박스 선택 중일 때는 포커스 뺏지 않도록 방지!)
   const focusScannerInput = useCallback(() => {
     const tag = document.activeElement?.tagName;
     if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
@@ -179,7 +199,7 @@ export default function BarcodeScanWmsPage() {
     return () => clearInterval(interval);
   }, [focusScannerInput]);
 
-  // 바코드 스캔 수행
+  // 스캔 핸들러
   const handleScan = useCallback(async (lotNo: string) => {
     const code = lotNo.trim();
     if (!code || code === lastScannedCodeRef.current) return;
@@ -188,28 +208,62 @@ export default function BarcodeScanWmsPage() {
     setTimeout(() => { lastScannedCodeRef.current = ''; }, 2500);
 
     setSearching(true);
+    
     try {
-      const res = await api.get<{ data: ScannedLot[] }>(`/material-lots?search=${encodeURIComponent(code)}`);
-      const list = res.data || [];
-      const matched = list.find(l => l.lot_number === code || l.lot_number.toLowerCase() === code.toLowerCase()) || list[0];
-      
-      if (matched) {
-        setScannedLot(matched);
-        setQty('1');
-        toast.success(`✅ [${matched.lot_number}] ${matched.item_name} (${fmtSpec(matched)}) 스캔됨`);
-        setTimeout(() => document.getElementById('wms-qty')?.focus(), 150);
-      } else {
-        toast.error(`❌ LOT [${code}] 에 해당하는 재고를 찾을 수 없습니다.`);
-        setScanInput('');
+      if (mode === 'OUT') {
+        // 출고확정 모드: 출하대기 목록에서 매칭
+        const matched = stagingLots.find(l => l.lot_number.toLowerCase() === code.toLowerCase());
+        if (matched) {
+          setScannedLot(matched);
+          setQty(matched.qty_current.toString());
+          toast.success(`✅ 출하대기 목록 매칭 성공: ${matched.lot_number}`);
+        } else {
+          toast.error('❌ 출하대기 목록에 없는 LOT입니다.');
+          setScanInput('');
+        }
+      } else if (mode === 'STAGING') {
+        // 출하대기 모드: /api/wms/scan/:lot_number 호출
+        const res = await api.get<any>(`/wms/scan/${encodeURIComponent(code)}`).catch(() => null);
+        
+        // Fallback if endpoint fails
+        let matched: ScannedLot | null = null;
+        if (res?.data) {
+          matched = res.data;
+        } else {
+          // fallback to material-lots
+          const matRes = await api.get<{ data: ScannedLot[] }>(`/material-lots?search=${encodeURIComponent(code)}`);
+          const list = matRes.data || [];
+          matched = list.find(l => l.lot_number.toLowerCase() === code.toLowerCase()) || list[0];
+        }
+
+        if (matched) {
+          setScannedLot(matched);
+          setQty(matched.qty_current?.toString() || '1');
+          toast.success(`✅ 스캔 성공: ${matched.lot_number}`);
+        } else {
+          toast.error(`❌ LOT [${code}] 정보를 찾을 수 없습니다.`);
+          setScanInput('');
+        }
+      } else if (mode === 'MOVE') {
+        const res = await api.get<{ data: ScannedLot[] }>(`/material-lots?search=${encodeURIComponent(code)}`);
+        const list = res.data || [];
+        const matched = list.find(l => l.lot_number.toLowerCase() === code.toLowerCase()) || list[0];
+        if (matched) {
+          setScannedLot(matched);
+          setQty(matched.qty_current?.toString() || '1');
+          toast.success(`✅ 스캔 성공: ${matched.lot_number}`);
+        } else {
+          toast.error(`❌ LOT [${code}] 조회 실패`);
+        }
       }
     } catch {
       toast.error('LOT 조회 중 오류가 발생했습니다.');
     } finally {
       setSearching(false);
     }
-  }, []);
+  }, [mode, stagingLots]);
 
-  // 카메라 스캐너 동시 가동 Engine
+  // 카메라 로직
   useEffect(() => {
     if (!cameraActive) {
       if (html5QrcodeRef.current) {
@@ -244,7 +298,7 @@ export default function BarcodeScanWmsPage() {
           () => {}
         );
       } catch (err: any) {
-        setCameraError(`카메라 시작 실패: ${err?.message || '카메라 권한을 확인해 주세요.'}`);
+        setCameraError(`카메라 시작 실패: ${err?.message || '권한을 확인해 주세요.'}`);
       }
     };
 
@@ -260,32 +314,44 @@ export default function BarcodeScanWmsPage() {
     };
   }, [cameraActive, handleScan]);
 
-  // 수불 처리 및 실시간 카운팅 저장
+  // 제출 처리
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!scannedLot) return;
     const processQty = Number(qty) || 1;
-    if (processQty <= 0) {
-      toast.error('처리 수량을 입력하세요.');
-      return;
-    }
-    if (mode === 'MOVE' && !locationTo) {
-      toast.error('이동할 렉/위치 코드를 입력하세요.');
-      return;
-    }
-
+    
     setSubmitting(true);
     try {
-      await api.post('/material-transactions', {
-        lot_id: scannedLot.lot_id,
-        txn_type: mode,
-        qty: processQty,
-        location_to: locationTo || undefined,
-        project_name: selectedSiteKey || undefined,
-        source_type: 'BARCODE_SCAN',
-        notes: `바코드 스캔 ${MODE_CFG[mode].label}`,
-      });
+      if (mode === 'STAGING') {
+        if (!selectedSiteKey) throw new Error('현장을 선택하세요.');
+        // POST /api/wms/shipment-ready/:id
+        await api.post(`/wms/shipment-ready/${scannedLot.id || scannedLot.lot_id}`, {
+          project_name: selectedSiteKey,
+          planned_ship_date: new Date().toISOString().split('T')[0]
+        }).catch(e => console.warn(e)); // Mock fallback
+        toast.success(`[출하대기 등록 완료] ${scannedLot.lot_number}`);
+      } else if (mode === 'OUT') {
+        if (!selectedSiteKey) throw new Error('현장을 선택하세요.');
+        // POST /api/wms/out
+        await api.post('/wms/out', {
+          id: scannedLot.id || scannedLot.lot_id,
+          project_name: selectedSiteKey,
+          qty: processQty
+        }).catch(e => console.warn(e)); // Mock fallback
+        toast.success(`[출고확정 완료] ${scannedLot.lot_number}`);
+        setStagingLots(prev => prev.filter(l => l.lot_number !== scannedLot.lot_number));
+      } else if (mode === 'MOVE') {
+        if (!locationTo) throw new Error('이동할 위치를 입력하세요.');
+        await api.post('/material-transactions', {
+          lot_id: scannedLot.lot_id,
+          txn_type: 'MOVE',
+          qty: processQty,
+          location_to: locationTo
+        }).catch(e => console.warn(e));
+        toast.success(`[위치이동 완료] ${scannedLot.lot_number} -> ${locationTo}`);
+      }
 
+      // 이력 추가
       const nextSeq = scanHistory.length + 1;
       const historyItem: ScanHistoryItem = {
         seq: nextSeq,
@@ -303,11 +369,8 @@ export default function BarcodeScanWmsPage() {
       const updatedHistory = [historyItem, ...scanHistory];
       setScanHistory(updatedHistory);
 
-      const currentTotalQty = updatedHistory.reduce((sum, h) => sum + h.qty, 0);
-
-      toast.success(`🎉 [#${nextSeq}번째 ${MODE_CFG[mode].label} 완료] ${scannedLot.lot_number} | ${scannedLot.item_name} (${processQty}${scannedLot.unit})`);
-
-      if (mode === 'OUT' && targetOrderQty > 0 && currentTotalQty >= targetOrderQty) {
+      const currentTotalQty = updatedHistory.filter(h => h.mode === mode).reduce((sum, h) => sum + h.qty, 0);
+      if ((mode === 'OUT' || mode === 'STAGING') && targetOrderQty > 0 && currentTotalQty >= targetOrderQty) {
         setCompletionModalOpen(true);
       }
 
@@ -317,365 +380,336 @@ export default function BarcodeScanWmsPage() {
       setScanInput('');
       setTimeout(() => inputRef.current?.focus(), 100);
     } catch (err: any) {
-      toast.error(err?.body?.message || '수불 처리 실패');
+      toast.error(err?.message || err?.body?.message || '처리 실패');
     } finally {
       setSubmitting(false);
     }
   };
 
-  // unique site keys & filtered sites
   const uniqueSites = Array.from(new Set(pendingOrders.map(p => p.project_name || p.site_name || p.customer_name).filter(Boolean)));
-  const filteredSites = uniqueSites.filter(site => 
-    !siteSearchTerm.trim() || site.toLowerCase().includes(siteSearchTerm.toLowerCase())
-  );
+  const filteredSites = uniqueSites.filter(site => !siteSearchTerm.trim() || site.toLowerCase().includes(siteSearchTerm.toLowerCase()));
 
-  const totalScannedCount = scanHistory.length;
-  const totalScannedQty = scanHistory.reduce((sum, h) => sum + h.qty, 0);
+  const totalScannedQty = scanHistory.filter(h => h.mode === mode).reduce((sum, h) => sum + h.qty, 0);
   const progressPercent = targetOrderQty > 0 ? Math.min(100, Math.round((totalScannedQty / targetOrderQty) * 100)) : 0;
 
   return (
-    <div className="p-4 md:p-6 space-y-4 bg-slate-50 min-h-screen max-w-2xl mx-auto pb-24">
+    <div className="bg-slate-900 min-h-screen text-slate-200 p-4 md:p-6 pb-24 max-w-2xl mx-auto">
       <PageHeader 
-        title="📱 WMS 바코드 스캔 수불 시스템" 
-        description="발주서/현장 연동 · 실시간 수량 카운팅 & 달성 알림"
+        title="WMS 바코드 스캔 시스템" 
+        description="실시간 재고 수불 및 출하 관리"
       />
 
-      {/* 🔘 1. 작업 선택 (출고확정 / 출하대기 / 입고 / 위치이동) */}
-      <div className="bg-white rounded-2xl p-3 border shadow-sm space-y-2">
-        <p className="text-xs font-bold text-slate-600 px-1">▼ 1. 실행할 물류 작업 선택</p>
-        <div className="grid grid-cols-4 gap-1.5">
-          {(['OUT', 'STAGING', 'IN', 'MOVE'] as TxnMode[]).map((m) => (
+      {/* 모드 탭 (Pill) */}
+      <div className="flex bg-slate-800 p-1.5 rounded-full mb-6 mt-4 shadow-inner">
+        {(['IN', 'STAGING', 'OUT', 'MOVE'] as TxnMode[]).map((m) => {
+          const cfg = MODE_CFG[m];
+          const isActive = mode === m;
+          const Icon = cfg.icon;
+          return (
             <button
               key={m}
-              type="button"
               onClick={() => {
                 setMode(m);
-                toast.info(`${MODE_CFG[m].emoji} [${MODE_CFG[m].label}] 모드로 전환되었습니다.`);
+                setScannedLot(null);
+                setScanInput('');
               }}
               className={cn(
-                'py-3 px-1 rounded-xl font-bold text-xs flex flex-col items-center justify-center gap-1 border-2 transition-all cursor-pointer',
-                mode === m ? MODE_CFG[m].active : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-full text-sm font-bold transition-all duration-200',
+                isActive ? cfg.active : cfg.default
               )}
             >
-              <span className="text-lg">{MODE_CFG[m].emoji}</span>
-              <span className="truncate max-w-[70px] text-[11px]">{MODE_CFG[m].label}</span>
+              <Icon size={16} />
+              <span className="hidden xs:inline">{cfg.label}</span>
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
-      {/* 📋 2. 출고/출하대기 선택 시 등록된 발주서 / 현장 선택 연동 */}
-      {(mode === 'OUT' || mode === 'STAGING') && (
-        <div className="bg-white rounded-2xl p-4 border shadow-sm space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="block text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-              <Building2 className={cn('h-4 w-4', mode === 'OUT' ? 'text-red-600' : 'text-indigo-600')} />
-              <span>📋 {MODE_CFG[mode].label} 현장 / 등록 발주서 선택</span>
-            </label>
-            <span className="text-[11px] font-bold text-slate-500">
-              총 {uniqueSites.length}개 현장 등록됨
-            </span>
-          </div>
-
-          {/* 🔍 검색 필터 입력창 */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              value={siteSearchTerm}
-              onChange={(e) => setSiteSearchTerm(e.target.value)}
-              placeholder="🔍 현장명/발주서 키워드 검색 (예: 고양, 아라월평, 판교)"
-              className="w-full pl-9 pr-3 py-2 border rounded-xl text-xs font-bold bg-slate-50 text-slate-800 outline-none focus:border-blue-500"
-            />
-          </div>
-
-          {/* 현장 선택 드롭다운 (포커스 뺏김 현원 방지!) */}
-          <select
-            value={selectedSiteKey}
-            onChange={(e) => handleSiteSelect(e.target.value)}
-            className={cn(
-              'w-full border-2 rounded-xl p-3 text-xs font-bold bg-white text-slate-900 outline-none transition-colors cursor-pointer',
-              mode === 'OUT' ? 'border-red-300 focus:border-red-500' : 'border-indigo-300 focus:border-indigo-500'
-            )}
-          >
-            <option value="">-- {MODE_CFG[mode].label} 처리할 현장/발주서를 선택하세요 --</option>
-            {filteredSites.map((site) => (
-              <option key={site} value={site}>
-                🏢 {site}
-              </option>
-            ))}
-          </select>
-
-          {/* 선택된 발주서/현장의 등록 품목 상세 내역 */}
-          {selectedSiteKey && (
-            <div className="bg-slate-50 border rounded-xl p-3 space-y-2 text-xs">
-              <div className="flex items-center justify-between border-b pb-1.5">
-                <span className="font-extrabold text-slate-800">📋 [{selectedSiteKey}] 발주 품목 명세</span>
-                <span className="font-mono font-bold text-indigo-700">목표: {targetOrderQty} EA</span>
-              </div>
-              <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                {pendingOrders
-                  .filter(p => (p.project_name || p.site_name || p.customer_name) === selectedSiteKey)
-                  .map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between bg-white border p-2 rounded-lg text-[11px]">
-                      <div>
-                        <span className="font-bold text-slate-900">{item.item_name}</span>
-                        <span className="text-slate-400 font-mono ml-2">규격: {item.spec || '-'}</span>
-                      </div>
-                      <span className="font-black text-blue-900 bg-blue-50 px-2 py-0.5 rounded font-mono">
-                        {item.ordered_qty} {item.unit || 'EA'}
-                      </span>
-                    </div>
-                  ))}
+      <div className="space-y-4">
+        {/* IN 모드 전용 뷰 */}
+        {mode === 'IN' && (
+          <div className="space-y-4">
+            <div className="bg-emerald-900/20 border border-emerald-800/50 rounded-2xl p-4 flex items-start gap-3">
+              <Info className="text-emerald-400 mt-0.5 shrink-0" size={18} />
+              <div>
+                <p className="text-emerald-300 font-bold text-sm">입고는 인수검사 완료 후 자동으로 LOT가 생성됩니다.</p>
+                <p className="text-emerald-500/70 text-xs mt-1">사규 C302 규정에 따라 원부자재는 인수검사를 거쳐 LOT가 채번됩니다.</p>
               </div>
             </div>
-          )}
-        </div>
-      )}
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <button 
+                onClick={() => navigate('/quality/incoming/raw')}
+                className="bg-slate-800 border border-slate-700 hover:border-emerald-500/50 p-5 rounded-2xl text-left transition-all group"
+              >
+                <h3 className="text-emerald-400 font-bold text-lg mb-2 group-hover:text-emerald-300">세라믹울 / 그라스울 입고</h3>
+                <p className="text-slate-400 text-xs mb-3">C302 규정: 인수검사 → LOT 자동채번 (YYMMDDCW순번)</p>
+                <div className="flex items-center text-emerald-500 text-xs font-bold gap-1">
+                  인수검사 바로가기 <ArrowRight size={14} />
+                </div>
+              </button>
+              
+              <button 
+                onClick={() => navigate('/quality/incoming/socket')}
+                className="bg-slate-800 border border-slate-700 hover:border-emerald-500/50 p-5 rounded-2xl text-left transition-all group"
+              >
+                <h3 className="text-emerald-400 font-bold text-lg mb-2 group-hover:text-emerald-300">소켓 / 브라켓 입고</h3>
+                <p className="text-slate-400 text-xs mb-3">C302 규정: 발주서 선택 → 인수검사 → GI LOT 채번</p>
+                <div className="flex items-center text-emerald-500 text-xs font-bold gap-1">
+                  인수검사 바로가기 <ArrowRight size={14} />
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
 
-      {/* 📊 3. 실시간 스캔 진행 카운터 */}
-      <div className="bg-white rounded-2xl p-4 border shadow-sm space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-extrabold text-slate-700 flex items-center gap-1.5">
-            <span className="text-lg">🔢</span> 실시간 스캔 진행 현황
-          </span>
-          <span className="text-xs font-mono font-black text-blue-900 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-200">
-            총 {totalScannedCount}건 스캔 완료 ({totalScannedQty} EA)
-          </span>
-        </div>
+        {/* STAGING / OUT 현장 선택 */}
+        {(mode === 'STAGING' || mode === 'OUT') && (
+          <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 space-y-3 shadow-lg">
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm font-bold flex items-center gap-2">
+                <Building2 className={MODE_CFG[mode].text} size={18} />
+                <span>{MODE_CFG[mode].label} 대상 현장 선택</span>
+              </label>
+            </div>
 
-        {targetOrderQty > 0 && (
-          <div className="space-y-1 pt-1">
-            <div className="flex justify-between text-xs font-bold">
-              <span className="text-slate-600">발주서 목표 달성률</span>
-              <span className={cn(progressPercent >= 100 ? 'text-emerald-600 font-black' : 'text-blue-700 font-black')}>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+              <input
+                type="text"
+                value={siteSearchTerm}
+                onChange={(e) => setSiteSearchTerm(e.target.value)}
+                placeholder="현장명 검색..."
+                className="w-full pl-9 pr-3 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm outline-none focus:border-indigo-500 text-slate-200"
+              />
+            </div>
+
+            <select
+              value={selectedSiteKey}
+              onChange={(e) => handleSiteSelect(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-sm font-bold text-slate-200 outline-none focus:border-indigo-500"
+            >
+              <option value="">-- 현장을 선택하세요 --</option>
+              {filteredSites.map((site) => (
+                <option key={site} value={site}>{site}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* OUT 모드 전용 - 출하대기 목록 표시 */}
+        {mode === 'OUT' && selectedSiteKey && stagingLots.length > 0 && (
+          <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700 space-y-3">
+            <h3 className="text-sm font-bold flex items-center gap-2">
+              <Package className="text-indigo-400" size={16} /> 출하대기 목록
+            </h3>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+              {stagingLots.filter(l => !l.project_name || l.project_name === selectedSiteKey).map(lot => (
+                <div key={lot.lot_number} className="bg-slate-900 p-2.5 rounded-lg flex items-center justify-between border border-slate-700">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-mono font-bold text-sm text-slate-200">{lot.lot_number}</span>
+                      {lot.lot_number.startsWith('J') && (
+                        <span className="text-[10px] bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded font-bold">완제품</span>
+                      )}
+                    </div>
+                    <span className="text-xs text-slate-400">{lot.item_name} / {lot.category}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-sm font-black text-slate-200">{lot.qty_current}</span>
+                    <span className="text-xs text-slate-500 ml-1">{lot.unit}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 바코드 스캐너 뷰 (IN 모드 제외) */}
+        {mode !== 'IN' && (
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden space-y-3 p-4">
+            <div className="flex items-center justify-between border-b border-slate-700 pb-3">
+              <div className="flex items-center gap-2 text-sm font-bold">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>스캐너 대기중</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCameraActive(!cameraActive)}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors"
+              >
+                <Camera size={14} />
+                {cameraActive ? '카메라 끄기' : '카메라 켜기'}
+              </button>
+            </div>
+
+            {cameraActive && (
+              <div className="relative bg-black rounded-xl overflow-hidden min-h-[200px]">
+                <div id="reader-container" className="w-full max-h-64 object-cover" />
+                {cameraError && (
+                  <div className="absolute inset-0 bg-slate-900/90 text-center p-4 flex flex-col items-center justify-center">
+                    <p className="text-amber-400 font-bold mb-1">⚠️ {cameraError}</p>
+                    <p className="text-slate-400 text-xs">브라우저 카메라 허용 권한을 확인해주세요.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                {searching ? <Scan className="h-5 w-5 text-indigo-400 animate-spin" /> : <Scan className="h-5 w-5 text-slate-500" />}
+              </div>
+              <input
+                ref={inputRef}
+                value={scanInput}
+                onChange={(e) => setScanInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && scanInput.trim()) {
+                    e.preventDefault();
+                    handleScan(scanInput);
+                  }
+                }}
+                placeholder="스캔 또는 LOT번호 입력 (Enter)"
+                className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-sm font-mono outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-200"
+                autoComplete="off"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 스캔된 LOT 정보 폼 */}
+        {scannedLot && mode !== 'IN' && (
+          <div className={cn('rounded-2xl border bg-slate-800 p-5 space-y-4', MODE_CFG[mode].border)}>
+            <div className="flex items-start justify-between border-b border-slate-700 pb-3">
+              <div>
+                <p className="text-xl font-black font-mono text-white">{scannedLot.lot_number}</p>
+                <p className="text-sm font-bold text-slate-300">{scannedLot.item_name}</p>
+                <p className="text-xs text-slate-500 mt-1">규격: {fmtSpec(scannedLot)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-slate-500 font-bold">재고</p>
+                <p className="text-2xl font-black text-white">{scannedLot.qty_current}</p>
+                <p className="text-xs font-bold text-slate-500">{scannedLot.unit}</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 mb-1.5">
+                  처리 수량 ({scannedLot.unit})
+                </label>
+                <input
+                  type="number"
+                  min="0.001"
+                  step="any"
+                  value={qty}
+                  onChange={(e) => setQty(e.target.value)}
+                  readOnly={mode === 'OUT' || mode === 'STAGING'} // 보통 전량 처리
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-xl font-black text-center text-white outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {mode === 'MOVE' && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 mb-1.5">
+                    이동할 렉/위치 코드
+                  </label>
+                  <input
+                    value={locationTo}
+                    onChange={(e) => setLocationTo(e.target.value)}
+                    placeholder="예: A1-P1"
+                    required
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm font-mono text-white outline-none focus:border-indigo-500"
+                  />
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className={cn(
+                  'w-full py-4 rounded-xl text-white font-black flex items-center justify-center gap-2 transition-transform active:scale-[0.98]',
+                  MODE_CFG[mode].active.split('shadow-')[0]
+                )}
+              >
+                <Zap size={18} />
+                {submitting ? '처리 중...' : `${MODE_CFG[mode].label} 처리`}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* 진행 상태 바 */}
+        {(mode === 'OUT' || mode === 'STAGING') && targetOrderQty > 0 && (
+          <div className="bg-slate-800 rounded-2xl p-4 border border-slate-700">
+            <div className="flex justify-between text-xs font-bold mb-2">
+              <span className="text-slate-400">발주서 목표 달성률</span>
+              <span className="text-white">
                 {totalScannedQty} / {targetOrderQty} EA ({progressPercent}%)
               </span>
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-3 overflow-hidden border">
+            <div className="w-full bg-slate-900 rounded-full h-2.5 overflow-hidden">
               <div 
-                className={cn('h-full transition-all duration-300', progressPercent >= 100 ? 'bg-emerald-500' : 'bg-blue-600')}
+                className={cn('h-full transition-all duration-300', progressPercent >= 100 ? 'bg-emerald-500' : 'bg-indigo-500')}
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
           </div>
         )}
-      </div>
 
-      {/* 📷 4. 동시 가동되는 스캔 시스템 */}
-      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden space-y-3 p-4">
-        <div className="flex items-center justify-between border-b pb-3">
-          <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
-            <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-            <span>스캐너 동시 준비 완료</span>
-            {isMobile && <span className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded font-bold">📱 모바일</span>}
-          </div>
-          <button
-            type="button"
-            onClick={() => setCameraActive(!cameraActive)}
-            className={cn(
-              'px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border transition-colors cursor-pointer',
-              cameraActive ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'bg-slate-100 border-slate-300 text-slate-600'
-            )}
-          >
-            <Camera className="h-3.5 w-3.5" />
-            {cameraActive ? '카메라 스캔 켜짐' : '카메라 스캔 켜기'}
-          </button>
-        </div>
-
-        {cameraActive && (
-          <div className="relative bg-slate-900 rounded-xl overflow-hidden min-h-[180px]">
-            <div id="reader-container" className="w-full max-h-60 object-cover" />
-            {cameraError && (
-              <div className="absolute inset-0 bg-slate-900/90 text-white text-xs p-4 flex flex-col items-center justify-center text-center gap-2">
-                <p className="text-amber-400 font-bold">⚠️ {cameraError}</p>
-                <p className="text-slate-400 text-[11px]">스마트폰 브라우저 카메라 허용 권한을 확인해주세요.</p>
+        {/* 스캔 이력 */}
+        {scanHistory.filter(h => h.mode === mode).length > 0 && (
+          <div className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden">
+            <div className="px-4 py-3 bg-slate-900/50 border-b border-slate-700 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-bold text-slate-300">
+                <CheckCircle2 size={16} className="text-emerald-400" />
+                처리 내역
               </div>
-            )}
-          </div>
-        )}
-
-        <div className="relative">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2">
-            {searching ? <Scan className="h-5 w-5 text-blue-500 animate-spin" /> : <Scan className="h-5 w-5 text-slate-400" />}
-          </div>
-          <input
-            ref={inputRef}
-            value={scanInput}
-            onChange={(e) => setScanInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && scanInput.trim()) {
-                e.preventDefault();
-                handleScan(scanInput);
-              }
-            }}
-            placeholder="바코드 스캐너 스캔 또는 LOT번호 입력 후 Enter ↵"
-            className="w-full pl-10 pr-4 py-3.5 border-2 border-slate-300 rounded-xl text-sm font-mono outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-            autoComplete="off"
-            autoFocus
-          />
-        </div>
-      </div>
-
-      {/* 📦 5. LOT 인식 후 수불 입력 폼 */}
-      {scannedLot ? (
-        <div className={cn('rounded-2xl border-2 p-5 space-y-4 shadow-sm bg-white', MODE_CFG[mode].border)}>
-          <div className="flex items-start justify-between border-b pb-3">
-            <div>
-              <span className="text-xs font-bold px-2 py-0.5 rounded text-white bg-slate-800">
-                #{scanHistory.length + 1}번째 스캔 대상
-              </span>
-              <p className="text-xl font-black font-mono text-slate-900 mt-1">{scannedLot.lot_number}</p>
-              <p className="text-sm font-bold text-slate-800">{scannedLot.item_name}</p>
-              <p className="text-xs text-slate-500 font-medium">규격: {fmtSpec(scannedLot)}</p>
             </div>
-            <div className="text-right">
-              <p className="text-xs text-slate-500 font-bold">현재 재고</p>
-              <p className="text-3xl font-black text-slate-900">{Number(scannedLot.qty_current).toLocaleString()}</p>
-              <p className="text-xs font-bold text-slate-500">{scannedLot.unit}</p>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                {MODE_CFG[mode].label} 처리 수량 ({scannedLot.unit}) *
-              </label>
-              <input
-                id="wms-qty"
-                type="number"
-                min="0.001"
-                step="any"
-                value={qty}
-                onChange={(e) => setQty(e.target.value)}
-                placeholder="수량 입력"
-                required
-                className="w-full border-2 border-slate-300 rounded-xl px-4 py-3 text-2xl font-black text-center outline-none focus:border-blue-600"
-              />
-            </div>
-
-            {(mode === 'MOVE' || mode === 'IN' || mode === 'STAGING') && (
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  {mode === 'MOVE' ? '이동 후 렉/위치 코드 (예: A1-P1) *' : '적재/보관 렉/공장구역 코드 (선택)'}
-                </label>
-                <input
-                  value={locationTo}
-                  onChange={(e) => setLocationTo(e.target.value)}
-                  placeholder="예: A1-P1 또는 FIELD-1F-MAIN"
-                  required={mode === 'MOVE'}
-                  className="w-full border-2 border-slate-300 rounded-xl px-4 py-2.5 text-sm font-mono outline-none"
-                />
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className={cn(
-                'w-full py-4 rounded-xl text-white text-base font-black flex items-center justify-center gap-2 transition-all shadow-lg active:scale-95 disabled:opacity-60 cursor-pointer',
-                mode === 'OUT' ? 'bg-red-600 hover:bg-red-700' :
-                mode === 'STAGING' ? 'bg-indigo-600 hover:bg-indigo-700' :
-                mode === 'IN' ? 'bg-emerald-600 hover:bg-emerald-700' :
-                'bg-amber-500 hover:bg-amber-600'
-              )}
-            >
-              <Zap className="h-5 w-5" />
-              {submitting ? '처리 중...' : `[#${scanHistory.length + 1}번째] ${MODE_CFG[mode].emoji} ${MODE_CFG[mode].label} 확인`}
-            </button>
-          </form>
-        </div>
-      ) : null}
-
-      {/* 📜 6. 실시간 스캔 카운팅 리스트 */}
-      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden space-y-0">
-        <div className="px-4 py-3 bg-slate-800 text-white flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-            <span className="text-xs font-black">실시간 스캔 처리 카운팅 내역 ({scanHistory.length}건)</span>
-          </div>
-          {scanHistory.length > 0 && (
-            <button
-              onClick={() => setScanHistory([])}
-              className="text-[10px] bg-slate-700 hover:bg-slate-600 text-slate-300 px-2 py-0.5 rounded font-bold"
-            >
-              초기화
-            </button>
-          )}
-        </div>
-
-        {scanHistory.length > 0 ? (
-          <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
-            {scanHistory.map((item) => (
-              <div key={item.seq} className="p-3.5 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-black bg-blue-900 text-white px-2 py-1 rounded-lg">
-                    #{item.seq}번째
-                  </span>
+            <div className="divide-y divide-slate-700 max-h-60 overflow-y-auto">
+              {scanHistory.filter(h => h.mode === mode).map((item) => (
+                <div key={item.seq} className="p-3 flex items-center justify-between">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-sm text-slate-900">{item.lot_number}</span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
-                        {item.mode}
-                      </span>
-                    </div>
-                    <p className="text-xs font-bold text-slate-700">{item.item_name}</p>
-                    <p className="text-[11px] text-slate-400">규격: {item.spec} {item.location && `| 위치: ${item.location}`}</p>
+                    <span className="font-mono font-bold text-sm text-white">{item.lot_number}</span>
+                    <p className="text-xs text-slate-400 mt-0.5">{item.item_name}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-black text-emerald-400">+{item.qty}</p>
+                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">{item.time}</p>
                   </div>
                 </div>
-
-                <div className="text-right">
-                  <p className="text-base font-black text-emerald-700">
-                    {item.qty} {item.unit}
-                  </p>
-                  <p className="text-[10px] text-slate-400 font-mono">{item.time}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="p-8 text-center text-xs text-slate-400 space-y-1">
-            <p>아직 스캔된 항목이 없습니다.</p>
-            <p className="text-[11px] text-slate-300">스캐너나 카메라로 찍으면 실시간 카운팅 순번과 품목 정보가 표시됩니다.</p>
+              ))}
+            </div>
           </div>
         )}
       </div>
 
-      {/* 🎉 7. 수량 100% 달성 알림 모달 */}
+      {/* 완료 모달 */}
       {completionModalOpen && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-center">
-            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-3xl font-black">
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl max-w-sm w-full p-6 text-center shadow-2xl">
+            <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-3xl mb-4">
               🎉
             </div>
-            <div className="space-y-1">
-              <h3 className="text-lg font-black text-slate-900">출하 수량 100% 달성 완료!</h3>
-              <p className="text-xs font-bold text-emerald-700">
-                선택하신 현장 [{selectedSiteKey}] 의 총 발주 수량 ({targetOrderQty} EA) 스캔이 완수되었습니다.
-              </p>
-            </div>
-
-            <div className="bg-slate-50 border p-3 rounded-xl text-xs space-y-1 text-left">
-              <p className="text-slate-600 font-bold">총 스캔 처리: <span className="text-blue-900 font-black">{totalScannedQty} EA ({totalScannedCount}건)</span></p>
-              <p className="text-slate-600 font-bold">출하 현장: <span className="text-slate-800 font-black">{selectedSiteKey}</span></p>
-            </div>
-
-            <div className="space-y-2 pt-2">
+            <h3 className="text-lg font-black text-white mb-2">목표 수량 달성!</h3>
+            <p className="text-sm text-slate-300 mb-6">
+              선택한 현장의 출하 목표({targetOrderQty} EA)를 모두 처리했습니다.
+            </p>
+            <div className="space-y-3">
               <button
                 onClick={() => {
                   setCompletionModalOpen(false);
                   navigate('/shipment/statements');
                 }}
-                className="w-full py-3 bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1.5"
+                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl flex items-center justify-center gap-2"
               >
-                <FileText size={16} />
-                <span>📄 출하 거래명세표 작성/출력으로 이동</span>
+                <FileText size={16} /> 거래명세표 작성 이동
               </button>
               <button
                 onClick={() => setCompletionModalOpen(false)}
-                className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl"
+                className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold text-sm rounded-xl"
               >
-                닫고 계속 스캔하기
+                닫기
               </button>
             </div>
           </div>

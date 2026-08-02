@@ -80,14 +80,14 @@ export const shopTopGroups: TopNavGroup[] = [
   {
     key: 'process', label: '공정 단계', Icon: Factory,
     children: [
-      { label: '① 원재료 인수검사', path: '/quality/incoming/raw' },
+      { label: '▶ 인수검사 (품질관리)', path: '/quality/incoming', badge: '품질' },
       { label: '②~⑤ 통합 4공정 (배합·압출·재단·조립)', path: '/production/process-stages' },
       { label: '기존 공정 실행 (배합·압출·재단)', path: '/production/process-execution' },
-      { label: '부자재 인수검사', path: '/quality/incoming/sub' },
       { label: '조립생산일지 (J-LOT)', path: '/production/assembly-log' },
       { label: '중간검사 (C-701)', path: '/quality/process-inspection' },
     ],
   },
+
 
   {
     key: 'inventory', label: '재고관리', Icon: Boxes,

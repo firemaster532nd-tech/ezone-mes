@@ -164,6 +164,23 @@ export async function materialLotsRoutes(app: FastifyInstance) {
     return { data: rows };
   });
 
+  // ── GET /api/material-lots/next-lot ──────────────────────────────────────
+  app.get('/api/material-lots/next-lot', { preHandler: requireAuth }, async (req) => {
+    const { abbrev = 'CW', date } = req.query as any;
+    const yymmdd = date || new Date().toISOString().replace(/-/g,'').slice(2,8);
+    const pattern = `${yymmdd}${abbrev}%`;
+    const { rows } = await pool.query(
+      `SELECT lot_number FROM material_lots WHERE lot_number LIKE $1 ORDER BY lot_number DESC LIMIT 1`,
+      [pattern]
+    );
+    let nextSeq = 1;
+    if (rows.length > 0) {
+      const m = rows[0].lot_number.match(/(\d+)$/);
+      if (m) nextSeq = parseInt(m[1]) + 1;
+    }
+    return { lot_number: `${yymmdd}${abbrev}${String(nextSeq).padStart(3,'0')}` };
+  });
+
   // ── GET /api/material-lots/:id ───────────────────────────────────────────
   app.get('/api/material-lots/:id', { preHandler: requireAuth }, async (req) => {
     const { id } = req.params as any;
