@@ -106,6 +106,7 @@ export const shopTopGroups: TopNavGroup[] = [
     children: [
       { label: '②~⑤ 통합 4공정 (배합·압출·재단·조립)', path: '/production/process-stages' },
       { label: '기존 공정 실행 (배합·압출·재단)', path: '/production/process-execution' },
+      { label: '조립생산일지 (J-LOT)', path: '/production/assembly-log' },
     ],
   },
 
@@ -269,6 +270,7 @@ export const adminTopGroups: TopNavGroup[] = [
     children: [
       { label: '②~⑤ 통합 4공정 (배합·압출·재단·조립)', path: '/production/process-stages' },
       { label: '기존 공정 실행 (배합·압출·재단)', path: '/production/process-execution' },
+      { label: '조립생산일지 (J-LOT)', path: '/production/assembly-log' },
     ],
   },
   {

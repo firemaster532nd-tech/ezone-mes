@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '@/lib/api';
 import { LocationPicker } from '@/components/LocationPicker';
+import { AssemblyLogPage } from './AssemblyLogPage';
 import {
   Factory, Layers, Scissors, Hammer, Flame,
   CheckCircle, AlertCircle, Play, ChevronRight, Scale,
@@ -50,9 +51,11 @@ const CUTTING_PIPE_SPECS = [
 
 export function ProcessStagePage() {
   const [activeTab, setActiveTab] = useState<StageTab>('MIX');
+  const [asmSubTab, setAsmSubTab] = useState<'FULL_LOG' | 'SIMPLE'>('FULL_LOG');
   const [loading, setLoading] = useState(false);
   const [workOrders, setWorkOrders] = useState<WorkOrderOption[]>([]);
   const [selectedWo, setSelectedWo] = useState<WorkOrderOption | null>(null);
+
 
   // 최근 공정 로그 (이전단계 LOT 계보 상속용)
   const [mixLogs, setMixLogs] = useState<any[]>([]);
@@ -790,15 +793,37 @@ export function ProcessStagePage() {
       {/* 탭 4: 조립 (ASM) 영역 — J-LOT 완제품 조립 */}
       {/* ─────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'ASM' && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center justify-between pb-4 mb-4 border-b">
+        <div className="space-y-4">
+          {/* 서브 탭: 전자 조립생산일지 (EZC B-201 서식) vs 간편 조립 실행 */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
               <Hammer className="w-5 h-5 text-emerald-600" />
-              조립 공정 (J-LOT 채번 및 적재장소 지정)
+              <span>조립 공정 (J-LOT 채번 및 적재장소 지정)</span>
             </h2>
-            <span className="text-xs font-mono bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-bold">
-              J-LOT 자동 채번
-            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setAsmSubTab('FULL_LOG')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                  asmSubTab === 'FULL_LOG'
+                    ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-300'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                📋 전자 조립생산일지 (EZC B-201 서식)
+              </button>
+              <button
+                type="button"
+                onClick={() => setAsmSubTab('SIMPLE')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                  asmSubTab === 'SIMPLE'
+                    ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-300'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                ⚡ 간편 조립 실행
+              </button>
+            </div>
           </div>
 
           <form onSubmit={handleAsmSubmit} className="space-y-4 max-w-3xl">
