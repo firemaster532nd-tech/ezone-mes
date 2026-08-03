@@ -1,19 +1,28 @@
-﻿import { FastifyInstance } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { kgToMeters } from './lot-properties.js';
 
 export async function processExecutionRoutes(app: FastifyInstance) {
-  // \u2500\u2500 \uc11c\ubc84 \uc2dc\uc791 \uc2dc \uba85\ucba8 \ub370\uc774\ud130 \ucd08\uae30\ud654 (\ube44\ub3d9\uae30 \ubc31\uadf8\ub77c\uc6b4\ub4dc)\n  setImmediate(async () => {\n    try {\n    // Migration: add worker_ids and worker_names columns, expand shift column
+  // ── 서버 시작 시 명시 데이터 초기화 (비동기 백그라운드)
+  setImmediate(async () => {
+    try {
+      // Migration: add worker_ids and worker_names columns, expand shift column
       await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS worker_ids TEXT`);
       await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS worker_names TEXT`);
       await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS raw_material_inputs TEXT`);
       await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS parent_lot_number TEXT`);
       await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS dummy_weight_kg NUMERIC(10,2)`);
       await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS scrap_kg NUMERIC(10,2)`);
+      await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS form_number TEXT`);
+      await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS category_name TEXT`);
+      await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS stop_reason TEXT`);
+      await pool.query(`ALTER TABLE process_log ADD COLUMN IF NOT EXISTS quality_remarks TEXT`);
       await pool.query(`ALTER TABLE process_log ALTER COLUMN shift TYPE VARCHAR(20)`);
       await pool.query(`ALTER TABLE process_log DROP CONSTRAINT IF EXISTS process_log_shift_check`);
     
-      // GET /api/process-logs - 공정 실행 로그 목록\n    } catch (e) { console.warn([\u0022process-execution.ts\u0022 init], e); }\n  });\n
+    } catch (e) { console.warn(["process-execution.ts init"], e); }
+  });
+
   app.get('/api/process-logs', async (request) => {
     const { wo_id, process_code, date, shift, worker_id, status } = request.query as {
       wo_id?: string;
@@ -49,7 +58,7 @@ export async function processExecutionRoutes(app: FastifyInstance) {
     }
     if (shift) {
       params.push(shift);
-      conditions.push(`pl.shift LIKE '%' || $${params.length} || '%'`);
+      conditions.push(`pl.shift = $${params.length}`);
     }
     if (worker_id) {
       params.push(parseInt(worker_id, 10));
@@ -66,7 +75,7 @@ export async function processExecutionRoutes(app: FastifyInstance) {
     query += ' ORDER BY pl.created_at DESC';
 
     const result = await pool.query(query, params);
-    return { data: result.rows, total: result.rows.length };
+    return { data: result.rows };
   });
 
   // GET /api/process-logs/:id - 공정 실행 상세 (이벤트 포함)
@@ -108,18 +117,24 @@ export async function processExecutionRoutes(app: FastifyInstance) {
   // POST /api/process-logs - 공정 로그 생성
   app.post('/api/process-logs', async (request, reply) => {
     const body = request.body as Record<string, unknown>;
-    const { wo_id, process_code, shift, worker_id, planned_qty, worker_ids, worker_names, raw_material_inputs, parent_lot_number } = body;
+    const { 
+      wo_id, process_code, shift, worker_id, planned_qty, 
+      worker_ids, worker_names, raw_material_inputs, parent_lot_number,
+      form_number, category_name, stop_reason, quality_remarks
+    } = body;
 
     // shift can be comma-separated (e.g. "AM,PM") or single value
-    const effectiveShift = shift as string || '';
-    if (!wo_id || !process_code || !effectiveShift) {
-      return reply.status(400).send({ error: 'Bad Request', message: 'wo_id, process_code, shift는 필수입니다.' });
+    const effectiveShift = shift as string || 'AM';
+    if (!process_code) {
+      return reply.status(400).send({ error: 'Bad Request', message: 'process_code는 필수입니다.' });
     }
 
     // PLANNED 상태 작업지시를 자동으로 IN_PROGRESS 전환
-    const woCheck = await pool.query('SELECT status FROM work_order WHERE wo_id = $1', [wo_id]);
-    if (woCheck.rows.length > 0 && woCheck.rows[0].status === 'PLANNED') {
-      await pool.query(`UPDATE work_order SET status = 'IN_PROGRESS' WHERE wo_id = $1`, [wo_id]);
+    if (wo_id) {
+      const woCheck = await pool.query('SELECT status FROM work_order WHERE wo_id = $1', [wo_id]);
+      if (woCheck.rows.length > 0 && woCheck.rows[0].status === 'PLANNED') {
+        await pool.query(`UPDATE work_order SET status = 'IN_PROGRESS' WHERE wo_id = $1`, [wo_id]);
+      }
     }
 
     // Determine worker_id: use provided worker_id, or first from worker_ids array
@@ -130,9 +145,27 @@ export async function processExecutionRoutes(app: FastifyInstance) {
     const rawMaterialInputsJson = raw_material_inputs ? JSON.stringify(raw_material_inputs) : null;
 
     const result = await pool.query(
-      `INSERT INTO process_log (wo_id, process_code, shift, worker_id, planned_qty, worker_ids, worker_names, raw_material_inputs, parent_lot_number)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
-      [wo_id, process_code, effectiveShift, effectiveWorkerId || null, planned_qty || null, workerIdsJson, workerNamesJson, rawMaterialInputsJson, parent_lot_number || null]
+      `INSERT INTO process_log (
+        wo_id, process_code, shift, worker_id, planned_qty, 
+        worker_ids, worker_names, raw_material_inputs, parent_lot_number,
+        form_number, category_name, stop_reason, quality_remarks
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+      [
+        wo_id ? Number(wo_id) : null,
+        process_code,
+        effectiveShift,
+        effectiveWorkerId || null,
+        planned_qty || null,
+        workerIdsJson,
+        workerNamesJson,
+        rawMaterialInputsJson,
+        parent_lot_number || null,
+        form_number || null,
+        category_name || null,
+        stop_reason || null,
+        quality_remarks || null
+      ]
     );
 
     return { data: result.rows[0] };
