@@ -69,20 +69,62 @@ async function migrateFnStock() {
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_fn_daily ON fn_daily_production(prod_date, item_name, spec, prod_type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_fn_daily_date ON fn_daily_production(prod_date DESC)`);
 
-  // 4. 초기 데이터
+  // 4. fn_purchase_order 테이블
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS fn_purchase_order (
+      fn_po_id      SERIAL PRIMARY KEY,
+      project_id    INT REFERENCES project_master(project_id) ON DELETE SET NULL,
+      project_name  VARCHAR(300),
+      order_date    DATE,
+      delivery_date DATE,
+      status        VARCHAR(20) DEFAULT 'ORDERED',
+      notes         TEXT,
+      created_by    INT,
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS fn_purchase_order_item (
+      fn_po_item_id    SERIAL PRIMARY KEY,
+      fn_po_id         INT NOT NULL REFERENCES fn_purchase_order(fn_po_id) ON DELETE CASCADE,
+      item_type        VARCHAR(50) NOT NULL,
+      diameter_mm      INT,
+      height_spec      VARCHAR(20),
+      item_label       VARCHAR(100),
+      qty_ordered      INT NOT NULL DEFAULT 0,
+      qty_received     INT NOT NULL DEFAULT 0,
+      fn_lot_number    VARCHAR(200),
+      our_lot_number   VARCHAR(60),
+      linked_wo_id     INT,
+      notes            TEXT,
+      created_at       TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+  await pool.query(`ALTER TABLE fn_purchase_order ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'ORDERED'`).catch(()=>{});
+  await pool.query(`ALTER TABLE fn_purchase_order_item ADD COLUMN IF NOT EXISTS fn_lot_number VARCHAR(200)`).catch(()=>{});
+  await pool.query(`ALTER TABLE fn_purchase_order_item ADD COLUMN IF NOT EXISTS our_lot_number VARCHAR(60)`).catch(()=>{});
+  await pool.query(`ALTER TABLE fn_purchase_order_item ADD COLUMN IF NOT EXISTS notes TEXT`).catch(()=>{});
+
+  // 5. 초기 데이터 (엑셀 2608 기준)
   await pool.query(`
     INSERT INTO fn_finished_stock (diameter_mm, spec, qty) VALUES
-      (100,'몸통',900),(100,'150H',0),(100,'170H',0),(100,'180H',0),
-      (100,'190H',0),(100,'200H',0),(100,'210H',0),(100,'240H',0),
-      (100,'250H',0),(100,'260H',0),(75,'몸통',0),(50,'몸통',1260)
+      (100,'몸통',0),(100,'150H',0),(100,'170H',0),(100,'180H',0),
+      (100,'190H',0),(100,'200H',0),(100,'210H',1680),(100,'240H',0),
+      (100,'250H',0),(100,'260H',0),(75,'몸통',642),(50,'몸통',447)
     ON CONFLICT (diameter_mm, spec) DO NOTHING;
 
     INSERT INTO fn_material_stock (item_name, spec, qty, unit) VALUES
-      ('보호철판','100파이',5759,'ea'),('보호철판','75파이',1030,'ea'),
-      ('보호철판','50파이',2876,'ea'),('볼트,너트,와샤','-',35700,'ea'),
-      ('시트(재단)','100파이',1063,'ea'),('시트(재단)','75파이',13,'ea'),
-      ('시트(재단)','50파이',-533,'ea'),('시트(압출)','-',31,'ea'),
-      ('소켓','100파이',0,'ea'),('소켓','75파이',0,'ea'),('소켓','50파이',0,'ea')
+      ('일체형슬리브','100파이',0,'ea'),
+      ('일체형슬리브','75파이',642,'ea'),
+      ('일체형슬리브','50파이',447,'ea'),
+      ('보호철판','100파이',2341,'ea'),('보호철판','75파이',712,'ea'),
+      ('보호철판','50파이',803,'ea'),
+      ('볼트,너트,와샤','-',13248,'ea'),
+      ('한국카멕트','-',8,'ea'),
+      ('화창카멕트','-',0,'ea'),
+      ('시트(재단)','100파이',2295,'ea'),
+      ('시트(재단)','75파이',461,'ea'),
+      ('시트(재단)','50파이',413,'ea'),
+      ('시트(재단)','규격외',40,'ea'),
+      ('시트(압출)','-',0,'ea')
     ON CONFLICT (item_name, spec) DO NOTHING;
   `);
 }
@@ -615,5 +657,112 @@ export async function fnStockRoutes(app: FastifyInstance) {
     } finally {
       client.release();
     }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // FN 발주서 API
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // GET 발주서 목록
+  app.get('/api/fn-purchase-orders', { preHandler: requireAuth }, async (req) => {
+    const { status } = req.query as any;
+    let q = `SELECT p.*, COUNT(i.fn_po_item_id) AS item_count,
+               COALESCE(SUM(i.qty_ordered),0) AS total_qty_ordered,
+               COALESCE(SUM(i.qty_received),0) AS total_qty_received
+             FROM fn_purchase_order p
+             LEFT JOIN fn_purchase_order_item i ON i.fn_po_id = p.fn_po_id
+             WHERE 1=1`;
+    const params: any[] = [];
+    if (status) { params.push(status); q += ` AND p.status=$${params.length}`; }
+    q += ` GROUP BY p.fn_po_id ORDER BY p.created_at DESC`;
+    const r = await pool.query(q, params);
+    return { data: r.rows };
+  });
+
+  // GET 미수령 발주서 (인수검사 페이지에서 불러오기용)
+  app.get('/api/fn-purchase-orders/pending', { preHandler: requireAuth }, async () => {
+    const r = await pool.query(`
+      SELECT p.fn_po_id, p.order_date, p.delivery_date, p.project_name, p.status,
+             i.fn_po_item_id, i.item_type, i.diameter_mm, i.height_spec, i.item_label,
+             i.qty_ordered, i.qty_received, i.fn_lot_number
+      FROM fn_purchase_order p
+      JOIN fn_purchase_order_item i ON i.fn_po_id = p.fn_po_id
+      WHERE p.status IN ('ORDERED','PARTIAL') AND i.qty_received < i.qty_ordered
+      ORDER BY p.delivery_date ASC NULLS LAST, p.fn_po_id DESC
+    `);
+    return { data: r.rows };
+  });
+
+  // GET 발주서 상세
+  app.get('/api/fn-purchase-orders/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const { id } = req.params as any;
+    const [po, items] = await Promise.all([
+      pool.query('SELECT * FROM fn_purchase_order WHERE fn_po_id=$1', [id]),
+      pool.query('SELECT * FROM fn_purchase_order_item WHERE fn_po_id=$1 ORDER BY fn_po_item_id', [id]),
+    ]);
+    if (!po.rows[0]) return reply.code(404).send({ error: '발주서 없음' });
+    return { data: { ...po.rows[0], items: items.rows } };
+  });
+
+  // POST 발주서 등록
+  app.post('/api/fn-purchase-orders', { preHandler: requireAuth }, async (req, reply) => {
+    const { project_id, project_name, order_date, delivery_date, notes, items, created_by } = req.body as any;
+    if (!items?.length) return reply.code(400).send({ error: '품목이 없습니다.' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const poRes = await client.query(
+        `INSERT INTO fn_purchase_order (project_id, project_name, order_date, delivery_date, notes, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING fn_po_id`,
+        [project_id || null, project_name || null, order_date || null, delivery_date || null, notes || null, created_by || null]
+      );
+      const fn_po_id = poRes.rows[0].fn_po_id;
+      for (const it of items) {
+        await client.query(
+          `INSERT INTO fn_purchase_order_item
+           (fn_po_id, item_type, diameter_mm, height_spec, item_label, qty_ordered, fn_lot_number, notes)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [fn_po_id, it.item_type, it.diameter_mm||null, it.height_spec||null,
+           it.item_label||null, it.qty_ordered||0, it.fn_lot_number||null, it.notes||null]
+        );
+      }
+      await client.query('COMMIT');
+      return { data: { fn_po_id, message: 'FN 발주서 등록 완료' } };
+    } catch(e) {
+      await client.query('ROLLBACK'); throw e;
+    } finally { client.release(); }
+  });
+
+  // PATCH 수령 처리 (인수검사 합격 시)
+  app.patch('/api/fn-purchase-orders/items/:itemId/receive', { preHandler: requireAuth }, async (req, reply) => {
+    const { itemId } = req.params as any;
+    const { qty_received, our_lot_number } = req.body as any;
+    if (!qty_received || qty_received <= 0) return reply.code(400).send({ error: '수량 필요' });
+    const r = await pool.query(
+      `UPDATE fn_purchase_order_item
+       SET qty_received = qty_received + $1,
+           our_lot_number = COALESCE(our_lot_number || ',' || $2, $2)
+       WHERE fn_po_item_id = $3
+       RETURNING fn_po_id, qty_ordered, qty_received + $1 AS new_received`,
+      [qty_received, our_lot_number || null, itemId]
+    );
+    if (!r.rows[0]) return reply.code(404).send({ error: '항목 없음' });
+    const { fn_po_id, qty_ordered, new_received } = r.rows[0];
+    // 발주서 전체 상태 업데이트
+    const allItems = await pool.query(
+      'SELECT SUM(qty_ordered) AS tot_o, SUM(qty_received) AS tot_r FROM fn_purchase_order_item WHERE fn_po_id=$1',
+      [fn_po_id]
+    );
+    const { tot_o, tot_r } = allItems.rows[0];
+    const newStatus = Number(tot_r) >= Number(tot_o) ? 'RECEIVED' : 'PARTIAL';
+    await pool.query('UPDATE fn_purchase_order SET status=$1 WHERE fn_po_id=$2', [newStatus, fn_po_id]);
+    return { data: { success: true, new_received, status: newStatus } };
+  });
+
+  // DELETE 발주서 취소
+  app.delete('/api/fn-purchase-orders/:id', { preHandler: requireAuth }, async (req) => {
+    const { id } = req.params as any;
+    await pool.query("UPDATE fn_purchase_order SET status='CANCELLED' WHERE fn_po_id=$1", [id]);
+    return { data: { success: true } };
   });
 }

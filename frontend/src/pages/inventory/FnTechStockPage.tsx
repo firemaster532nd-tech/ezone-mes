@@ -27,26 +27,36 @@ interface DailyProd {
   qty: number; lot_number?: string; worker_name?: string;
 }
 
-// ─── 초기값 (엑셀 통합현황 기준) ─────────────────────────────────────────
+// ─── 초기값 (엑셀 통합현황 2608 기준) ────────────────────────────────────
 const FALLBACK_FINISHED: FinishedStock[] = [
-  { id:1, diameter_mm:100, spec:'몸통', qty:900 },
-  { id:2, diameter_mm:100, spec:'150H', qty:0 },{ id:3, diameter_mm:100, spec:'170H', qty:0 },
-  { id:4, diameter_mm:100, spec:'180H', qty:0 },{ id:5, diameter_mm:100, spec:'190H', qty:0 },
-  { id:6, diameter_mm:100, spec:'200H', qty:0 },{ id:7, diameter_mm:100, spec:'210H', qty:0 },
-  { id:8, diameter_mm:100, spec:'240H', qty:0 },{ id:9, diameter_mm:100, spec:'250H', qty:0 },
+  { id:1,  diameter_mm:100, spec:'몸통', qty:0 },
+  { id:2,  diameter_mm:100, spec:'150H', qty:0 },
+  { id:3,  diameter_mm:100, spec:'170H', qty:0 },
+  { id:4,  diameter_mm:100, spec:'180H', qty:0 },
+  { id:5,  diameter_mm:100, spec:'190H', qty:0 },
+  { id:6,  diameter_mm:100, spec:'200H', qty:0 },
+  { id:7,  diameter_mm:100, spec:'210H', qty:1680 },
+  { id:8,  diameter_mm:100, spec:'240H', qty:0 },
+  { id:9,  diameter_mm:100, spec:'250H', qty:0 },
   { id:10, diameter_mm:100, spec:'260H', qty:0 },
-  { id:11, diameter_mm:75, spec:'몸통', qty:0 },
-  { id:12, diameter_mm:50, spec:'몸통', qty:1260 },
+  { id:11, diameter_mm:75,  spec:'몸통', qty:642 },
+  { id:12, diameter_mm:50,  spec:'몸통', qty:447 },
 ];
 const FALLBACK_MATERIAL: MaterialStock[] = [
-  { id:1, item_name:'보호철판',     spec:'100파이', qty:5759,  unit:'ea' },
-  { id:2, item_name:'보호철판',     spec:'75파이',  qty:1030,  unit:'ea' },
-  { id:3, item_name:'보호철판',     spec:'50파이',  qty:2876,  unit:'ea' },
-  { id:4, item_name:'볼트,너트,와샤',spec:'-',      qty:35700, unit:'ea' },
-  { id:5, item_name:'시트(재단)',   spec:'100파이', qty:1063,  unit:'ea' },
-  { id:6, item_name:'시트(재단)',   spec:'75파이',  qty:13,    unit:'ea' },
-  { id:7, item_name:'시트(재단)',   spec:'50파이',  qty:-533,  unit:'ea' },
-  { id:8, item_name:'시트(압출)',   spec:'-',       qty:31,    unit:'ea' },
+  { id:1,  item_name:'일체형슬리브', spec:'100파이',  qty:0,     unit:'ea' },
+  { id:2,  item_name:'일체형슬리브', spec:'75파이',   qty:642,   unit:'ea' },
+  { id:3,  item_name:'일체형슬리브', spec:'50파이',   qty:447,   unit:'ea' },
+  { id:4,  item_name:'보호철판',      spec:'100파이', qty:2341,  unit:'ea' },
+  { id:5,  item_name:'보호철판',      spec:'75파이',  qty:712,   unit:'ea' },
+  { id:6,  item_name:'보호철판',      spec:'50파이',  qty:803,   unit:'ea' },
+  { id:7,  item_name:'볼트,너트,와샤',  spec:'-',      qty:13248, unit:'ea' },
+  { id:8,  item_name:'한국카멕트',    spec:'-',      qty:8,     unit:'ea' },
+  { id:9,  item_name:'화창카멕트',    spec:'-',      qty:0,     unit:'ea' },
+  { id:10, item_name:'시트(재단)',     spec:'100파이', qty:2295,  unit:'ea' },
+  { id:11, item_name:'시트(재단)',     spec:'75파이',  qty:461,   unit:'ea' },
+  { id:12, item_name:'시트(재단)',     spec:'50파이',  qty:413,   unit:'ea' },
+  { id:13, item_name:'시트(재단)',     spec:'규격외',   qty:40,    unit:'ea' },
+  { id:14, item_name:'시트(압출)',     spec:'-',      qty:0,     unit:'ea' },
 ];
 
 const FN_100_SPECS = ['몸통', '150H', '170H', '180H', '190H', '200H', '210H', '240H', '250H', '260H'];

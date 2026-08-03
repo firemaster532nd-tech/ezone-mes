@@ -75,6 +75,29 @@ interface PoItem {
   construction_type: 'SINGLE' | 'DOUBLE' | null;
 }
 
+interface FnPurchaseOrder {
+  fn_po_id: number;
+  project_name: string | null;
+  order_date: string | null;
+  delivery_date: string | null;
+  status: 'ORDERED' | 'PARTIAL' | 'RECEIVED' | 'CANCELLED';
+  notes: string | null;
+  item_count: number;
+  total_qty_ordered: number;
+  total_qty_received: number;
+  created_at: string;
+}
+interface FnPoItem {
+  fn_po_item_id: number;
+  item_type: string;
+  diameter_mm: number | null;
+  height_spec: string | null;
+  item_label: string | null;
+  qty_ordered: number;
+  qty_received: number;
+  fn_lot_number: string | null;
+}
+
 interface ParsedPreview {
   project: Record<string, string>;
   items: PoItem[];
@@ -1614,10 +1637,294 @@ function SocketOrderTab({ list }: { list: PurchaseOrder[] }) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// FN테크 발주 탭
+// ────────────────────────────────────────────────────────────────────────────
+function FnPurchaseTab({ projects }: { projects: Project[] }) {
+  const [orders, setOrders] = useState<FnPurchaseOrder[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // 폼 상태
+  const [formProjectId, setFormProjectId] = useState<number|null>(null);
+  const [formProjectName, setFormProjectName] = useState('');
+  const [formOrderDate, setFormOrderDate] = useState(new Date().toISOString().slice(0,10));
+  const [formDeliveryDate, setFormDeliveryDate] = useState('');
+  const [formNotes, setFormNotes] = useState('');
+  const [formItems, setFormItems] = useState<Array<{
+    item_type: string; diameter_mm: number|null; height_spec: string|null;
+    item_label: string; qty_ordered: number; fn_lot_number: string;
+  }>>([]);
+
+  // 품목 선택 상태
+  const [addType, setAddType] = useState('SLEEVE');
+  const [addDiam, setAddDiam] = useState(100);
+  const [addHeight, setAddHeight] = useState('');
+  const [addQty, setAddQty] = useState('');
+  const [addFnLot, setAddFnLot] = useState('');
+
+  const SLEEVE_HEIGHTS = ['몸통', '150H', '170H', '180H', '190H', '200H', '210H', '240H', '250H', '260H'];
+  const ITEM_TYPES = [
+    { value: 'SLEEVE', label: '일체형슬리브' },
+    { value: 'SHIELD', label: '보호철판' },
+    { value: 'BOLT', label: '볼트,너트,와샤' },
+    { value: 'CEMENT_KR', label: '한국카멕트' },
+    { value: 'CEMENT_HC', label: '화창카멕트' },
+    { value: 'SHEET_CUT', label: '시트(재단)' },
+    { value: 'SHEET_EXT', label: '시트(압출)' },
+  ];
+
+  const makeLabel = (type: string, diam: number, height: string) => {
+    const t = ITEM_TYPES.find(x => x.value === type)?.label || type;
+    if (type === 'SLEEVE') return t + ' ' + diam + '파이 ' + (height && height !== '몸통' ? height : '몸통');
+    if (['SHIELD','SHEET_CUT'].includes(type)) return `${t} ${diam}파이`;
+    return t;
+  };
+
+  const fetchOrders = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await api.get<{ data: FnPurchaseOrder[] }>('/fn-purchase-orders');
+      setOrders(r.data || []);
+    } catch { setOrders([]); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
+
+  const handleAddItem = () => {
+    if (!addQty || Number(addQty) <= 0) { toast.error('수량을 입력하세요'); return; }
+    const needsDiam = ['SLEEVE','SHIELD','SHEET_CUT'].includes(addType);
+    const needsHeight = addType === 'SLEEVE' && addDiam === 100;
+    setFormItems(prev => [...prev, {
+      item_type: addType,
+      diameter_mm: needsDiam ? addDiam : null,
+      height_spec: needsHeight ? (addHeight || '몸통') : null,
+      item_label: makeLabel(addType, addDiam, addHeight),
+      qty_ordered: Number(addQty),
+      fn_lot_number: addFnLot,
+    }]);
+    setAddQty(''); setAddFnLot('');
+  };
+
+  const handleSubmit = async () => {
+    if (!formItems.length) { toast.error('품목을 추가하세요'); return; }
+    try {
+      await api.post('/fn-purchase-orders', {
+        project_id: formProjectId,
+        project_name: formProjectName || projects.find(p=>p.project_id===formProjectId)?.project_name || null,
+        order_date: formOrderDate || null,
+        delivery_date: formDeliveryDate || null,
+        notes: formNotes || null,
+        items: formItems,
+      });
+      toast.success('FN 발주서 등록 완료!');
+      setShowModal(false);
+      setFormItems([]);
+      fetchOrders();
+    } catch { toast.error('등록 실패'); }
+  };
+
+  const statusBadge = (s: string) => {
+    const m: Record<string,string> = {
+      ORDERED: 'bg-blue-100 text-blue-800',
+      PARTIAL: 'bg-amber-100 text-amber-800',
+      RECEIVED: 'bg-emerald-100 text-emerald-800',
+      CANCELLED: 'bg-slate-100 text-slate-500',
+    };
+    const l: Record<string,string> = { ORDERED:'발주완료', PARTIAL:'부분수령', RECEIVED:'전체수령', CANCELLED:'취소' };
+    return <span className={`px-2 py-0.5 rounded text-xs font-bold ${m[s]||'bg-slate-100'}`}>{l[s]||s}</span>;
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* 헤더 */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-bold text-slate-800">⚡ 에프엔테크 발주 관리</h3>
+          <p className="text-sm text-slate-500 mt-0.5">일체형슬리브 · 보호철판 · 볼트너트와샤 · 카멕트 · 시트 발주 등록 및 수령 현황</p>
+        </div>
+        <button onClick={() => setShowModal(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition shadow">
+          <PlusCircle className="h-4 w-4" /> 신규 발주 등록
+        </button>
+      </div>
+
+      {/* 목록 */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-slate-600 text-xs">
+            <tr>
+              <th className="px-4 py-3 text-left">발주일</th>
+              <th className="px-4 py-3 text-left">납기일</th>
+              <th className="px-4 py-3 text-left">현장/프로젝트</th>
+              <th className="px-4 py-3 text-center">품목수</th>
+              <th className="px-4 py-3 text-right">발주/수령</th>
+              <th className="px-4 py-3 text-center">상태</th>
+              <th className="px-4 py-3 text-left">비고</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {loading ? (
+              <tr><td colSpan={7} className="py-8 text-center text-slate-400">로딩 중...</td></tr>
+            ) : orders.length === 0 ? (
+              <tr><td colSpan={7} className="py-8 text-center text-slate-400">등록된 발주서가 없습니다.</td></tr>
+            ) : orders.map(o => (
+              <tr key={o.fn_po_id} className="hover:bg-slate-50/60">
+                <td className="px-4 py-3 text-xs font-mono text-slate-500">{o.order_date?.slice(0,10)||'-'}</td>
+                <td className="px-4 py-3 text-xs font-mono text-slate-500">{o.delivery_date?.slice(0,10)||'-'}</td>
+                <td className="px-4 py-3 font-medium">{o.project_name||'미지정'}</td>
+                <td className="px-4 py-3 text-center">{o.item_count}종</td>
+                <td className="px-4 py-3 text-right font-mono">
+                  {Number(o.total_qty_received).toLocaleString()} / {Number(o.total_qty_ordered).toLocaleString()} EA
+                </td>
+                <td className="px-4 py-3 text-center">{statusBadge(o.status)}</td>
+                <td className="px-4 py-3 text-xs text-slate-500 truncate max-w-[160px]">{o.notes||''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* 신규 등록 모달 */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center px-6 py-4 border-b bg-slate-50">
+              <h3 className="font-bold text-slate-800">⚡ 에프엔테크 발주서 등록</h3>
+              <button onClick={() => { setShowModal(false); setFormItems([]); }} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+            <div className="p-6 space-y-4 text-sm">
+              {/* 기본정보 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">발주일</label>
+                  <input type="date" value={formOrderDate} onChange={e=>setFormOrderDate(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">납기 요청일</label>
+                  <input type="date" value={formDeliveryDate} onChange={e=>setFormDeliveryDate(e.target.value)}
+                    className="w-full border rounded-lg px-3 py-2 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">현장/프로젝트 연결</label>
+                <select value={formProjectId ?? ''} onChange={e => setFormProjectId(e.target.value ? Number(e.target.value) : null)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm">
+                  <option value="">-- 직접 입력 --</option>
+                  {projects.map(p => <option key={p.project_id} value={p.project_id}>[{p.project_code}] {p.project_name}</option>)}
+                </select>
+                {!formProjectId && (
+                  <input value={formProjectName} onChange={e=>setFormProjectName(e.target.value)}
+                    placeholder="현장명 직접 입력" className="w-full border rounded-lg px-3 py-2 text-sm mt-1" />
+                )}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">비고</label>
+                <textarea value={formNotes} onChange={e=>setFormNotes(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm" rows={2} />
+              </div>
+
+              {/* 품목 추가 */}
+              <div className="border rounded-xl p-4 bg-slate-50 space-y-3">
+                <p className="text-xs font-bold text-slate-700">+ 품목 추가</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-slate-500 mb-0.5 block">품목 종류</label>
+                    <select value={addType} onChange={e=>{setAddType(e.target.value);setAddHeight('');}} className="w-full border rounded px-2 py-1.5 text-sm">
+                      {ITEM_TYPES.map(t=><option key={t.value} value={t.value}>{t.label}</option>)}
+                    </select>
+                  </div>
+                  {['SLEEVE','SHIELD','SHEET_CUT'].includes(addType) && (
+                    <div>
+                      <label className="text-xs text-slate-500 mb-0.5 block">파이</label>
+                      <select value={addDiam} onChange={e=>setAddDiam(Number(e.target.value))} className="w-full border rounded px-2 py-1.5 text-sm">
+                        <option value={100}>100파이</option>
+                        <option value={75}>75파이</option>
+                        <option value={50}>50파이</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+                {addType === 'SLEEVE' && addDiam === 100 && (
+                  <div>
+                    <label className="text-xs text-slate-500 mb-0.5 block">높이 규격</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SLEEVE_HEIGHTS.map(h => (
+                        <button key={h} type="button"
+                          onClick={() => setAddHeight(h)}
+                          className={`px-2.5 py-1 rounded text-xs font-medium border transition ${
+                            addHeight===h ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white border-slate-300 text-slate-600 hover:border-emerald-400'
+                          }`}>{h}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-xs text-slate-500 mb-0.5 block">발주 수량 (EA)</label>
+                    <input type="number" value={addQty} onChange={e=>setAddQty(e.target.value)}
+                      className="w-full border rounded px-2 py-1.5 text-sm font-mono" placeholder="0" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 mb-0.5 block">FN 납품 LOT (선택)</label>
+                    <input value={addFnLot} onChange={e=>setAddFnLot(e.target.value)}
+                      className="w-full border rounded px-2 py-1.5 text-sm font-mono" placeholder="예: 260715-FN-100" />
+                  </div>
+                </div>
+                <button type="button" onClick={handleAddItem}
+                  className="w-full py-1.5 bg-slate-700 text-white rounded text-sm font-medium hover:bg-slate-600">
+                  + 품목 추가
+                </button>
+              </div>
+
+              {/* 추가된 품목 목록 */}
+              {formItems.length > 0 && (
+                <div className="border rounded-xl overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-100">
+                      <tr>
+                        <th className="px-3 py-2 text-left">품목</th>
+                        <th className="px-3 py-2 text-right">수량</th>
+                        <th className="px-3 py-2 text-left">FN LOT</th>
+                        <th className="px-3 py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {formItems.map((it, i) => (
+                        <tr key={i}>
+                          <td className="px-3 py-2 font-medium">{it.item_label}</td>
+                          <td className="px-3 py-2 text-right font-mono">{it.qty_ordered.toLocaleString()} EA</td>
+                          <td className="px-3 py-2 font-mono text-slate-500">{it.fn_lot_number||'-'}</td>
+                          <td className="px-3 py-2 text-center">
+                            <button onClick={()=>setFormItems(prev=>prev.filter((_,j)=>j!==i))}
+                              className="text-red-400 hover:text-red-600 text-xs">✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 px-6 py-4 border-t bg-slate-50">
+              <button onClick={()=>{setShowModal(false);setFormItems([]);}} className="px-4 py-2 border rounded-lg text-sm hover:bg-slate-50">취소</button>
+              <button onClick={handleSubmit} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">
+                발주서 등록
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // 메인 페이지
 // ────────────────────────────────────────────────────────────────────────────
 export default function PurchaseOrdersPage() {
-  const [activeTab, setActiveTab] = useState<'manage' | 'socket'>('manage');
+  const [activeTab, setActiveTab] = useState<'manage' | 'socket' | 'fn'>('manage');
   const [list, setList] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [parsing, setParsing] = useState(false);
@@ -1839,10 +2146,23 @@ export default function PurchaseOrdersPage() {
           <Wrench className="h-4 w-4" />
           소켓류발주
         </button>
+        <button
+          onClick={() => setActiveTab('fn')}
+          className={cn(
+            'flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-t-xl border border-b-0 transition-colors',
+            activeTab === 'fn'
+              ? 'bg-white text-emerald-600 border-gray-200'
+              : 'bg-gray-100 text-gray-500 hover:bg-gray-200 border-transparent'
+          )}
+        >
+          ⚡ 에프엔테크 발주
+        </button>
       </div>
 
       <div className="flex-1 overflow-auto p-6 space-y-6">
-        {activeTab === 'socket' ? (
+        {activeTab === 'fn' ? (
+          <FnPurchaseTab projects={projects} />
+        ) : activeTab === 'socket' ? (
           <SocketOrderTab list={list} />
         ) : (
         <>
@@ -2006,7 +2326,7 @@ export default function PurchaseOrdersPage() {
         )}
 
         {/* 삭제된 발주서 복원 패널 */}
-        {activeTab !== 'socket' && (
+        {activeTab === 'manage' && (
           <div className="bg-white rounded-2xl shadow-sm border border-red-100">
             <button
               onClick={() => {

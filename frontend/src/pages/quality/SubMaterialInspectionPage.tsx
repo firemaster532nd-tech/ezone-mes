@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import { Plus } from 'lucide-react';
 
 // ─── 탭 타입 (D122/D124/D125/D127 성적서 기준) ────────────────────────────
-type SubTab = '세라믹울' | '그라스울-롤' | '그라스울-보드' | '실란트' | '고무패킹';
+type SubTab = '세라믹울' | '그라스울-롤' | '그라스울-보드' | '실란트';
 
 const TAB_INFO: Record<SubTab, {
   formCode: string;
@@ -68,18 +68,6 @@ const TAB_INFO: Record<SubTab, {
     inspector: '김정용',
     sizes: ['실리콘 실란트 (투명)', '실리콘 실란트 (회색)', '방화 실란트'],
   },
-  '고무패킹': {
-    formCode: 'D130',
-    abbrev: 'PK',
-    unit: 'EA',
-    measureLabel: '두께',
-    measureUnit: 'mm',
-    minVal: 2.0,
-    maxVal: 4.0,
-    step: 0.01,
-    inspector: '김정용',
-    sizes: ['상부 고무패킹', '하부 고무패킹'],
-  },
 };
 
 const TAB_COLOR: Record<SubTab, string> = {
@@ -87,7 +75,6 @@ const TAB_COLOR: Record<SubTab, string> = {
   '그라스울-롤': 'bg-yellow-600 text-white',
   '그라스울-보드': 'bg-lime-600 text-white',
   '실란트':      'bg-blue-600 text-white',
-  '고무패킹':    'bg-purple-600 text-white',
 };
 
 const LOCATION_OPTIONS = [
@@ -231,7 +218,7 @@ export function SubMaterialInspectionPage() {
     <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
       <PageHeader
         title="📦 부자재 인수검사"
-        description="세라믹울(D124) · 그라스울(D122/D127) · 실란트(D125) · 고무패킹(D130) 인수검사 성적서 등록"
+        description="세라믹울(D124) · 그라스울-롤(D122) · 그라스울-보드(D127) · 실란트(D125) 인수검사 성적서 등록"
       >
         <button
           onClick={() => setShowModal(true)}

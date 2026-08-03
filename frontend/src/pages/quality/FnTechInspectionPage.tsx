@@ -56,6 +56,13 @@ const LBL = 'block text-xs font-semibold text-slate-400 mb-1';
 export function FnTechInspectionPage() {
   const [tab, setTab] = useState<FnTab>('일체형슬리브');
   const [selectedSize, setSelectedSize] = useState('');
+  const [sleeveDiam, setSleeveDiam] = useState<number>(100);
+  const [sleeveHeight, setSleeveHeight] = useState('몸통');
+  const SLEEVE_HEIGHTS_100 = ['몸통', '150H', '170H', '180H', '190H', '200H', '210H', '240H', '250H', '260H'];
+  const [pendingOrders, setPendingOrders] = useState<any[]>([]);
+  const [showPOModal, setShowPOModal] = useState(false);
+  const [linkedPoItemId, setLinkedPoItemId] = useState<number | null>(null);
+
   const [supplierLot, setSupplierLot] = useState('');
   const [lotNumber, setLotNumber] = useState('');
   const [qty, setQty] = useState('');
@@ -91,7 +98,7 @@ export function FnTechInspectionPage() {
   // 측정값 변경 시 자동 판정
   useEffect(() => {
     autoJudge();
-  }, [measurements, visualOk, certOk, selectedSize]);
+  }, [measurements, visualOk, certOk, selectedSize, sleeveDiam]);
 
   const fetchNextLot = async (t: FnTab) => {
     try {
@@ -114,6 +121,25 @@ export function FnTechInspectionPage() {
     } catch { setHistory([]); }
   };
 
+  const fetchPendingOrders = async () => {
+    try {
+      const r = await api.get<{ data: any[] }>('/fn-purchase-orders/pending');
+      setPendingOrders(r.data || []);
+    } catch { setPendingOrders([]); }
+  };
+
+  const handleSelectPO = (item: any) => {
+    if (item.item_type === 'SLEEVE') {
+      setTab('일체형슬리브');
+      setSleeveDiam(item.diameter_mm || 100);
+      setSleeveHeight(item.height_spec || '몸통');
+    }
+    setQty(String(item.qty_ordered - item.qty_received));
+    if (item.fn_lot_number) setSupplierLot(item.fn_lot_number);
+    setShowPOModal(false);
+    setLinkedPoItemId(item.fn_po_item_id);
+  };
+
   useEffect(() => {
     fetchEquipment();
     fetchHistory();
@@ -126,7 +152,8 @@ export function FnTechInspectionPage() {
   const getMeasure = (field: string, n: string) => measurements[`${field}_${n}`] || '';
 
   const autoJudge = () => {
-    if (!visualOk || !certOk || !selectedSize) { setResult(''); return; }
+    const isSizeSelected = tab === '일체형슬리브' ? !!sleeveDiam : !!selectedSize;
+    if (!visualOk || !certOk || !isSizeSelected) { setResult(''); return; }
     const fields = spec.fields;
     let allPass = true;
     for (const f of fields) {
@@ -141,18 +168,23 @@ export function FnTechInspectionPage() {
   };
 
   const handleSubmit = async () => {
-    if (!selectedSize) { toast.error('규격을 선택해 주세요.'); return; }
+    const isSizeSelected = tab === '일체형슬리브' ? !!sleeveDiam : !!selectedSize;
+    if (!isSizeSelected) { toast.error('규격을 선택해 주세요.'); return; }
     if (!qty) { toast.error('수량을 입력해 주세요.'); return; }
     if (!lotNumber) { toast.error('LOT 번호가 없습니다.'); return; }
     if (result !== '합격') { toast.error('합격 판정 후 등록 가능합니다.'); return; }
 
     try {
+      const finalItemName = tab === '일체형슬리브' 
+        ? `${tab} ${sleeveDiam}파이${sleeveDiam === 100 ? ' ' + sleeveHeight : ''}`
+        : `${tab} ${selectedSize}`;
+
       // 검사 성적서 등록
       await api.post('/inspections', {
         insp_type: 'INCOMING',
         category: 'FN',
         form_code: FORM_CODE[tab],
-        item_name: `${tab} ${selectedSize}`,
+        item_name: finalItemName,
         inspector,
         supplier_lot: supplierLot,
         lot_number: lotNumber,
@@ -168,13 +200,21 @@ export function FnTechInspectionPage() {
       await api.post('/material-lots', {
         lot_number: lotNumber,
         category: 'FN',
-        item_name: `${tab} ${selectedSize}`,
+        item_name: finalItemName,
         unit: '개',
         qty_current: parseFloat(qty),
         supplier_lot: supplierLot,
         location,
         received_date: new Date().toISOString().slice(0, 10),
       });
+
+      if (linkedPoItemId) {
+        await api.patch(`/fn-purchase-orders/items/${linkedPoItemId}/receive`, {
+          qty_received: parseFloat(qty),
+          our_lot_number: lotNumber,
+        });
+        setLinkedPoItemId(null);
+      }
 
       toast.success(`✅ ${tab} [${lotNumber}] 합격 등록 완료! FN테크 재고 반영`);
       await fetchNextLot(tab);
@@ -216,16 +256,42 @@ export function FnTechInspectionPage() {
 
         {/* 입력 카드 */}
         <div className="bg-slate-800 rounded-2xl border border-slate-700 p-4 space-y-4">
+          <button onClick={async () => { await fetchPendingOrders(); setShowPOModal(true); }}
+            className="w-full py-2 bg-blue-700 hover:bg-blue-600 text-white rounded-xl text-sm font-bold mb-2 transition">
+            📋 미수령 발주서 불러오기
+          </button>
+
           <p className="text-sm font-bold text-slate-300">▼ 입고 정보</p>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={LBL}>규격 *</label>
-              <select className={SEL} value={selectedSize} onChange={e => setSelectedSize(e.target.value)}>
-                <option value="">선택</option>
-                {spec.sizes.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
+            {tab === '일체형슬리브' ? (
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className={LBL}>파이 *</label>
+                  <select className={SEL} value={sleeveDiam} onChange={e => setSleeveDiam(Number(e.target.value))}>
+                    <option value={50}>50파이</option>
+                    <option value={75}>75파이</option>
+                    <option value={100}>100파이</option>
+                  </select>
+                </div>
+                {sleeveDiam === 100 && (
+                  <div className="flex-1">
+                    <label className={LBL}>높이 *</label>
+                    <select className={SEL} value={sleeveHeight} onChange={e => setSleeveHeight(e.target.value)}>
+                      {SLEEVE_HEIGHTS_100.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div>
+                <label className={LBL}>규격 *</label>
+                <select className={SEL} value={selectedSize} onChange={e => setSelectedSize(e.target.value)}>
+                  <option value="">선택</option>
+                  {spec.sizes.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            )}
             <div>
               <label className={LBL}>LOT 번호 (자동채번) *</label>
               <input className={`${INP} font-mono font-bold text-emerald-400`} value={lotNumber} onChange={e => setLotNumber(e.target.value)} placeholder="자동채번..." />
@@ -387,6 +453,30 @@ export function FnTechInspectionPage() {
           </div>
         </div>
       </div>
+
+      {showPOModal && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+          <div className="bg-slate-800 rounded-xl w-full max-w-lg max-h-[70vh] overflow-y-auto border border-slate-600">
+            <div className="flex justify-between items-center px-4 py-3 border-b border-slate-700">
+              <h4 className="text-white font-bold text-sm">📋 미수령 FN 발주 목록</h4>
+              <button onClick={()=>setShowPOModal(false)} className="text-slate-400">✕</button>
+            </div>
+            {pendingOrders.length === 0 ? (
+              <p className="text-slate-400 text-center py-8 text-sm">미수령 발주 없음</p>
+            ) : pendingOrders.map(it => (
+              <button key={it.fn_po_item_id} onClick={()=>handleSelectPO(it)}
+                className="w-full text-left px-4 py-3 border-b border-slate-700 hover:bg-slate-700 transition">
+                <div className="text-white text-sm font-medium">{it.item_label || `${it.item_type} ${it.diameter_mm||''}파이 ${it.height_spec||''}`}</div>
+                <div className="text-slate-400 text-xs mt-0.5">
+                  발주 {it.qty_ordered} / 수령 {it.qty_received} / 미수령 {it.qty_ordered - it.qty_received} EA
+                  {it.fn_lot_number && ` · FN LOT: ${it.fn_lot_number}`}
+                </div>
+                <div className="text-slate-500 text-xs">{it.project_name||''} · 납기: {it.delivery_date?.slice(0,10)||'-'}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
