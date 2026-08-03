@@ -33,6 +33,8 @@ const LBL = 'block text-xs font-semibold text-slate-400 mb-1';
 export function RawMaterialInspectionPage() {
   const [activeTab, setActiveTab] = useState<TabType>('세라믹울');
   const [history, setHistory] = useState<any[]>([]);
+  const [equipment, setEquipment] = useState<any[]>([]);
+  const [selectedEquipment, setSelectedEquipment] = useState('');
 
   const defaultForm: FormState = {
     density: '', thickness: '', width_mm: '', length_mm: '7400',
@@ -59,10 +61,18 @@ export function RawMaterialInspectionPage() {
     } catch { setHistory([]); }
   };
 
+  const fetchEquipment = async () => {
+    try {
+      const res = await api.get<{ data: any[] }>('/equipment/inspection');
+      setEquipment(res.data || []);
+    } catch { /* 무시 */ }
+  };
+
   useEffect(() => {
     setForm({ ...defaultForm, length_mm: activeTab === '세라믹울' ? '7400' : '' });
     fetchNextLot(activeTab);
     fetchHistory(activeTab);
+    fetchEquipment();
   }, [activeTab]);
 
   // 자동 판정

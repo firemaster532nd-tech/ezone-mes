@@ -6,11 +6,13 @@ import { Box, Plus, CheckCircle, ArrowRight, Zap } from 'lucide-react';
 export function SubMaterialInspectionPage() {
   const [inspections, setInspections] = useState<any[]>([]);
   const [criteria, setCriteria] = useState<any[]>([]);
+  const [equipment, setEquipment] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
   // 폼 상태 (부자재 전용 + FN테크 슬리브/보호철판)
   const [selectedCriteria, setSelectedCriteria] = useState('');
+  const [selectedEquipment, setSelectedEquipment] = useState('');
   const [supplierLot, setSupplierLot] = useState('');
   const [qty, setQty] = useState<number>(100);
   const [inspector, setInspector] = useState('최진영');
@@ -23,12 +25,14 @@ export function SubMaterialInspectionPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [inspRes, critRes] = await Promise.all([
+      const [inspRes, critRes, eqRes] = await Promise.all([
         api.get<{ data: any[] }>('/inspections?insp_type=INCOMING&category=SM'),
-        api.get<{ data: any[] }>('/inspection-criteria?category=SUB')
+        api.get<{ data: any[] }>('/inspection-criteria?category=SUB'),
+        api.get<{ data: any[] }>('/equipment/inspection')
       ]);
       setInspections(inspRes.data || []);
       setCriteria(critRes.data || []);
+      setEquipment(eqRes.data || []);
     } catch {
       setInspections([]);
     } finally {
@@ -175,6 +179,23 @@ export function SubMaterialInspectionPage() {
                 </select>
               </div>
 
+              <div>
+                <label className="block font-medium text-slate-700 mb-1">사용 검사장비 (검사설비 관리 연동)</label>
+                <select
+                  value={selectedEquipment}
+                  onChange={e => setSelectedEquipment(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                >
+                  <option value="">-- 검사장비 선택 --</option>
+                  {equipment.map(eq => (
+                    <option key={eq.equipment_id} value={eq.manage_no}>
+                      [{eq.manage_no}] {eq.equipment_name} — {eq.capacity_spec}
+                      {eq.calibration_status === 'EXPIRED' ? ' ⚠️만료' : eq.calibration_status === 'EXPIRING' ? ' ⚡임박' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-medium text-slate-700 mb-1">공급사 LOT</label>
@@ -199,21 +220,41 @@ export function SubMaterialInspectionPage() {
               </div>
 
               <div>
-                <label className="block font-medium text-slate-700 mb-1">합격 시 입고 적재 랙 위치 (A1~U3)</label>
+                <label className="block font-medium text-slate-700 mb-1">합격 시 입고 적재 위치</label>
                 <select
                   value={targetLocation}
                   onChange={e => setTargetLocation(e.target.value)}
                   className="w-full border rounded-lg px-3 py-2 text-sm font-mono font-bold focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 >
-                  <optgroup label="1구역 (O1~A3 15칸 × 3층)">
+                  <optgroup label="1구역 — 메인 랙 (O→A, 15칸 × 3단)">
                     {['O','N','M','L','K','J','I','H','G','F','E','D','C','B','A'].flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
                       <option key={c} value={c}>{c} 랙 셀</option>
                     ))}
                   </optgroup>
-                  <optgroup label="2구역 (P1~R3 3칸 × 3층)">
+                  <optgroup label="2구역 — 보조 랙 (P→R, 3칸 × 3단)">
                     {['P','Q','R'].flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
                       <option key={c} value={c}>{c} 랙 셀</option>
                     ))}
+                  </optgroup>
+                  <optgroup label="3구역 — 부자재 랙 (S→U, 3칸 × 3단)">
+                    {['S','T','U'].flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
+                      <option key={c} value={c}>{c} 랙 셀</option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="현장 위치 — 1공장">
+                    <option value="FIELD-1F-MAIN">1공장 메인</option>
+                    <option value="FIELD-1F-MAT">1공장 창고</option>
+                    <option value="FIELD-1F-SUB-MAT">1공장 부자재실</option>
+                    <option value="FIELD-1F-TENT">1공장 천막안</option>
+                    <option value="FIELD-1F-RACK-FRONT">1공장 렉앞</option>
+                  </optgroup>
+                  <optgroup label="현장 위치 — 2공장">
+                    <option value="FIELD-2F-CUTTING">2공장 재단실방향</option>
+                    <option value="FIELD-2F-CENTER">2공장 중앙 (공장중앙)</option>
+                    <option value="FIELD-2F-RACKS">2공장 랙쪽 (공장랙쪽)</option>
+                    <option value="FIELD-2F-RACK-FRONT">2공장 렉앞</option>
+                    <option value="FIELD-2F-PAINTING">2공장 도색실</option>
+                    <option value="FIELD-2F-TENT">2공장 천막안</option>
                   </optgroup>
                 </select>
               </div>
