@@ -103,6 +103,11 @@ import AccountingPLPage from '@/pages/accounting/AccountingPLPage';
 import SupportPage from '@/pages/support/SupportPage';
 import { MobileHomePage } from '@/pages/MobileHomePage';
 import { MobileMorePage } from '@/pages/MobileMorePage';
+import { QuotationEntryPage } from '@/pages/sales/QuotationEntryPage';
+import { SalesDeliveryPage } from '@/pages/sales/SalesDeliveryPage';
+import { SalesDeliveryEntryPage } from '@/pages/sales/SalesDeliveryEntryPage';
+import { SalesStatusPage } from '@/pages/sales/SalesStatusPage';
+import { TaxInvoicePage } from '@/pages/sales/TaxInvoicePage';
 
 
 // ─── 라우트 에러 바운더리 ───
@@ -190,8 +195,24 @@ export const router = createBrowserRouter([
       { path: 'orders/material-orders', element: <MaterialOrdersPage /> },
       { path: 'orders/socket-order-wait', element: <SocketOrderWaitPage /> },
       { path: 'quality/socket-incoming/:soId', element: <SocketIncomingDetailPage /> },
-      { path: 'orders/quotations', element: <QuotationPage /> },
-      { path: 'orders/unordered', element: <UnorderedPage /> },
+      { path: 'orders/quotations', element: <Navigate to="/sales/quotations" replace /> },
+      { path: 'orders/unordered', element: <Navigate to="/sales/quotations/unordered" replace /> },
+      { path: 'orders/quotations/print/:id', element: <QuotationPrintPage /> },
+      // 영업 - 견적 (신규 경로)
+      { path: 'sales/quotations', element: <QuotationPage /> },
+      { path: 'sales/quotations/entry', element: <QuotationEntryPage /> },
+      { path: 'sales/quotations/entry/:id', element: <QuotationEntryPage /> },
+      { path: 'sales/quotations/status', element: <SalesStatusPage type="quotation" /> },
+      { path: 'sales/quotations/unordered', element: <UnorderedPage /> },
+      // 영업 - 판매
+      { path: 'sales/delivery', element: <SalesDeliveryPage /> },
+      { path: 'sales/delivery/entry', element: <SalesDeliveryEntryPage /> },
+      { path: 'sales/delivery/entry/:id', element: <SalesDeliveryEntryPage /> },
+      { path: 'sales/delivery/status', element: <SalesStatusPage type="delivery" /> },
+      { path: 'sales/delivery/accounting', element: <SalesDeliveryPage mode="accounting" /> },
+      // 세금계산서
+      { path: 'sales/tax-invoice', element: <TaxInvoicePage /> },
+      { path: 'sales/tax-invoice/:id', element: <TaxInvoicePage /> },
       { path: 'orders/quotations/print/:id', element: <QuotationPrintPage /> },
       { path: 'orders/projects', element: <ProjectPage /> },
       { path: 'orders/purchase-orders', element: <PurchaseOrdersPage /> },

@@ -1,11 +1,11 @@
-﻿import { NavLink, useLocation, useNavigate, Link } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate, Link } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, Package, ShieldCheck,
   Truck, Settings, Factory, Database,
   Wrench, FlaskConical, Scissors, Box, Layers,
   Hammer, Inbox, FileText, ShoppingCart, Megaphone, ShieldAlert,
   CheckCircle, TrendingUp, HardHat, Boxes, Monitor,
-  HeadphonesIcon, Search, X, ChevronDown,
+  HeadphonesIcon, Search, X, ChevronDown, LineChart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState, useEffect, useRef, useMemo } from 'react';
@@ -48,12 +48,24 @@ export const shopTopGroups: TopNavGroup[] = [
     children: [
       { label: '현장별 프로젝트', path: '/orders/projects' },
       { label: '수주 관리 / BOM', path: '/orders' },
-      { label: '견적서 등록/관리', path: '/orders/quotations' },
       { label: '발주서 관리', path: '/orders/purchase-orders' },
       { label: '자재 발주서', path: '/orders/purchase-requests' },
       { label: '주문내역 → 입고신청', path: '/orders/material-orders' },
-      { label: '미주문현황 조회', path: '/orders/unordered' },
       { label: '자재발주대기', path: '/orders/socket-order-wait' },
+    ],
+  },
+  {
+    key: 'sales', label: '영업', Icon: LineChart,
+    children: [
+      { label: '견적서 입력', path: '/sales/quotations/entry', step: '견적' },
+      { label: '견적서 조회', path: '/sales/quotations', step: '견적' },
+      { label: '견적서 현황', path: '/sales/quotations/status', step: '견적' },
+      { label: '미수주현황', path: '/sales/quotations/unordered', step: '견적' },
+      { label: '판매 입력', path: '/sales/delivery/entry', step: '판매' },
+      { label: '판매 조회', path: '/sales/delivery', step: '판매' },
+      { label: '판매 현황', path: '/sales/delivery/status', step: '판매' },
+      { label: '판매 일괄회계반영', path: '/sales/delivery/accounting', step: '판매' },
+      { label: '세금계산서 발행/조회', path: '/sales/tax-invoice', step: '세금' },
     ],
   },
   {
@@ -183,12 +195,24 @@ export const adminTopGroups: TopNavGroup[] = [
     children: [
       { label: '현장별 프로젝트', path: '/orders/projects' },
       { label: '수주 관리 / BOM', path: '/orders' },
-      { label: '견적서 등록/관리', path: '/orders/quotations' },
       { label: '발주서 관리', path: '/orders/purchase-orders' },
       { label: '자재 발주서', path: '/orders/purchase-requests' },
       { label: '주문내역 → 입고신청', path: '/orders/material-orders' },
-      { label: '미주문현황 조회', path: '/orders/unordered' },
       { label: '자재발주대기', path: '/orders/socket-order-wait' },
+    ],
+  },
+  {
+    key: 'sales', label: '영업', Icon: LineChart,
+    children: [
+      { label: '견적서 입력', path: '/sales/quotations/entry', step: '견적' },
+      { label: '견적서 조회', path: '/sales/quotations', step: '견적' },
+      { label: '견적서 현황', path: '/sales/quotations/status', step: '견적' },
+      { label: '미수주현황', path: '/sales/quotations/unordered', step: '견적' },
+      { label: '판매 입력', path: '/sales/delivery/entry', step: '판매' },
+      { label: '판매 조회', path: '/sales/delivery', step: '판매' },
+      { label: '판매 현황', path: '/sales/delivery/status', step: '판매' },
+      { label: '판매 일괄회계반영', path: '/sales/delivery/accounting', step: '판매' },
+      { label: '세금계산서 발행/조회', path: '/sales/tax-invoice', step: '세금' },
     ],
   },
   {

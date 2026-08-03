@@ -46,6 +46,7 @@ import { quotationRoutes } from './routes/quotations.js';
 import { projectRoutes } from './routes/projects.js';
 import { purchaseOrderRoutes } from './routes/purchase-orders.js';
 import { socketWorkOrderRoutes } from './routes/socket-work-orders.js';
+import { salesDeliveryRoutes } from './routes/sales-delivery.js';
 import { ecountRoutes } from './routes/ecount.js';
 import { socketOrderRoutes } from './routes/socket-orders.js';
 import { socketStockRoutes } from './routes/socket-stock.js';
@@ -134,6 +135,7 @@ export const initApp = async () => {
   await app.register(projectRoutes);
   await app.register(purchaseOrderRoutes);
   await app.register(socketWorkOrderRoutes);
+  await app.register(salesDeliveryRoutes);
   await app.register(ecountRoutes);
   await app.register(socketOrderRoutes);
   await app.register(socketStockRoutes);
