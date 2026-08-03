@@ -90,6 +90,7 @@ import { RawMaterialInspectionPage } from '@/pages/quality/RawMaterialInspection
 import { SubMaterialInspectionPage } from '@/pages/quality/SubMaterialInspectionPage';
 import { SocketBracketInspectionPage } from '@/pages/quality/SocketBracketInspectionPage';
 import { NonCertifiedInspectionPage } from '@/pages/quality/NonCertifiedInspectionPage';
+import { FnTechInspectionPage } from '@/pages/quality/FnTechInspectionPage';
 import { NonCertifiedStockPage } from '@/pages/inventory/NonCertifiedStockPage';
 import BarcodeScanWmsPage from '@/pages/inventory/BarcodeScanWmsPage';
 import { ForceChangePasswordPage } from '@/pages/auth/ForceChangePasswordPage';
@@ -179,6 +180,7 @@ export const router = createBrowserRouter([
       { path: 'quality/incoming/raw', element: <RawMaterialInspectionPage /> },
       { path: 'quality/incoming/sub', element: <SubMaterialInspectionPage /> },
       { path: 'quality/incoming/socket', element: <SocketBracketInspectionPage /> },
+      { path: 'quality/incoming/fn-tech', element: <FnTechInspectionPage /> },
       { path: 'quality/incoming/non-certified', element: <NonCertifiedInspectionPage /> },
       { path: 'quality/equipment/inspection', element: <InspectionEquipmentPage /> },
       { path: 'quality/equipment/manufacturing', element: <ManufacturingEquipmentPage /> },

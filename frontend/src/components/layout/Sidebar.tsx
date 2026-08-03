@@ -1,4 +1,4 @@
-import { NavLink, useLocation, useNavigate, Link } from 'react-router-dom';
+﻿import { NavLink, useLocation, useNavigate, Link } from 'react-router-dom';
 import {
   LayoutDashboard, ClipboardList, Package, ShieldCheck,
   Truck, Settings, Factory, Database,
@@ -110,6 +110,7 @@ export const shopTopGroups: TopNavGroup[] = [
       { label: '원재료 인수검사', path: '/quality/incoming/raw' },
       { label: '부자재 인수검사', path: '/quality/incoming/sub' },
       { label: '소켓/브라켓 인수검사', path: '/quality/incoming/socket' },
+      { label: '⚡ 에프엔테크 인수검사', path: '/quality/incoming/fn-tech' },
       { label: '비인정제품 인수검사', path: '/quality/incoming/non-certified' },
       { label: '중간검사 (C-701)', path: '/quality/process-inspection' },
       { label: '자주검사', path: '/quality/self-inspection' },
@@ -219,6 +220,7 @@ export const adminTopGroups: TopNavGroup[] = [
       { label: '원재료 인수검사', path: '/quality/incoming/raw' },
       { label: '부자재 인수검사', path: '/quality/incoming/sub' },
       { label: '소켓/브라켓 인수검사', path: '/quality/incoming/socket' },
+      { label: '⚡ 에프엔테크 인수검사', path: '/quality/incoming/fn-tech' },
       { label: '비인정제품 인수검사', path: '/quality/incoming/non-certified' },
       { label: '중간검사 (C-701)', path: '/quality/process-inspection' },
       { label: '자주검사', path: '/quality/self-inspection' },
