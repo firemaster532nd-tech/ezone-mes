@@ -99,7 +99,6 @@ export const shopTopGroups: TopNavGroup[] = [
       { label: '조립생산일지 (J-LOT)', path: '/production/assembly-log' },
       { label: '부자재별 작업지시', path: '/production/sub-work-orders' },
       { label: '에프엔테크 작업지시', path: '/production/fn-work-orders' },
-      { label: '기존 공정 실행', path: '/production/process-execution' },
     ],
   },
   {
@@ -261,9 +260,15 @@ export const adminTopGroups: TopNavGroup[] = [
       { label: '구조체 작업지시', path: '/production/struct-work-orders' },
       { label: '부자재별 작업지시', path: '/production/sub-work-orders' },
       { label: '에프엔테크 작업지시', path: '/production/fn-work-orders' },
-      { label: '공정 실행', path: '/production/process-execution' },
       { label: '생산 현황', path: '/production/production-dashboard' },
       { label: '공정일지', path: '/production/daily-log' },
+    ],
+  },
+  {
+    key: 'process', label: '공정 단계', Icon: Factory,
+    children: [
+      { label: '②~⑤ 통합 4공정 (배합·압출·재단·조립)', path: '/production/process-stages' },
+      { label: '기존 공정 실행 (배합·압출·재단)', path: '/production/process-execution' },
     ],
   },
   {
