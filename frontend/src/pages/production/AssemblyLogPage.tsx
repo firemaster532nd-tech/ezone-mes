@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
-import { ClipboardList, PlusCircle, CheckCircle2, Package, Layers, Calendar, User } from 'lucide-react';
+import { ClipboardList, PlusCircle, CheckCircle2, Package, Layers, Calendar, User, Printer } from 'lucide-react';
 import { LocationPicker } from '@/components/LocationPicker';
+import { OfficialFormPrinter, OfficialFormPrintData } from '@/components/OfficialFormPrinter';
 
 interface AssemblyTypeConfig {
   type: string;
@@ -150,14 +151,10 @@ const GAP_SHEET_SPECS: Record<GapSheetSubType, { value: string; label: string }[
   ],
 };
 
-// 랙 로케이션 옵션 (RACK_OPTIONS는 LocationPicker로 대체 — 이하 미사용)
-
 export function AssemblyLogPage() {
   const [selectedType, setSelectedType] = useState<AssemblyTypeConfig>(ASSEMBLY_TYPES[0]);
   const [assemblyDate, setAssemblyDate] = useState(new Date().toISOString().slice(0, 10));
-  // 플래싱 서브타입 (FZ/FI/FL)
   const [flashingSubType, setFlashingSubType] = useState<'FZ'|'FI'|'FL'>('FZ');
-  // 틈새복합시트 서브타입 (BD_CV1S/BD_RV3S/HTG)
   const [gapSheetSubType, setGapSheetSubType] = useState<GapSheetSubType>('BD_CV1S');
   const [spec, setSpec] = useState('W170×L1000 (t0.5)');
   const [specCustom, setSpecCustom] = useState('');
@@ -167,14 +164,13 @@ export function AssemblyLogPage() {
   const [workerName, setWorkerName] = useState('조립담당자');
   const [remarks, setRemarks] = useState('');
   
-  // 투입 LOT 관리
   const [inputLots, setInputLots] = useState<{ label: string; lot_number: string; qty: number }[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [printData, setPrintData] = useState<OfficialFormPrintData | null>(null);
 
   useEffect(() => {
-    // 공정 타입 변경 시 투입 LOT 폼 및 규격 기본값 초기화
     setInputLots(
       selectedType.inputMaterials.map(matLabel => ({
         label: matLabel,
@@ -182,7 +178,6 @@ export function AssemblyLogPage() {
         qty: producedQty
       }))
     );
-    // 공정별 규격 기본값 초기화
     if (selectedType.type === 'FLASHING') {
       setSpec(FLASHING_SPECS[flashingSubType]?.[0]?.value ?? '');
     } else if (selectedType.type === 'GAP_SHEET') {
@@ -192,7 +187,6 @@ export function AssemblyLogPage() {
     }
   }, [selectedType, producedQty]);
 
-  // 플래싱 서브타입 변경 시 규격 기본값 업데이트
   useEffect(() => {
     if (selectedType.type === 'FLASHING') {
       setSpec(FLASHING_SPECS[flashingSubType]?.[0]?.value ?? '');
@@ -200,7 +194,6 @@ export function AssemblyLogPage() {
     }
   }, [flashingSubType]);
 
-  // 틈새복합시트 서브타입 변경 시 규격 기본값 업데이트
   useEffect(() => {
     if (selectedType.type === 'GAP_SHEET') {
       setSpec(GAP_SHEET_SPECS[gapSheetSubType]?.[0]?.value ?? '');
@@ -217,11 +210,33 @@ export function AssemblyLogPage() {
       setLoading(true);
       const res = await api.get(`/api/production/assembly-logs?type=${selectedType.type}`);
       setLogs(res.data || res || []);
-    } catch (e) {
-      console.error(e);
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const openPrintModal = () => {
+    const finalSpec = (spec === 'CUSTOM') ? specCustom : spec;
+    setPrintData({
+      formNumber: selectedType.formNumber,
+      formTitle: selectedType.name,
+      date: assemblyDate,
+      worker: workerName,
+      stopReason: remarks,
+      items: [
+        {
+          structName: `${selectedType.name} (${finalSpec})`,
+          inputQty,
+          produced_qty: producedQty,
+          jlot_number: `J${assemblyDate.replace(/-/g, '').slice(2)}${selectedType.code}01`,
+          socketLot: inputLots[0]?.lot_number || '',
+          sheetLot: inputLots[1]?.lot_number || '',
+          woolLot: inputLots[2]?.lot_number || '',
+        }
+      ],
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -250,8 +265,7 @@ export function AssemblyLogPage() {
         remarks
       });
 
-      alert(`✅ ${res.message || '조립생산일지 작성 및 반제품 J-LOT가 생성되었습니다!'}`);
-      // 폼 초기화 및 새로고침
+      openPrintModal();
       fetchLogs();
     } catch (err: any) {
       alert(`저장 실패: ${err?.response?.data?.message || err.message}`);
@@ -262,17 +276,29 @@ export function AssemblyLogPage() {
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen">
+      {printData && (
+        <OfficialFormPrinter data={printData} onClose={() => setPrintData(null)} autoPrint={true} />
+      )}
+
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center">
             <ClipboardList className="w-7 h-7 mr-2 text-indigo-600" />
-            전자 조립생산일지 및 반제품 J-LOT 관리
+            전자 조립생산일지 및 반제품 J-LOT 관리 [{selectedType.formNumber}]
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             사규 EZC-C-302 Rev8 제7조 및 실물 서식 기준 (원/부자재 ➔ 조립 ➔ J-LOT 생성 ➔ 반제품 재고 자동 입고 & 랙 적재)
           </p>
         </div>
+        <button
+          type="button"
+          onClick={openPrintModal}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-sm"
+        >
+          <Printer className="w-4 h-4 text-slate-600" />
+          A4 서식 인쇄
+        </button>
       </div>
 
       {/* Assembly Type Selector Tabs */}

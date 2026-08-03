@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { Flame, PlusCircle, CheckCircle2, Calendar, User, Clock, Printer, FileText } from 'lucide-react';
+import { OfficialFormPrinter, OfficialFormPrintData } from '@/components/OfficialFormPrinter';
 
 interface MixBatchItem {
   id: string;
@@ -17,6 +18,7 @@ export function MixLogPage() {
   const [worker, setWorker] = useState<string>('배합작업자');
   const [equipNo, setEquipNo] = useState<string>('EZC-M-09');
   const [stopReason, setStopReason] = useState<string>('');
+  const [printData, setPrintData] = useState<OfficialFormPrintData | null>(null);
 
   const [batches, setBatches] = useState<MixBatchItem[]>([
     {
@@ -75,6 +77,18 @@ export function MixLogPage() {
     setBatches(prev => prev.filter(b => b.id !== id));
   };
 
+  const openPrintModal = () => {
+    setPrintData({
+      formNumber: 'EZC B-201-1',
+      formTitle: '배합 생산일지',
+      date,
+      worker,
+      equipNo,
+      stopReason,
+      items: batches,
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
@@ -91,7 +105,8 @@ export function MixLogPage() {
         stop_reason: stopReason,
       });
 
-      alert(`✅ [EZC B-201-1] 배합생산일지가 저장되었습니다! (총 ${batches.length}건, ${totalKg}kg)`);
+      // 즉시 인쇄 모달 열기
+      openPrintModal();
       fetchRecentLogs();
     } catch (e: any) {
       alert(`❌ 저장 실패: ${e.message || '오류가 발생했습니다.'}`);
@@ -102,6 +117,10 @@ export function MixLogPage() {
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen">
+      {printData && (
+        <OfficialFormPrinter data={printData} onClose={() => setPrintData(null)} autoPrint={true} />
+      )}
+
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -117,7 +136,8 @@ export function MixLogPage() {
           </p>
         </div>
         <button
-          onClick={() => window.print()}
+          type="button"
+          onClick={openPrintModal}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-sm"
         >
           <Printer className="w-4 h-4 text-slate-600" />

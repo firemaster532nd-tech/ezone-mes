@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { Scissors, PlusCircle, CheckCircle2, Package, Layers, Calendar, User, Printer, FileText } from 'lucide-react';
+import { OfficialFormPrinter, OfficialFormPrintData } from '@/components/OfficialFormPrinter';
 
 interface CuttingCategoryConfig {
   id: string;
@@ -67,6 +68,7 @@ export function CuttingLogPage() {
   const [worker, setWorker] = useState<string>('재단작업자');
   const [thickness, setThickness] = useState<number>(25);
   const [density, setDensity] = useState<number>(120);
+  const [printData, setPrintData] = useState<OfficialFormPrintData | null>(null);
 
   // 원자재 인수검사 LOT 목록 (세라믹울 / 그라스울)
   const [materialLots, setMaterialLots] = useState<any[]>([]);
@@ -182,12 +184,22 @@ export function CuttingLogPage() {
     setItems(prev => prev.filter(item => item.id !== id));
   };
 
+  const openPrintModal = () => {
+    setPrintData({
+      formNumber: selectedCategory.formNumber,
+      formTitle: selectedCategory.name,
+      date,
+      worker,
+      items,
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     try {
       const totalQty = items.reduce((acc, cur) => acc + (Number(cur.qty) || 0), 0);
-      const res = await api.post<any>('/process-logs', {
+      await api.post<any>('/process-logs', {
         process_code: 'CUT',
         shift: 'AM',
         worker_names: [worker],
@@ -206,7 +218,8 @@ export function CuttingLogPage() {
         category_name: selectedCategory.name,
       });
 
-      alert(`✅ ${selectedCategory.formNumber} ${selectedCategory.name} 작성이 저장되었습니다! (총 ${totalQty} EA)`);
+      // 즉시 인쇄 모달 열기
+      openPrintModal();
       fetchRecentLogs();
     } catch (e: any) {
       alert(`❌ 저장 실패: ${e.message || '오류가 발생했습니다.'}`);
@@ -217,6 +230,10 @@ export function CuttingLogPage() {
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen">
+      {printData && (
+        <OfficialFormPrinter data={printData} onClose={() => setPrintData(null)} autoPrint={true} />
+      )}
+
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
@@ -229,7 +246,8 @@ export function CuttingLogPage() {
           </p>
         </div>
         <button
-          onClick={() => window.print()}
+          type="button"
+          onClick={openPrintModal}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-sm"
         >
           <Printer className="w-4 h-4 text-slate-600" />
