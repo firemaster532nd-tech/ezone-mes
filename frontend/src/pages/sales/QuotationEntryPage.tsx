@@ -262,7 +262,7 @@ export function QuotationEntryPage() {
       <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/sales/quotations')} className="text-slate-400 hover:text-slate-600">←</button>
-          <h1 className="text-base font-bold text-slate-800">곬적서 {isEdit ? '수정' : '입력'}</h1>
+          <h1 className="text-base font-bold text-slate-800">견적서 {isEdit ? '수정' : '입력'}</h1>
           {status !== '진행중' && (
             <span className={`px-2 py-0.5 rounded text-xs font-bold ${
               status === '주문완료' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'
