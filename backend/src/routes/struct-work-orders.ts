@@ -180,6 +180,7 @@ async function migrateStructWO() {
     CREATE INDEX IF NOT EXISTS idx_struct_woi_wo ON struct_work_order_item(wo_id);
     -- construction_type 컨럼 없으면 추가
     ALTER TABLE struct_work_order_item ADD COLUMN IF NOT EXISTS construction_type VARCHAR(10) DEFAULT 'DOUBLE';
+    ALTER TABLE struct_work_order_item ADD COLUMN IF NOT EXISTS jlot_number VARCHAR(50);
   `);
 }
 
@@ -253,6 +254,27 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
     return { data: { ...wo.rows[0], items: items.rows } };
   });
 
+  // ── GET /api/struct-work-orders/jlot-list ─────────────────────────────
+  app.get('/api/struct-work-orders/jlot-list', { preHandler: requireAuth }, async (req, reply) => {
+    const { po_id } = req.query as any;
+    if (!po_id) return reply.code(400).send({ error: 'po_id 필수' });
+    
+    try {
+      const res = await pool.query(`
+        SELECT woi.jlot_number, woi.product_type, woi.width_mm, woi.height_mm, woi.qty, woi.construction_type
+        FROM struct_work_order_item woi
+        JOIN struct_work_order wo ON wo.wo_id = woi.wo_id
+        WHERE wo.po_id = $1 AND wo.wo_type = 'ASM' AND woi.jlot_number IS NOT NULL AND woi.jlot_number != ''
+        ORDER BY woi.seq_no
+      `, [parseInt(po_id)]);
+      
+      return { data: res.rows };
+    } catch (e) {
+      req.log.error(e, 'Failed to fetch jlot-list');
+      return reply.code(500).send({ error: 'Internal Server Error' });
+    }
+  });
+
   // ── POST /api/struct-work-orders ────────────────────────────────────────
   app.post('/api/struct-work-orders', { preHandler: requireAuth }, async (req, reply) => {
     const {
@@ -311,13 +333,19 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
         else if (wo_type === 'PACKING')      calc_data = { packing_qty: Q };
         // INSPECT, LABEL: calc_data = null
 
+        // ASM 공정인 경우 J-LOT 미리 채번
+        let jlotNum: string | null = null;
+        if (wo_type === 'ASM') {
+          jlotNum = await generateJLot(it.product_type || '', W, H);
+        }
+
         await client.query(`
           INSERT INTO struct_work_order_item
-            (wo_id,seq_no,po_item_id,product_type,width_mm,height_mm,qty,construction_type,calc_data,stock_type,stock_id,remarks)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            (wo_id,seq_no,po_item_id,product_type,width_mm,height_mm,qty,construction_type,calc_data,stock_type,stock_id,remarks,jlot_number)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
         `, [woId, i+1, it.po_item_id||null, it.product_type||null,
             W, H, Q, CT, calc_data ? JSON.stringify(calc_data) : null,
-            it.stock_type||null, it.stock_id||null, it.remarks||null]);
+            it.stock_type||null, it.stock_id||null, it.remarks||null, jlotNum]);
       }
       await client.query('COMMIT');
       return { data: wo.rows[0] };
@@ -522,15 +550,21 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
             };
           }
 
+          // ASM 공정인 경우 J-LOT 미리 채번
+          let jlotNum: string | null = null;
+          if (woType === 'ASM') {
+            jlotNum = await generateJLot(it.product_type || '', W, H);
+          }
+
           await client.query(`
             INSERT INTO struct_work_order_item
               (wo_id,seq_no,po_item_id,product_type,width_mm,height_mm,
-               qty,construction_type,calc_data,remarks)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+               qty,construction_type,calc_data,remarks,jlot_number)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
           `, [woId, i+1, it.po_item_id||null, it.product_type||null,
               W, H, Q, CT,
               calc_data ? JSON.stringify(calc_data) : null,
-              it.remark||null]);
+              it.remark||null, jlotNum]);
         }
 
         created.push({
@@ -662,9 +696,37 @@ export async function structWorkOrderRoutes(app: FastifyInstance) {
 
       for (const ci of (completed_items || [])) {
         const { item_id, completed_qty, stock_type, stock_id, deduct_qty, input_lot_id, input_lot_no } = ci;
+
+        // ── LOT 추적 필수입력 강제 (Sprint 1-4) ──
+        if (completed_qty > 0) {
+          // 1. 재단 공정인 경우: 세라믹울 LOT 필수 검증
+          if (wo.wo_type && (wo.wo_type === 'CUT' || wo.wo_type.startsWith('CUT_'))) {
+            if (!input_lot_no || input_lot_no.trim() === '') {
+              await client.query('ROLLBACK');
+              client.release();
+              return reply.code(400).send({
+                error: 'MISSING_REQUIRED_LOT',
+                message: '재단 공정 완료 시 세라믹울 LOT 번호는 필수 입력 항목입니다.'
+              });
+            }
+          }
+          // 2. 조립 공정인 경우: 글라스울 LOT 필수 검증
+          if (wo.wo_type === 'ASM') {
+            if (!input_lot_no || input_lot_no.trim() === '') {
+              await client.query('ROLLBACK');
+              client.release();
+              return reply.code(400).send({
+                error: 'MISSING_REQUIRED_LOT',
+                message: '조립 공정 완료 시 글라스울 및 소켓 구성자재 LOT 번호는 필수 입력 항목입니다.'
+              });
+            }
+          }
+        }
+
         const itemRow = currentItems.find((r: any) => r.item_id === item_id);
 
         let jlotNum: string | null = itemRow?.jlot_number || null;
+
 
         // ASM(조립) 공정일 경우 J-LOT 자동채번 (아직 없는 경우)
         if (wo.wo_type === 'ASM' && !jlotNum && itemRow) {

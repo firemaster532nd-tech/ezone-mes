@@ -394,11 +394,37 @@ export const initApp = async () => {
 
       console.log('✅ 회계 모듈 테이블 마이그레이션 완료 (5개 테이블)');
       console.log('✅ Menu migration done: inventory + shipment + statement menus granted to all departments');
+
+      // ── Sprint 1-1: 수입검사 기준 및 이상치 컬럼 추가 ──
+      await pool.query(`ALTER TABLE inspection_criteria ADD COLUMN IF NOT EXISTS decimal_places INTEGER DEFAULT 0`);
+      await pool.query(`ALTER TABLE inspection ADD COLUMN IF NOT EXISTS is_outlier BOOLEAN DEFAULT FALSE`);
+      await pool.query(`ALTER TABLE inspection ADD COLUMN IF NOT EXISTS outlier_reason TEXT`);
+      await pool.query(`ALTER TABLE inspection_detail ADD COLUMN IF NOT EXISTS is_outlier BOOLEAN DEFAULT FALSE`);
+      await pool.query(`ALTER TABLE inspection_detail ADD COLUMN IF NOT EXISTS outlier_reason TEXT`);
+
+      await pool.query(`
+        UPDATE inspection_criteria 
+        SET decimal_places = 3 
+        WHERE item_name IN ('D101 난연컴파운드', 'D102 팽창흑연', 'D103 EVA', 'D104 EP100')
+      `);
+      await pool.query(`
+        UPDATE inspection_criteria 
+        SET decimal_places = 2 
+        WHERE item_name = 'FN테크 슬리브 (FN-P100)'
+      `);
+      await pool.query(`
+        UPDATE inspection_criteria 
+        SET decimal_places = 3 
+        WHERE item_name = '보호철판 (MS/BS)'
+      `);
+      console.log('✅ Sprint 1-1 수입검사 기준 및 이상치 마이그레이션 완료');
+
     } catch (e) {
       console.warn('⚠ Menu migration skipped:', e);
     }
 
   }); // end setImmediate background migration
+
 
   return app;
 };

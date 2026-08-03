@@ -1,4 +1,4 @@
-﻿import { FastifyInstance } from 'fastify';
+import { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import pg from 'pg';
 import { determineSamplingMode } from './lot-validation.js';
@@ -99,11 +99,123 @@ async function createMaterialLotOnPass(
   }
 }
 
+function getDecimalPlaces(num: number | string | undefined | null): number {
+  if (num == null || num === '') return 0;
+  const s = num.toString();
+  const dot = s.indexOf('.');
+  return dot === -1 ? 0 : s.length - dot - 1;
+}
+
+// 5종 입력 검증 함수 (서버측 미들웨어/유틸리티)
+async function validateInspectionInput(
+  client: any,
+  itemId: number,
+  details: any[],
+  outlierReason: string | null
+): Promise<{
+  isValid: boolean;
+  errorCode?: 'MISSING_REQUIRED' | 'INVALID_PRECISION' | 'OUT_OF_RANGE';
+  message?: string;
+  hasRepeated?: boolean;
+  hasOutlier?: boolean;
+  criteriaMap?: Map<string, any>;
+}> {
+  // 1. item_master 및 inspection_criteria 조회
+  const itemRes = await client.query('SELECT item_name, spec FROM item_master WHERE item_id = $1', [itemId]);
+  if (itemRes.rows.length === 0) {
+    return { isValid: true };
+  }
+  const { item_name } = itemRes.rows[0];
+
+  const criteriaRes = await client.query(
+    'SELECT * FROM inspection_criteria WHERE item_name = $1 AND is_active = true',
+    [item_name]
+  );
+  if (criteriaRes.rows.length === 0) {
+    return { isValid: true };
+  }
+  const criteria = criteriaRes.rows[0];
+  const { min_value, max_value, decimal_places, is_required } = criteria;
+
+  let hasRepeated = false;
+  let hasOutlier = false;
+  let measurementsCount = 0;
+
+  // 2. details 검증
+  for (const d of details) {
+    const measurements = [d.measured_n1, d.measured_n2, d.measured_n3].filter(v => v != null) as number[];
+    measurementsCount += measurements.length;
+
+    // 자릿수 검증
+    for (const val of measurements) {
+      if (getDecimalPlaces(val) > decimal_places) {
+        return {
+          isValid: false,
+          errorCode: 'INVALID_PRECISION',
+          message: `입력값(${val})의 소수 자릿수가 기준 자릿수(${decimal_places}자리)를 초과합니다.`,
+        };
+      }
+    }
+
+    // 반복값 검증 (n1 = n2 = n3 이고, 모두 null이 아니면 경고)
+    if (
+      d.measured_n1 != null &&
+      d.measured_n2 != null &&
+      d.measured_n3 != null &&
+      Number(d.measured_n1) === Number(d.measured_n2) &&
+      Number(d.measured_n2) === Number(d.measured_n3)
+    ) {
+      hasRepeated = true;
+    }
+
+
+    // 이상치(범위 이탈) 검증
+    if (min_value != null || max_value != null) {
+      for (const val of measurements) {
+        const numVal = Number(val);
+        if (
+          (min_value != null && numVal < Number(min_value)) ||
+          (max_value != null && numVal > Number(max_value))
+        ) {
+          hasOutlier = true;
+        }
+      }
+    }
+  }
+
+  // 필수값 검증 (is_required가 참인데 실측치가 없는 경우)
+  if (is_required && measurementsCount === 0) {
+    return {
+      isValid: false,
+      errorCode: 'MISSING_REQUIRED',
+      message: '필수 검사 항목에 측정 데이터가 입력되지 않았습니다.',
+    };
+  }
+
+  // 이상치 발생 시 사유가 누락된 경우 차단 (409)
+  if (hasOutlier && (!outlierReason || outlierReason.trim() === '')) {
+    return {
+      isValid: false,
+      errorCode: 'OUT_OF_RANGE',
+      message: '검사 측정값이 기준 범위를 이탈했습니다. 실측 확인 사유를 입력해 주세요.',
+      hasOutlier,
+      hasRepeated,
+    };
+  }
+
+  return {
+    isValid: true,
+    hasRepeated,
+    hasOutlier,
+    criteriaMap: new Map([[item_name, criteria]]),
+  };
+}
 
 /**
  * Auto-judge helper: determine PASS/FAIL for a single inspection detail item.
  * Returns 'PASS', 'FAIL', or 'NA'.
  */
+
 function judgeDetailItem(detail: {
   check_method: string | null;
   cert_standard: number | null;
@@ -867,6 +979,29 @@ export async function inspectionRoutes(app: FastifyInstance) {
 
     const client = await pool.connect();
     try {
+      // ── 5종 입력 검증 (서버측 미들웨어 호출) ──
+      let validationResult: any = { isValid: true, hasRepeated: false, hasOutlier: false, criteriaMap: new Map<string, any>() };
+      if (isIncoming && itemId) {
+        const outlierReason = (body.outlier_reason as string) || (body.remarks as string) || null;
+        validationResult = await validateInspectionInput(client, itemId, details || [], outlierReason);
+        if (!validationResult.isValid) {
+          client.release();
+          if (validationResult.errorCode === 'OUT_OF_RANGE') {
+            return reply.status(409).send({
+              error: 'OUT_OF_RANGE',
+              message: validationResult.message,
+              hasOutlier: true,
+              hasRepeated: validationResult.hasRepeated,
+            });
+          } else {
+            return reply.status(400).send({
+              error: validationResult.errorCode,
+              message: validationResult.message,
+            });
+          }
+        }
+      }
+
       await client.query('BEGIN');
 
       // 1. 인수검사: lot_transaction 생성 (검사 대상 LOT)
@@ -895,13 +1030,16 @@ export async function inspectionRoutes(app: FastifyInstance) {
         acceptC = samplingInfo.c;
       }
 
+      const isOutlier = validationResult.hasOutlier || false;
+      const outlierReason = isOutlier ? ((body.outlier_reason as string) || (body.remarks as string) || null) : null;
+
       const inspResult = await client.query(
         `INSERT INTO inspection (insp_type, form_code, lot_id, cert_id, sampling_n, accept_c, result, inspector, inspected_at,
-         cert_doc_id, ks_verified, cert_doc_verified)
-         VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', $7, NOW(), $8, $9, $10)
+         cert_doc_id, ks_verified, cert_doc_verified, is_outlier, outlier_reason)
+         VALUES ($1, $2, $3, $4, $5, $6, 'PENDING', $7, NOW(), $8, $9, $10, $11, $12)
          RETURNING *`,
         [insp_type, body.form_code || null, lotId, body.cert_id || null, samplingN, acceptC, body.inspector || null,
-         certDocId, ksVerified, certDocVerified]
+         certDocId, ksVerified, certDocVerified, isOutlier, outlierReason]
       );
       const insp = inspResult.rows[0];
 
@@ -920,17 +1058,40 @@ export async function inspectionRoutes(app: FastifyInstance) {
 
           itemResults.push(itemResult);
 
+          // 개별 항목의 이상치 판단
+          let detailIsOutlier = false;
+          if (isIncoming && itemId && validationResult.criteriaMap) {
+            const itemRes = await client.query('SELECT item_name FROM item_master WHERE item_id = $1', [itemId]);
+            if (itemRes.rows.length > 0) {
+              const crit = validationResult.criteriaMap.get(itemRes.rows[0].item_name);
+              if (crit) {
+                const measurements = [d.measured_n1, d.measured_n2, d.measured_n3].filter(v => v != null) as number[];
+                for (const val of measurements) {
+                  const numVal = Number(val);
+                  if (
+                    (crit.min_value != null && numVal < Number(crit.min_value)) ||
+                    (crit.max_value != null && numVal > Number(crit.max_value))
+                  ) {
+                    detailIsOutlier = true;
+                  }
+                }
+              }
+            }
+          }
+
           await client.query(
             `INSERT INTO inspection_detail
              (insp_id, item_no, quality_item, check_item, check_method,
               cert_standard, prod_standard, measured_n1, measured_n2, measured_n3,
-              is_applicable, item_result, direction)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+              is_applicable, item_result, direction, is_outlier, outlier_reason)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
             [
               insp.insp_id, d.item_no, d.quality_item, d.check_item, d.check_method,
               d.cert_standard ?? null, d.prod_standard ?? null,
               d.measured_n1 ?? null, d.measured_n2 ?? null, d.measured_n3 ?? null,
               d.is_applicable ?? true, itemResult, d.direction || 'MIN',
+              detailIsOutlier,
+              detailIsOutlier ? outlierReason : null
             ]
           );
         }
@@ -963,6 +1124,54 @@ export async function inspectionRoutes(app: FastifyInstance) {
         inventoryTxn = invResult.rows[0];
       }
 
+      // 7. 이상치 발생 시 결재 대기요청 자동 기안
+      if (isIncoming && isOutlier) {
+        const itemRes = await client.query('SELECT item_name FROM item_master WHERE item_id = $1', [itemId]);
+        const itemName = itemRes.rows[0]?.item_name || '알 수 없는 품목';
+        
+        let writerId = null;
+        if (body.inspector) {
+          const writerRes = await client.query(
+            "SELECT worker_id FROM worker WHERE worker_name = $1 LIMIT 1",
+            [body.inspector]
+          );
+          writerId = writerRes.rows[0]?.worker_id || null;
+        }
+
+        let reviewerId = null;
+        let approverId = null;
+
+        const workerRes = await client.query(
+          "SELECT worker_id FROM worker WHERE worker_name = '최진영' LIMIT 1"
+        );
+        if (workerRes.rows.length > 0) {
+          approverId = workerRes.rows[0].worker_id;
+          const reviewerRes = await client.query(
+            "SELECT worker_id FROM worker WHERE worker_name = '임병용' LIMIT 1"
+          );
+          reviewerId = reviewerRes.rows[0]?.worker_id || approverId;
+        } else {
+          const adminRes = await client.query(
+            "SELECT worker_id FROM worker WHERE role IN ('admin', 'manager') ORDER BY worker_id LIMIT 2"
+          );
+          reviewerId = adminRes.rows[0]?.worker_id || null;
+          approverId = adminRes.rows[1]?.worker_id || reviewerId;
+        }
+
+        await client.query(`
+          INSERT INTO approval (doc_type, doc_id, doc_title, doc_summary, status, writer_id, reviewer_id, approver_id)
+          VALUES ('OUTLIER', $1, $2, $3, 'PENDING', $4, $5, $6)
+        `, [
+          insp.insp_id,
+          `[품질 이상치 보고] ${itemName}`,
+          `이상치 발생 - 항목: ${itemName}, 사유: ${outlierReason || '없음'}`,
+          writerId,
+          reviewerId,
+          approverId
+        ]);
+        console.log(`[Outlier Approval Drafted] insp_id: ${insp.insp_id}, writer: ${writerId}`);
+      }
+
       await client.query('COMMIT');
 
       // LOT 정보 조회
@@ -972,20 +1181,22 @@ export async function inspectionRoutes(app: FastifyInstance) {
         lotInfo = lr.rows[0];
       }
 
-      return {
+      return reply.code(201).send({
         data: {
           ...insp,
           result: overallResult,
           lot: lotInfo,
           inventory_created: inventoryTxn != null,
         },
-      };
+        warning: validationResult.hasRepeated ? 'REPEATED_VALUE' : undefined,
+      });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
     } finally {
       client.release();
     }
+
   });
 
   // DELETE /api/inspections/:id - 검사 삭제

@@ -18,6 +18,7 @@ interface Order {
   order_date: string;
   status: string;
   items_json: OrderItem[];
+  po_id?: number;
 }
 
 interface InspectItem {
@@ -30,6 +31,7 @@ interface InspectItem {
   height: { n1: number | ''; n2: number | ''; n3: number | '' };
   width: { n1: number | ''; n2: number | ''; n3: number | '' };
   result: 'PASS' | 'FAIL';
+  jlot_number?: string;
 }
 
 export function SocketBracketInspectionPage() {
@@ -42,6 +44,7 @@ export function SocketBracketInspectionPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [itemsToInspect, setItemsToInspect] = useState<InspectItem[]>([]);
   const [inspector, setInspector] = useState('최진영');
+  const [availableJLots, setAvailableJLots] = useState<any[]>([]);
 
   useEffect(() => {
     fetchOrders();
@@ -103,6 +106,20 @@ export function SocketBracketInspectionPage() {
     let parsedItems = typeof order.items_json === 'string' ? JSON.parse(order.items_json) : order.items_json;
     if (!Array.isArray(parsedItems)) parsedItems = [];
 
+    let jlots: any[] = [];
+    if (order.po_id) {
+      try {
+        const res = await api.get<{ data: any[] }>(`/struct-work-orders/jlot-list?po_id=${order.po_id}`);
+        jlots = res.data || [];
+        setAvailableJLots(jlots);
+      } catch (e) {
+        console.error('Failed to fetch structural J-LOT list', e);
+        setAvailableJLots([]);
+      }
+    } else {
+      setAvailableJLots([]);
+    }
+
     const newItems: InspectItem[] = [];
     for (let i = 0; i < parsedItems.length; i++) {
       const p = parsedItems[i];
@@ -111,6 +128,11 @@ export function SocketBracketInspectionPage() {
       let cat: '소켓' | '브라켓' | '보호철판' | '기타' = '소켓';
       if (p.item_name.includes('브라켓')) cat = '브라켓';
       else if (p.item_name.includes('철판')) cat = '보호철판';
+
+      const matchedJLot = jlots.find(j => 
+        p.item_name.includes(j.product_type) || 
+        j.product_type.includes(p.item_name)
+      )?.jlot_number || '';
 
       newItems.push({
         id: Math.random().toString(36).substr(2, 9),
@@ -121,7 +143,8 @@ export function SocketBracketInspectionPage() {
         thickness: { n1: '', n2: '', n3: '' },
         height: { n1: '', n2: '', n3: '' },
         width: { n1: '', n2: '', n3: '' },
-        result: 'PASS'
+        result: 'PASS',
+        jlot_number: matchedJLot
       });
     }
 
@@ -242,7 +265,8 @@ export function SocketBracketInspectionPage() {
           n3: item.thickness.n3 || 0,
           overall_result: item.result,
           result: item.result,
-          inspector: inspector
+          inspector: inspector,
+          notes: item.jlot_number ? `[구조체 LOT: ${item.jlot_number}]` : '소켓 인수검사 합격'
         }).catch(e => console.error('Inspection post failed', e));
       }
 
@@ -422,6 +446,24 @@ export function SocketBracketInspectionPage() {
                           </div>
                         </div>
                       </div>
+                      
+                      {selectedOrder && availableJLots.length > 0 && (
+                        <div className="mt-3">
+                          <label className="text-xs text-slate-400 mb-1 block">연계 구조체 LOT (작업지시 J-LOT)</label>
+                          <select
+                            value={item.jlot_number || ''}
+                            onChange={e => updateItem(item.id, 'jlot_number', e.target.value)}
+                            className="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-white text-sm focus:border-emerald-500 outline-none"
+                          >
+                            <option value="">-- J-LOT 선택 --</option>
+                            {availableJLots.map(j => (
+                              <option key={j.jlot_number} value={j.jlot_number}>
+                                [{j.jlot_number}] {j.product_type} ({j.width_mm}x{j.height_mm}, {j.qty}개)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
                       <div>
                         <div className="flex justify-between items-center mb-1">

@@ -92,9 +92,9 @@ export const shopTopGroups: TopNavGroup[] = [
     key: 'production', label: '생산관리', Icon: ClipboardList,
     children: [
       { label: 'TBM 안전회의', path: '/production/tbm' },
-      { label: '통합 4공정 파이프라인', path: '/production/process-stages' },
       { label: '일반 작업지시', path: '/production/work-orders' },
       { label: '비인정제품 작업지시', path: '/production/socket-work-orders' },
+
       { label: '구조체 작업지시', path: '/production/struct-work-orders' },
       { label: '조립생산일지 (J-LOT)', path: '/production/assembly-log' },
       { label: '부자재별 작업지시', path: '/production/sub-work-orders' },
@@ -107,7 +107,6 @@ export const shopTopGroups: TopNavGroup[] = [
     children: [
       { label: '②~⑤ 통합 4공정 (배합·압출·재단·조립)', path: '/production/process-stages' },
       { label: '기존 공정 실행 (배합·압출·재단)', path: '/production/process-execution' },
-      { label: '조립생산일지 (J-LOT)', path: '/production/assembly-log' },
     ],
   },
 

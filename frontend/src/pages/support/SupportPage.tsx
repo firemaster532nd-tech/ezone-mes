@@ -10,7 +10,9 @@ import {
   HardHat, ClipboardList, Boxes, ShieldCheck, Scissors,
   FlaskConical, Layers, Box, Hammer, Truck, Monitor,
   Database, TrendingUp, Settings, HeadphonesIcon,
+  Smartphone, Sparkles,
 } from 'lucide-react';
+
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface Faq {
@@ -52,8 +54,40 @@ interface ManualSection {
 }
 
 const MANUAL_DATA: ManualSection[] = [
+  // ── PWA 모바일 앱 설치 가이드 ──
+  {
+    id: 'pwa-install', category: 'general', categoryLabel: '일반', categoryColor: '#64748b',
+    Icon: Smartphone, title: '모바일 앱 설치 가이드 (PWA)',
+    subtitle: '이지원 MES를 스마트폰 및 태블릿에 앱으로 설치하여 현장 작업 시 편리하게 사용하는 방법',
+    steps: [
+      { title: 'Android (안드로이드) 설치', content: 'Chrome 브라우저로 이지원.kr에 접속한 후, 주소창 우측의 더보기(점 3개) 버튼을 누르고 [앱 설치] 또는 [홈 화면에 추가]를 클릭합니다.' },
+      { title: 'iOS (아이폰/아이패드) 설치', content: 'Safari 브라우저로 이지원.kr에 접속한 후, 하단 중앙의 공유(내보내기) 아이콘을 클릭하고 목록에서 [홈 화면에 추가]를 선택합니다.' },
+      { title: 'PC 데스크톱 설치', content: 'Chrome 또는 Edge 브라우저 주소창 우측 끝에 표시되는 [설치] 아이콘(모니터 모양에 아래 화살표)을 클릭하여 데스크톱 앱으로 설치합니다.' },
+      { title: '앱 실행 및 권한 허용', content: '설치 완료 후 바탕화면에 생성된 "이지원 MES" 아이콘을 실행하면 브라우저 주소창 없이 풀스크린 앱으로 구동됩니다. 카메라 및 알림 권한을 허용해 주세요.' },
+    ],
+    tips: [
+      '안드로이드 기기에서는 QR/바코드 인식을 위한 카메라 권한 및 알림 권한을 반드시 허용해 주세요.',
+      'PWA 앱은 인터넷 브라우저 캐시를 사용하여 빠른 구동 및 로딩 속도를 보장합니다.'
+    ],
+  },
+  // ── 신규 업데이트 기능 가이드 ──
+  {
+    id: 'recent-updates', category: 'general', categoryLabel: '일반', categoryColor: '#64748b',
+    Icon: Sparkles, title: '신규 업데이트 기능 가이드',
+    subtitle: '영업관리 이카운트 연동, 복식부기 회계 ERP, WMS 3구역 시각화, 인수검사 라벨 선발행 등 신규 추가 기능 활용법',
+    steps: [
+      { title: '영업 관리 (이카운트 구조 재편)', content: '메뉴 > 영업관리에서 견적서 등록, 판매(출하) 등록 및 국세청 표준 세금계산서(적색/청색) 인쇄 모달을 지원합니다. 이카운트 연동을 통해 원클릭 동기화가 가능합니다.' },
+      { title: '수입검사 / 인수검사 개선', content: '원/부자재 발주 정보와 수입검사가 완전 연동되어, 검사 즉시 창고 재고로 자동 등록됩니다. 바코드 라벨을 검사 전/후에 선발행하여 자재 식별이 용이해졌습니다.' },
+      { title: '회계 ERP 및 표준 문서 출력', content: '대한민국 기업 표준 복식부기 서식(손익계산서/재무상태표) 출력을 지원하며, 모든 출력 문서에 회사 인장(도장)이 자동으로 합성되어 인쇄됩니다.' },
+      { title: 'WMS 2단계 Staging 및 3구역 시각화', content: '포장·출하 시 2단계 Staging 프로세스가 신설되었습니다. 렉 로케이션 메뉴에서 공장 3구역(1공장, 2공장, 재단실 등 총 8대 공장구역)의 실시간 적재 현황 카드를 시각적으로 모니터링할 수 있습니다.' },
+    ],
+    tips: [
+      '신규 영업 및 회계 서식 인쇄 시 크롬 인쇄 설정에서 "배경 그래픽"을 활성화해야 이지원 인장과 라인 색상이 올바르게 인쇄됩니다.'
+    ],
+  },
   // ── 대시보드 ──
   {
+
     id: 'dashboard', category: 'general', categoryLabel: '일반', categoryColor: '#64748b',
     Icon: LayoutDashboard, title: '오늘의 작업 (대시보드)',
     subtitle: '당일 작업지시, 결재 대기, 출하 현황을 한눈에 확인하는 메인 화면',

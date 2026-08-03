@@ -963,9 +963,13 @@ function CreateInspectionModal({
   const [specWidth, setSpecWidth] = useState('');
   const [specLength, setSpecLength] = useState('');
   const [specDensity, setSpecDensity] = useState('');
+  const [criteriaList, setCriteriaList] = useState<any[]>([]);
 
   // 울(Wool)류 판단: 그라스울, 세라믹울 = 밀도 필드 있음
   const selectedItemObj = items.find(i => String(i.item_id) === selectedItem);
+  const activeCriteria = criteriaList.find(c => c.item_name === selectedItemObj?.item_name);
+  const decimalPlaces = activeCriteria?.decimal_places ?? 2;
+  const inputStep = (10 ** -decimalPlaces).toFixed(decimalPlaces);
   const isWoolType = !!(selectedItemObj && (
     selectedItemObj.item_name.includes('그라스울') ||
     selectedItemObj.item_name.includes('세라믹울') ||
@@ -1017,6 +1021,7 @@ function CreateInspectionModal({
   useEffect(() => {
     api.get<{ data: FormPreset[] }>('/inspections/incoming-presets').then((r) => setPresets(r.data));
     api.get<{ data: any[] }>('/items').then((r) => setItems(r.data));
+    api.get<{ data: any[] }>('/inspection-criteria').then((r) => setCriteriaList(r.data || []));
   }, []);
 
   // URL 파라미터 초기값 적용 (아이템 목록 로드 후)
@@ -1233,7 +1238,7 @@ function CreateInspectionModal({
 
   const [autoJudgeResult, setAutoJudgeResult] = useState<string | null>(null);
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (outlierReason: string | null = null) => {
     if (!selectedForm) return alert('검사양식을 선택하세요');
     if (!selectedItem) return alert('품목을 선택하세요');
     if (!qty || parseFloat(qty) <= 0) return alert('입고수량을 입력하세요');
@@ -1259,6 +1264,7 @@ function CreateInspectionModal({
         inspector: inspector || null,
         insp_date: inspDate,
         cert_doc_id: selectedCertDocId || null,
+        outlier_reason: outlierReason,
         // SM 자재 스펙 치수
         spec_thickness_mm: specThickness ? parseFloat(specThickness) : null,
         spec_width_mm: specWidth ? parseFloat(specWidth) : null,
@@ -1313,7 +1319,29 @@ function CreateInspectionModal({
         lot_number: res.data.lot?.lot_number ?? '',
         inventory_created: res.data.inventory_created ?? false,
       });
-    } catch { alert('검사 등록 실패'); }
+
+      if ((res as any).warning === 'REPEATED_VALUE') {
+        toast.warning('⚠ 모든 측정 항목 실측값(n1=n2=n3)이 완전 동일합니다.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      const status = err?.status || err?.statusCode || err?.body?.statusCode || (err?.body && err.body.statusCode);
+      const errorMsg = err?.body?.message || err?.message || '검사 등록 실패';
+      const errorCode = err?.body?.error || err?.body?.errorCode || (err?.body && err.body.error);
+
+      if (status === 409 || errorCode === 'OUT_OF_RANGE') {
+        const reason = prompt('검사 측정값이 기준 범위를 이탈했습니다. 실측 확인 사유를 입력해 주세요 (필수):');
+        if (reason && reason.trim()) {
+          await handleSubmit(reason);
+        } else if (reason !== null) {
+          alert('사유를 입력하지 않아 등록이 거부되었습니다.');
+        }
+      } else if (status === 400 && errorCode === 'INVALID_PRECISION') {
+        alert(`[자릿수 초과 오류] ${errorMsg}`);
+      } else {
+        alert(`등록 실패: ${errorMsg}`);
+      }
+    }
     finally { setSubmitting(false); }
   };
 
@@ -1947,7 +1975,7 @@ function CreateInspectionModal({
                         )}>{m.frequency}</span>
                       </td>
                       <td className="px-2 py-1">
-                        <input type="number" step="0.01" value={m.cert_standard}
+                        <input type="number" step={inputStep} value={m.cert_standard}
                           onChange={(e) => updateMeasurement(idx, 'cert_standard', e.target.value)}
                           disabled={!m.is_applicable}
                           className="w-full border rounded px-1 py-0.5 text-right text-xs" />
@@ -1956,7 +1984,7 @@ function CreateInspectionModal({
                         {m.check_method === '성적서' || m.check_method === '공인기관' ? (
                           <span className="text-xs text-gray-400 block text-right">성적서</span>
                         ) : (
-                          <input type="number" step="0.01" value={m.n1}
+                          <input type="number" step={inputStep} value={m.n1}
                             onChange={(e) => updateMeasurement(idx, 'n1', e.target.value)}
                             disabled={!m.is_applicable}
                             className="w-full border rounded px-1 py-0.5 text-right text-xs" placeholder="n1" />
@@ -1967,7 +1995,7 @@ function CreateInspectionModal({
                           {m.check_method === '성적서' || m.check_method === '공인기관' ? (
                             <span className="text-xs text-gray-400 block text-right">대체</span>
                           ) : (
-                            <input type="number" step="0.01" value={m.n2}
+                            <input type="number" step={inputStep} value={m.n2}
                               onChange={(e) => updateMeasurement(idx, 'n2', e.target.value)}
                               disabled={!m.is_applicable}
                               className="w-full border rounded px-1 py-0.5 text-right text-xs" placeholder="n2" />
@@ -1979,7 +2007,7 @@ function CreateInspectionModal({
                           {m.check_method === '성적서' || m.check_method === '공인기관' ? (
                             <span className="text-xs text-gray-400 block text-right">확인</span>
                           ) : (
-                            <input type="number" step="0.01" value={m.n3}
+                            <input type="number" step={inputStep} value={m.n3}
                               onChange={(e) => updateMeasurement(idx, 'n3', e.target.value)}
                               disabled={!m.is_applicable}
                               className="w-full border rounded px-1 py-0.5 text-right text-xs" placeholder="n3" />
