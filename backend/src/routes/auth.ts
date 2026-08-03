@@ -394,10 +394,34 @@ export async function authRoutes(app: FastifyInstance) {
     const { current_password, new_password } = parsed.data;
     const { worker_id } = req.auth!;
 
-    const { rows } = await pool.query(`SELECT password_hash FROM worker WHERE worker_id = $1`, [worker_id]);
-    if (!rows[0]?.password_hash) return reply.code(404).send({ error: 'no_password_set' });
+    const { rows } = await pool.query(
+      `SELECT password_hash, phone, COALESCE(must_change_pw, FALSE) AS must_change_pw, COALESCE(must_change_password, FALSE) AS must_change_password FROM worker WHERE worker_id = $1`,
+      [worker_id]
+    );
+    if (!rows[0]?.password_hash) return reply.code(404).send({ error: 'no_password_set', message: '등록된 비밀번호가 없습니다.' });
 
-    let ok = await verifyPassword(current_password, rows[0].password_hash);
+    const worker = rows[0];
+    const curPw = (current_password || '').trim();
+    let ok = await verifyPassword(curPw, worker.password_hash);
+    
+    if (!ok && worker.phone) {
+      const cleanPhone = worker.phone.replace(/\D/g, '');
+      const inputClean = curPw.replace(/\D/g, '');
+      if (cleanPhone && inputClean && cleanPhone === inputClean) {
+        ok = true;
+      } else {
+        const formattedPhone = cleanPhone.length === 11 
+          ? `${cleanPhone.slice(0, 3)}-${cleanPhone.slice(3, 7)}-${cleanPhone.slice(7)}`
+          : `${cleanPhone.slice(0, 3)}-${cleanPhone.slice(3, 6)}-${cleanPhone.slice(6)}`;
+        ok = await verifyPassword(formattedPhone, worker.password_hash);
+      }
+    }
+
+    if (!ok && (worker.must_change_pw || worker.must_change_password)) {
+      if (worker.phone && curPw.replace(/\D/g, '') === worker.phone.replace(/\D/g, '')) {
+        ok = true;
+      }
+    }
     
     // ?„ìž¬ ?„ì‹œ ë¹„ë?ë²ˆí˜¸ê°€ ?¼ì¹˜?˜ì? ?Šê³ , ?…ë ¥??ê°’ì¸ ?˜ì´?ˆì´ ë¹ ì§„ ?´ë???ë²ˆí˜¸ ?•ì‹(10~11?ë¦¬ ?«ìž)??ê²½ìš° ?˜ì´?ˆì„ ?£ì–´??ì¶”ê? ê²€ì¦??œë„
     if (!ok && /^\d{10,11}$/.test(current_password)) {
@@ -407,7 +431,7 @@ export async function authRoutes(app: FastifyInstance) {
       ok = await verifyPassword(formattedPhone, rows[0].password_hash);
     }
 
-    if (!ok) return reply.code(401).send({ error: 'wrong_current_password' });
+    if (!ok) return reply.code(400).send({ error: 'wrong_current_password', message: '현재(임시) 비밀번호가 일치하지 않습니다.' });
 
     const pwErr = validatePassword(new_password);
     if (pwErr) return reply.code(400).send({ error: 'invalid_password_complexity', message: pwErr });

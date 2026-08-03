@@ -26,7 +26,8 @@ export function ForceChangePasswordPage() {
       toast.success('비밀번호가 변경되었습니다.');
       window.location.href = '/';
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || '비밀번호 변경 실패');
+      const errMsg = err?.body?.message || err?.body?.error || err?.message || '비밀번호 변경 중 오류가 발생했습니다.';
+      toast.error(errMsg);
     } finally {
       setSaving(false);
     }
