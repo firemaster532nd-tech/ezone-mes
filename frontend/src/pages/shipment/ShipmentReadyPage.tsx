@@ -835,9 +835,30 @@ export function ShipmentReadyPage() {
               {wmsLoading ? (
                 <p className="text-xs text-gray-400 text-center py-4">로딩 중...</p>
               ) : shipmentReadyItems.length === 0 ? (
-                <p className="text-xs text-gray-400 text-center py-8">
-                  WMS에 등록된 출하대기 품목이 없습니다.
-                </p>
+                <div className="py-10 text-center space-y-3 bg-slate-50 rounded-xl border border-dashed border-slate-300 p-6">
+                  <div className="text-3xl">📍</div>
+                  <p className="text-sm font-bold text-slate-700">
+                    현재 WMS 랙 위치가 지정된 출하 대기 품목이 없습니다.
+                  </p>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                    생산된 완제품(J-LOT)이나 원부자재/비인정 재고가 공정 완료 후 랙 위치(예: A1-P1)로 입고되거나, 
+                    <strong>[WMS 바코드 스캔]</strong> 메뉴에서 출하 대기(STAGING) 등록을 수행하면 이곳에 실시간 보관 위치가 표시됩니다.
+                  </p>
+                  <div className="flex items-center justify-center gap-2 pt-2">
+                    <a
+                      href="/inventory/barcode-wms"
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow transition"
+                    >
+                      📱 WMS 바코드 스캔 랙 지정하기
+                    </a>
+                    <a
+                      href="/inventory/location"
+                      className="px-4 py-2 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 font-bold text-xs rounded-xl shadow-xs transition"
+                    >
+                      🗺️ 랙 로케이션 맵 확인
+                    </a>
+                  </div>
+                </div>
               ) : (
                 <div className="space-y-2">
                   {Object.entries(

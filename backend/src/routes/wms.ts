@@ -669,22 +669,42 @@ export async function wmsRoutes(app: FastifyInstance) {
   });
 
   // ── GET /api/wms/shipment-ready-items ─────────────────────────────────────
-  // 출하대기 목록 (현장별)
+  // 출하대기 목록 (현장별 - NCS, assembly_lot, material_lots 통합 조회)
   app.get('/api/wms/shipment-ready-items', async (req) => {
     const { site_name } = req.query as any;
     const { rows } = await pool.query(`
       SELECT
         ncs.id, ncs.item_name, ncs.spec, ncs.lot_number, ncs.qty, ncs.unit,
-        ncs.shipment_site_name, ncs.shipment_order_date,
+        COALESCE(ncs.shipment_site_name, '기본 출하 현장') AS shipment_site_name,
+        ncs.shipment_order_date,
         ncs.location_id,
-        sl.location_code, sl.display_name,
+        COALESCE(sl.location_code, ncs.rack_code) AS location_code,
+        COALESCE(sl.display_name, ncs.rack_code) AS display_name,
         ncs.created_at
       FROM non_certified_stock ncs
       LEFT JOIN storage_locations sl ON sl.location_id = ncs.location_id
-      WHERE ncs.wms_status = 'SHIPMENT_READY'
+      WHERE (ncs.wms_status = 'SHIPMENT_READY' OR ncs.location_id IS NOT NULL OR ncs.rack_code IS NOT NULL)
         AND ncs.status != 'DISPOSED'
         ${site_name ? `AND ncs.shipment_site_name ILIKE $1` : ''}
-      ORDER BY ncs.shipment_site_name, ncs.shipment_order_date, ncs.id
+
+      UNION ALL
+
+      SELECT
+        al.lot_id AS id,
+        COALESCE(al.item_name, al.lot_type, '반제품 조립품') AS item_name,
+        al.spec, al.lot_number, COALESCE(al.remaining_qty, al.qty) AS qty, 'EA' AS unit,
+        COALESCE(al.rack_location, '조립 현장') AS shipment_site_name,
+        al.created_at::date AS shipment_order_date,
+        al.location_id,
+        COALESCE(sl.location_code, al.staging_location, al.rack_location) AS location_code,
+        COALESCE(sl.display_name, al.staging_location, al.rack_location) AS display_name,
+        al.created_at
+      FROM assembly_lot al
+      LEFT JOIN storage_locations sl ON sl.location_id = al.location_id
+      WHERE (al.staging_location IS NOT NULL OR al.rack_location IS NOT NULL OR al.location_id IS NOT NULL)
+        AND al.status IN ('ACTIVE', 'STOCK', 'COMPLETE')
+
+      ORDER BY shipment_site_name, shipment_order_date, id
     `, site_name ? [`%${site_name}%`] : []);
     return { data: rows };
   });
