@@ -743,6 +743,105 @@ export async function wmsRoutes(app: FastifyInstance) {
     return { data: { non_certified: ncRows, lots: lotRows } };
   });
 
+  // ── POST /api/wms/batch-upload ────────────────────────────────────────────
+  // 연속 바코드 스캔 일괄 등록 & WMS 트랜잭션 수불 처리
+  app.post('/api/wms/batch-upload', async (req, reply) => {
+    const { items } = req.body as {
+      items: Array<{
+        lot_number: string;
+        mode: 'IN' | 'STAGING' | 'OUT' | 'MOVE';
+        qty?: number;
+        location_code?: string;
+        project_name?: string;
+        item_name?: string;
+        spec?: string;
+      }>;
+    };
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return reply.status(400).send({ error: '일괄 등록할 스캔 품목 목록(items)이 비어있습니다.' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      let successCount = 0;
+
+      for (const item of items) {
+        const { lot_number, mode, qty = 1, location_code, project_name, item_name, spec } = item;
+        if (!lot_number) continue;
+
+        // 위치 ID 조회
+        let locId: number | null = null;
+        if (location_code) {
+          const locRes = await client.query('SELECT location_id FROM storage_locations WHERE location_code = $1', [location_code]);
+          if (locRes.rows.length > 0) locId = locRes.rows[0].location_id;
+        }
+
+        if (mode === 'IN') {
+          // 입고 처리: non_certified_stock 생성 또는 상태 ACTIVE
+          await client.query(`
+            INSERT INTO non_certified_stock (lot_number, item_name, spec, qty, status, wms_status, location_id, created_at)
+            VALUES ($1, $2, $3, $4, 'ACTIVE', 'ACTIVE', $5, NOW())
+            ON CONFLICT (lot_number) DO UPDATE
+            SET qty = non_certified_stock.qty + $4, status = 'ACTIVE', wms_status = 'ACTIVE',
+                location_id = COALESCE($5, non_certified_stock.location_id), updated_at = NOW()
+          `, [lot_number, item_name || '원부자재', spec || '표준규격', qty, locId]);
+          successCount++;
+        } else if (mode === 'STAGING') {
+          // 출하 대기 처리
+          await client.query(`
+            UPDATE non_certified_stock
+            SET wms_status = 'SHIPMENT_READY', shipment_site_name = COALESCE($2, shipment_site_name),
+                location_id = COALESCE($3, location_id), updated_at = NOW()
+            WHERE lot_number = $1
+          `, [lot_number, project_name, locId]);
+
+          await client.query(`
+            UPDATE assembly_lot
+            SET staging_location = COALESCE($2, staging_location), location_id = COALESCE($3, location_id), updated_at = NOW()
+            WHERE lot_number = $1
+          `, [lot_number, project_name, locId]);
+          successCount++;
+        } else if (mode === 'OUT') {
+          // 출고 확정 처리
+          await client.query(`
+            UPDATE non_certified_stock
+            SET wms_status = 'SHIPPED', status = 'SHIPPED', updated_at = NOW()
+            WHERE lot_number = $1
+          `, [lot_number]);
+
+          await client.query(`
+            UPDATE assembly_lot
+            SET status = 'SHIPPED', updated_at = NOW()
+            WHERE lot_number = $1
+          `, [lot_number]);
+          successCount++;
+        } else if (mode === 'MOVE') {
+          // 위치 이동
+          if (locId) {
+            await client.query(`UPDATE non_certified_stock SET location_id = $2, updated_at = NOW() WHERE lot_number = $1`, [lot_number, locId]);
+            await client.query(`UPDATE assembly_lot SET location_id = $2, updated_at = NOW() WHERE lot_number = $1`, [lot_number, locId]);
+            successCount++;
+          }
+        }
+      }
+
+      await client.query('COMMIT');
+      return reply.send({
+        success: true,
+        message: `총 ${successCount}건의 스캔 항목이 성공적으로 일괄 등록되었습니다.`,
+        processed_count: successCount,
+      });
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      console.error('[wms/batch-upload error]', err);
+      return reply.status(500).send({ error: '일괄 등록 처리 중 오류가 발생했습니다: ' + err.message });
+    } finally {
+      client.release();
+    }
+  });
+
   // ── GET /api/wms/transactions ─────────────────────────────────────────────
   // 입출고 이력 조회
   app.get('/api/wms/transactions', async (req) => {
