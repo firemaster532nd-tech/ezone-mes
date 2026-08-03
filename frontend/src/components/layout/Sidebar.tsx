@@ -86,12 +86,12 @@ export const shopTopGroups: TopNavGroup[] = [
     children: [
       { label: '결재함', path: '/approval/inbox' },
       { label: '공지 / 쪽지함', path: '/announcements' },
+      { label: 'TBM 안전회의', path: '/production/tbm' },
     ],
   },
   {
     key: 'production', label: '생산관리', Icon: ClipboardList,
     children: [
-      { label: 'TBM 안전회의', path: '/production/tbm' },
       { label: '일반 작업지시', path: '/production/work-orders' },
       { label: '비인정제품 작업지시', path: '/production/socket-work-orders' },
 
@@ -248,12 +248,12 @@ export const adminTopGroups: TopNavGroup[] = [
       { label: '결재함', path: '/approval/inbox' },
       { label: '결재 라인 설정', path: '/approval/lines' },
       { label: '공지 / 쪽지함', path: '/announcements' },
+      { label: 'TBM 안전회의', path: '/production/tbm' },
     ],
   },
   {
     key: 'production', label: '생산관리', Icon: ClipboardList,
     children: [
-      { label: 'TBM 안전회의', path: '/production/tbm' },
       { label: '작업지시 목록', path: '/production/work-orders' },
       { label: '비인정제품 작업지시', path: '/production/socket-work-orders' },
       { label: '구조체 작업지시', path: '/production/struct-work-orders' },
