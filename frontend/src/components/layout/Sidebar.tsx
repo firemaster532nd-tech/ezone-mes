@@ -106,8 +106,10 @@ export const shopTopGroups: TopNavGroup[] = [
     children: [
       { label: '②~⑤ 통합 4공정 (배합·압출·재단·조립)', path: '/production/process-stages' },
       { label: '기존 공정 실행 (배합·압출·재단)', path: '/production/process-execution' },
-      { label: '재단생산일지', path: '/production/cutting-log' },
-      { label: '조립생산일지 (J-LOT)', path: '/production/assembly-log' },
+      { label: '배합생산일지 (EZC B-201-1)', path: '/production/mix-log' },
+      { label: '압출생산일지 (EZC B-201-2)', path: '/production/extrusion-log' },
+      { label: '재단생산일지 (EZC B-201-12/13)', path: '/production/cutting-log' },
+      { label: '조립생산일지 (EZC B-201-3/8/9/10/11)', path: '/production/assembly-log' },
     ],
   },
 
@@ -271,8 +273,10 @@ export const adminTopGroups: TopNavGroup[] = [
     children: [
       { label: '②~⑤ 통합 4공정 (배합·압출·재단·조립)', path: '/production/process-stages' },
       { label: '기존 공정 실행 (배합·압출·재단)', path: '/production/process-execution' },
-      { label: '재단생산일지', path: '/production/cutting-log' },
-      { label: '조립생산일지 (J-LOT)', path: '/production/assembly-log' },
+      { label: '배합생산일지 (EZC B-201-1)', path: '/production/mix-log' },
+      { label: '압출생산일지 (EZC B-201-2)', path: '/production/extrusion-log' },
+      { label: '재단생산일지 (EZC B-201-12/13)', path: '/production/cutting-log' },
+      { label: '조립생산일지 (EZC B-201-3/8/9/10/11)', path: '/production/assembly-log' },
     ],
   },
   {

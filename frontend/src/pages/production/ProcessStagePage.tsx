@@ -3,6 +3,8 @@ import { api } from '@/lib/api';
 import { LocationPicker } from '@/components/LocationPicker';
 import { AssemblyLogPage } from './AssemblyLogPage';
 import { CuttingLogPage } from './CuttingLogPage';
+import { MixLogPage } from './MixLogPage';
+import { ExtrusionLogPage } from './ExtrusionLogPage';
 import {
   Factory, Layers, Scissors, Hammer, Flame,
   CheckCircle, AlertCircle, Play, ChevronRight, Scale,
@@ -52,6 +54,8 @@ const CUTTING_PIPE_SPECS = [
 
 export function ProcessStagePage() {
   const [activeTab, setActiveTab] = useState<StageTab>('MIX');
+  const [mixSubTab, setMixSubTab] = useState<'FULL_LOG' | 'SIMPLE'>('FULL_LOG');
+  const [extSubTab, setExtSubTab] = useState<'FULL_LOG' | 'SIMPLE'>('FULL_LOG');
   const [asmSubTab, setAsmSubTab] = useState<'FULL_LOG' | 'SIMPLE'>('FULL_LOG');
   const [cutSubTab, setCutSubTab] = useState<'FULL_LOG' | 'SIMPLE'>('FULL_LOG');
   const [loading, setLoading] = useState(false);
@@ -421,98 +425,142 @@ export function ProcessStagePage() {
       {/* 탭 1: 배합 (MIX) 영역 */}
       {/* ─────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'MIX' && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center justify-between pb-4 mb-4 border-b">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
               <Flame className="w-5 h-5 text-blue-600" />
-              배합 공정 등록 (MIX)
+              <span>배합 공정 서식 및 실행 선택</span>
             </h2>
-            <span className="text-xs font-mono bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-bold">
-              LOT 규격: YYMMDD-S01
-            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setMixSubTab('FULL_LOG')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                  mixSubTab === 'FULL_LOG'
+                    ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-300'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                📋 전자 배합생산일지 (EZC B-201-1 서식)
+              </button>
+              <button
+                type="button"
+                onClick={() => setMixSubTab('SIMPLE')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                  mixSubTab === 'SIMPLE'
+                    ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-300'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                ⚡ 간편 배합 등록
+              </button>
+            </div>
           </div>
 
-          <form onSubmit={handleMixSubmit} className="space-y-4 max-w-3xl">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">배합일자</label>
-                <input
-                  type="date"
-                  value={mixDate}
-                  onChange={e => setMixDate(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">작업자</label>
-                <input
-                  type="text"
-                  value={mixWorker}
-                  onChange={e => setMixWorker(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
+          {mixSubTab === 'FULL_LOG' ? (
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+              <MixLogPage />
             </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-blue-700 mb-1">
-                  * 배합 LOT 번호 (자동 채번)
-                </label>
-                <input
-                  type="text"
-                  value={mixLotNumber}
-                  onChange={e => setMixLotNumber(e.target.value)}
-                  className="w-full border-2 border-blue-200 rounded-lg px-3 py-2 text-sm font-mono font-bold text-blue-900 bg-blue-50/30"
-                  required
-                />
+          ) : (
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+              <div className="flex items-center justify-between pb-4 mb-4 border-b">
+                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Flame className="w-5 h-5 text-blue-600" />
+                  간편 배합 공정 등록 (MIX)
+                </h2>
+                <span className="text-xs font-mono bg-blue-50 text-blue-700 px-3 py-1 rounded-full font-bold">
+                  LOT 규격: YYMMDD-S01
+                </span>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  투입 원료 LOT (난연컴파운드 MB)
-                </label>
-                <input
-                  type="text"
-                  value={mixRawLot}
-                  onChange={e => setMixRawLot(e.target.value)}
-                  placeholder="예: 260729MB001"
-                  className="w-full border rounded-lg px-3 py-2 text-sm font-mono"
-                />
-              </div>
-            </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                실측 중량 (kg)
-              </label>
-              <input
-                type="number"
-                value={mixInputKg}
-                onChange={e => setMixInputKg(Number(e.target.value))}
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-                min={1}
-                required
-              />
-            </div>
+              <form onSubmit={handleMixSubmit} className="space-y-4 max-w-3xl">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">배합일자</label>
+                    <input
+                      type="date"
+                      value={mixDate}
+                      onChange={e => setMixDate(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">작업자</label>
+                    <input
+                      type="text"
+                      value={mixWorker}
+                      onChange={e => setMixWorker(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">비고 / 메모</label>
-              <textarea
-                value={mixRemarks}
-                onChange={e => setMixRemarks(e.target.value)}
-                placeholder="배합 특이사항 입력"
-                className="w-full border rounded-lg px-3 py-2 text-sm h-20"
-              />
-            </div>
+                <div className="p-4 bg-blue-50/50 border border-blue-200 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-900">자동 생성될 배합 LOT</span>
+                    <button
+                      type="button"
+                      onClick={generateMixLot}
+                      className="text-xs text-blue-600 font-bold hover:underline"
+                    >
+                      🔄 번호 재생성
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={mixLotNumber}
+                    onChange={e => setMixLotNumber(e.target.value)}
+                    className="w-full bg-white border border-blue-300 rounded-lg px-3 py-2 text-sm font-mono font-bold text-blue-800"
+                    required
+                  />
+                </div>
 
-            <button
-              type="submit"
-              className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow transition flex items-center justify-center gap-2"
-            >
-              <CheckCircle className="w-4 h-4" />
-              배합 완료 ➔ 다음 (압출) 단계로 이동
-            </button>
-          </form>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      투입 원재료 인수검사 LOT (선택)
+                    </label>
+                    <input
+                      type="text"
+                      value={mixRawLot}
+                      onChange={e => setMixRawLot(e.target.value)}
+                      placeholder="예: 251025MB001"
+                      className="w-full border rounded-lg px-3 py-2 text-sm font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">실측 투입 중량 (kg)</label>
+                    <input
+                      type="number"
+                      value={mixInputKg}
+                      onChange={e => setMixInputKg(Number(e.target.value))}
+                      className="w-full border rounded-lg px-3 py-2 text-sm font-bold"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">비고 / 메모</label>
+                  <textarea
+                    value={mixRemarks}
+                    onChange={e => setMixRemarks(e.target.value)}
+                    placeholder="배합 특이사항 입력"
+                    className="w-full border rounded-lg px-3 py-2 text-sm h-20"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl shadow transition flex items-center justify-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  배합 완료 ➔ 다음 (압출) 단계로 이동
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       )}
 
@@ -520,148 +568,186 @@ export function ProcessStagePage() {
       {/* 탭 2: 압출 (EXT) 영역 — 1호기/2호기 분리 & 수율 계산 */}
       {/* ─────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'EXT' && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center justify-between pb-4 mb-4 border-b">
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
               <Layers className="w-5 h-5 text-indigo-600" />
-              압출 공정 등록 (1호기 / 2호기 필수 분류)
+              <span>압출 공정 서식 및 실행 선택</span>
             </h2>
-            <span className="text-xs font-mono bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-bold">
-              압출 수율: {extYieldRate}%
-            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setExtSubTab('FULL_LOG')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                  extSubTab === 'FULL_LOG'
+                    ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-300'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                📋 전자 압출생산일지 (EZC B-201-2 서식)
+              </button>
+              <button
+                type="button"
+                onClick={() => setExtSubTab('SIMPLE')}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                  extSubTab === 'SIMPLE'
+                    ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-300'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                ⚡ 간편 압출 등록
+              </button>
+            </div>
           </div>
 
-          <form onSubmit={handleExtSubmit} className="space-y-4 max-w-3xl">
-            {/* ★ 핵심: 1호기 vs 2호기 선택 */}
-            <div>
-              <label className="block text-xs font-bold text-indigo-900 mb-2">
-                ⚙️ 압출 호기 선택 (필수)
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                {EXTRUDERS.map(ex => (
-                  <button
-                    key={ex.id}
-                    type="button"
-                    onClick={() => setExtMachine(ex.id)}
-                    className={`p-3.5 rounded-xl border-2 font-bold text-sm transition flex items-center justify-between ${
-                      extMachine === ex.id
-                        ? `${ex.color} ring-2 ring-indigo-500 shadow-sm`
-                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span>{ex.name}</span>
-                    <span className="text-xs px-2 py-0.5 rounded bg-white border font-bold">
-                      {ex.code}
-                    </span>
-                  </button>
-                ))}
-              </div>
+          {extSubTab === 'FULL_LOG' ? (
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+              <ExtrusionLogPage />
             </div>
+          ) : (
+            <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+              <div className="flex items-center justify-between pb-4 mb-4 border-b">
+                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-indigo-600" />
+                  압출 공정 등록 (1호기 / 2호기 필수 분류)
+                </h2>
+                <span className="text-xs font-mono bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-bold">
+                  압출 수율: {extYieldRate}%
+                </span>
+              </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  상속할 배합 LOT 선택
-                </label>
-                <select
-                  value={selectedMixLot}
-                  onChange={e => setSelectedMixLot(e.target.value)}
-                  className="w-full border-2 border-indigo-200 rounded-lg px-3 py-2 text-sm font-mono font-bold bg-indigo-50/20"
+              <form onSubmit={handleExtSubmit} className="space-y-4 max-w-3xl">
+                {/* ★ 핵심: 1호기 vs 2호기 선택 */}
+                <div>
+                  <label className="block text-xs font-bold text-indigo-900 mb-2">
+                    ⚙️ 압출 호기 선택 (필수)
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {EXTRUDERS.map(ex => (
+                      <button
+                        key={ex.id}
+                        type="button"
+                        onClick={() => setExtMachine(ex.id)}
+                        className={`p-3.5 rounded-xl border-2 font-bold text-sm transition flex items-center justify-between ${
+                          extMachine === ex.id
+                            ? `${ex.color} ring-2 ring-indigo-500 shadow-sm`
+                            : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                        }`}
+                      >
+                        <span>{ex.name}</span>
+                        <span className="text-xs px-2 py-0.5 rounded bg-white border font-bold">
+                          {ex.code}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      상속할 배합 LOT 선택
+                    </label>
+                    <select
+                      value={selectedMixLot}
+                      onChange={e => setSelectedMixLot(e.target.value)}
+                      className="w-full border-2 border-indigo-200 rounded-lg px-3 py-2 text-sm font-mono font-bold bg-indigo-50/20"
+                    >
+                      <option value="">-- 배합 LOT 선택 --</option>
+                      {mixLogs.map(l => (
+                        <option key={l.log_id} value={l.lot_number}>
+                          {l.lot_number} ({l.weighed_input || 0}kg)
+                        </option>
+                      ))}
+                      {mixLotNumber && <option value={mixLotNumber}>최근생성: {mixLotNumber}</option>}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">작업자</label>
+                    <input
+                      type="text"
+                      value={extWorker}
+                      onChange={e => setExtWorker(e.target.value)}
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                    />
+                  </div>
+                </div>
+
+                {/* 수율 계산 입력 란 */}
+                <div className="p-4 bg-slate-50 border rounded-xl space-y-3">
+                  <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Scale className="w-4 h-4 text-indigo-600" />
+                    수율 계산용 실측 입력
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-xs">
+                    <div>
+                      <label className="block text-slate-600 mb-1">투입 중량 (kg)</label>
+                      <input
+                        type="number"
+                        value={extInputKg}
+                        onChange={e => setExtInputKg(Number(e.target.value))}
+                        className="w-full border rounded px-2.5 py-1.5 font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-600 mb-1">생산 길이 (m)</label>
+                      <input
+                        type="number"
+                        value={extOutputMeters}
+                        onChange={e => setExtOutputMeters(Number(e.target.value))}
+                        className="w-full border rounded px-2.5 py-1.5 font-bold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-600 mb-1">손실 길이 (m)</label>
+                      <input
+                        type="number"
+                        value={extLossMeters}
+                        onChange={e => setExtLossMeters(Number(e.target.value))}
+                        className="w-full border rounded px-2.5 py-1.5 font-bold text-red-600"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 실시간 수율 게이지 */}
+                  <div className="mt-2 bg-white p-3 rounded-lg border flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-slate-600">계산된 압출 수율: </span>
+                      <span className={`text-lg font-black ${extYieldRate >= 90 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                        {extYieldRate}%
+                      </span>
+                    </div>
+                    <div className="w-48 bg-slate-100 rounded-full h-3 overflow-hidden">
+                      <div
+                        className={`h-full transition-all ${extYieldRate >= 90 ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                        style={{ width: `${extYieldRate}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">특이사항</label>
+                  <input
+                    type="text"
+                    value={extRemarks}
+                    onChange={e => setExtRemarks(e.target.value)}
+                    placeholder="예: 1호기 노즐 교체 후 가동"
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow transition flex items-center justify-center gap-2"
                 >
-                  <option value="">-- 배합 LOT 선택 --</option>
-                  {mixLogs.map(l => (
-                    <option key={l.log_id} value={l.lot_number}>
-                      {l.lot_number} ({l.weighed_input || 0}kg)
-                    </option>
-                  ))}
-                  {/* 선택이 없으면 직접입력용 옵션 */}
-                  {mixLotNumber && <option value={mixLotNumber}>최근생성: {mixLotNumber}</option>}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">작업자</label>
-                <input
-                  type="text"
-                  value={extWorker}
-                  onChange={e => setExtWorker(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm"
-                />
-              </div>
+                  <CheckCircle className="w-4 h-4" />
+                  압출 완료 ➔ 다음 (재단) 단계로 이동
+                </button>
+              </form>
             </div>
-
-            {/* 수율 계산 입력 란 */}
-            <div className="p-4 bg-slate-50 border rounded-xl space-y-3">
-              <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <Scale className="w-4 h-4 text-indigo-600" />
-                수율 계산용 실측 입력
-              </div>
-              <div className="grid grid-cols-3 gap-3 text-xs">
-                <div>
-                  <label className="block text-slate-600 mb-1">투입 중량 (kg)</label>
-                  <input
-                    type="number"
-                    value={extInputKg}
-                    onChange={e => setExtInputKg(Number(e.target.value))}
-                    className="w-full border rounded px-2.5 py-1.5 font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 mb-1">생산 길이 (m)</label>
-                  <input
-                    type="number"
-                    value={extOutputMeters}
-                    onChange={e => setExtOutputMeters(Number(e.target.value))}
-                    className="w-full border rounded px-2.5 py-1.5 font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 mb-1">손실 길이 (m)</label>
-                  <input
-                    type="number"
-                    value={extLossMeters}
-                    onChange={e => setExtLossMeters(Number(e.target.value))}
-                    className="w-full border rounded px-2.5 py-1.5 font-bold text-red-600"
-                  />
-                </div>
-              </div>
-
-              {/* 실시간 수율 게이지 */}
-              <div className="mt-2 bg-white p-3 rounded-lg border flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-bold text-slate-600">계산된 압출 수율: </span>
-                  <span className={`text-lg font-black ${extYieldRate >= 90 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                    {extYieldRate}%
-                  </span>
-                </div>
-                <div className="w-48 bg-slate-100 rounded-full h-3 overflow-hidden">
-                  <div
-                    className={`h-full transition-all ${extYieldRate >= 90 ? 'bg-emerald-500' : 'bg-amber-500'}`}
-                    style={{ width: `${extYieldRate}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">특이사항</label>
-              <input
-                type="text"
-                value={extRemarks}
-                onChange={e => setExtRemarks(e.target.value)}
-                placeholder="예: 1호기 노즐 교체 후 가동"
-                className="w-full border rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-xl shadow transition flex items-center justify-center gap-2"
-            >
-              <CheckCircle className="w-4 h-4" />
-              압출 완료 ➔ 다음 (재단) 단계로 이동
-            </button>
-          </form>
+          )}
         </div>
       )}
 

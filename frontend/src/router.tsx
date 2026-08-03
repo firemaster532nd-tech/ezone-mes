@@ -65,6 +65,8 @@ import { FnTechStockPage } from '@/pages/inventory/FnTechStockPage';
 import MaterialOrdersPage from '@/pages/orders/MaterialOrdersPage';
 import { AssemblyLogPage } from '@/pages/production/AssemblyLogPage';
 import { CuttingLogPage } from '@/pages/production/CuttingLogPage';
+import { MixLogPage } from '@/pages/production/MixLogPage';
+import { ExtrusionLogPage } from '@/pages/production/ExtrusionLogPage';
 import ShipmentOrdersPage from '@/pages/shipment/ShipmentOrdersPage';
 import { ShipmentInputPage } from '@/pages/shipment/ShipmentInputPage';
 import ExitPassPrintPage from '@/pages/shipment/ExitPassPrintPage';
@@ -160,7 +162,9 @@ export const router = createBrowserRouter([
       { path: 'production/sub-work-orders',       element: <SubWorkOrderPage /> },
       { path: 'production/fn-work-orders',        element: <FnWorkOrderPage /> },
       { path: 'production/assembly-log',          element: <AssemblyLogPage /> },
-      { path: 'production/cutting-log',           element: <CuttingLogPage /> },
+      { path: 'production/cutting-log', font: 'mono', element: <CuttingLogPage /> },
+      { path: 'production/mix-log',               element: <MixLogPage /> },
+      { path: 'production/extrusion-log',         element: <ExtrusionLogPage /> },
       { path: 'production/daily-workforce', element: <DailyWorkforcePage /> },
       { path: 'production/yield-dashboard', element: <YieldDashboardPage /> },
       // 재고관리
