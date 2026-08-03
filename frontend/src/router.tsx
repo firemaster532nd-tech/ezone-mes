@@ -67,6 +67,7 @@ import { AssemblyLogPage } from '@/pages/production/AssemblyLogPage';
 import { CuttingLogPage } from '@/pages/production/CuttingLogPage';
 import { MixLogPage } from '@/pages/production/MixLogPage';
 import { ExtrusionLogPage } from '@/pages/production/ExtrusionLogPage';
+import { WebmailPage } from '@/pages/communication/WebmailPage';
 import ShipmentOrdersPage from '@/pages/shipment/ShipmentOrdersPage';
 import { ShipmentInputPage } from '@/pages/shipment/ShipmentInputPage';
 import ExitPassPrintPage from '@/pages/shipment/ExitPassPrintPage';
@@ -276,6 +277,9 @@ export const router = createBrowserRouter([
       // 공지/쪽지함
       { path: 'announcements',         element: <AnnouncementsPage /> },
       { path: 'announcements/:id',     element: <AnnouncementsPage /> },
+      // 소통 / 웹메일
+      { path: 'communication/webmail', element: <WebmailPage /> },
+      { path: 'webmail',               element: <WebmailPage /> },
       // 고객센터
       { path: 'support',               element: <SupportPage /> },
       // 슈퍼관리자 전용

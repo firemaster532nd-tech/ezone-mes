@@ -82,10 +82,11 @@ export const shopTopGroups: TopNavGroup[] = [
     ],
   },
   {
-    key: 'comm', label: '소통', Icon: Inbox,
+    key: 'comm', label: '전자결재 · 소통', Icon: Inbox,
     children: [
       { label: '결재함', path: '/approval/inbox' },
       { label: '공지 / 쪽지함', path: '/announcements' },
+      { label: '구글 웹메일 (Gmail)', path: '/communication/webmail' },
       { label: 'TBM 안전회의', path: '/production/tbm' },
     ],
   },
@@ -243,11 +244,12 @@ export const adminTopGroups: TopNavGroup[] = [
     ],
   },
   {
-    key: 'approval', label: '결재관리', Icon: Inbox,
+    key: 'approval', label: '전자결재 · 소통', Icon: Inbox,
     children: [
       { label: '결재함', path: '/approval/inbox' },
       { label: '결재 라인 설정', path: '/approval/lines' },
       { label: '공지 / 쪽지함', path: '/announcements' },
+      { label: '구글 웹메일 (Gmail)', path: '/communication/webmail' },
       { label: 'TBM 안전회의', path: '/production/tbm' },
     ],
   },
