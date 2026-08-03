@@ -61,7 +61,7 @@ export function FnTechInspectionPage() {
   const [qty, setQty] = useState('');
   const [inspector, setInspector] = useState('김정용');
   const [selectedEquipment, setSelectedEquipment] = useState('');
-  const [location, setLocation] = useState('FIELD-1F-SUB-MAT');
+  const [location, setLocation] = useState('FIELD-1F-MAT');
   const [notes, setNotes] = useState('');
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [history, setHistory] = useState<any[]>([]);
@@ -307,24 +307,22 @@ export function FnTechInspectionPage() {
             <div>
               <label className={LBL}>입고 적재 위치</label>
               <select className={SEL} value={location} onChange={e => setLocation(e.target.value)}>
-                <optgroup label="1공장">
-                  <option value="FIELD-1F-MAIN">1공장 메인</option>
-                  <option value="FIELD-1F-MAT">1공장 창고</option>
-                  <option value="FIELD-1F-SUB-MAT">1공장 부자재실</option>
-                  <option value="FIELD-1F-TENT">1공장 천막안</option>
-                  <option value="FIELD-1F-RACK-FRONT">1공장 렉앞</option>
-                </optgroup>
-                <optgroup label="2공장 랙 (S~U, 3구역)">
-                  {['S','T','U'].flatMap(c => [1,2,3].map(t => `${c}${t}`)).map(c => (
-                    <option key={c} value={c}>{c} 랙 셀</option>
+                <optgroup label="1구역 랙 (A~R)">
+                  {['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R'].flatMap(c => [1,2,3].map(t => `${c}${t}`)).map(c => (
+                    <option key={c} value={c}>{c} 랙</option>
                   ))}
                 </optgroup>
-                <optgroup label="2공장 현장">
-                  <option value="FIELD-2F-CUTTING">2공장 재단실방향</option>
-                  <option value="FIELD-2F-CENTER">2공장 중앙</option>
-                  <option value="FIELD-2F-RACKS">2공장 랙쪽</option>
-                  <option value="FIELD-2F-RACK-FRONT">2공장 렉앞</option>
-                  <option value="FIELD-2F-TENT">2공장 천막안</option>
+                <optgroup label="현장 위치 — 1공장">
+                  <option value="FIELD-1F-IN">1공장 안</option>
+                  <option value="FIELD-1F-MAT">1공장 원재료창고</option>
+                  <option value="FIELD-1F-TENT">1공장앞 천막</option>
+                  <option value="FIELD-1F-OUTDOOR">1공장 야적</option>
+                </optgroup>
+                <optgroup label="현장 위치 — 2공장">
+                  <option value="FIELD-2F-LEFT">2공장안 왼쪽</option>
+                  <option value="FIELD-2F-RIGHT">2공장안 오른쪽</option>
+                  <option value="FIELD-2F-TENT">2공장앞 천막</option>
+                  <option value="FIELD-2F-OUTDOOR">2공장 야적</option>
                 </optgroup>
               </select>
             </div>

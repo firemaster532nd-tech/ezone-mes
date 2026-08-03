@@ -18,7 +18,7 @@ interface WmsLocation {
 }
 
 // ─── 하드코딩 상수 ────────────────────────────────────────────────────────────
-const RACK_BAYS = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U'];
+const RACK_BAYS = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R'];
 const RACK_TIERS = [1, 2, 3];
 const RACK_PALLETS = [
   { value: 'P1', label: 'P1 (오른쪽)' },
@@ -26,19 +26,16 @@ const RACK_PALLETS = [
 ];
 
 const FIELD_OPTIONS = [
-  // ─── 1공장 ───────────────────────────────────────────────────
-  { value: 'FIELD-1F-MAIN',        label: '1공장 메인' },
-  { value: 'FIELD-1F-MAT',         label: '1공장 창고' },
-  { value: 'FIELD-1F-SUB-MAT',     label: '1공장 부자재실' },
-  { value: 'FIELD-1F-TENT',        label: '1공장 천막안' },
-  { value: 'FIELD-1F-RACK-FRONT',  label: '1공장 렉앞' },
-  // ─── 2공장 ───────────────────────────────────────────────────
-  { value: 'FIELD-2F-CUTTING',     label: '2공장 재단실구역 (재단실 방향)' },
-  { value: 'FIELD-2F-CENTER',      label: '2공장 중앙구역 (공장 중앙)' },
-  { value: 'FIELD-2F-RACKS',       label: '2공장 렉구역 (공장 랙쪽, 메인 RACK)' },
-  { value: 'FIELD-2F-RACK-FRONT',  label: '2공장 렉앞' },
-  { value: 'FIELD-2F-PAINTING',    label: '2공장 도색실' },
-  { value: 'FIELD-2F-TENT',        label: '2공장 천막안' },
+  // ─── 1공장 (DB 코드 기준) ─────────────────────────────────
+  { value: 'FIELD-1F-IN',      label: '1공장 안' },
+  { value: 'FIELD-1F-MAT',     label: '1공장 원재료창고' },
+  { value: 'FIELD-1F-TENT',    label: '1공장앞 천막' },
+  { value: 'FIELD-1F-OUTDOOR', label: '1공장 야적' },
+  // ─── 2공장 (DB 코드 기준) ─────────────────────────────────
+  { value: 'FIELD-2F-LEFT',    label: '2공장안 왼쪽' },
+  { value: 'FIELD-2F-RIGHT',   label: '2공장안 오른쪽' },
+  { value: 'FIELD-2F-TENT',    label: '2공장앞 천막' },
+  { value: 'FIELD-2F-OUTDOOR', label: '2공장 야적' },
 ];
 
 type LocType = 'RACK' | 'FIELD' | 'NONE';
@@ -72,7 +69,7 @@ export function LocationPicker({ value, onChange, placeholder, disabled, allowNo
     if (t === 'FIELD') {
       setFieldCode(value);
     } else if (t === 'RACK') {
-      const match = value.match(/^([A-U])(\d)-?(P\d)?$/);
+      const match = value.match(/^([A-R])(\d)-?(P\d)?$/);
       if (match) {
         setRackBay(match[1]);
         setRackTier(Number(match[2]));

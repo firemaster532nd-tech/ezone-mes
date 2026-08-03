@@ -236,25 +236,17 @@ export function SubMaterialInspectionPage() {
                       <option key={c} value={c}>{c} 랙 셀</option>
                     ))}
                   </optgroup>
-                  <optgroup label="3구역 — 부자재 랙 (S→U, 3칸 × 3단)">
-                    {['S','T','U'].flatMap(col => [1,2,3].map(t => `${col}${t}`)).map(c => (
-                      <option key={c} value={c}>{c} 랙 셀</option>
-                    ))}
-                  </optgroup>
                   <optgroup label="현장 위치 — 1공장">
-                    <option value="FIELD-1F-MAIN">1공장 메인</option>
-                    <option value="FIELD-1F-MAT">1공장 창고</option>
-                    <option value="FIELD-1F-SUB-MAT">1공장 부자재실</option>
-                    <option value="FIELD-1F-TENT">1공장 천막안</option>
-                    <option value="FIELD-1F-RACK-FRONT">1공장 렉앞</option>
+                    <option value="FIELD-1F-IN">1공장 안</option>
+                    <option value="FIELD-1F-MAT">1공장 원재료창고</option>
+                    <option value="FIELD-1F-TENT">1공장앞 천막</option>
+                    <option value="FIELD-1F-OUTDOOR">1공장 야적</option>
                   </optgroup>
                   <optgroup label="현장 위치 — 2공장">
-                    <option value="FIELD-2F-CUTTING">2공장 재단실방향</option>
-                    <option value="FIELD-2F-CENTER">2공장 중앙 (공장중앙)</option>
-                    <option value="FIELD-2F-RACKS">2공장 랙쪽 (공장랙쪽)</option>
-                    <option value="FIELD-2F-RACK-FRONT">2공장 렉앞</option>
-                    <option value="FIELD-2F-PAINTING">2공장 도색실</option>
-                    <option value="FIELD-2F-TENT">2공장 천막안</option>
+                    <option value="FIELD-2F-LEFT">2공장안 왼쪽</option>
+                    <option value="FIELD-2F-RIGHT">2공장안 오른쪽</option>
+                    <option value="FIELD-2F-TENT">2공장앞 천막</option>
+                    <option value="FIELD-2F-OUTDOOR">2공장 야적</option>
                   </optgroup>
                 </select>
               </div>
