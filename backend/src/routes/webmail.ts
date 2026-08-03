@@ -37,7 +37,7 @@ export async function fetchRealGmailInbox() {
     const lock = await client.getMailboxLock('INBOX');
     const messages: any[] = [];
     try {
-      const status = await client.status('INBOX', { messages: true, unread: true });
+      const status = await client.status('INBOX', { messages: true, unseen: true });
       const total = status.messages || 0;
       const startSeq = Math.max(1, total - 9); // fetch last 10 emails
 

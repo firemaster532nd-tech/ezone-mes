@@ -101,49 +101,43 @@ export async function initializeWorkerPasswords() {
 
 export async function authRoutes(app: FastifyInstance) {
   // Serverless 환경 부팅 속도 최적화: 마이그레이션 및 관리자 초기화는 넌블로킹 비동기로 실행
-  setImmediate(() => {
-    ensureAdminUser().catch((err) => console.error('Failed to ensure admin user:', err));
-    initializeWorkerPasswords().catch((err) => console.error('Failed to initialize worker passwords:', err));
+  setImmediate(async () => {
+    try {
+      await ensureAdminUser().catch((err) => console.error('Failed to ensure admin user:', err));
+      await initializeWorkerPasswords().catch((err) => console.error('Failed to initialize worker passwords:', err));
+
+      await pool.query(`ALTER TABLE worker ADD COLUMN IF NOT EXISTS allowed_modes VARCHAR(10) DEFAULT 'shop';`).catch(() => {});
+      await pool.query(`ALTER TABLE worker ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE;`).catch(() => {});
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS item_subcategory_master (
+          subcategory_id   SERIAL PRIMARY KEY,
+          item_category    VARCHAR(10) NOT NULL,
+          subcategory_name VARCHAR(100) NOT NULL,
+          sort_order       INT DEFAULT 0,
+          is_active        BOOLEAN DEFAULT TRUE,
+          created_at       TIMESTAMPTZ DEFAULT NOW(),
+          UNIQUE (item_category, subcategory_name)
+        )
+      `).catch((err: unknown) => console.error('[Migration] CREATE item_subcategory_master:', err));
+
+      await pool.query(`
+        INSERT INTO item_subcategory_master (item_category, subcategory_name)
+        SELECT DISTINCT item_category, item_subcategory
+        FROM item_master
+        WHERE item_subcategory IS NOT NULL AND item_subcategory <> ''
+        ON CONFLICT (item_category, subcategory_name) DO NOTHING
+      `).catch((err: unknown) => console.error('[Migration] SEED item_subcategory_master:', err));
+
+      await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_density  VARCHAR(30)`).catch(()=>{});
+      await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_thickness VARCHAR(30)`).catch(()=>{});
+      await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_width    VARCHAR(30)`).catch(()=>{});
+      await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_length   VARCHAR(30)`).catch(()=>{});
+      await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_height   VARCHAR(30)`).catch(()=>{});
+    } catch (err) {
+      console.warn('[auth.ts init]', err);
+    }
   });
-
-  // ?œë²„ ?œìž‘ ??admin ê³„ì • ë³´ìž¥ ë°??„ì§  ?¨ìŠ¤?Œë“œê°€ ?¸íŒ…?˜ì? ?Šì? ë¹„ê?ë¦¬ìž  ê³„ì •?¤ì ˜ ì´ˆê¸° ë¹„ë?ë²ˆí˜¸ë¥??´ë???ë²ˆí˜¸ë¡??¸íŒ…
-  // allowed_modes ì½œëŸ¼ ë§ˆì ´ê·¸ë ˆ?´ì…˜
-  await pool.query(`
-    ALTER TABLE worker ADD COLUMN IF NOT EXISTS allowed_modes VARCHAR(10) DEFAULT 'shop';
-  `).catch(() => {});
-
-  await pool.query(`
-    ALTER TABLE worker ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE;
-  `).catch(() => {});
-
-  // ?¸ë¶„ë¥?ë§ˆìŠ¤???Œì ´ë¸?? ì„± (ì¿¼ë¦¬ 1)
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS item_subcategory_master (
-      subcategory_id   SERIAL PRIMARY KEY,
-      item_category    VARCHAR(10) NOT NULL,
-      subcategory_name VARCHAR(100) NOT NULL,
-      sort_order       INT DEFAULT 0,
-      is_active        BOOLEAN DEFAULT TRUE,
-      created_at       TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE (item_category, subcategory_name)
-    )
-  `).catch((err: unknown) => console.error('[Migration] CREATE item_subcategory_master:', err));
-
-  // ê¸°ì¡´ item_master ? ì„œ ?¸ë¶„ë¥??œë“œ (ì¿¼ë¦¬ 2 - ë¶„ë¦¬ ?„ìˆ˜)
-  await pool.query(`
-    INSERT INTO item_subcategory_master (item_category, subcategory_name)
-    SELECT DISTINCT item_category, item_subcategory
-    FROM item_master
-    WHERE item_subcategory IS NOT NULL AND item_subcategory <> ''
-    ON CONFLICT (item_category, subcategory_name) DO NOTHING
-  `).catch((err: unknown) => console.error('[Migration] SEED item_subcategory_master:', err));
-
-  // êµ¬ì¡°??ê·œê²© ì½œëŸ¼ ì¶”ê? (?¤ì¤‘ ALTER ?¨ì ¼ ì¿¼ë¦¬)
-  await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_density  VARCHAR(30)`).catch(()=>{});
-  await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_thickness VARCHAR(30)`).catch(()=>{});
-  await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_width    VARCHAR(30)`).catch(()=>{});
-  await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_length   VARCHAR(30)`).catch(()=>{});
-  await pool.query(`ALTER TABLE item_master ADD COLUMN IF NOT EXISTS spec_height   VARCHAR(30)`).catch(()=>{});
 
   // POST /api/auth/login  (사번 + 비밀번호)
   app.post('/api/auth/login', async (req, reply) => {
