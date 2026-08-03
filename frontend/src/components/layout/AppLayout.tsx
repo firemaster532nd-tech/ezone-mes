@@ -69,10 +69,15 @@ export function AppLayout() {
     localStorage.setItem('active_group', key);
   };
 
-  // 현재 경로에 맞는 그룹 자동 선택
   useEffect(() => {
+    const path = location.pathname;
+    // /quality/ 경로는 항상 quality 그룹 우선
+    if (path.startsWith('/quality/') || path === '/quality') {
+      handleGroupChange('quality');
+      return;
+    }
     const matched = filteredGroups.find(g =>
-      g.children?.some(c => location.pathname === c.path || location.pathname.startsWith(c.path + '/'))
+      g.children?.some(c => path === c.path || path.startsWith(c.path + '/'))
     );
     if (matched) handleGroupChange(matched.key);
   }, [location.pathname]);
