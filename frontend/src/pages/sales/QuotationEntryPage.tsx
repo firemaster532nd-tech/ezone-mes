@@ -136,7 +136,7 @@ export function QuotationEntryPage() {
         total: Number(it.amount) + Number(it.vat),
         remarks: it.remarks || '',
       })));
-    } catch { toast.error('곬적서를 불러오지 못했습니다.'); }
+    } catch { toast.error('견적서를 불러오지 못했습니다.'); }
     finally { setLoading(false); }
   }, []);
 
@@ -222,10 +222,10 @@ export function QuotationEntryPage() {
       };
       if (isEdit) {
         await api.put(`/quotations/${id}`, payload);
-        toast.success('곬적서가 수정되었습니다.');
+        toast.success('견적서가 수정되었습니다.');
       } else {
         await api.post('/quotations', payload);
-        toast.success('곬적서가 등록되었습니다.');
+        toast.success('견적서가 등록되었습니다.');
         navigate('/sales/quotations');
       }
     } catch (e: any) {

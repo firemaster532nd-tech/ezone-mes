@@ -57,26 +57,28 @@ export const shopTopGroups: TopNavGroup[] = [
   {
     key: 'sales', label: '영업', Icon: LineChart,
     children: [
-      // ─── 견적서 ───
-      { label: '▸ 견적서', path: '', isSection: true },
-      { label: '견적서조회', path: '/sales/quotations' },
-      { label: '견적서입력', path: '/sales/quotations/entry' },
-      { label: '견적서현황', path: '/sales/quotations/status' },
-      { label: '미주문현황', path: '/sales/quotations/unordered' },
-      // ─── 주문서 ───
-      { label: '▸ 주문서', path: '', isSection: true },
-      { label: '주문서조회', path: '/orders/purchase-orders' },
-      // ─── 판매 ───
-      { label: '▸ 판매', path: '', isSection: true },
-      { label: '판매조회', path: '/sales/delivery' },
-      { label: '판매입력', path: '/sales/delivery/entry' },
-      { label: '판매단가일괄변경', path: '/sales/delivery/price-change' },
-      { label: '판매현황', path: '/sales/delivery/status' },
-      { label: '수금현황', path: '/sales/payment/status' },
-      { label: '판매할인현황', path: '/sales/delivery/discount' },
-      { label: '회계미반영현황 (판매)', path: '/sales/delivery/accounting' },
-      { label: '거래처별채권', path: '/sales/receivables' },
-      { label: '거래명세서인쇄', path: '/sales/tax-invoice' },
+      {
+        label: '견적서', path: '/sales/quotations',
+        children: [
+          { label: '견적서 조회', path: '/sales/quotations' },
+          { label: '견적서 입력', path: '/sales/quotations/entry' },
+          { label: '견적서 현황', path: '/sales/quotations/status' },
+          { label: '미주문현황', path: '/sales/quotations/unordered' },
+        ],
+      },
+      {
+        label: '판매', path: '/sales/delivery',
+        children: [
+          { label: '판매 조회', path: '/sales/delivery' },
+          { label: '판매 입력', path: '/sales/delivery/entry' },
+          { label: '단가일괄변경', path: '/sales/delivery/price-change' },
+          { label: '판매현황', path: '/sales/delivery/status' },
+          { label: '수금현황', path: '/sales/payment/status' },
+          { label: '할인현황', path: '/sales/delivery/discount' },
+          { label: '회계미반영현황', path: '/sales/delivery/accounting' },
+          { label: '거래처별채권', path: '/sales/receivables' },
+        ],
+      },
     ],
   },
   {
@@ -129,12 +131,16 @@ export const shopTopGroups: TopNavGroup[] = [
   {
     key: 'quality', label: '품질관리', Icon: ShieldCheck,
     children: [
-      { label: '인수검사', path: '/quality/incoming' },
-      { label: '원재료 인수검사', path: '/quality/incoming/raw' },
-      { label: '부자재 인수검사', path: '/quality/incoming/sub' },
-      { label: '소켓/브라켓 인수검사', path: '/quality/incoming/socket' },
-      { label: '⚡ 에프엔테크 인수검사', path: '/quality/incoming/fn-tech' },
-      { label: '비인정제품 인수검사', path: '/quality/incoming/non-certified' },
+      {
+        label: '인수검사', path: '/quality/incoming/raw',
+        children: [
+          { label: '원재료 인수검사', path: '/quality/incoming/raw' },
+          { label: '부자재 인수검사', path: '/quality/incoming/sub' },
+          { label: '소켓/브라켓 인수검사', path: '/quality/incoming/socket' },
+          { label: '⚡ 에프엔테크 인수검사', path: '/quality/incoming/fn-tech' },
+          { label: '비인정제품 인수검사', path: '/quality/incoming/non-certified' },
+        ],
+      },
       { label: '중간검사 (C-701)', path: '/quality/process-inspection' },
       { label: '자주검사', path: '/quality/self-inspection' },
       { label: '완제품검사 (C-901)', path: '/quality/fqc-inspection' },
@@ -152,11 +158,11 @@ export const shopTopGroups: TopNavGroup[] = [
     children: [
       { label: '출하대기현황', path: '/shipment/ready' },
       { label: '출하조회', path: '/shipment/orders' },
-      { label: '출하입력', path: '/shipment/input' },
       { label: '출하현황', path: '/shipment/pending' },
       { label: '포장·출하 스캔', path: '/shipment/staging' },
       { label: '거래명세서 관리', path: '/shipment/statements' },
       { label: '반품입고', path: '/shipment/returns' },
+      { label: '출하지시서', path: '/shipment/dispatch' },
     ],
   },
   {
@@ -215,26 +221,28 @@ export const adminTopGroups: TopNavGroup[] = [
   {
     key: 'sales', label: '영업', Icon: LineChart,
     children: [
-      // ─── 견적서 ───
-      { label: '▸ 견적서', path: '', isSection: true },
-      { label: '견적서조회', path: '/sales/quotations' },
-      { label: '견적서입력', path: '/sales/quotations/entry' },
-      { label: '견적서현황', path: '/sales/quotations/status' },
-      { label: '미주문현황', path: '/sales/quotations/unordered' },
-      // ─── 주문서 ───
-      { label: '▸ 주문서', path: '', isSection: true },
-      { label: '주문서조회', path: '/orders/purchase-orders' },
-      // ─── 판매 ───
-      { label: '▸ 판매', path: '', isSection: true },
-      { label: '판매조회', path: '/sales/delivery' },
-      { label: '판매입력', path: '/sales/delivery/entry' },
-      { label: '판매단가일괄변경', path: '/sales/delivery/price-change' },
-      { label: '판매현황', path: '/sales/delivery/status' },
-      { label: '수금현황', path: '/sales/payment/status' },
-      { label: '판매할인현황', path: '/sales/delivery/discount' },
-      { label: '회계미반영현황 (판매)', path: '/sales/delivery/accounting' },
-      { label: '거래처별채권', path: '/sales/receivables' },
-      { label: '거래명세서인쇄', path: '/sales/tax-invoice' },
+      {
+        label: '견적서', path: '/sales/quotations',
+        children: [
+          { label: '견적서 조회', path: '/sales/quotations' },
+          { label: '견적서 입력', path: '/sales/quotations/entry' },
+          { label: '견적서 현황', path: '/sales/quotations/status' },
+          { label: '미주문현황', path: '/sales/quotations/unordered' },
+        ],
+      },
+      {
+        label: '판매', path: '/sales/delivery',
+        children: [
+          { label: '판매 조회', path: '/sales/delivery' },
+          { label: '판매 입력', path: '/sales/delivery/entry' },
+          { label: '단가일괄변경', path: '/sales/delivery/price-change' },
+          { label: '판매현황', path: '/sales/delivery/status' },
+          { label: '수금현황', path: '/sales/payment/status' },
+          { label: '할인현황', path: '/sales/delivery/discount' },
+          { label: '회계미반영현황', path: '/sales/delivery/accounting' },
+          { label: '거래처별채권', path: '/sales/receivables' },
+        ],
+      },
     ],
   },
   {
@@ -262,12 +270,16 @@ export const adminTopGroups: TopNavGroup[] = [
   {
     key: 'quality', label: '품질관리', Icon: ShieldCheck,
     children: [
-      { label: '인수검사', path: '/quality/incoming' },
-      { label: '원재료 인수검사', path: '/quality/incoming/raw' },
-      { label: '부자재 인수검사', path: '/quality/incoming/sub' },
-      { label: '소켓/브라켓 인수검사', path: '/quality/incoming/socket' },
-      { label: '⚡ 에프엔테크 인수검사', path: '/quality/incoming/fn-tech' },
-      { label: '비인정제품 인수검사', path: '/quality/incoming/non-certified' },
+      {
+        label: '인수검사', path: '/quality/incoming/raw',
+        children: [
+          { label: '원재료 인수검사', path: '/quality/incoming/raw' },
+          { label: '부자재 인수검사', path: '/quality/incoming/sub' },
+          { label: '소켓/브라켓 인수검사', path: '/quality/incoming/socket' },
+          { label: '⚡ 에프엔테크 인수검사', path: '/quality/incoming/fn-tech' },
+          { label: '비인정제품 인수검사', path: '/quality/incoming/non-certified' },
+        ],
+      },
       { label: '중간검사 (C-701)', path: '/quality/process-inspection' },
       { label: '자주검사', path: '/quality/self-inspection' },
       { label: '완제품검사 (C-901)', path: '/quality/fqc-inspection' },
@@ -298,11 +310,11 @@ export const adminTopGroups: TopNavGroup[] = [
     children: [
       { label: '출하대기현황', path: '/shipment/ready' },
       { label: '출하조회', path: '/shipment/orders' },
-      { label: '출하입력', path: '/shipment/input' },
       { label: '출하현황', path: '/shipment/pending' },
       { label: '포장·출하 스캔', path: '/shipment/staging' },
       { label: '거래명세서 관리', path: '/shipment/statements' },
       { label: '반품입고', path: '/shipment/returns' },
+      { label: '출하지시서', path: '/shipment/dispatch' },
     ],
   },
   {

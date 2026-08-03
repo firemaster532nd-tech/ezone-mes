@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { ClipboardCheck, Search, ChevronRight, CheckCircle2, XCircle, Plus, RefreshCw, FileText } from 'lucide-react';
+import { ClipboardCheck, Search, ChevronRight, CheckCircle2, XCircle, Plus, RefreshCw, FileText, Printer } from 'lucide-react';
+import { GodexLabelPrinter } from '@/components/label/GodexLabelPrinter';
 
 interface OrderItem {
   item_name: string;
@@ -36,6 +37,7 @@ export function SocketBracketInspectionPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
+  const [printLabelData, setPrintLabelData] = useState<any>(null);
   
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [itemsToInspect, setItemsToInspect] = useState<InspectItem[]>([]);
@@ -422,7 +424,23 @@ export function SocketBracketInspectionPage() {
                       </div>
 
                       <div>
-                        <label className="text-xs text-emerald-400/80 mb-1 block">부여될 LOT 번호</label>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-xs text-emerald-400/80 block">부여될 LOT 번호</label>
+                          <button
+                            type="button"
+                            onClick={() => setPrintLabelData({
+                              lot_number: item.lotNumber,
+                              item_name: item.item_name,
+                              category: item.category,
+                              unit: 'EA',
+                              qty_current: item.qty || 1,
+                              received_date: new Date().toISOString().slice(0, 10),
+                            })}
+                            className="flex items-center gap-1 text-[11px] bg-amber-600/30 hover:bg-amber-600/50 text-amber-300 border border-amber-500/40 rounded px-2 py-0.5 transition"
+                          >
+                            <Printer className="h-3 w-3" /> 라벨 미리 출력
+                          </button>
+                        </div>
                         <input
                           type="text"
                           value={item.lotNumber}
@@ -611,6 +629,15 @@ export function SocketBracketInspectionPage() {
           </div>
         </div>
       </div>
+
+      {/* 라벨 미리 출력 모달 */}
+      {printLabelData && (
+        <GodexLabelPrinter
+          labelData={printLabelData}
+          onClose={() => setPrintLabelData(null)}
+        />
+      )}
     </div>
   );
 }
+

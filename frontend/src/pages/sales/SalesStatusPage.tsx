@@ -40,7 +40,7 @@ export function SalesStatusPage({ type }: { type: 'quotation' | 'delivery' }) {
   const totalCnt    = monthly.reduce((s,m)=>s+(Number(m.cnt||0)),0);
   const maxAmount   = Math.max(...monthly.map(m=>Number(m.amount||m.supply||0)), 1);
 
-  const title = type === 'delivery' ? '판매 현황' : '곬적서 현황';
+  const title = type === 'delivery' ? '판매 현황' : '견적서 현황';
 
   return (
     <div className="space-y-4">

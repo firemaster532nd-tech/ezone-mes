@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
+import { Printer } from 'lucide-react';
+import { GodexLabelPrinter } from '@/components/label/GodexLabelPrinter';
 
 // ─── 타입 ────────────────────────────────────────────────────
 type FnTab = '일체형슬리브' | '보호철판' | '고무패킹';
@@ -56,6 +58,7 @@ const LBL = 'block text-xs font-semibold text-slate-400 mb-1';
 export function FnTechInspectionPage() {
   const [tab, setTab] = useState<FnTab>('일체형슬리브');
   const [selectedSize, setSelectedSize] = useState('');
+  const [showLabelPrinter, setShowLabelPrinter] = useState(false);
   const [sleeveDiam, setSleeveDiam] = useState<number>(100);
   const [sleeveHeight, setSleeveHeight] = useState('몸통');
   const SLEEVE_HEIGHTS_100 = ['몸통', '150H', '170H', '180H', '190H', '200H', '210H', '240H', '250H', '260H'];
@@ -406,17 +409,45 @@ export function FnTechInspectionPage() {
             </div>
           )}
 
-          {/* 등록 버튼 */}
-          <button onClick={handleSubmit}
-            className={`w-full py-3 rounded-xl font-black text-base transition-all ${
-              result === '합격' ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg' :
-              result === '불합격' ? 'bg-red-800 text-red-300 opacity-60 cursor-not-allowed' :
-              'bg-slate-700 text-slate-400'
-            }`}>
-            {result === '합격' ? `✅ ${tab} 합격 등록 → FN테크 재고 자동 반영` :
-             result === '불합격' ? '❌ 불합격 (조치 필요)' : '전체 항목 입력 후 자동 판정'}
-          </button>
+          {/* 라벨 미리 출력 버튼 & 등록 버튼 */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (!lotNumber) { toast.error('LOT 번호가 생성된 후 미리 인쇄할 수 있습니다.'); return; }
+                setShowLabelPrinter(true);
+              }}
+              className="flex items-center justify-center gap-1.5 px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white font-bold text-sm rounded-xl transition shadow"
+            >
+              <Printer className="h-4 w-4" /> 라벨 미리 출력
+            </button>
+            <button onClick={handleSubmit}
+              className={`flex-1 py-3 rounded-xl font-black text-base transition-all ${
+                result === '합격' ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg' :
+                result === '불합격' ? 'bg-red-800 text-red-300 opacity-60 cursor-not-allowed' :
+                'bg-slate-700 text-slate-400'
+              }`}>
+              {result === '합격' ? `✅ ${tab} 합격 등록 → FN테크 재고 자동 반영` :
+               result === '불합격' ? '❌ 불합격 (조치 필요)' : '전체 항목 입력 후 자동 판정'}
+            </button>
+          </div>
         </div>
+
+        {/* 라벨 미리 출력 모달 */}
+        {showLabelPrinter && (
+          <GodexLabelPrinter
+            labelData={{
+              lot_number: lotNumber,
+              item_name: `FN테크 ${tab} ${selectedSize || ''}`,
+              category: `FN테크-${tab}`,
+              unit: 'EA',
+              qty_current: qty || '1',
+              received_date: new Date().toISOString().slice(0, 10),
+              location: location,
+            }}
+            onClose={() => setShowLabelPrinter(false)}
+          />
+        )}
 
         {/* 이력 테이블 */}
         <div className="bg-slate-800 rounded-2xl border border-slate-700 p-4">

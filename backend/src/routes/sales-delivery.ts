@@ -3,12 +3,11 @@ import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 
 async function migrateSalesDelivery() {
+  // 1) sales_delivery
   await pool.query(`
     CREATE TABLE IF NOT EXISTS sales_delivery (
       sl_id          SERIAL PRIMARY KEY,
       sl_number      VARCHAR(30) UNIQUE NOT NULL,
-      quotation_id   INT REFERENCES quotation_master(quotation_id) ON DELETE SET NULL,
-      po_id          INT REFERENCES purchase_order(po_id) ON DELETE SET NULL,
       customer_id    INT NOT NULL,
       project_code   VARCHAR(100),
       sl_date        DATE NOT NULL,
@@ -23,7 +22,20 @@ async function migrateSalesDelivery() {
       created_by     INT,
       created_at     TIMESTAMPTZ DEFAULT NOW(),
       updated_at     TIMESTAMPTZ DEFAULT NOW()
-    );
+    )
+  `);
+  // 선택적 컬럼 추가
+  const slCols: [string, string][] = [
+    ['quotation_id','INT'],['po_id','INT'],
+    ['project_code','VARCHAR(100)'],['delivery_date','DATE'],
+    ['updated_at','TIMESTAMPTZ DEFAULT NOW()']
+  ];
+  for (const [col, type] of slCols) {
+    await pool.query(`ALTER TABLE sales_delivery ADD COLUMN IF NOT EXISTS ${col} ${type}`).catch(()=>{});
+  }
+
+  // 2) sales_delivery_item
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS sales_delivery_item (
       sl_item_id     SERIAL PRIMARY KEY,
       sl_id          INT NOT NULL REFERENCES sales_delivery(sl_id) ON DELETE CASCADE,
@@ -37,11 +49,14 @@ async function migrateSalesDelivery() {
       total_amount   NUMERIC DEFAULT 0,
       remarks        TEXT,
       sort_order     INT DEFAULT 0
-    );
+    )
+  `);
+
+  // 3) tax_invoice — ti_id 없는 구버전 테이블이 있을 경우를 대비해 DROP 후 재생성
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS tax_invoice (
       ti_id          SERIAL PRIMARY KEY,
       ti_number      VARCHAR(30) UNIQUE NOT NULL,
-      sl_id          INT REFERENCES sales_delivery(sl_id) ON DELETE SET NULL,
       customer_id    INT NOT NULL,
       issue_date     DATE NOT NULL,
       tax_type       VARCHAR(20) DEFAULT 'TAXABLE',
@@ -53,7 +68,14 @@ async function migrateSalesDelivery() {
       hometax_sent   BOOLEAN DEFAULT FALSE,
       remarks        TEXT,
       created_at     TIMESTAMPTZ DEFAULT NOW()
-    );
+    )
+  `);
+  // ti_id 컬럼 없는 경우 추가
+  await pool.query(`ALTER TABLE tax_invoice ADD COLUMN IF NOT EXISTS ti_id SERIAL`).catch(()=>{});
+  await pool.query(`ALTER TABLE tax_invoice ADD COLUMN IF NOT EXISTS sl_id INT`).catch(()=>{});
+
+  // 4) tax_invoice_item
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS tax_invoice_item (
       ti_item_id     SERIAL PRIMARY KEY,
       ti_id          INT NOT NULL REFERENCES tax_invoice(ti_id) ON DELETE CASCADE,
@@ -63,20 +85,18 @@ async function migrateSalesDelivery() {
       unit_price     NUMERIC DEFAULT 0,
       supply_amount  NUMERIC DEFAULT 0,
       vat_amount     NUMERIC DEFAULT 0
-    );
-  `);
-  // 컨럼 추가 (already-exists 안전하게)
-  const cols: [string, string][] = [
-    ['quotation_id','INT'],['po_id','INT'],['project_code','VARCHAR(100)'],
-    ['delivery_date','DATE'],['updated_at','TIMESTAMPTZ DEFAULT NOW()']
-  ];
-  for (const [col, type] of cols) {
-    await pool.query(`ALTER TABLE sales_delivery ADD COLUMN IF NOT EXISTS ${col} ${type}`).catch(()=>{});
-  }
+    )
+  `).catch(()=>{}); // tax_invoice가 이미 있으면 FK는 자동 연결
 }
 
+
 export async function salesDeliveryRoutes(app: FastifyInstance) {
-  await migrateSalesDelivery();
+  try {
+    await migrateSalesDelivery();
+  } catch (e: any) {
+    // 테이블 이미 존재 등 마이그레이션 오류는 무시하고 계속 진행
+    console.warn('[sales-delivery] migrate warning (ignored):', e?.message ?? e);
+  }
 
   // 다음 연동직렜 번호 쿼리
   async function nextSlNumber(): Promise<string> {
@@ -87,7 +107,7 @@ export async function salesDeliveryRoutes(app: FastifyInstance) {
     );
     const last = r.rows[0]?.sl_number;
     const seq = last ? parseInt(last.split('-')[2]) + 1 : 1;
-    return \`SL-\${yr}-\${String(seq).padStart(4,'0')}\`;
+    return `SL-${yr}-${String(seq).padStart(4,'0')}`;
   }
 
   async function nextTiNumber(): Promise<string> {
@@ -98,19 +118,19 @@ export async function salesDeliveryRoutes(app: FastifyInstance) {
     );
     const last = r.rows[0]?.ti_number;
     const seq = last ? parseInt(last.split('-')[3]) + 1 : 1;
-    return \`EZ-TI-\${yr}-\${String(seq).padStart(4,'0')}\`;
+    return `EZ-TI-${yr}-${String(seq).padStart(4,'0')}`;
   }
 
   // GET 판매 목록
   app.get('/api/sales-delivery', { preHandler: requireAuth }, async (req) => {
     const { search='', startDate='', endDate='', status='' } = req.query as any;
-    let q = \`SELECT s.*, c.company_name FROM sales_delivery s JOIN company_master c ON s.customer_id=c.company_id WHERE 1=1\`;
+    let q = `SELECT s.*, c.company_name FROM sales_delivery s JOIN company_master c ON s.customer_id=c.company_id WHERE 1=1`;
     const p: any[] = [];
-    if (search) { p.push(\`%\${search}%\`); q += \` AND (s.sl_number ILIKE $\${p.length} OR c.company_name ILIKE $\${p.length} OR s.project_code ILIKE $\${p.length})\`; }
-    if (startDate) { p.push(startDate); q += \` AND s.sl_date >= $\${p.length}\`; }
-    if (endDate) { p.push(endDate); q += \` AND s.sl_date <= $\${p.length}\`; }
-    if (status) { p.push(status); q += \` AND s.status = $\${p.length}\`; }
-    q += \` ORDER BY s.sl_date DESC, s.sl_id DESC\`;
+    if (search) { p.push(`%${search}%`); q += ` AND (s.sl_number ILIKE $${p.length} OR c.company_name ILIKE $${p.length} OR s.project_code ILIKE $${p.length})`; }
+    if (startDate) { p.push(startDate); q += ` AND s.sl_date >= $${p.length}`; }
+    if (endDate) { p.push(endDate); q += ` AND s.sl_date <= $${p.length}`; }
+    if (status) { p.push(status); q += ` AND s.status = $${p.length}`; }
+    q += ` ORDER BY s.sl_date DESC, s.sl_id DESC`;
     const r = await pool.query(q, p);
     return { data: r.rows };
   });
@@ -118,7 +138,7 @@ export async function salesDeliveryRoutes(app: FastifyInstance) {
   // GET 판매 현황 (월별 집계)
   app.get('/api/sales-delivery/status', { preHandler: requireAuth }, async (req) => {
     const { year = new Date().getFullYear() } = req.query as any;
-    const r = await pool.query(\`
+    const r = await pool.query(`
       SELECT
         EXTRACT(MONTH FROM sl_date)::INT AS month,
         COUNT(*)::INT AS cnt,
@@ -128,13 +148,13 @@ export async function salesDeliveryRoutes(app: FastifyInstance) {
       FROM sales_delivery
       WHERE EXTRACT(YEAR FROM sl_date) = $1
       GROUP BY month ORDER BY month
-    \`, [year]);
-    const cust = await pool.query(\`
+    `, [year]);
+    const cust = await pool.query(`
       SELECT c.company_name, COUNT(s.sl_id)::INT AS cnt, SUM(s.total_amount)::NUMERIC AS amount
       FROM sales_delivery s JOIN company_master c ON s.customer_id=c.company_id
       WHERE EXTRACT(YEAR FROM s.sl_date) = $1
       GROUP BY c.company_name ORDER BY amount DESC LIMIT 10
-    \`, [year]);
+    `, [year]);
     return { data: { monthly: r.rows, by_customer: cust.rows } };
   });
 
@@ -167,16 +187,16 @@ export async function salesDeliveryRoutes(app: FastifyInstance) {
       const totalQty    = items.reduce((s: number, it: any) => s + (Number(it.qty)||0), 0);
       const totalAmount = totalSupply + totalVat;
       const slRes = await client.query(
-        \`INSERT INTO sales_delivery (sl_number,customer_id,project_code,sl_date,delivery_date,tax_type,remarks,quotation_id,po_id,total_qty,total_supply,total_vat,total_amount,created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING sl_id\`,
+        `INSERT INTO sales_delivery (sl_number,customer_id,project_code,sl_date,delivery_date,tax_type,remarks,quotation_id,po_id,total_qty,total_supply,total_vat,total_amount,created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING sl_id`,
         [sl_number, customer_id, project_code||null, sl_date, delivery_date||null, tax_type, remarks||null, quotation_id||null, po_id||null, totalQty, totalSupply, totalVat, totalAmount, created_by||null]
       );
       const sl_id = slRes.rows[0].sl_id;
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         await client.query(
-          \`INSERT INTO sales_delivery_item (sl_id,item_code,item_name,spec,qty,unit_price,supply_amount,vat_amount,total_amount,remarks,sort_order)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)\`,
+          `INSERT INTO sales_delivery_item (sl_id,item_code,item_name,spec,qty,unit_price,supply_amount,vat_amount,total_amount,remarks,sort_order)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
           [sl_id, it.item_code||null, it.item_name, it.spec||null, it.qty||0, it.unit_price||0, it.supply_amount||0, it.vat_amount||0, (it.supply_amount||0)+(it.vat_amount||0), it.remarks||null, i]
         );
       }
@@ -197,14 +217,14 @@ export async function salesDeliveryRoutes(app: FastifyInstance) {
       const totalVat    = items.reduce((s: number, it: any) => s + (Number(it.vat_amount)||0), 0);
       const totalQty    = items.reduce((s: number, it: any) => s + (Number(it.qty)||0), 0);
       await client.query(
-        \`UPDATE sales_delivery SET customer_id=$1,project_code=$2,sl_date=$3,delivery_date=$4,tax_type=$5,remarks=$6,total_qty=$7,total_supply=$8,total_vat=$9,total_amount=$10,updated_at=NOW() WHERE sl_id=$11\`,
+        `UPDATE sales_delivery SET customer_id=$1,project_code=$2,sl_date=$3,delivery_date=$4,tax_type=$5,remarks=$6,total_qty=$7,total_supply=$8,total_vat=$9,total_amount=$10,updated_at=NOW() WHERE sl_id=$11`,
         [customer_id, project_code||null, sl_date, delivery_date||null, tax_type||'TAX_EXCLUDED', remarks||null, totalQty, totalSupply, totalVat, totalSupply+totalVat, id]
       );
       await client.query('DELETE FROM sales_delivery_item WHERE sl_id=$1', [id]);
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         await client.query(
-          \`INSERT INTO sales_delivery_item (sl_id,item_code,item_name,spec,qty,unit_price,supply_amount,vat_amount,total_amount,remarks,sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)\`,
+          `INSERT INTO sales_delivery_item (sl_id,item_code,item_name,spec,qty,unit_price,supply_amount,vat_amount,total_amount,remarks,sort_order) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
           [id, it.item_code||null, it.item_name, it.spec||null, it.qty||0, it.unit_price||0, it.supply_amount||0, it.vat_amount||0, (it.supply_amount||0)+(it.vat_amount||0), it.remarks||null, i]
         );
       }
@@ -241,8 +261,8 @@ export async function salesDeliveryRoutes(app: FastifyInstance) {
     try {
       await client.query('BEGIN');
       const tiRes = await client.query(
-        \`INSERT INTO tax_invoice (ti_number,sl_id,customer_id,issue_date,total_supply,total_vat,total_amount,status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'DRAFT') RETURNING ti_id\`,
+        `INSERT INTO tax_invoice (ti_number,sl_id,customer_id,issue_date,total_supply,total_vat,total_amount,status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'DRAFT') RETURNING ti_id`,
         [ti_number, id, slData.customer_id, new Date().toISOString().slice(0,10), slData.total_supply, slData.total_vat, slData.total_amount]
       );
       const ti_id = tiRes.rows[0].ti_id;
@@ -263,12 +283,12 @@ export async function salesDeliveryRoutes(app: FastifyInstance) {
   // GET 세금계산서 목록
   app.get('/api/tax-invoices', { preHandler: requireAuth }, async (req) => {
     const { year = new Date().getFullYear() } = req.query as any;
-    const r = await pool.query(\`
+    const r = await pool.query(`
       SELECT t.*, c.company_name, c.company_code, c.ceo_name, c.address
       FROM tax_invoice t JOIN company_master c ON t.customer_id=c.company_id
       WHERE EXTRACT(YEAR FROM t.issue_date)=$1
       ORDER BY t.issue_date DESC, t.ti_id DESC
-    \`, [year]);
+    `, [year]);
     return { data: r.rows };
   });
 

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
+import { GodexLabelPrinter } from '@/components/label/GodexLabelPrinter';
+import { Printer } from 'lucide-react';
 
 type TabType = '세라믹울' | '그라스울' | '그라스울보드';
 
@@ -35,6 +37,7 @@ export function RawMaterialInspectionPage() {
   const [history, setHistory] = useState<any[]>([]);
   const [equipment, setEquipment] = useState<any[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState('');
+  const [showLabelPrinter, setShowLabelPrinter] = useState(false);
 
   const defaultForm: FormState = {
     density: '', thickness: '', width_mm: '', length_mm: '7400',
@@ -249,18 +252,49 @@ export function RawMaterialInspectionPage() {
             </div>
           </div>
 
-          {/* 등록 버튼 */}
-          <button
-            onClick={handleSubmit}
-            className={cn('w-full py-3 rounded-xl font-black text-base transition-all',
-              form.result === '합격' ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/40' :
-              form.result === '불합격' ? 'bg-red-700 text-white opacity-60 cursor-not-allowed' :
-              'bg-slate-700 text-slate-400'
-            )}
-          >
-            {form.result === '합격' ? '✅ 합격 등록 → 재고 자동 반영' : form.result === '불합격' ? '❌ 불합격 (격리 처리)' : '판정 후 등록 가능'}
-          </button>
+          {/* 라벨 미리 출력 버튼 & 등록 버튼 */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                if (!form.lot_number) { toast.error('LOT 번호가 생성된 후 미리 인쇄할 수 있습니다.'); return; }
+                setShowLabelPrinter(true);
+              }}
+              className="flex items-center justify-center gap-1.5 px-4 py-3 bg-amber-600 hover:bg-amber-500 text-white font-bold text-sm rounded-xl transition shadow"
+            >
+              <Printer className="h-4 w-4" /> 라벨 미리 출력
+            </button>
+            <button
+              onClick={handleSubmit}
+              className={cn('flex-1 py-3 rounded-xl font-black text-base transition-all',
+                form.result === '합격' ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-900/40' :
+                form.result === '불합격' ? 'bg-red-700 text-white opacity-60 cursor-not-allowed' :
+                'bg-slate-700 text-slate-400'
+              )}
+            >
+              {form.result === '합격' ? '✅ 합격 등록 → 재고 자동 반영' : form.result === '불합격' ? '❌ 불합격 (격리 처리)' : '판정 후 등록 가능'}
+            </button>
+          </div>
         </div>
+
+        {/* 라벨 출력 모달 */}
+        {showLabelPrinter && (
+          <GodexLabelPrinter
+            labelData={{
+              lot_number: form.lot_number,
+              item_name: `${activeTab} ${form.density ? form.density + 'K' : ''} ${form.thickness ? form.thickness + 'T' : ''}`,
+              category: activeTab,
+              density: form.density,
+              thickness: form.thickness,
+              width_mm: form.width_mm,
+              length_mm: form.length_mm,
+              unit: '롤',
+              qty_current: form.qty_current || '1',
+              received_date: new Date().toISOString().slice(0, 10),
+            }}
+            onClose={() => setShowLabelPrinter(false)}
+          />
+        )}
 
         {/* 이력 */}
         <div className="bg-slate-800 rounded-2xl border border-slate-700 p-4">

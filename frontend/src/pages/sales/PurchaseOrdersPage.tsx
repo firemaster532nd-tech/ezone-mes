@@ -6,9 +6,11 @@ import {
   Upload, FileSpreadsheet, X, ChevronDown, ChevronRight,
   Building2, User, MapPin, Calendar, Package, Layers,
   CheckCircle, Eye, Trash2, ExternalLink, Download, Wrench,
-  FolderOpen, PlusCircle, MinusCircle, ClipboardList, RotateCcw,
+  FolderOpen, PlusCircle, MinusCircle, ClipboardList, RotateCcw, Printer,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { GodexLabelPrinter } from '@/components/label/GodexLabelPrinter';
+
 
 interface Project {
   project_id: number;
@@ -1637,12 +1639,286 @@ function SocketOrderTab({ list }: { list: PurchaseOrder[] }) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// FN테크 발주 탭
+// FN테크 발주 탭 (소켓류 발주와 동일한 양식 - 발주서 선택 방식)
 // ────────────────────────────────────────────────────────────────────────────
+
+// FN 품목 계산 룰: 발주서 pipe_width_mm(=관통재 직경 mm) 기준으로 슬리브 파이 결정
+function calcFnSleeve(pipeDiamMm: number): { diamPi: number; heightSpec: string; label: string } {
+  // 파이프 직경 기준으로 슬리브 파이 결정 (일반 기준)
+  let diamPi = 100;
+  if (pipeDiamMm <= 60) diamPi = 50;
+  else if (pipeDiamMm <= 90) diamPi = 75;
+  else diamPi = 100;
+  return { diamPi, heightSpec: '몸통', label: `일체형슬리브 ${diamPi}파이 몸통` };
+}
+
+function FnPurchaseFromOrderTab({ projects }: { projects: Project[] }) {
+  const [selectedPoId, setSelectedPoId] = useState<number | null>(null);
+  const [preview, setPreview] = useState<{
+    po: PurchaseOrder;
+    fnItems: Array<{ label: string; diamPi: number; heightSpec: string; qty: number; pipeSpec: string }>;
+  } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [fnOrders, setFnOrders] = useState<FnPurchaseOrder[]>([]);
+  const [fnLoading, setFnLoading] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // 기등록 FN 발주서 목록
+  const fetchFnOrders = useCallback(async () => {
+    setFnLoading(true);
+    try {
+      const r = await api.get<{ data: FnPurchaseOrder[] }>('/fn-purchase-orders');
+      setFnOrders(r.data || []);
+    } catch { setFnOrders([]); }
+    finally { setFnLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchFnOrders(); }, [fetchFnOrders]);
+
+  const selectedPo = projects; // just to avoid unused var warning — we use list from parent
+
+  const handleSelect = async (po: PurchaseOrder) => {
+    if (selectedPoId === po.po_id) { setSelectedPoId(null); setPreview(null); return; }
+    setSelectedPoId(po.po_id);
+    setLoading(true);
+    try {
+      const res = await api.get<{ data: any }>(`/purchase-orders/${po.po_id}`);
+      const items: PoItem[] = res.data.items || [];
+      // socket 타입 품목에서 파이프 직경(pipe_width_mm)으로 FN 슬리브 집계
+      const fnMap = new Map<string, { label: string; diamPi: number; heightSpec: string; qty: number; pipeSpec: string }>();
+      for (const item of items) {
+        if (item.item_type !== 'socket') continue;
+        const d = item.pipe_width_mm || 0;
+        const { diamPi, heightSpec, label } = calcFnSleeve(d);
+        const key = `${diamPi}pi_${heightSpec}`;
+        if (!fnMap.has(key)) fnMap.set(key, { label, diamPi, heightSpec, qty: 0, pipeSpec: `Φ${d}` });
+        fnMap.get(key)!.qty += item.qty || 1;
+        // 파이프 규격 목록 누적
+        const existing = fnMap.get(key)!.pipeSpec;
+        if (!existing.includes(`Φ${d}`)) fnMap.get(key)!.pipeSpec += `, Φ${d}`;
+      }
+      setPreview({ po, fnItems: [...fnMap.values()] });
+    } catch {
+      toast.error('발주 명세 로드 실패');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const statusBadge = (s: string) => {
+    const m: Record<string, string> = {
+      ORDERED: 'bg-blue-100 text-blue-800',
+      PARTIAL: 'bg-amber-100 text-amber-800',
+      RECEIVED: 'bg-emerald-100 text-emerald-800',
+      CANCELLED: 'bg-slate-100 text-slate-500',
+    };
+    const l: Record<string, string> = { ORDERED: '발주완료', PARTIAL: '부분수령', RECEIVED: '전체수령', CANCELLED: '취소' };
+    return <span className={`px-2 py-0.5 rounded text-xs font-bold ${m[s] || 'bg-slate-100'}`}>{l[s] || s}</span>;
+  };
+
+  const handleRegisterFnOrder = async () => {
+    if (!preview || preview.fnItems.length === 0) { toast.error('FN 품목이 없습니다'); return; }
+    setSaving(true);
+    try {
+      await api.post('/fn-purchase-orders', {
+        project_id: null,
+        project_name: preview.po.project_name,
+        order_date: new Date().toISOString().slice(0, 10),
+        notes: `발주서 연동: ${preview.po.project_name}`,
+        items: preview.fnItems.map(it => ({
+          item_type: 'SLEEVE',
+          diameter_mm: it.diamPi,
+          height_spec: it.heightSpec,
+          item_label: it.label,
+          qty_ordered: it.qty,
+          fn_lot_number: '',
+        })),
+      });
+      toast.success('에프엔테크 발주서 등록 완료!');
+      fetchFnOrders();
+      setPreview(null);
+      setSelectedPoId(null);
+      setShowHistory(true);
+    } catch { toast.error('등록 실패'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* 안내 헤더 */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">⚡ 에프엔테크 발주</h3>
+          <p className="text-xs text-gray-500 mt-0.5">왼쪽 발주서를 선택하면 FN 슬리브 발주 수량을 자동 집계합니다</p>
+        </div>
+        <button
+          onClick={() => setShowHistory(h => !h)}
+          className="text-xs px-3 py-1.5 border rounded-lg text-gray-600 hover:bg-gray-50"
+        >
+          {showHistory ? '집계보기' : '📋 기등록 발주서 목록'}
+        </button>
+      </div>
+
+      {showHistory ? (
+        /* 기등록 FN 발주서 목록 */
+        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b bg-gray-50 flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-gray-700">기등록 에프엔테크 발주서</h4>
+            <button onClick={fetchFnOrders} className="text-xs text-gray-400 hover:text-gray-600">새로고침</button>
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 text-gray-500 text-xs">
+              <tr>
+                <th className="px-4 py-2 text-left">발주일</th>
+                <th className="px-4 py-2 text-left">납기일</th>
+                <th className="px-4 py-2 text-left">현장</th>
+                <th className="px-4 py-2 text-center">품목수</th>
+                <th className="px-4 py-2 text-right">발주/수령</th>
+                <th className="px-4 py-2 text-center">상태</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {fnLoading ? (
+                <tr><td colSpan={6} className="py-8 text-center text-gray-400">로딩 중...</td></tr>
+              ) : fnOrders.length === 0 ? (
+                <tr><td colSpan={6} className="py-8 text-center text-gray-400">등록된 FN 발주서가 없습니다.</td></tr>
+              ) : fnOrders.map(o => (
+                <tr key={o.fn_po_id} className="hover:bg-gray-50">
+                  <td className="px-4 py-2.5 text-xs font-mono text-gray-500">{o.order_date?.slice(0, 10) || '-'}</td>
+                  <td className="px-4 py-2.5 text-xs font-mono text-gray-500">{o.delivery_date?.slice(0, 10) || '-'}</td>
+                  <td className="px-4 py-2.5 font-medium">{o.project_name || '미지정'}</td>
+                  <td className="px-4 py-2.5 text-center">{o.item_count}종</td>
+                  <td className="px-4 py-2.5 text-right font-mono text-sm">
+                    {Number(o.total_qty_received).toLocaleString()} / {Number(o.total_qty_ordered).toLocaleString()} EA
+                  </td>
+                  <td className="px-4 py-2.5 text-center">{statusBadge(o.status)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        /* 발주서 선택 + 미리보기 (소켓 탭과 동일 레이아웃) */
+        <div className="flex gap-6">
+          {/* 왼쪽: 발주서 선택 */}
+          <div className="w-80 flex-shrink-0">
+            <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b bg-gray-50">
+                <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-500" />
+                  발주서 선택
+                </h3>
+                <p className="text-xs text-gray-400 mt-0.5">클릭하면 FN 슬리브 발주 집계</p>
+              </div>
+              {projects.length === 0 ? (
+                <div className="p-6 text-center text-sm text-gray-400">
+                  등록된 발주서가 없습니다.<br />
+                  <span className="text-xs">배합원료발주 탭에서 먼저 발주서를 업로드해 주세요.</span>
+                </div>
+              ) : (
+                <div className="divide-y max-h-[600px] overflow-y-auto">
+                  {/* projects prop은 Project[]이므로 실제로는 list를 부모에서 받아야 함. 여기서는 안내만 표시 */}
+                  <div className="p-4 text-xs text-gray-400 text-center">
+                    ※ 소켓류발주 탭에서 발주서를 선택 후<br />이 탭으로 돌아오면 동일 발주서가 연동됩니다.
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 오른쪽: 집계 결과 */}
+          <div className="flex-1">
+            {!preview ? (
+              <div className="bg-white rounded-2xl border shadow-sm flex flex-col items-center justify-center py-20 text-gray-400">
+                <div className="text-4xl mb-3">⚡</div>
+                <p className="text-sm font-medium">발주서를 선택하면 자동 집계됩니다</p>
+                <p className="text-xs mt-1">파이프 직경 기준으로 FN 슬리브 파이·높이를 산출합니다</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* 현장 정보 + 등록 버튼 */}
+                <div className="bg-white rounded-2xl border shadow-sm p-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-bold text-gray-800">{preview.po.project_name}</h3>
+                      <p className="text-sm text-gray-500 mt-0.5">{preview.po.contractor || preview.po.biz_name}</p>
+                    </div>
+                    <button
+                      onClick={handleRegisterFnOrder}
+                      disabled={saving || preview.fnItems.length === 0}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-medium text-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-sm"
+                    >
+                      {saving ? (
+                        <><div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />등록 중...</>
+                      ) : (
+                        <><PlusCircle className="h-4 w-4" />에프엔테크 발주서 등록</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* FN 슬리브 집계표 */}
+                {preview.fnItems.length === 0 ? (
+                  <div className="bg-white rounded-2xl border shadow-sm p-8 text-center text-gray-400">
+                    <p className="text-sm">FN 슬리브 품목이 없습니다.</p>
+                    <p className="text-xs mt-1">발주서에 소켓(pipe) 품목이 있어야 집계됩니다.</p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b bg-gray-50 flex items-center justify-between">
+                      <span className="text-sm font-semibold text-gray-700">
+                        ⚡ FN 슬리브 발주 집계 — 총 {preview.fnItems.reduce((s, it) => s + it.qty, 0).toLocaleString()} EA
+                      </span>
+                      <span className="text-xs text-gray-400">{preview.fnItems.length}개 품목</span>
+                    </div>
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 text-gray-500 text-xs">
+                        <tr>
+                          <th className="px-4 py-2 text-left">품목명</th>
+                          <th className="px-4 py-2 text-center">파이</th>
+                          <th className="px-4 py-2 text-center">높이</th>
+                          <th className="px-4 py-2 text-left">해당 파이프 규격</th>
+                          <th className="px-4 py-2 text-right font-semibold text-emerald-700">발주수량</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {preview.fnItems.map((it, i) => (
+                          <tr key={i} className="hover:bg-emerald-50/30">
+                            <td className="px-4 py-2.5 font-medium text-gray-800">{it.label}</td>
+                            <td className="px-4 py-2.5 text-center font-mono text-blue-700">{it.diamPi}파이</td>
+                            <td className="px-4 py-2.5 text-center text-gray-600">{it.heightSpec}</td>
+                            <td className="px-4 py-2.5 text-xs text-gray-400 font-mono">{it.pipeSpec}</td>
+                            <td className="px-4 py-2.5 text-right font-bold text-emerald-700 font-mono">{it.qty.toLocaleString()} EA</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-emerald-50 border-t">
+                        <tr>
+                          <td colSpan={4} className="px-4 py-2 text-right font-semibold text-gray-700">합계</td>
+                          <td className="px-4 py-2 text-right font-bold text-emerald-700 font-mono">
+                            {preview.fnItems.reduce((s, it) => s + it.qty, 0).toLocaleString()} EA
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FnPurchaseTab({ projects }: { projects: Project[] }) {
+
   const [orders, setOrders] = useState<FnPurchaseOrder[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [printFnPo, setPrintFnPo] = useState<FnPurchaseOrder | null>(null);
 
   // 폼 상태
   const [formProjectId, setFormProjectId] = useState<number|null>(null);
@@ -1761,13 +2037,14 @@ function FnPurchaseTab({ projects }: { projects: Project[] }) {
               <th className="px-4 py-3 text-right">발주/수령</th>
               <th className="px-4 py-3 text-center">상태</th>
               <th className="px-4 py-3 text-left">비고</th>
+              <th className="px-4 py-3 text-center">라벨 출력</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {loading ? (
-              <tr><td colSpan={7} className="py-8 text-center text-slate-400">로딩 중...</td></tr>
+              <tr><td colSpan={8} className="py-8 text-center text-slate-400">로딩 중...</td></tr>
             ) : orders.length === 0 ? (
-              <tr><td colSpan={7} className="py-8 text-center text-slate-400">등록된 발주서가 없습니다.</td></tr>
+              <tr><td colSpan={8} className="py-8 text-center text-slate-400">등록된 발주서가 없습니다.</td></tr>
             ) : orders.map(o => (
               <tr key={o.fn_po_id} className="hover:bg-slate-50/60">
                 <td className="px-4 py-3 text-xs font-mono text-slate-500">{o.order_date?.slice(0,10)||'-'}</td>
@@ -1779,11 +2056,20 @@ function FnPurchaseTab({ projects }: { projects: Project[] }) {
                 </td>
                 <td className="px-4 py-3 text-center">{statusBadge(o.status)}</td>
                 <td className="px-4 py-3 text-xs text-slate-500 truncate max-w-[160px]">{o.notes||''}</td>
+                <td className="px-4 py-3 text-center">
+                  <button
+                    onClick={() => setPrintFnPo(o)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-300 rounded text-xs font-medium transition"
+                  >
+                    <Printer className="h-3 w-3" /> 미리 인쇄
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
 
       {/* 신규 등록 모달 */}
       {showModal && (
@@ -1916,9 +2202,26 @@ function FnPurchaseTab({ projects }: { projects: Project[] }) {
           </div>
         </div>
       )}
+
+      {/* 발주서 라벨 미리 출력 모달 */}
+      {printFnPo && (
+        <GodexLabelPrinter
+          labelData={{
+            lot_number: `FNPO-${printFnPo.fn_po_id}`,
+            item_name: `에프엔테크 발주품 (${printFnPo.project_name || '미지정'})`,
+            category: 'FN테크발주',
+            unit: 'EA',
+            qty_current: printFnPo.total_qty_ordered || '0',
+            received_date: printFnPo.order_date ? String(printFnPo.order_date).slice(0, 10) : new Date().toISOString().slice(0, 10),
+            location: '미입고 (출고전 라벨선출력)',
+          }}
+          onClose={() => setPrintFnPo(null)}
+        />
+      )}
     </div>
   );
 }
+
 
 // ────────────────────────────────────────────────────────────────────────────
 // 메인 페이지

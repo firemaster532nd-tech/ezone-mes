@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { Plus } from 'lucide-react';
+import { Plus, Printer } from 'lucide-react';
+import { GodexLabelPrinter } from '@/components/label/GodexLabelPrinter';
 
 // ─── 탭 타입 (D122/D124/D125/D127 성적서 기준) ────────────────────────────
 type SubTab = '세라믹울' | '그라스울-롤' | '그라스울-보드' | '실란트';
@@ -109,6 +110,7 @@ export function SubMaterialInspectionPage() {
   const [n3, setN3] = useState('');
   const [location, setLocation] = useState('A1');
   const [notes, setNotes] = useState('');
+  const [showLabelPrinter, setShowLabelPrinter] = useState(false);
 
   const info = TAB_INFO[tab];
 
@@ -404,14 +406,39 @@ export function SubMaterialInspectionPage() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-3 border-t">
-              <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-slate-50">취소</button>
-              <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">
-                검사 등록
+            <div className="flex justify-between items-center pt-3 border-t">
+              <button
+                type="button"
+                onClick={() => setShowLabelPrinter(true)}
+                className="flex items-center gap-1.5 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition"
+              >
+                <Printer className="h-4 w-4" /> 라벨 미리 출력
               </button>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-slate-50">취소</button>
+                <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700">
+                  검사 등록
+                </button>
+              </div>
             </div>
           </form>
         </div>
+      )}
+
+      {/* 라벨 미리 출력 모달 */}
+      {showLabelPrinter && (
+        <GodexLabelPrinter
+          labelData={{
+            lot_number: lotNumber,
+            item_name: selectedSpec || `${tab} (${info.formCode})`,
+            category: tab,
+            unit: info.unit,
+            qty_current: qty || '1',
+            received_date: new Date().toISOString().slice(0, 10),
+            location: location,
+          }}
+          onClose={() => setShowLabelPrinter(false)}
+        />
       )}
     </div>
   );
