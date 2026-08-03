@@ -210,9 +210,14 @@ export const router = createBrowserRouter([
       { path: 'sales/delivery/entry/:id', element: <SalesDeliveryEntryPage /> },
       { path: 'sales/delivery/status', element: <SalesStatusPage type="delivery" /> },
       { path: 'sales/delivery/accounting', element: <SalesDeliveryPage mode="accounting" /> },
-      // 세금계산서
+      // 세금계산서 (거래명세서인쇄)
       { path: 'sales/tax-invoice', element: <TaxInvoicePage /> },
       { path: 'sales/tax-invoice/:id', element: <TaxInvoicePage /> },
+      // 판매 추가 메뉴 (플레이스홀더)
+      { path: 'sales/delivery/price-change', element: <SalesDeliveryPage /> },
+      { path: 'sales/payment/status', element: <SalesDeliveryPage /> },
+      { path: 'sales/delivery/discount', element: <SalesDeliveryPage /> },
+      { path: 'sales/receivables', element: <SalesDeliveryPage /> },
       { path: 'orders/quotations/print/:id', element: <QuotationPrintPage /> },
       { path: 'orders/projects', element: <ProjectPage /> },
       { path: 'orders/purchase-orders', element: <PurchaseOrdersPage /> },
