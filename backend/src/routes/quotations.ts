@@ -379,6 +379,41 @@ export async function quotationRoutes(app: FastifyInstance) {
         ]);
       }
 
+      // 4-2. 판매/매출납품(sales_delivery) 마스터 및 품목 등록 (판매 메뉴와 100% 자동 연동)
+      const slNumRes = await client.query(
+        `SELECT COALESCE(MAX(SUBSTRING(sl_number FROM 13 FOR 3)::INTEGER), 0) + 1 as next_seq 
+         FROM sales_delivery WHERE sl_number LIKE $1`,
+        [`SL-${orderDateStr}-%`]
+      );
+      const slSeq = String(slNumRes.rows[0].next_seq).padStart(3, '0');
+      const slNumber = `SL-${orderDateStr}-${slSeq}`;
+
+      const slRes = await client.query(`
+        INSERT INTO sales_delivery (
+          sl_number, customer_id, project_code, sl_date, delivery_date, tax_type, remarks, quotation_id,
+          total_qty, total_supply, total_vat, total_amount, status, created_by
+        ) VALUES ($1, $2, $3, CURRENT_DATE, $4, $5, $6, $7, $8, $9, $10, $11, 'CONFIRMED', 'SYSTEM')
+        RETURNING sl_id
+      `, [
+        slNumber, quote.customer_id || 1, quote.project_code || '견적전환현장', quote.delivery_date,
+        quote.tax_type || 'TAX_EXCLUDED', `견적서(${quote.quotation_number})에서 판매로 자동 전환됨. ${quote.remarks || ''}`,
+        quote.quotation_id, quote.total_qty, quote.total_amount, quote.total_vat,
+        Number(quote.total_amount) + Number(quote.total_vat)
+      ]);
+      const slId = slRes.rows[0].sl_id;
+
+      for (let i = 0; i < quoteItems.length; i++) {
+        const item = quoteItems[i];
+        await client.query(`
+          INSERT INTO sales_delivery_item (
+            sl_id, item_code, item_name, spec, qty, unit_price, supply_amount, vat_amount, total_amount, remarks, sort_order
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `, [
+          slId, item.item_code, item.item_name, item.spec, item.qty, item.unit_price,
+          item.amount, item.vat, Number(item.amount) + Number(item.vat), item.remarks, i
+        ]);
+      }
+
       // 5. 견적서 상태 '주문완료'로 업데이트
       await client.query(`
         UPDATE quotation_master SET status = '주문완료' WHERE quotation_id = $1
@@ -387,8 +422,9 @@ export async function quotationRoutes(app: FastifyInstance) {
       await client.query('COMMIT');
       return { 
         success: true, 
-        message: '견적서가 수주로 성공적으로 전환되었습니다.',
-        order: orderRes.rows[0]
+        message: '견적서가 수주 및 판매/매출납품으로 성공적으로 전환되었습니다.',
+        order: orderRes.rows[0],
+        sales_delivery_id: slId
       };
     } catch (err: any) {
       await client.query('ROLLBACK');
