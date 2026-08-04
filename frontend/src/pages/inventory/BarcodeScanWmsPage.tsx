@@ -554,29 +554,84 @@ export default function BarcodeScanWmsPage() {
             <p className="text-[11px] text-slate-600">바코드를 스캐너로 계속 찍으면 여기에 차곡차곡 쌓입니다.</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-700/60 max-h-80 overflow-y-auto">
+          <div className="divide-y divide-slate-700/60 max-h-96 overflow-y-auto">
             {batchCart.map((item) => {
               const cfg = MODE_CFG[item.mode] || MODE_CFG.AUTO;
+              const updateQty = (newQty: number) => {
+                setBatchCart(prev => prev.map(c => c.id === item.id ? { ...c, qty: Math.max(1, newQty) } : c));
+              };
               return (
-                <div key={item.id} className="p-3.5 flex items-center justify-between hover:bg-slate-750 transition text-xs gap-3">
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <span className={cn('px-2 py-0.5 rounded text-[10px] font-black', cfg.active)}>
-                      {cfg.label}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-mono font-bold text-white text-sm truncate">{item.lot_number}</p>
-                      <p className="text-[11px] text-slate-400 truncate">{item.item_name} ({item.spec})</p>
+                <div key={item.id} className="p-3.5 flex flex-col gap-2 hover:bg-slate-750 transition text-xs border-b border-slate-800">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <span className={cn('px-2 py-0.5 rounded text-[10px] font-black', cfg.active)}>
+                        {cfg.label}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-mono font-bold text-white text-sm truncate">{item.lot_number}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{item.item_name} ({item.spec})</p>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-3">
-                    <span className="font-black text-amber-400 text-sm font-mono">{item.qty} {item.unit}</span>
                     <button
                       onClick={() => removeItemFromCart(item.id)}
                       className="text-slate-500 hover:text-red-400 p-1"
+                      title="삭제"
                     >
                       ✕
                     </button>
+                  </div>
+
+                  {/* ⚖️ 소분 반출 수량 조절 툴바 (원자재 100kg/50kg 등) */}
+                  <div className="flex items-center justify-between bg-slate-900/80 p-2 rounded-xl border border-slate-750">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] text-amber-400 font-bold">⚖️ 소분반출량:</span>
+                      <div className="flex items-center gap-1">
+                        {[50, 100, 200].map(preset => (
+                          <button
+                            key={preset}
+                            type="button"
+                            onClick={() => {
+                              updateQty(preset);
+                              toast.info(`⚖️ 소분 수량 ${preset}${item.unit || 'kg'} 설정`);
+                            }}
+                            className={cn(
+                              'px-2 py-0.5 rounded text-[10px] font-bold border transition',
+                              item.qty === preset
+                                ? 'bg-amber-500 text-slate-950 border-amber-400 font-black'
+                                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                            )}
+                          >
+                            {preset}{item.unit || 'kg'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => updateQty(item.qty - 10)}
+                        className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 font-bold text-white flex items-center justify-center border border-slate-700 text-xs"
+                      >
+                        -10
+                      </button>
+                      <input
+                        type="number"
+                        min={1}
+                        value={item.qty}
+                        onChange={e => updateQty(Number(e.target.value || 1))}
+                        className="w-16 px-1.5 py-0.5 bg-slate-950 border border-amber-500/50 text-amber-400 font-mono font-black text-xs text-center rounded focus:outline-none"
+                      />
+                      <span className="text-[11px] font-bold text-slate-400">{item.unit || 'kg'}</span>
+                      <button
+                        type="button"
+                        onClick={() => updateQty(item.qty + 10)}
+                        className="w-6 h-6 rounded bg-slate-800 hover:bg-slate-700 font-bold text-white flex items-center justify-center border border-slate-700 text-xs"
+                      >
+                        +10
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

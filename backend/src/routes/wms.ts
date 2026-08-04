@@ -804,12 +804,34 @@ export async function wmsRoutes(app: FastifyInstance) {
           `, [lot_number, project_name, locId]);
           successCount++;
         } else if (mode === 'OUT') {
-          // 출고 확정 처리
+          // 출고/소분 반출 확정 처리 (원자재 1,000kg 중 100kg/50kg 소분 차감)
+          const lotRes = await client.query(`
+            UPDATE material_lots
+            SET qty_current = GREATEST(0, qty_current - $2), updated_at = NOW()
+            WHERE lot_number = $1 RETURNING lot_id, category, qty_current
+          `, [lot_number, qty]);
+
+          if (lotRes.rows.length > 0) {
+            const { lot_id, category, qty_current } = lotRes.rows[0];
+            const qtyAfter = Number(qty_current);
+            const qtyBefore = qtyAfter + Number(qty);
+            await client.query(`
+              INSERT INTO material_transactions (
+                txn_date, lot_id, lot_number, category, txn_type, qty, qty_before, qty_after, notes
+              ) VALUES (
+                CURRENT_DATE, $1, $2, $3, 'OUT', -$4, $5, $6, $7
+              )
+            `, [lot_id, lot_number, category, 'OUT', qty, qtyBefore, qtyAfter, `원부자재 소분 반출 (${qty} 차감)`]);
+          }
+
           await client.query(`
             UPDATE non_certified_stock
-            SET wms_status = 'SHIPPED', status = 'SHIPPED', updated_at = NOW()
+            SET qty = GREATEST(0, qty - $2),
+                wms_status = CASE WHEN qty - $2 <= 0 THEN 'SHIPPED' ELSE wms_status END,
+                status = CASE WHEN qty - $2 <= 0 THEN 'SHIPPED' ELSE status END,
+                updated_at = NOW()
             WHERE lot_number = $1
-          `, [lot_number]);
+          `, [lot_number, qty]);
 
           await client.query(`
             UPDATE assembly_lot
