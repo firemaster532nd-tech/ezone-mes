@@ -294,6 +294,17 @@ function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading:
   const auditTotalQty = auditLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
   const nonCertTotalQty = nonCertLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
 
+  // 원자재 4종 집계
+  const mbLots = lots.filter(l => matchesCategory(l.category, '원자재') || matchesCategory(l.category, '컴파운드') || l.lot_number.includes('MB'));
+  const cwLots = lots.filter(l => matchesCategory(l.category, '세라믹울') || l.lot_number.includes('CW'));
+  const gwLots = lots.filter(l => l.category === '그라스울' || l.lot_number.includes('GW'));
+  const gwbLots = lots.filter(l => l.category === '그라스울보드' || l.lot_number.includes('GWB'));
+
+  const mbQty = mbLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
+  const cwQty = cwLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
+  const gwQty = gwLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
+  const gwbQty = gwbLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
+
   return (
     <div className="space-y-4">
       {/* 🛡️/🏭 재고 분류 선택 상단 대형 탭 */}
@@ -316,7 +327,7 @@ function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading:
               <p className="text-lg font-black">{lots.length}개 LOT</p>
             </div>
           </div>
-          <span className="font-mono text-sm font-bold opacity-90">{(auditTotalQty + nonCertTotalQty).toLocaleString()}롤</span>
+          <span className="font-mono text-sm font-bold opacity-90">{(auditTotalQty + nonCertTotalQty).toLocaleString()}개</span>
         </button>
 
         <button
@@ -362,23 +373,76 @@ function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading:
         </button>
       </div>
 
-      {/* 요약 카드 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
-          <div className="p-2.5 bg-slate-900 text-white rounded-lg"><Package className="h-5 w-5"/></div>
-          <div><p className="text-xs text-slate-500 font-bold">선택구분 총 LOT</p><p className="text-xl font-black">{filtered.length}개</p></div>
+      {/* 🧪🔥🌾🧱 원자재 4종 주요 재고 현황 카드 나열 */}
+      <div className="bg-slate-900 text-white rounded-2xl p-4 border border-slate-800 shadow-md space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+          <div className="flex items-center gap-2">
+            <Package className="h-4 w-4 text-amber-400" />
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-200">원자재 4종 실시간 재고 현황 (원료/울/보드)</h3>
+          </div>
+          <span className="text-[11px] text-slate-400 font-mono">클릭 시 해당 품목 필터링</span>
         </div>
-        <div className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
-          <div className="p-2.5 bg-blue-600 text-white rounded-lg"><BarChart3 className="h-5 w-5"/></div>
-          <div><p className="text-xs text-slate-500 font-bold">조회 수 수량</p><p className="text-xl font-black text-blue-700">{filtered.reduce((a, l) => a + Number(l.qty_current || 0), 0).toLocaleString()}</p></div>
-        </div>
-        <div className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
-          <div className="p-2.5 bg-indigo-600 text-white rounded-lg"><ShieldCheck className="h-5 w-5"/></div>
-          <div><p className="text-xs text-slate-500 font-bold">인정시험용 수량</p><p className="text-xl font-black text-indigo-700">{auditTotalQty.toLocaleString()}</p></div>
-        </div>
-        <div className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
-          <div className="p-2.5 bg-emerald-600 text-white rounded-lg"><Building2 className="h-5 w-5"/></div>
-          <div><p className="text-xs text-slate-500 font-bold">비인정용 수량</p><p className="text-xl font-black text-emerald-700">{nonCertTotalQty.toLocaleString()}</p></div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* 1. 난연컴파운드(MB) */}
+          <button
+            onClick={() => setCat('원자재(배합원료)')}
+            className={cn(
+              'p-3 rounded-xl border text-left transition flex items-center justify-between shadow-sm',
+              cat === '원자재(배합원료)' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-800/90 hover:bg-slate-800 text-white border-slate-700'
+            )}
+          >
+            <div>
+              <p className="text-[11px] font-extrabold opacity-90">🧪 1. 난연컴파운드 (MB)</p>
+              <p className="text-base font-black mt-0.5">{mbLots.length}개 LOT</p>
+            </div>
+            <span className="text-xs font-mono font-bold">{mbQty.toLocaleString()} kg</span>
+          </button>
+
+          {/* 2. 세라믹울(CW) */}
+          <button
+            onClick={() => setCat('세라믹울')}
+            className={cn(
+              'p-3 rounded-xl border text-left transition flex items-center justify-between shadow-sm',
+              cat === '세라믹울' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-800/90 hover:bg-slate-800 text-white border-slate-700'
+            )}
+          >
+            <div>
+              <p className="text-[11px] font-extrabold opacity-90">🔥 2. 세라믹울 (CW)</p>
+              <p className="text-base font-black mt-0.5">{cwLots.length}개 LOT</p>
+            </div>
+            <span className="text-xs font-mono font-bold">{cwQty.toLocaleString()} 롤</span>
+          </button>
+
+          {/* 3. 그라스울(GW) */}
+          <button
+            onClick={() => setCat('그라스울')}
+            className={cn(
+              'p-3 rounded-xl border text-left transition flex items-center justify-between shadow-sm',
+              cat === '그라스울' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-800/90 hover:bg-slate-800 text-white border-slate-700'
+            )}
+          >
+            <div>
+              <p className="text-[11px] font-extrabold opacity-90">🌾 3. 그라스울 (GW)</p>
+              <p className="text-base font-black mt-0.5">{gwLots.length}개 LOT</p>
+            </div>
+            <span className="text-xs font-mono font-bold">{gwQty.toLocaleString()} 롤</span>
+          </button>
+
+          {/* 4. 그라스울보드(GWB) */}
+          <button
+            onClick={() => setCat('그라스울보드')}
+            className={cn(
+              'p-3 rounded-xl border text-left transition flex items-center justify-between shadow-sm',
+              cat === '그라스울보드' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-800/90 hover:bg-slate-800 text-white border-slate-700'
+            )}
+          >
+            <div>
+              <p className="text-[11px] font-extrabold opacity-90">🧱 4. 그라스울보드 (GWB)</p>
+              <p className="text-base font-black mt-0.5">{gwbLots.length}개 LOT</p>
+            </div>
+            <span className="text-xs font-mono font-bold">{gwbQty.toLocaleString()} 매</span>
+          </button>
         </div>
       </div>
 
@@ -390,7 +454,7 @@ function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading:
             className="pl-9 pr-3 py-2 text-sm border rounded-lg focus:border-blue-500 outline-none w-52"/>
         </div>
         <div className="flex gap-1 flex-wrap items-center">
-          {['전체', ...CATEGORIES].map(c => (
+          {['전체', '원자재(배합원료)', '세라믹울', '그라스울', '그라스울보드', '차열재/차열시트', '소켓', '강판', '반제품(조립소켓/틈새시트/플래싱)', '기타부자재'].map(c => (
             <button key={c} onClick={() => setCat(c)}
               className={cn('px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors',
                 cat === c ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}>
