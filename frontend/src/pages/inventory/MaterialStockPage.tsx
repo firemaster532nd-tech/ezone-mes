@@ -238,28 +238,36 @@ body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:0;mar
   );
 }
 
-function matchesCategory(lotCategory: string | undefined, filterCat: string): boolean {
+function matchesCategory(lotCategory: string | undefined, filterCat: string, itemName?: string, lotNumber?: string): boolean {
   if (!filterCat || filterCat === '전체') return true;
-  if (!lotCategory) return false;
-  
-  const c = lotCategory.trim().toLowerCase();
+  const c = (lotCategory || '').trim().toLowerCase();
   const f = filterCat.trim().toLowerCase();
+  const n = (itemName || '').trim().toLowerCase();
+  const l = (lotNumber || '').trim().toLowerCase();
+
+  if (f.includes('ep-100') || f.includes('ep100')) {
+    return n.includes('ep100') || n.includes('ep-100') || l.includes('ep') || c.includes('ep');
+  }
+  if (f.includes('흑연')) {
+    return n.includes('흑연') || n.includes('graphite') || l.includes('gr');
+  }
+  if (f.includes('ea-33045') || f.includes('ea33045')) {
+    return n.includes('ea33045') || n.includes('ea-33045') || l.includes('ea');
+  }
+  if (f.includes('난연컴파운드') || f.includes('컴파운드')) {
+    return n.includes('컴파운드') || n.includes('mb') || l.includes('mb') || c.includes('컴파운드');
+  }
+  if (f.includes('세라믹울')) {
+    return c.includes('세라믹울') || n.includes('세라믹울') || l.includes('cw');
+  }
+  if (f.includes('그라스울보드')) {
+    return c.includes('그라스울보드') || n.includes('보드') || l.includes('gwb');
+  }
+  if (f.includes('그라스울')) {
+    return (c === '그라스울' || n.includes('그라스울') || l.includes('gw')) && !c.includes('보드') && !n.includes('보드');
+  }
 
   if (c === f || c.includes(f) || f.includes(c)) return true;
-
-  if (f.includes('원자재') || f.includes('배합')) {
-    return c.includes('원자재') || c.includes('원재료') || c.includes('rm') || c.includes('배합') || c.includes('컴파운드');
-  }
-  if (f.includes('차열')) {
-    return c.includes('차열') || c.includes('보온재');
-  }
-  if (f.includes('반제품')) {
-    return c.includes('반제품') || c.includes('조립') || c.includes('틈새') || c.includes('플래싱') || c.includes('sa');
-  }
-  if (f.includes('부자재')) {
-    return c.includes('부자재') || c.includes('sm') || c.includes('소켓') || c.includes('강판') || c.includes('그라스울') || c.includes('세라믹울');
-  }
-
   return false;
 }
 
@@ -267,7 +275,7 @@ function matchesCategory(lotCategory: string | undefined, filterCat: string): bo
 function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading: boolean; onRefresh: () => void }) {
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('전체');
-  const [stockTypeTab, setStockTypeTab] = useState<'ALL' | 'CERTIFIED_AUDIT' | 'NON_CERTIFIED'>('ALL');
+  const [stockTypeTab, setStockTypeTab] = useState<'ALL' | 'CERTIFIED' | 'CERTIFIED_AUDIT' | 'NON_CERTIFIED'>('ALL');
   const [includeZero, setIncludeZero] = useState(true);
   const [printLot, setPrintLot] = useState<MaterialLot | null>(null);
 
@@ -276,31 +284,43 @@ function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading:
     const params = new URLSearchParams(window.location.search);
     const st = params.get('stock_type');
     if (st === 'CERTIFIED_AUDIT') setStockTypeTab('CERTIFIED_AUDIT');
+    else if (st === 'CERTIFIED') setStockTypeTab('CERTIFIED');
     else if (st === 'NON_CERTIFIED') setStockTypeTab('NON_CERTIFIED');
   }, []);
 
   const filtered = lots.filter(l => {
     if (stockTypeTab === 'CERTIFIED_AUDIT' && l.stock_type !== 'CERTIFIED_AUDIT') return false;
-    if (stockTypeTab === 'NON_CERTIFIED' && l.stock_type === 'CERTIFIED_AUDIT') return false;
-    if (!matchesCategory(l.category, cat)) return false;
+    if (stockTypeTab === 'CERTIFIED' && (l.stock_type === 'CERTIFIED_AUDIT' || l.stock_type === 'NON_CERTIFIED')) return false;
+    if (stockTypeTab === 'NON_CERTIFIED' && l.stock_type !== 'NON_CERTIFIED') return false;
+    if (!matchesCategory(l.category, cat, l.item_name, l.lot_number)) return false;
     if (!includeZero && Number(l.qty_current || 0) <= 0) return false;
     if (search && !l.lot_number.toLowerCase().includes(search.toLowerCase()) && !l.item_name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
   const auditLots = lots.filter(l => l.stock_type === 'CERTIFIED_AUDIT' && Number(l.qty_current || 0) > 0);
-  const nonCertLots = lots.filter(l => l.stock_type !== 'CERTIFIED_AUDIT' && Number(l.qty_current || 0) > 0);
+  const certLots = lots.filter(l => l.stock_type !== 'CERTIFIED_AUDIT' && l.stock_type !== 'NON_CERTIFIED' && Number(l.qty_current || 0) > 0);
+  const nonCertLots = lots.filter(l => l.stock_type === 'NON_CERTIFIED' && Number(l.qty_current || 0) > 0);
 
   const auditTotalQty = auditLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
+  const certTotalQty = certLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
   const nonCertTotalQty = nonCertLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
 
-  // 원자재 4종 집계
-  const mbLots = lots.filter(l => matchesCategory(l.category, '원자재') || matchesCategory(l.category, '컴파운드') || l.lot_number.includes('MB'));
-  const cwLots = lots.filter(l => matchesCategory(l.category, '세라믹울') || l.lot_number.includes('CW'));
-  const gwLots = lots.filter(l => l.category === '그라스울' || l.lot_number.includes('GW'));
-  const gwbLots = lots.filter(l => l.category === '그라스울보드' || l.lot_number.includes('GWB'));
+  // 배합원료 4종 & 단열재 3종 상세 집계
+  const epLots = lots.filter(l => matchesCategory(l.category, 'EP-100', l.item_name, l.lot_number));
+  const grLots = lots.filter(l => matchesCategory(l.category, '흑연', l.item_name, l.lot_number));
+  const eaLots = lots.filter(l => matchesCategory(l.category, 'EA-33045', l.item_name, l.lot_number));
+  const mbLots = lots.filter(l => matchesCategory(l.category, '난연컴파운드', l.item_name, l.lot_number));
 
+  const cwLots = lots.filter(l => matchesCategory(l.category, '세라믹울', l.item_name, l.lot_number));
+  const gwLots = lots.filter(l => matchesCategory(l.category, '그라스울', l.item_name, l.lot_number));
+  const gwbLots = lots.filter(l => matchesCategory(l.category, '그라스울보드', l.item_name, l.lot_number));
+
+  const epQty = epLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
+  const grQty = grLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
+  const eaQty = eaLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
   const mbQty = mbLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
+
   const cwQty = cwLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
   const gwQty = gwLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
   const gwbQty = gwbLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
@@ -308,140 +328,193 @@ function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading:
   return (
     <div className="space-y-4">
       {/* 🛡️/🏭 재고 분류 선택 상단 대형 탭 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5">
         <button
           onClick={() => setStockTypeTab('ALL')}
           className={cn(
-            'p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-sm',
+            'p-3 rounded-2xl border text-left transition flex items-center justify-between shadow-sm',
             stockTypeTab === 'ALL'
               ? 'bg-slate-900 text-white border-slate-900 ring-2 ring-slate-400'
               : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
           )}
         >
-          <div className="flex items-center gap-3">
-            <div className={cn('p-2.5 rounded-xl', stockTypeTab === 'ALL' ? 'bg-slate-800 text-amber-400' : 'bg-slate-100 text-slate-700')}>
-              <Package className="h-5 w-5" />
+          <div className="flex items-center gap-2.5">
+            <div className={cn('p-2 rounded-xl', stockTypeTab === 'ALL' ? 'bg-slate-800 text-amber-400' : 'bg-slate-100 text-slate-700')}>
+              <Package className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-xs font-extrabold opacity-80">통합 재고 전체</p>
-              <p className="text-lg font-black">{lots.length}개 LOT</p>
+              <p className="text-[11px] font-extrabold opacity-80">통합 재고 전체</p>
+              <p className="text-base font-black">{lots.length}개 LOT</p>
             </div>
           </div>
-          <span className="font-mono text-sm font-bold opacity-90">{(auditTotalQty + nonCertTotalQty).toLocaleString()}개</span>
         </button>
 
         <button
           onClick={() => setStockTypeTab('CERTIFIED_AUDIT')}
           className={cn(
-            'p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-sm',
+            'p-3 rounded-2xl border text-left transition flex items-center justify-between shadow-sm',
             stockTypeTab === 'CERTIFIED_AUDIT'
               ? 'bg-indigo-900 text-white border-indigo-700 ring-2 ring-indigo-500'
               : 'bg-indigo-50/50 text-indigo-950 border-indigo-200 hover:bg-indigo-100/60'
           )}
         >
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-indigo-600 text-white shadow">
-              <ShieldCheck className="h-5 w-5" />
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-600 text-white shadow">
+              <ShieldCheck className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-xs font-extrabold text-indigo-300">🛡️ 인정시험용 재고 (공정심사)</p>
-              <p className="text-lg font-black text-white">{auditLots.length}개 LOT</p>
+              <p className="text-[11px] font-extrabold text-indigo-300">🛡️ 인정시험용 (공정심사)</p>
+              <p className="text-base font-black text-white">{auditLots.length}개 LOT</p>
             </div>
           </div>
-          <span className="font-mono text-base font-black text-indigo-200">{auditTotalQty.toLocaleString()}롤</span>
+        </button>
+
+        <button
+          onClick={() => setStockTypeTab('CERTIFIED')}
+          className={cn(
+            'p-3 rounded-2xl border text-left transition flex items-center justify-between shadow-sm',
+            stockTypeTab === 'CERTIFIED'
+              ? 'bg-emerald-900 text-white border-emerald-700 ring-2 ring-emerald-500'
+              : 'bg-emerald-50/40 text-emerald-950 border-emerald-200 hover:bg-emerald-100/60'
+          )}
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-emerald-600 text-white shadow">
+              <Building2 className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-[11px] font-extrabold text-emerald-300">🏭 인정용 (양산/출하용)</p>
+              <p className="text-base font-black text-white">{certLots.length}개 LOT</p>
+            </div>
+          </div>
         </button>
 
         <button
           onClick={() => setStockTypeTab('NON_CERTIFIED')}
           className={cn(
-            'p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-sm',
+            'p-3 rounded-2xl border text-left transition flex items-center justify-between shadow-sm',
             stockTypeTab === 'NON_CERTIFIED'
-              ? 'bg-emerald-900 text-white border-emerald-700 ring-2 ring-emerald-500'
-              : 'bg-emerald-50/40 text-emerald-950 border-emerald-200 hover:bg-emerald-100/60'
+              ? 'bg-rose-900 text-white border-rose-700 ring-2 ring-rose-500'
+              : 'bg-rose-50/40 text-rose-950 border-rose-200 hover:bg-rose-100/60'
           )}
         >
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-emerald-600 text-white shadow">
-              <Building2 className="h-5 w-5" />
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-rose-600 text-white shadow">
+              <Building2 className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-xs font-extrabold text-emerald-300">🏭 비인정용 재고 (현장실재고)</p>
-              <p className="text-lg font-black text-white">{nonCertLots.length}개 LOT</p>
+              <p className="text-[11px] font-extrabold text-rose-300">❌ 비인정용 (현재 미등록)</p>
+              <p className="text-base font-black text-white">{nonCertLots.length}개 LOT</p>
             </div>
           </div>
-          <span className="font-mono text-base font-black text-emerald-200">{nonCertTotalQty.toLocaleString()}롤</span>
         </button>
       </div>
 
-      {/* 🧪🔥🌾🧱 원자재 4종 주요 재고 현황 카드 나열 */}
+      {/* 🧪🔥🌾🧱 배합원료 4종 (EP-100, 흑연, EA-33045, 난연컴파운드) & 단열재 3종 실시간 재고 카드 */}
       <div className="bg-slate-900 text-white rounded-2xl p-4 border border-slate-800 shadow-md space-y-3">
         <div className="flex items-center justify-between border-b border-slate-800 pb-2">
           <div className="flex items-center gap-2">
             <Package className="h-4 w-4 text-amber-400" />
-            <h3 className="text-xs font-black uppercase tracking-wider text-slate-200">원자재 4종 실시간 재고 현황 (원료/울/보드)</h3>
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-200">배합원료 4종 &amp; 단열재 실시간 재고 나열</h3>
           </div>
-          <span className="text-[11px] text-slate-400 font-mono">클릭 시 해당 품목 필터링</span>
+          <span className="text-[11px] text-slate-400 font-mono">클릭 시 해당 품목 즉시 필터링</span>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {/* 1. 난연컴파운드(MB) */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+          {/* 1. EP-100 */}
           <button
-            onClick={() => setCat('원자재(배합원료)')}
+            onClick={() => setCat('EP-100')}
             className={cn(
               'p-3 rounded-xl border text-left transition flex items-center justify-between shadow-sm',
-              cat === '원자재(배합원료)' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-800/90 hover:bg-slate-800 text-white border-slate-700'
+              cat === 'EP-100' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-800/90 hover:bg-slate-800 text-white border-slate-700'
             )}
           >
             <div>
-              <p className="text-[11px] font-extrabold opacity-90">🧪 1. 난연컴파운드 (MB)</p>
+              <p className="text-[11px] font-extrabold opacity-90">🧪 1. EP-100 (바인더)</p>
+              <p className="text-base font-black mt-0.5">{epLots.length}개 LOT</p>
+            </div>
+            <span className="text-xs font-mono font-bold">{epQty.toLocaleString()} kg</span>
+          </button>
+
+          {/* 2. 흑연 */}
+          <button
+            onClick={() => setCat('흑연')}
+            className={cn(
+              'p-3 rounded-xl border text-left transition flex items-center justify-between shadow-sm',
+              cat === '흑연' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-800/90 hover:bg-slate-800 text-white border-slate-700'
+            )}
+          >
+            <div>
+              <p className="text-[11px] font-extrabold opacity-90">⬛ 2. 팽창흑연 (흑연)</p>
+              <p className="text-base font-black mt-0.5">{grLots.length}개 LOT</p>
+            </div>
+            <span className="text-xs font-mono font-bold">{grQty.toLocaleString()} kg</span>
+          </button>
+
+          {/* 3. EA-33045 */}
+          <button
+            onClick={() => setCat('EA-33045')}
+            className={cn(
+              'p-3 rounded-xl border text-left transition flex items-center justify-between shadow-sm',
+              cat === 'EA-33045' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-800/90 hover:bg-slate-800 text-white border-slate-700'
+            )}
+          >
+            <div>
+              <p className="text-[11px] font-extrabold opacity-90">🧪 3. EA-33045 (첨가제)</p>
+              <p className="text-base font-black mt-0.5">{eaLots.length}개 LOT</p>
+            </div>
+            <span className="text-xs font-mono font-bold">{eaQty.toLocaleString()} kg</span>
+          </button>
+
+          {/* 4. 난연컴파운드(MB) */}
+          <button
+            onClick={() => setCat('난연컴파운드')}
+            className={cn(
+              'p-3 rounded-xl border text-left transition flex items-center justify-between shadow-sm',
+              cat === '난연컴파운드' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-800/90 hover:bg-slate-800 text-white border-slate-700'
+            )}
+          >
+            <div>
+              <p className="text-[11px] font-extrabold opacity-90">🔥 4. 난연컴파운드 (MB)</p>
               <p className="text-base font-black mt-0.5">{mbLots.length}개 LOT</p>
             </div>
             <span className="text-xs font-mono font-bold">{mbQty.toLocaleString()} kg</span>
           </button>
+        </div>
 
-          {/* 2. 세라믹울(CW) */}
+        {/* 단열재 3종 서브 그리드 */}
+        <div className="grid grid-cols-3 gap-2.5 pt-1 border-t border-slate-800/80">
           <button
             onClick={() => setCat('세라믹울')}
             className={cn(
-              'p-3 rounded-xl border text-left transition flex items-center justify-between shadow-sm',
-              cat === '세라믹울' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-800/90 hover:bg-slate-800 text-white border-slate-700'
+              'p-2.5 rounded-lg border text-left transition flex items-center justify-between',
+              cat === '세라믹울' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-850 hover:bg-slate-800 text-slate-300 border-slate-750'
             )}
           >
-            <div>
-              <p className="text-[11px] font-extrabold opacity-90">🔥 2. 세라믹울 (CW)</p>
-              <p className="text-base font-black mt-0.5">{cwLots.length}개 LOT</p>
-            </div>
-            <span className="text-xs font-mono font-bold">{cwQty.toLocaleString()} 롤</span>
+            <span className="text-[11px] font-bold">🔥 세라믹울: {cwLots.length}개</span>
+            <span className="text-xs font-mono font-extrabold">{cwQty.toLocaleString()} 롤</span>
           </button>
 
-          {/* 3. 그라스울(GW) */}
           <button
             onClick={() => setCat('그라스울')}
             className={cn(
-              'p-3 rounded-xl border text-left transition flex items-center justify-between shadow-sm',
-              cat === '그라스울' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-800/90 hover:bg-slate-800 text-white border-slate-700'
+              'p-2.5 rounded-lg border text-left transition flex items-center justify-between',
+              cat === '그라스울' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-850 hover:bg-slate-800 text-slate-300 border-slate-750'
             )}
           >
-            <div>
-              <p className="text-[11px] font-extrabold opacity-90">🌾 3. 그라스울 (GW)</p>
-              <p className="text-base font-black mt-0.5">{gwLots.length}개 LOT</p>
-            </div>
-            <span className="text-xs font-mono font-bold">{gwQty.toLocaleString()} 롤</span>
+            <span className="text-[11px] font-bold">🌾 그라스울: {gwLots.length}개</span>
+            <span className="text-xs font-mono font-extrabold">{gwQty.toLocaleString()} 롤</span>
           </button>
 
-          {/* 4. 그라스울보드(GWB) */}
           <button
             onClick={() => setCat('그라스울보드')}
             className={cn(
-              'p-3 rounded-xl border text-left transition flex items-center justify-between shadow-sm',
-              cat === '그라스울보드' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-800/90 hover:bg-slate-800 text-white border-slate-700'
+              'p-2.5 rounded-lg border text-left transition flex items-center justify-between',
+              cat === '그라스울보드' ? 'bg-amber-500 text-slate-950 border-amber-400 font-black' : 'bg-slate-850 hover:bg-slate-800 text-slate-300 border-slate-750'
             )}
           >
-            <div>
-              <p className="text-[11px] font-extrabold opacity-90">🧱 4. 그라스울보드 (GWB)</p>
-              <p className="text-base font-black mt-0.5">{gwbLots.length}개 LOT</p>
-            </div>
-            <span className="text-xs font-mono font-bold">{gwbQty.toLocaleString()} 매</span>
+            <span className="text-[11px] font-bold">🧱 그라스울보드: {gwbLots.length}개</span>
+            <span className="text-xs font-mono font-extrabold">{gwbQty.toLocaleString()} 매</span>
           </button>
         </div>
       </div>
@@ -454,7 +527,7 @@ function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading:
             className="pl-9 pr-3 py-2 text-sm border rounded-lg focus:border-blue-500 outline-none w-52"/>
         </div>
         <div className="flex gap-1 flex-wrap items-center">
-          {['전체', '원자재(배합원료)', '세라믹울', '그라스울', '그라스울보드', '차열재/차열시트', '소켓', '강판', '반제품(조립소켓/틈새시트/플래싱)', '기타부자재'].map(c => (
+          {['전체', 'EP-100', '흑연', 'EA-33045', '난연컴파운드', '세라믹울', '그라스울', '그라스울보드', '차열재/차열시트', '소켓', '강판', '반제품(조립소켓/플래싱)', '기타부자재'].map(c => (
             <button key={c} onClick={() => setCat(c)}
               className={cn('px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors',
                 cat === c ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}>
@@ -507,10 +580,15 @@ function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading:
                         <ShieldCheck className="w-3 h-3 text-indigo-600" />
                         인정시험용
                       </span>
-                    ) : (
-                      <span className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-300 rounded text-[10px] font-bold flex items-center gap-1 w-fit">
-                        <Building2 className="w-3 h-3 text-slate-500" />
+                    ) : lot.stock_type === 'NON_CERTIFIED' ? (
+                      <span className="px-2 py-0.5 bg-rose-100 text-rose-900 border border-rose-300 rounded text-[10px] font-bold flex items-center gap-1 w-fit">
+                        <Building2 className="w-3 h-3 text-rose-600" />
                         비인정용
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 bg-emerald-100 text-emerald-900 border border-emerald-300 rounded text-[10px] font-bold flex items-center gap-1 w-fit">
+                        <Building2 className="w-3 h-3 text-emerald-600" />
+                        인정용
                       </span>
                     )}
                   </td>
