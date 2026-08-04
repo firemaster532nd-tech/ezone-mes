@@ -2380,13 +2380,14 @@ function SocketDetailPanel({ soId, projectName }: { soId: number; projectName: s
           html, body { width: 80mm; height: 60mm; margin: 0; padding: 0; font-family: 'Malgun Gothic', sans-serif; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; overflow: hidden; }
           .labels { display: flex; flex-direction: column; }
           .label {
-            width: 68mm; height: 48mm; margin: 5mm auto;
+            width: 72mm; height: 52mm; margin: 4mm auto;
             padding: 2mm 2.5mm; box-sizing: border-box;
             display: flex; flex-direction: column; gap: 0.8mm;
             border: 0.4mm solid #334155; overflow: hidden;
-            page-break-after: always;
-            page-break-inside: avoid;
+            page-break-inside: avoid; break-inside: avoid;
           }
+          .label:not(:last-child) { page-break-after: always; break-after: always; }
+          .label:last-child { page-break-after: avoid; break-after: avoid; }
           .lot { font-size: 10pt; font-weight: bold; border-bottom: 0.3mm solid #333; padding-bottom: 0.5mm; color: #1d4ed8; }
           .type { font-size: 8.5pt; font-weight: bold; color: #1a56db; }
           .spec { font-size: 8.5pt; font-weight: bold; }

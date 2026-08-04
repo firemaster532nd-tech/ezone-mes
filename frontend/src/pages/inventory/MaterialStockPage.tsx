@@ -132,7 +132,9 @@ function LabelModal({ lot, onClose }: { lot: MaterialLot; onClose: () => void })
 <style>
 @page{size:80mm 60mm;margin:0}
 html,body{width:80mm;height:60mm;margin:0;padding:0;background:#fff;font-family:'Malgun Gothic',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;}
-.label-card{width:68mm;height:48mm;margin:5mm auto;padding:1.5mm 2mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.4mm solid #334155;overflow:hidden;page-break-after:always;page-break-inside:avoid;}
+.label-card{width:72mm;height:52mm;margin:4mm auto;padding:1.5mm 2mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.4mm solid #334155;overflow:hidden;page-break-inside:avoid;break-inside:avoid;}
+.label-card:not(:last-child){page-break-after:always;break-after:always;}
+.label-card:last-child{page-break-after:avoid;break-after:avoid;}
 .header{display:flex;justify-content:space-between;align-items:center;border-bottom:0.3mm solid #1a237e;padding-bottom:0.3mm;font-size:7pt;font-weight:bold;}
 .company{color:#c00;}.title{color:#1a237e;}.date{color:#666;font-size:6pt;}
 .body-row{display:flex;gap:2mm;align-items:center;flex:1;margin-top:0.5mm;margin-bottom:0.5mm;overflow:hidden;}
