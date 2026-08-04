@@ -540,26 +540,33 @@ function QuotationFormModal({
 
   // 견적서 저장하기
   const handleSave = async () => {
-    if (Number(master.customer_id) === 0) {
-      toast.error('거래처를 선택해 주세요.');
-      return;
-    }
     if (!master.quotation_number.trim()) {
       toast.error('견적번호는 필수입니다.');
       return;
     }
     
-    // 품목 유효성 체크
-    const validItems = items.filter(r => r.item_code.trim() !== '');
+    // 품목 유효성 체크 (품목명 또는 품목코드가 존재하는 항목)
+    const validItems = items.filter(r => r.item_name.trim() !== '' || r.item_code.trim() !== '');
     if (validItems.length === 0) {
-      toast.error('코드가 입력된 유효한 품목이 1개 이상 존재해야 합니다.');
+      toast.error('유효한 품목이 1개 이상 입력되어야 합니다.');
       return;
     }
 
     const payload = {
       ...master,
-      customer_id: Number(master.customer_id),
-      items: validItems
+      customer_id: Number(master.customer_id || 0),
+      company_name: selectedCompany?.company_name || master.company_name || '거래처',
+      items: validItems.map(item => ({
+        item_code: item.item_code.trim() || 'ITEM',
+        item_name: item.item_name.trim() || '견적 품목',
+        spec: item.spec || null,
+        qty: Number(item.qty || 1),
+        unit_price: Number(item.unit_price || 0),
+        amount: Number(item.amount || 0),
+        vat: Number(item.vat || 0),
+        summary_note: item.summary_note || null,
+        remarks: item.remarks || null,
+      }))
     };
 
     try {
@@ -572,6 +579,7 @@ function QuotationFormModal({
       }
       onSave();
     } catch (e: any) {
+      console.error('[Quotation Save Error]:', e);
       toast.error(e?.body?.message || e?.message || '견적서 저장에 실패했습니다.');
     }
   };

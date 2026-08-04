@@ -4,20 +4,23 @@ import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 
 const quotationItemSchema = z.object({
-  item_code: z.string().min(1),
-  item_name: z.string().min(1),
+  quotation_item_id: z.number().optional(),
+  item_code: z.string().optional().default('ITEM'),
+  item_name: z.string().optional().default('품목명'),
   spec: z.string().nullable().optional(),
-  qty: z.number().positive(),
+  qty: z.number().optional().default(1),
   unit_price: z.number().nonnegative().optional().default(0),
   amount: z.number().nonnegative().optional().default(0),
   vat: z.number().nonnegative().optional().default(0),
+  summary_note: z.string().nullable().optional(),
   remarks: z.string().nullable().optional(),
-});
+}).passthrough();
 
 const quotationMasterSchema = z.object({
   quotation_number: z.string().min(1),
   quotation_date: z.string(),
-  customer_id: z.number().int().positive(),
+  customer_id: z.number().optional().default(0),
+  company_name: z.string().optional(),
   project_code: z.string().nullable().optional(),
   manager_name: z.string().nullable().optional(),
   warehouse_id: z.string().nullable().optional(),
@@ -26,8 +29,9 @@ const quotationMasterSchema = z.object({
   price_type: z.string().default('DEFAULT'),
   delivery_date: z.string().nullable().optional(),
   remarks: z.string().nullable().optional(),
-  items: z.array(quotationItemSchema),
-});
+  summary_note: z.string().nullable().optional(),
+  items: z.array(quotationItemSchema).default([]),
+}).passthrough();
 
 export async function quotationRoutes(app: FastifyInstance) {
   
@@ -40,9 +44,11 @@ export async function quotationRoutes(app: FastifyInstance) {
     const status = query.status || '';
 
     let sql = `
-      SELECT q.*, c.company_name, c.company_code as customer_business_no
+      SELECT q.*, 
+             COALESCE(c.company_name, q.remarks, '거래처') as company_name, 
+             COALESCE(c.company_code, 'BIZ-001') as customer_business_no
       FROM quotation_master q
-      JOIN company_master c ON q.customer_id = c.company_id
+      LEFT JOIN company_master c ON q.customer_id = c.company_id
       WHERE 1=1
     `;
     const params: unknown[] = [];
@@ -81,10 +87,11 @@ export async function quotationRoutes(app: FastifyInstance) {
   // GET /api/quotations/unordered - 미주문현황 조회
   app.get('/api/quotations/unordered', { preHandler: requireAuth }, async () => {
     const sql = `
-      SELECT qi.*, q.quotation_number, q.quotation_date, q.project_code, q.delivery_date, q.status, c.company_name
+      SELECT qi.*, q.quotation_number, q.quotation_date, q.project_code, q.delivery_date, q.status,
+             COALESCE(c.company_name, '자유입력 거래처') as company_name
       FROM quotation_item qi
       JOIN quotation_master q ON qi.quotation_id = q.quotation_id
-      JOIN company_master c ON q.customer_id = c.company_id
+      LEFT JOIN company_master c ON q.customer_id = c.company_id
       WHERE q.status = '진행중'
       ORDER BY q.quotation_date ASC, qi.quotation_item_id ASC
     `;
@@ -97,9 +104,14 @@ export async function quotationRoutes(app: FastifyInstance) {
     const id = parseInt(req.params.id, 10);
     
     const masterRes = await pool.query(`
-      SELECT q.*, c.company_name, c.company_code as customer_business_no, c.ceo_name as customer_ceo, c.phone as customer_phone, c.address as customer_addr
+      SELECT q.*, 
+             COALESCE(c.company_name, '자유입력 거래처') as company_name, 
+             c.company_code as customer_business_no, 
+             c.ceo_name as customer_ceo, 
+             c.phone as customer_phone, 
+             c.address as customer_addr
       FROM quotation_master q
-      JOIN company_master c ON q.customer_id = c.company_id
+      LEFT JOIN company_master c ON q.customer_id = c.company_id
       WHERE q.quotation_id = $1
     `, [id]);
     
@@ -125,12 +137,13 @@ export async function quotationRoutes(app: FastifyInstance) {
   app.post('/api/quotations', { preHandler: requireAuth }, async (req, reply) => {
     const parsed = quotationMasterSchema.safeParse(req.body);
     if (!parsed.success) {
+      console.warn('[quotationRoutes POST Error]:', parsed.error.issues);
       return reply.code(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
 
     const {
-      quotation_number, quotation_date, customer_id, project_code, manager_name,
-      warehouse_id, tax_type, currency, price_type, delivery_date, remarks, items
+      quotation_number, quotation_date, customer_id = 0, project_code, manager_name,
+      warehouse_id, tax_type, currency, price_type, delivery_date, remarks, summary_note, items
     } = parsed.data;
 
     const client = await pool.connect();
@@ -142,22 +155,22 @@ export async function quotationRoutes(app: FastifyInstance) {
       let totalAmount = 0;
       let totalVat = 0;
       for (const item of items) {
-        totalQty += item.qty;
-        totalAmount += item.amount;
-        totalVat += item.vat;
+        totalQty += Number(item.qty || 0);
+        totalAmount += Number(item.amount || 0);
+        totalVat += Number(item.vat || 0);
       }
 
       // 2. 마스터 인서트
       const masterRes = await client.query(`
         INSERT INTO quotation_master (
           quotation_number, quotation_date, customer_id, project_code, manager_name,
-          warehouse_id, tax_type, currency, price_type, delivery_date, remarks,
+          warehouse_id, tax_type, currency, price_type, delivery_date, remarks, summary_note,
           total_qty, total_amount, total_vat, status
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, '진행중')
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, '진행중')
         RETURNING *
       `, [
-        quotation_number, quotation_date, customer_id, project_code || null, manager_name || null,
-        warehouse_id || null, tax_type, currency, price_type, delivery_date || null, remarks || null,
+        quotation_number, quotation_date, customer_id || 0, project_code || null, manager_name || null,
+        warehouse_id || null, tax_type, currency, price_type, delivery_date || null, remarks || null, summary_note || null,
         totalQty, totalAmount, totalVat
       ]);
 
@@ -166,24 +179,29 @@ export async function quotationRoutes(app: FastifyInstance) {
       // 3. 아이템 인서트
       for (let idx = 0; idx < items.length; idx++) {
         const item = items[idx];
+        const itemCode = item.item_code || `ITEM-${idx + 1}`;
+        const itemName = item.item_name || '견적 품목';
+
         await client.query(`
           INSERT INTO quotation_item (
-            quotation_id, item_code, item_name, spec, qty, unit_price, amount, vat, remarks, sort_order
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            quotation_id, item_code, item_name, spec, qty, unit_price, amount, vat, summary_note, remarks, sort_order
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         `, [
-          quotationId, item.item_code, item.item_name, item.spec || null, item.qty,
-          item.unit_price, item.amount, item.vat, item.remarks || null, idx
+          quotationId, itemCode, itemName, item.spec || null, Number(item.qty || 1),
+          Number(item.unit_price || 0), Number(item.amount || 0), Number(item.vat || 0),
+          item.summary_note || null, item.remarks || null, idx
         ]);
       }
 
       await client.query('COMMIT');
-      return { data: masterRes.rows[0] };
+      return { data: masterRes.rows[0], success: true };
     } catch (err: any) {
       await client.query('ROLLBACK');
+      console.error('[POST /api/quotations Error]:', err);
       if (err.code === '23505') {
         return reply.code(409).send({ error: 'duplicate_quotation_number', message: '이미 등록된 견적서 번호입니다.' });
       }
-      throw err;
+      return reply.code(500).send({ error: 'internal_error', message: err.message || '견적서 저장 오류가 발생했습니다.' });
     } finally {
       client.release();
     }
@@ -194,12 +212,13 @@ export async function quotationRoutes(app: FastifyInstance) {
     const id = parseInt(req.params.id, 10);
     const parsed = quotationMasterSchema.safeParse(req.body);
     if (!parsed.success) {
+      console.warn('[quotationRoutes PUT Error]:', parsed.error.issues);
       return reply.code(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
 
     const {
-      quotation_number, quotation_date, customer_id, project_code, manager_name,
-      warehouse_id, tax_type, currency, price_type, delivery_date, remarks, items
+      quotation_number, quotation_date, customer_id = 0, project_code, manager_name,
+      warehouse_id, tax_type, currency, price_type, delivery_date, remarks, summary_note, items
     } = parsed.data;
 
     const client = await pool.connect();
@@ -211,9 +230,9 @@ export async function quotationRoutes(app: FastifyInstance) {
       let totalAmount = 0;
       let totalVat = 0;
       for (const item of items) {
-        totalQty += item.qty;
-        totalAmount += item.amount;
-        totalVat += item.vat;
+        totalQty += Number(item.qty || 0);
+        totalAmount += Number(item.amount || 0);
+        totalVat += Number(item.vat || 0);
       }
 
       // 2. 마스터 업데이트
@@ -221,12 +240,12 @@ export async function quotationRoutes(app: FastifyInstance) {
         UPDATE quotation_master SET
           quotation_number = $1, quotation_date = $2, customer_id = $3, project_code = $4,
           manager_name = $5, warehouse_id = $6, tax_type = $7, currency = $8,
-          price_type = $9, delivery_date = $10, remarks = $11,
-          total_qty = $12, total_amount = $13, total_vat = $14
-        WHERE quotation_id = $15 RETURNING *
+          price_type = $9, delivery_date = $10, remarks = $11, summary_note = $12,
+          total_qty = $13, total_amount = $14, total_vat = $15, updated_at = NOW()
+        WHERE quotation_id = $16 RETURNING *
       `, [
-        quotation_number, quotation_date, customer_id, project_code || null, manager_name || null,
-        warehouse_id || null, tax_type, currency, price_type, delivery_date || null, remarks || null,
+        quotation_number, quotation_date, customer_id || 0, project_code || null, manager_name || null,
+        warehouse_id || null, tax_type, currency, price_type, delivery_date || null, remarks || null, summary_note || null,
         totalQty, totalAmount, totalVat, id
       ]);
 
@@ -240,24 +259,29 @@ export async function quotationRoutes(app: FastifyInstance) {
 
       for (let idx = 0; idx < items.length; idx++) {
         const item = items[idx];
+        const itemCode = item.item_code || `ITEM-${idx + 1}`;
+        const itemName = item.item_name || '견적 품목';
+
         await client.query(`
           INSERT INTO quotation_item (
-            quotation_id, item_code, item_name, spec, qty, unit_price, amount, vat, remarks, sort_order
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            quotation_id, item_code, item_name, spec, qty, unit_price, amount, vat, summary_note, remarks, sort_order
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         `, [
-          id, item.item_code, item.item_name, item.spec || null, item.qty,
-          item.unit_price, item.amount, item.vat, item.remarks || null, idx
+          id, itemCode, itemName, item.spec || null, Number(item.qty || 1),
+          Number(item.unit_price || 0), Number(item.amount || 0), Number(item.vat || 0),
+          item.summary_note || null, item.remarks || null, idx
         ]);
       }
 
       await client.query('COMMIT');
-      return { data: masterRes.rows[0] };
+      return { data: masterRes.rows[0], success: true };
     } catch (err: any) {
       await client.query('ROLLBACK');
+      console.error('[PUT /api/quotations/:id Error]:', err);
       if (err.code === '23505') {
         return reply.code(409).send({ error: 'duplicate_quotation_number', message: '이미 등록된 견적서 번호입니다.' });
       }
-      throw err;
+      return reply.code(500).send({ error: 'internal_error', message: err.message || '견적서 수정 오류가 발생했습니다.' });
     } finally {
       client.release();
     }
@@ -284,9 +308,9 @@ export async function quotationRoutes(app: FastifyInstance) {
 
       // 1. 견적서 조회
       const quoteRes = await client.query(`
-        SELECT q.*, c.company_name
+        SELECT q.*, COALESCE(c.company_name, '자유입력 거래처') as company_name
         FROM quotation_master q
-        JOIN company_master c ON q.customer_id = c.company_id
+        LEFT JOIN company_master c ON q.customer_id = c.company_id
         WHERE q.quotation_id = $1 AND q.status = '진행중'
       `, [id]);
 
@@ -326,20 +350,16 @@ export async function quotationRoutes(app: FastifyInstance) {
       const orderId = orderRes.rows[0].order_id;
 
       // 4. 수주 상세 품목(sales_order_item) 등록
-      // 견적 품목 중 완제품으로 규정된 품목들을 수주 상세로 연동
       for (let i = 0; i < quoteItems.length; i++) {
         const item = quoteItems[i];
 
-        // 기본 인정구조(certification_master) 매칭 (없을 경우 1번 기본 또는 매칭 코드 활용)
-        // 여기서는 예시를 위해 VA-064 구조코드를 기본으로 매칭 시켜 줍니다.
         const certRes = await client.query(
           `SELECT cert_id, structure_code FROM certification_master WHERE structure_code = $1 LIMIT 1`,
           [item.item_code.startsWith('FP-') ? item.item_code.replace('FP-', '') : 'VA-064']
         );
-        const certId = certRes.rows[0] ? certRes.rows[0].cert_id : 1; // 1번 기본
+        const certId = certRes.rows[0] ? certRes.rows[0].cert_id : 1;
         const structureCode = certRes.rows[0] ? certRes.rows[0].structure_code : 'VA-064';
 
-        // 엑셀 규격 파싱 (예: 850X550 또는 850*550 형식)
         let w = 800;
         let h = 600;
         if (item.spec) {
