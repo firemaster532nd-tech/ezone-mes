@@ -15,27 +15,8 @@ import {
 import { toast } from 'sonner';
 
 export function validatePasswordComplexity(password: string): string | null {
-  if (!/[a-z]/.test(password)) {
-    return '비밀번호에는 영어 소문자가 반드시 포함되어야 합니다.';
-  }
-  if (!/\d/.test(password)) {
-    return '비밀번호에는 숫자가 반드시 포함되어야 합니다.';
-  }
-  if (!/[\W_]/.test(password)) {
-    return '비밀번호에는 특수문자가 반드시 포함되어야 합니다.';
-  }
-  if (/(\d)\1\1/.test(password)) {
-    return '비밀번호에 3개 이상의 반복된 숫자(예: 111)를 사용할 수 없습니다.';
-  }
-  for (let i = 0; i < password.length - 2; i++) {
-    const c1 = password.charCodeAt(i);
-    const c2 = password.charCodeAt(i + 1);
-    const c3 = password.charCodeAt(i + 2);
-    if (c1 >= 48 && c1 <= 57 && c2 >= 48 && c2 <= 57 && c3 >= 48 && c3 <= 57) {
-      if ((c2 === c1 + 1 && c3 === c2 + 1) || (c2 === c1 - 1 && c3 === c2 - 1)) {
-        return '비밀번호에 3개 이상의 연속된 숫자(예: 123, 321)를 사용할 수 없습니다.';
-      }
-    }
+  if (!password || password.length < 4) {
+    return '비밀번호는 최소 4자 이상이어야 합니다.';
   }
   return null;
 }

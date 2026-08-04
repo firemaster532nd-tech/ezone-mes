@@ -16,7 +16,7 @@ export function ForceChangePasswordPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPw !== confirmPw) { toast.error('새 비밀번호가 일치하지 않습니다.'); return; }
-    if (newPw.length < 8) { toast.error('비밀번호는 8자 이상이어야 합니다.'); return; }
+    if (newPw.length < 4) { toast.error('비밀번호는 4자 이상이어야 합니다.'); return; }
     setSaving(true);
     try {
       await api.post('/auth/change-password', {

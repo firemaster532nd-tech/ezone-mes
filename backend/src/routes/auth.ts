@@ -34,27 +34,8 @@ const changePasswordSchema = z.object({
 });
 
 export function validatePassword(password: string): string | null {
-  if (!/[a-z]/.test(password)) {
-    return 'ë¹„ë?ë²ˆí˜¸?ëŠ” ?ì–´ ?Œë¬¸?ê? ë°˜ë“œ???¬í•¨?˜ì–´???©ë‹ˆ??';
-  }
-  if (!/\d/.test(password)) {
-    return 'ë¹„ë?ë²ˆí˜¸?ëŠ” ?«ìžê°€ ë°˜ë“œ???¬í•¨?˜ì–´???©ë‹ˆ??';
-  }
-  if (!/[\W_]/.test(password)) {
-    return 'ë¹„ë?ë²ˆí˜¸?ëŠ” ?¹ìˆ˜ë¬¸ìžê°€ ë°˜ë“œ???¬í•¨?˜ì–´???©ë‹ˆ??';
-  }
-  if (/(\d)\1\1/.test(password)) {
-    return 'ë¹„ë?ë²ˆí˜¸??3ê°??´ìƒ ??ë°˜ë³µ???«ìž (?? 111)ë¥??¬ìš©?????†ìŠµ?ˆë‹¤.';
-  }
-  for (let i = 0; i < password.length - 2; i++) {
-    const c1 = password.charCodeAt(i);
-    const c2 = password.charCodeAt(i + 1);
-    const c3 = password.charCodeAt(i + 2);
-    if (c1 >= 48 && c1 <= 57 && c2 >= 48 && c2 <= 57 && c3 >= 48 && c3 <= 57) {
-      if ((c2 === c1 + 1 && c3 === c2 + 1) || (c2 === c1 - 1 && c3 === c2 - 1)) {
-        return 'ë¹„ë?ë²ˆí˜¸??3ê°??´ìƒ ???°ì† ???«ìž (?? 123, 321)ë¥??¬ìš©?????†ìŠµ?ˆë‹¤.';
-      }
-    }
+  if (!password || password.length < 4) {
+    return '비밀번호는 최소 4자 이상이어야 합니다.';
   }
   return null;
 }
@@ -408,31 +389,17 @@ export async function authRoutes(app: FastifyInstance) {
     const curPw = (current_password || '').trim();
     let ok = await verifyPassword(curPw, worker.password_hash);
     
+    // 초기화된 비밀번호 변경 모드 (must_change_pw / must_change_password)일 때는 이미 인증된 사용자이므로 비밀번호 변경 허용
+    if (!ok && (worker.must_change_pw || worker.must_change_password)) {
+      ok = true;
+    }
+
     if (!ok && worker.phone) {
       const cleanPhone = worker.phone.replace(/\D/g, '');
       const inputClean = curPw.replace(/\D/g, '');
       if (cleanPhone && inputClean && cleanPhone === inputClean) {
         ok = true;
-      } else {
-        const formattedPhone = cleanPhone.length === 11 
-          ? `${cleanPhone.slice(0, 3)}-${cleanPhone.slice(3, 7)}-${cleanPhone.slice(7)}`
-          : `${cleanPhone.slice(0, 3)}-${cleanPhone.slice(3, 6)}-${cleanPhone.slice(6)}`;
-        ok = await verifyPassword(formattedPhone, worker.password_hash);
       }
-    }
-
-    if (!ok && (worker.must_change_pw || worker.must_change_password)) {
-      if (worker.phone && curPw.replace(/\D/g, '') === worker.phone.replace(/\D/g, '')) {
-        ok = true;
-      }
-    }
-    
-    // ?„ìž¬ ?„ì‹œ ë¹„ë?ë²ˆí˜¸ê°€ ?¼ì¹˜?˜ì? ?Šê³ , ?…ë ¥??ê°’ì¸ ?˜ì´?ˆì´ ë¹ ì§„ ?´ë???ë²ˆí˜¸ ?•ì‹(10~11?ë¦¬ ?«ìž)??ê²½ìš° ?˜ì´?ˆì„ ?£ì–´??ì¶”ê? ê²€ì¦??œë„
-    if (!ok && /^\d{10,11}$/.test(current_password)) {
-      const formattedPhone = current_password.length === 11 
-        ? `${current_password.slice(0, 3)}-${current_password.slice(3, 7)}-${current_password.slice(7)}`
-        : `${current_password.slice(0, 3)}-${current_password.slice(3, 6)}-${current_password.slice(6)}`;
-      ok = await verifyPassword(formattedPhone, rows[0].password_hash);
     }
 
     if (!ok) return reply.code(400).send({ error: 'wrong_current_password', message: '현재(임시) 비밀번호가 일치하지 않습니다.' });
@@ -448,7 +415,7 @@ export async function authRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // GET /api/auth/next-employee-no  (?¬ìš© ê°€?¥í•œ ?¤ìŒ ?¬ë²ˆ ?ë™ ì¡°íšŒ)
+  // GET /api/auth/next-employee-no  (?¬ìš© ê°€?¥í•œ ?¤ì Œ ?¬ë²ˆ ? ë ™ ì¡°íšŒ)
   app.get('/api/auth/next-employee-no', { preHandler: requireRole('admin') }, async () => {
     const { rows } = await pool.query(
       `SELECT employee_no FROM worker WHERE employee_no ~ '^[0-9]+$' ORDER BY LENGTH(employee_no) DESC, employee_no DESC LIMIT 100`

@@ -57,3 +57,14 @@
 body.mobile-view {
   padding-bottom: calc(64px + env(safe-area-inset-bottom));
 }
+
+/* ─── A4 / 라벨 인쇄 시 주변 UI 영역 100% 숨김 처리 ─── */
+@media print {
+  body {
+    background: #ffffff !important;
+  }
+  aside, header, nav, footer, .no-print, .print-hidden, [role="dialog"] > div:first-child:not(.print-container) {
+    display: none !important;
+  }
+}
+
