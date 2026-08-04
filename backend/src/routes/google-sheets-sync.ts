@@ -3,7 +3,7 @@ import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 
 const DEFAULT_SHEET_ID = '1dUrjgHuUFRr0I6yi5EGYYdHH2AWCz2PRfEVPPX_51vg';
-const DEFAULT_GID = '2113952191';
+const DEFAULT_GID = '1472597640';
 const GOOGLE_SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${DEFAULT_SHEET_ID}/export?format=csv&gid=${DEFAULT_GID}`;
 
 interface SheetRow {
