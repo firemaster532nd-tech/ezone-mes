@@ -200,9 +200,39 @@ body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:0;mar
           </div>
         </div>
 
-        <button onClick={doPrint} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2 shadow">
-          <Printer className="h-4 w-4"/> 라벨 {printCount}장 순번 출력 (1/{printCount}~{printCount}/{printCount})
-        </button>
+        <div className="flex flex-col gap-2">
+          <button onClick={doPrint} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2 shadow transition">
+            <Printer className="h-4 w-4"/> 라벨 {printCount}장 순번 출력 (1/{printCount}~{printCount}/{printCount})
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => {
+              const headers = ['LOT_NUMBER', 'ITEM_NAME', 'SPEC', 'QTY', 'UNIT', 'LOCATION', 'STOCK_TYPE'];
+              const row = [
+                `"${lot.lot_number}"`,
+                `"${lot.item_name}"`,
+                `"${fmtSpec(lot)}"`,
+                `"${lot.qty_current}"`,
+                `"${lot.unit}"`,
+                `"${lot.location || '-'}"`,
+                `"${lot.stock_type === 'CERTIFIED_AUDIT' ? '인정시험용' : '비인정용'}"`
+              ];
+              const csvContent = '\uFEFF' + headers.join(',') + '\n' + row.join(',');
+              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `GoLabel_${lot.lot_number}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+              toast.success('📥 GoLabel 소프트웨어 연동용 CSV 파일이 다운로드되었습니다.');
+            }}
+            className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 border border-slate-300 transition"
+          >
+            <Download className="h-3.5 w-3.5 text-slate-600"/> GoLabel 소프트웨어 연동용 CSV 다운로드
+          </button>
+        </div>
       </div>
     </div>
   );
