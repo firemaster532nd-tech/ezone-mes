@@ -139,8 +139,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
   });
 
-  // POST /api/auth/login  (사번 + 비밀번호)
-  app.post('/api/auth/login', async (req, reply) => {
+  const handleLogin = async (req: any, reply: any) => {
     try {
       const parsed = loginSchema.safeParse(req.body);
       if (!parsed.success) return reply.code(400).send({ error: 'invalid_body', issues: parsed.error.issues });
@@ -284,7 +283,12 @@ export async function authRoutes(app: FastifyInstance) {
       }
       return reply.code(500).send({ error: 'internal_server_error', message: err.message });
     }
-  });
+  };
+
+  app.post('/api/auth/login', handleLogin);
+  app.post('/api/login', handleLogin);
+  app.post('/auth/login', handleLogin);
+  app.post('/login', handleLogin);
 
   // GET /api/auth/me  (현재 로그인한 사용자 + 권한 목록)
   app.get('/api/auth/me', { preHandler: requireAuth }, async (req) => {

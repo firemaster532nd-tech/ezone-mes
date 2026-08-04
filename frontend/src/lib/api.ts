@@ -23,9 +23,17 @@ async function requestWithRetry<T>(path: string, options?: RequestInit, retryCou
     headers['Content-Type'] = 'application/json';
   }
 
+  // 중복 /api/api/ 경로 자동 정제
+  let cleanPath = path;
+  if (cleanPath.startsWith('/api/')) cleanPath = cleanPath.slice(4);
+  else if (cleanPath.startsWith('api/')) cleanPath = cleanPath.slice(3);
+  if (!cleanPath.startsWith('/')) cleanPath = '/' + cleanPath;
+
+  const url = `${API_BASE}${cleanPath}`;
+
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, {
+    res = await fetch(url, {
       headers,
       ...options,
     });
