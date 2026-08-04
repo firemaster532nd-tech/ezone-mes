@@ -65,6 +65,10 @@ export function QuotationPage() {
   const [endDate, setEndDate] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // 상단 탭 상태: 'list' (목록/조회) | 'preview' (A4 미리보기)
+  const [activeTab, setActiveTab] = useState<'list' | 'preview'>('list');
+  const [selectedQuotationId, setSelectedQuotationId] = useState<number | null>(null);
   const [previewQuotation, setPreviewQuotation] = useState<(Quotation & { items?: QuotationItem[] }) | null>(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
@@ -72,11 +76,16 @@ export function QuotationPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingQuotation, setEditingQuotation] = useState<Quotation | null>(null);
 
-  const handleOpenPreview = async (id: number) => {
+  const handleOpenPreview = async (id: number, openModalDirectly = false) => {
     try {
       const details = await api.get<{ data: Quotation & { items?: QuotationItem[] } }>(`/quotations/${id}`);
       setPreviewQuotation(details.data);
-      setIsPreviewModalOpen(true);
+      setSelectedQuotationId(id);
+      if (openModalDirectly) {
+        setIsPreviewModalOpen(true);
+      } else {
+        setActiveTab('preview');
+      }
     } catch (e) {
       toast.error('견적서 상세 정보를 불러오지 못했습니다.');
     }
@@ -93,6 +102,9 @@ export function QuotationPage() {
       
       const res = await api.get<{ data: Quotation[] }>(`/quotations?${params.toString()}`);
       setData(res.data);
+      if (res.data.length > 0 && !selectedQuotationId) {
+        setSelectedQuotationId(res.data[0].quotation_id);
+      }
     } catch (e: any) {
       toast.error('견적서 목록을 불러오지 못했습니다.');
     } finally {
@@ -104,9 +116,134 @@ export function QuotationPage() {
     fetchData();
   }, [startDate, endDate, statusFilter]);
 
+  // 미리보기 탭 변경 시 선택된 견적서 상세 로딩
+  useEffect(() => {
+    if (activeTab === 'preview' && selectedQuotationId) {
+      api.get<{ data: Quotation & { items?: QuotationItem[] } }>(`/quotations/${selectedQuotationId}`)
+        .then(res => setPreviewQuotation(res.data))
+        .catch(() => toast.error('견적 상세를 가져오지 못했습니다.'));
+    }
+  }, [activeTab, selectedQuotationId]);
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     fetchData();
+  };
+
+  // 순수 A4 견적서 단독 인쇄 (주변 화면 및 테두리 미인쇄)
+  const handlePrintIsolatedQuotation = (quote: Quotation & { items?: QuotationItem[] }) => {
+    const items = quote.items || [];
+    const totalSupply = Number(quote.total_amount || 0);
+    const totalVat = Number(quote.total_vat || 0);
+    const totalSum = totalSupply + totalVat;
+
+    const printWin = window.open('', '_blank', 'width=900,height=1000');
+    if (!printWin) return;
+
+    printWin.document.write(`
+      <!DOCTYPE html>
+      <html lang="ko">
+      <head>
+        <meta charset="utf-8">
+        <title>견적서_${quote.quotation_number}</title>
+        <style>
+          @page { size: A4 portrait; margin: 12mm 15mm; }
+          * { box-sizing: border-box; }
+          body { font-family: 'Malgun Gothic', 'Pretendard', sans-serif; margin: 0; padding: 0; color: #0f172a; background: #fff; font-size: 10pt; line-height: 1.4; }
+          .quote-container { width: 100%; max-width: 210mm; margin: 0 auto; padding: 0; }
+          .header-title { text-align: center; font-size: 26pt; font-weight: 900; letter-spacing: 14px; margin-bottom: 24px; border-bottom: 3px double #0f172a; padding-bottom: 8px; }
+          .info-grid { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+          .box { border: 1px solid #64748b; padding: 12px; border-radius: 6px; flex: 1; font-size: 9pt; background: #fafafa; }
+          .box h4 { margin: 0 0 6px 0; font-size: 9.5pt; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; color: #1e293b; font-weight: bold; }
+          .box p { margin: 3px 0; }
+          .sum-bar { background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .sum-val { font-size: 15pt; font-weight: bold; color: #fbbf24; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 9pt; }
+          th, td { border: 1px solid #94a3b8; padding: 7px 9px; text-align: left; }
+          th { background: #f1f5f9; text-align: center; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .text-right { text-align: right; }
+          .text-center { text-align: center; }
+          .footer { margin-top: 40px; text-align: center; font-size: 9.5pt; }
+          .footer-company { font-size: 15pt; font-weight: 900; margin-top: 16px; color: #1e3a8a; letter-spacing: 3px; }
+        </style>
+      </head>
+      <body>
+        <div class="quote-container">
+          <div class="header-title">견 적 서</div>
+          <div class="info-grid">
+            <div class="box">
+              <h4>수신 (공급받는자)</h4>
+              <p><b>귀하/귀사명:</b> ${quote.company_name} 귀하</p>
+              <p><b>현장명:</b> ${quote.project_code || '일반 현장'}</p>
+              <p><b>담당자:</b> ${quote.manager_name || '-'}</p>
+              <p><b>견적일자:</b> ${quote.quotation_date}</p>
+              <p><b>납품기한:</b> ${quote.delivery_date || '협의'}</p>
+              <p><b>비고:</b> ${quote.remarks || '-'}</p>
+            </div>
+            <div class="box">
+              <h4>공급자 (제출자)</h4>
+              <p><b>등록번호:</b> 232-88-00624</p>
+              <p><b>상호 / 대표자:</b> (주)이지원 / 박민선 (직인생략)</p>
+              <p><b>주소:</b> 경기도 화성시 장안면 장안로227번길 166-18</p>
+              <p><b>업태 / 종목:</b> 제조업 / 내화채움구조체, 차열시트</p>
+              <p><b>전화 / 팩스:</b> TEL: 070-8870-0300 / FAX: 02-6455-0300</p>
+            </div>
+          </div>
+          <div class="sum-bar">
+            <span>총 견적 합계 금액 (VAT 포함)</span>
+            <span class="sum-val">₩${totalSum.toLocaleString()} 원</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width:40px;">No</th>
+                <th>품목코드</th>
+                <th>품명 및 규격</th>
+                <th style="width:55px;">수량</th>
+                <th style="width:75px;">단가</th>
+                <th style="width:95px;">공급가액</th>
+                <th style="width:85px;">세액</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${items.map((it, idx) => `
+                <tr>
+                  <td class="text-center">${idx + 1}</td>
+                  <td class="text-center">${it.item_code}</td>
+                  <td><b>${it.item_name}</b> ${it.spec ? `<br/><small style="color:#64748b;">${it.spec}</small>` : ''}</td>
+                  <td class="text-right">${Number(it.qty).toLocaleString()}</td>
+                  <td class="text-right">₩${Number(it.unit_price).toLocaleString()}</td>
+                  <td class="text-right">₩${Number(it.amount).toLocaleString()}</td>
+                  <td class="text-right">₩${Number(it.vat).toLocaleString()}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+            <tfoot>
+              <tr style="background:#f8fafc;font-weight:bold;">
+                <td colSpan="3" class="text-center">합 계 (TOTAL)</td>
+                <td class="text-right">${items.reduce((a,b)=>a+Number(b.qty),0).toLocaleString()}</td>
+                <td></td>
+                <td class="text-right">₩${totalSupply.toLocaleString()}</td>
+                <td class="text-right">₩${totalVat.toLocaleString()}</td>
+              </tr>
+            </tfoot>
+          </table>
+          <div class="footer">
+            <p>위와 같이 견적서를 제출합니다.</p>
+            <p><b>${quote.quotation_date}</b></p>
+            <div class="footer-company">(주) 이 지 원  대 표 이 사  박 민 선</div>
+          </div>
+        </div>
+        <script>
+          window.onload = function() {
+            window.print();
+            setTimeout(function() { window.close(); }, 500);
+          };
+        </script>
+      </body>
+      </html>
+    `);
+    printWin.document.close();
   };
 
   // 주문 및 판매 전환 API 호출
@@ -140,205 +277,440 @@ export function QuotationPage() {
       <PageHeader 
         title="견적서 관리" 
         count={data.length} 
-        description="E-Count 연동 견적서 현황 목록, 클릭 시 A4 미리보기 지원 및 클릭 한 번으로 수주/판매 자동 전환" 
+        description="E-Count 연동 견적서 현황 목록, A4 미리보기 탭 지원 및 단독 인쇄 / 판매 자동 전환" 
       />
 
-      {/* 필터 검색 섹션 */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm">
-        <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-end gap-4">
-          <div className="flex-1 min-w-[240px]">
-            <label className="block text-xs font-semibold text-slate-500 mb-1.5">검색어</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="견적번호, 거래처명, 현장명 검색..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1.5">견적기간</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"
-              />
-              <span className="text-slate-400">~</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1.5">진행상태</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-            >
-              <option value="">전체 상태</option>
-              <option value="진행중">진행중</option>
-              <option value="주문완료">주문완료</option>
-              <option value="취소">취소</option>
-            </select>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="px-5 py-2 bg-slate-800 text-white font-medium text-sm rounded-lg hover:bg-slate-700 transition-colors shadow-sm"
-            >
-              조회
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSearch('');
-                setStartDate('');
-                setEndDate('');
-                setStatusFilter('');
-                fetchData();
-              }}
-              className="px-4 py-2 border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              초기화
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* 목록 테이블 */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h3 className="font-bold text-slate-800 text-sm">견적서 목록 (행 클릭 시 미리보기)</h3>
+      {/* 상단 메인 탭 선택 바 */}
+      <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 pt-3 rounded-xl shadow-sm">
+        <div className="flex gap-2">
           <button
-            onClick={() => {
-              setEditingQuotation(null);
-              setIsModalOpen(true);
-            }}
-            className="px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5 shadow-sm"
+            onClick={() => setActiveTab('list')}
+            className={cn(
+              "px-5 py-2.5 font-bold text-sm rounded-t-lg transition-all flex items-center gap-2 border-b-2",
+              activeTab === 'list' 
+                ? "border-blue-600 text-blue-600 bg-blue-50/50" 
+                : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+            )}
           >
-            <Plus className="h-4 w-4" />
-            <span>신규 견적서 작성</span>
+            <FileText className="h-4 w-4" />
+            <span>📋 견적서 조회 / 현황</span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 font-mono">
+              {data.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('preview')}
+            className={cn(
+              "px-5 py-2.5 font-bold text-sm rounded-t-lg transition-all flex items-center gap-2 border-b-2",
+              activeTab === 'preview' 
+                ? "border-blue-600 text-blue-600 bg-blue-50/50" 
+                : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+            )}
+          >
+            <Eye className="h-4 w-4 text-emerald-600" />
+            <span>👁️ 견적서 A4 미리보기 탭</span>
           </button>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-xs font-semibold text-slate-500 border-b border-slate-100">
-              <tr>
-                <th className="px-5 py-3.5 text-center w-12">No</th>
-                <th className="px-5 py-3.5">견적일자</th>
-                <th className="px-5 py-3.5">견적번호</th>
-                <th className="px-5 py-3.5">거래처명</th>
-                <th className="px-5 py-3.5">현장명</th>
-                <th className="px-5 py-3.5 text-right">총 수량</th>
-                <th className="px-5 py-3.5 text-right">공급가액</th>
-                <th className="px-5 py-3.5 text-right">부가세</th>
-                <th className="px-5 py-3.5 text-right">합계금액</th>
-                <th className="px-5 py-3.5 text-center">진행상태</th>
-                <th className="px-5 py-3.5 text-center w-40">액션</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {data.map((q, idx) => (
-                <tr 
-                  key={q.quotation_id} 
-                  onClick={() => handleOpenPreview(q.quotation_id)}
-                  className="hover:bg-blue-50/50 cursor-pointer transition-colors group"
-                >
-                  <td className="px-5 py-4 text-center font-mono text-xs text-slate-400">{idx + 1}</td>
-                  <td className="px-5 py-4 font-mono text-xs text-slate-600">{q.quotation_date}</td>
-                  <td className="px-5 py-4 font-mono text-xs font-bold text-blue-600 group-hover:underline">
-                    {q.quotation_number}
-                  </td>
-                  <td className="px-5 py-4 font-medium text-slate-800">{q.company_name}</td>
-                  <td className="px-5 py-4 text-slate-500 text-xs">{q.project_code || '-'}</td>
-                  <td className="px-5 py-4 text-right font-mono text-slate-600 font-medium">
-                    {Number(q.total_qty).toLocaleString()}
-                  </td>
-                  <td className="px-5 py-4 text-right font-mono font-semibold text-slate-800">
-                    ₩{Number(q.total_amount).toLocaleString()}
-                  </td>
-                  <td className="px-5 py-4 text-right font-mono text-xs text-slate-500">
-                    ₩{Number(q.total_vat).toLocaleString()}
-                  </td>
-                  <td className="px-5 py-4 text-right font-mono font-bold text-blue-600">
-                    ₩{(Number(q.total_amount) + Number(q.total_vat)).toLocaleString()}
-                  </td>
-                  <td className="px-5 py-4 text-center">
-                    <span className={cn(
-                      "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold shadow-sm",
-                      q.status === '진행중' && "bg-amber-50 text-amber-700 border border-amber-200/50",
-                      q.status === '주문완료' && "bg-emerald-50 text-emerald-700 border border-emerald-200/50",
-                      q.status === '취소' && "bg-slate-100 text-slate-500"
-                    )}>
-                      {q.status}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 text-center" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center justify-center gap-1">
-                      <button
-                        onClick={() => handleOpenPreview(q.quotation_id)}
-                        className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded text-xs font-semibold transition-colors flex items-center gap-1"
-                        title="견적서 미리보기"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        <span>미리보기</span>
-                      </button>
+        <button
+          onClick={() => {
+            setEditingQuotation(null);
+            setIsModalOpen(true);
+          }}
+          className="mb-2 px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5 shadow-sm"
+        >
+          <Plus className="h-4 w-4" />
+          <span>신규 견적서 작성</span>
+        </button>
+      </div>
 
-                      {q.status === '진행중' && (
-                        <>
+      {/* TAB 1: 견적서 목록 / 현황 */}
+      {activeTab === 'list' && (
+        <>
+          {/* 필터 검색 섹션 */}
+          <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-sm">
+            <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-end gap-4">
+              <div className="flex-1 min-w-[240px]">
+                <label className="block text-xs font-semibold text-slate-500 mb-1.5">검색어</label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="견적번호, 거래처명, 현장명 검색..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1.5">견적기간</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"
+                  />
+                  <span className="text-slate-400">~</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1.5">진행상태</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                >
+                  <option value="">전체 상태</option>
+                  <option value="진행중">진행중</option>
+                  <option value="주문완료">주문완료</option>
+                  <option value="취소">취소</option>
+                </select>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-slate-800 text-white font-medium text-sm rounded-lg hover:bg-slate-700 transition-colors shadow-sm"
+                >
+                  조회
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch('');
+                    setStartDate('');
+                    setEndDate('');
+                    setStatusFilter('');
+                    fetchData();
+                  }}
+                  className="px-4 py-2 border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
+                >
+                  초기화
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* 목록 테이블 */}
+          <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <h3 className="font-bold text-slate-800 text-sm">견적서 목록 (행 클릭 시 미리보기 탭으로 이동)</h3>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-xs font-semibold text-slate-500 border-b border-slate-100">
+                  <tr>
+                    <th className="px-5 py-3.5 text-center w-12">No</th>
+                    <th className="px-5 py-3.5">견적일자</th>
+                    <th className="px-5 py-3.5">견적번호</th>
+                    <th className="px-5 py-3.5">거래처명</th>
+                    <th className="px-5 py-3.5">현장명</th>
+                    <th className="px-5 py-3.5 text-right">총 수량</th>
+                    <th className="px-5 py-3.5 text-right">공급가액</th>
+                    <th className="px-5 py-3.5 text-right">부가세</th>
+                    <th className="px-5 py-3.5 text-right">합계금액</th>
+                    <th className="px-5 py-3.5 text-center">진행상태</th>
+                    <th className="px-5 py-3.5 text-center w-48">액션</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {data.map((q, idx) => (
+                    <tr 
+                      key={q.quotation_id} 
+                      onClick={() => handleOpenPreview(q.quotation_id)}
+                      className="hover:bg-blue-50/50 cursor-pointer transition-colors group"
+                    >
+                      <td className="px-5 py-4 text-center font-mono text-xs text-slate-400">{idx + 1}</td>
+                      <td className="px-5 py-4 font-mono text-xs text-slate-600">{q.quotation_date}</td>
+                      <td className="px-5 py-4 font-mono text-xs font-bold text-blue-600 group-hover:underline">
+                        {q.quotation_number}
+                      </td>
+                      <td className="px-5 py-4 font-medium text-slate-800">{q.company_name}</td>
+                      <td className="px-5 py-4 text-slate-500 text-xs">{q.project_code || '-'}</td>
+                      <td className="px-5 py-4 text-right font-mono text-slate-600 font-medium">
+                        {Number(q.total_qty).toLocaleString()}
+                      </td>
+                      <td className="px-5 py-4 text-right font-mono font-semibold text-slate-800">
+                        ₩{Number(q.total_amount).toLocaleString()}
+                      </td>
+                      <td className="px-5 py-4 text-right font-mono text-xs text-slate-500">
+                        ₩{Number(q.total_vat).toLocaleString()}
+                      </td>
+                      <td className="px-5 py-4 text-right font-mono font-bold text-blue-600 bg-blue-50/10">
+                        ₩{(Number(q.total_amount) + Number(q.total_vat)).toLocaleString()}
+                      </td>
+                      <td className="px-5 py-4 text-center">
+                        <span className={cn(
+                          "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold shadow-sm",
+                          q.status === '진행중' && "bg-amber-50 text-amber-700 border border-amber-200/50",
+                          q.status === '주문완료' && "bg-emerald-50 text-emerald-700 border border-emerald-200/50",
+                          q.status === '취소' && "bg-slate-100 text-slate-500"
+                        )}>
+                          {q.status}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1.5">
                           <button
-                            onClick={() => handleConvertOrder(q.quotation_id, q.quotation_number)}
-                            className="p-1.5 rounded hover:bg-emerald-50 text-emerald-600 hover:text-emerald-800 transition-colors"
-                            title="수주/판매 전환"
+                            onClick={() => handleOpenPreview(q.quotation_id)}
+                            className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-xs font-bold transition-colors flex items-center gap-1 shadow-sm"
+                            title="견적서 미리보기 탭 이동"
                           >
-                            <ArrowRightLeft className="h-4 w-4" />
+                            <Eye className="h-3.5 w-3.5" />
+                            <span>미리보기</span>
                           </button>
+
                           <button
                             onClick={async () => {
-                              try {
-                                const details = await api.get<{ data: Quotation }>(`/quotations/${q.quotation_id}`);
-                                setEditingQuotation(details.data);
-                                setIsModalOpen(true);
-                              } catch (e) {
-                                toast.error('견적 상세를 가져오지 못했습니다.');
-                              }
+                              const details = await api.get<{ data: Quotation & { items?: QuotationItem[] } }>(`/quotations/${q.quotation_id}`);
+                              handlePrintIsolatedQuotation(details.data);
                             }}
-                            className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
-                            title="수정"
+                            className="p-1.5 rounded hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors"
+                            title="A4 단독 인쇄 (테두리 미인쇄)"
                           >
-                            <Pencil className="h-4 w-4" />
+                            <Printer className="h-4 w-4" />
                           </button>
-                        </>
-                      )}
+
+                          {q.status === '진행중' && (
+                            <>
+                              <button
+                                onClick={() => handleConvertOrder(q.quotation_id, q.quotation_number)}
+                                className="p-1.5 rounded hover:bg-emerald-50 text-emerald-600 hover:text-emerald-800 transition-colors"
+                                title="수주/판매 전환"
+                              >
+                                <ArrowRightLeft className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const details = await api.get<{ data: Quotation }>(`/quotations/${q.quotation_id}`);
+                                    setEditingQuotation(details.data);
+                                    setIsModalOpen(true);
+                                  } catch (e) {
+                                    toast.error('견적 상세를 가져오지 못했습니다.');
+                                  }
+                                }}
+                                className="p-1.5 rounded hover:bg-slate-100 text-slate-500 hover:text-slate-800 transition-colors"
+                                title="수정"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {data.length === 0 && !loading && (
+                    <tr>
+                      <td colSpan={11} className="px-5 py-12 text-center text-slate-400">
+                        <FileText className="h-10 w-10 mx-auto mb-3 text-slate-200" />
+                        조회된 견적서가 없습니다.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* TAB 2: A4 견적서 미리보기 탭 */}
+      {activeTab === 'preview' && (
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 space-y-6">
+          {/* 견적서 선택 바 및 액션 버튼 */}
+          <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200">
+            <div className="flex items-center gap-3 flex-1 min-w-[300px]">
+              <label className="text-xs font-bold text-slate-600 whitespace-nowrap">견적서 선택:</label>
+              <select
+                value={selectedQuotationId || ''}
+                onChange={(e) => setSelectedQuotationId(Number(e.target.value))}
+                className="px-3 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500/20 flex-1 max-w-md"
+              >
+                {data.map(q => (
+                  <option key={q.quotation_id} value={q.quotation_id}>
+                    [{q.quotation_number}] {q.company_name} - ₩{(Number(q.total_amount) + Number(q.total_vat)).toLocaleString()}원 ({q.status})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {previewQuotation && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handlePrintIsolatedQuotation(previewQuotation)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <Printer className="h-4 w-4 text-amber-400" />
+                  <span>🖨️ A4 단독 인쇄 (테두리 미인쇄)</span>
+                </button>
+
+                {previewQuotation.status === '진행중' && (
+                  <>
+                    <button
+                      onClick={() => handleConvertOrder(previewQuotation.quotation_id, previewQuotation.quotation_number)}
+                      className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-md transition-all"
+                    >
+                      <ArrowRightLeft className="h-4 w-4" />
+                      <span>🚀 수주 &amp; 판매로 전환</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingQuotation(previewQuotation);
+                        setIsModalOpen(true);
+                      }}
+                      className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors"
+                    >
+                      <Pencil className="h-4 w-4" />
+                      <span>수정</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* 본문 A4 문서 미리보기 렌더링 영역 */}
+          {previewQuotation ? (
+            <div className="flex justify-center bg-slate-100/70 p-8 rounded-xl border border-slate-200 overflow-x-auto">
+              <div className="bg-white w-full max-w-[210mm] min-h-[297mm] p-10 shadow-xl rounded-sm border border-slate-300 text-slate-900 space-y-6 text-sm">
+                
+                {/* 타이틀 */}
+                <div className="text-center py-2 border-b-2 border-slate-900">
+                  <h1 className="text-3xl font-extrabold tracking-[14px] text-slate-900">견 적 서</h1>
+                </div>
+
+                {/* 기본 정보 (수신 / 공급자 2열 배정) */}
+                <div className="grid grid-cols-2 gap-6 items-start">
+                  
+                  {/* 왼쪽: 공급받는자 정보 */}
+                  <div className="border border-slate-300 rounded-lg p-4 space-y-2 bg-slate-50/50">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                      <span className="text-xs font-semibold text-slate-500">수신 (공급받는자)</span>
+                      <span className="font-bold text-lg text-slate-900">{previewQuotation.company_name} <span className="text-xs font-normal text-slate-600">귀하</span></span>
                     </div>
-                  </td>
-                </tr>
-              ))}
-              {data.length === 0 && !loading && (
-                <tr>
-                  <td colSpan={11} className="px-5 py-12 text-center text-slate-400">
-                    <FileText className="h-10 w-10 mx-auto mb-3 text-slate-200" />
-                    조회된 견적서가 없습니다.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                    <div className="text-xs space-y-1.5 text-slate-700">
+                      <p><span className="text-slate-400">현장명:</span> <strong className="text-slate-900">{previewQuotation.project_code || '일반 현장'}</strong></p>
+                      <p><span className="text-slate-400">담당자:</span> {previewQuotation.manager_name || '-'}</p>
+                      <p><span className="text-slate-400">견적일자:</span> {previewQuotation.quotation_date}</p>
+                      <p><span className="text-slate-400">납품기한:</span> {previewQuotation.delivery_date || '협의'}</p>
+                      <p><span className="text-slate-400">비고:</span> {previewQuotation.remarks || '-'}</p>
+                    </div>
+                  </div>
+
+                  {/* 오른쪽: 공급자 정보 (이지원 공식 정보) */}
+                  <div className="border border-slate-300 rounded-lg p-4 space-y-1.5 text-xs bg-slate-50/50">
+                    <div className="flex items-center justify-between border-b border-slate-200 pb-2 mb-1">
+                      <span className="text-xs font-semibold text-slate-500">공급자 (제출자)</span>
+                      <strong className="text-sm text-blue-900 font-bold">(주)이지원</strong>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      <span className="text-slate-400">등록번호:</span>
+                      <span className="col-span-2 font-mono font-bold">232-88-00624</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      <span className="text-slate-400">상호 / 대표자:</span>
+                      <span className="col-span-2 font-bold">(주)이지원 / 박민선 (직인생략)</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      <span className="text-slate-400">주소:</span>
+                      <span className="col-span-2">경기도 화성시 장안면 장안로227번길 166-18</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      <span className="text-slate-400">업태 / 종목:</span>
+                      <span className="col-span-2">제조업 / 내화채움구조체, 차열시트</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1">
+                      <span className="text-slate-400">전화 / 팩스:</span>
+                      <span className="col-span-2 font-mono">TEL: 070-8870-0300 / FAX: 02-6455-0300</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 견적 합계 금액 바 */}
+                <div className="bg-slate-900 text-white rounded-lg p-4 flex items-center justify-between shadow-md">
+                  <div>
+                    <span className="text-xs text-slate-400 block font-medium">총 견적 합계 금액 (VAT 포함)</span>
+                    <span className="text-xl font-bold tracking-tight text-amber-400 font-mono">
+                      ₩{(Number(previewQuotation.total_amount || 0) + Number(previewQuotation.total_vat || 0)).toLocaleString()} 원
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs text-slate-300 block font-mono">
+                      공급가액 ₩{Number(previewQuotation.total_amount || 0).toLocaleString()} + 부가세 ₩{Number(previewQuotation.total_vat || 0).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 품목 명세서 테이블 */}
+                <div className="border border-slate-300 rounded-lg overflow-hidden">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300">
+                      <tr>
+                        <th className="p-2.5 text-center w-10">No</th>
+                        <th className="p-2.5">품목코드</th>
+                        <th className="p-2.5">품명 및 규격</th>
+                        <th className="p-2.5 text-right w-16">수량</th>
+                        <th className="p-2.5 text-center w-12">단위</th>
+                        <th className="p-2.5 text-right w-24">단가(원)</th>
+                        <th className="p-2.5 text-right w-28">공급가액(원)</th>
+                        <th className="p-2.5 text-right w-24">세액(원)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {(previewQuotation.items || []).map((it, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50">
+                          <td className="p-2.5 text-center font-mono text-slate-400">{idx + 1}</td>
+                          <td className="p-2.5 font-mono text-slate-600">{it.item_code}</td>
+                          <td className="p-2.5 font-medium text-slate-900">
+                            {it.item_name}
+                            {it.spec && <span className="block text-[10px] text-slate-500">{it.spec}</span>}
+                          </td>
+                          <td className="p-2.5 text-right font-mono font-bold text-slate-800">{Number(it.qty).toLocaleString()}</td>
+                          <td className="p-2.5 text-center text-slate-500">EA</td>
+                          <td className="p-2.5 text-right font-mono text-slate-700">₩{Number(it.unit_price).toLocaleString()}</td>
+                          <td className="p-2.5 text-right font-mono font-semibold text-slate-900">₩{Number(it.amount).toLocaleString()}</td>
+                          <td className="p-2.5 text-right font-mono text-slate-500">₩{Number(it.vat).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                      {(!previewQuotation.items || previewQuotation.items.length === 0) && (
+                        <tr>
+                          <td colSpan={8} className="p-6 text-center text-slate-400">등록된 품목이 없습니다.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* 하단 서명 / 안내 문구 */}
+                <div className="pt-6 border-t border-slate-200 text-center space-y-2 text-xs text-slate-500">
+                  <p className="font-semibold text-slate-700">위와 같이 견적서를 제출합니다.</p>
+                  <p className="font-bold text-slate-900 text-sm tracking-widest">{previewQuotation.quotation_date}</p>
+                  <p className="font-extrabold text-blue-900 text-base tracking-wider mt-2">(주) 이 지 원  대 표 이 사  박 민 선</p>
+                </div>
+
+              </div>
+            </div>
+          ) : (
+            <div className="py-16 text-center text-slate-400 text-sm">
+              선택된 견적서가 없습니다. 상단 드롭다운에서 미리볼 견적서를 선택해 주세요.
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* 미리보기 모달 */}
       {isPreviewModalOpen && previewQuotation && (

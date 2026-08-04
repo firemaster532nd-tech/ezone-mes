@@ -133,8 +133,24 @@ export function QuotationPrintPage() {
 
   return (
     <div className="min-h-screen bg-slate-100 font-sans text-slate-800 antialiased p-0 sm:p-6 print:p-0 print:bg-white">
+      <style>{`
+        @media print {
+          @page { size: A4 portrait; margin: 10mm 15mm; }
+          body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+          .no-print, nav, header, aside, button, .top-bar { display: none !important; }
+          .print-area {
+            border: none !important;
+            box-shadow: none !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+        }
+      `}</style>
+
       {/* 상단 액션 바 (인쇄 시 숨김) */}
-      <div className="max-w-[800px] mx-auto mb-4 bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center justify-between no-print print:hidden">
+      <div className="max-w-[800px] mx-auto mb-4 bg-white rounded-xl border border-slate-200 shadow-sm p-4 flex items-center justify-between no-print print:hidden top-bar">
         <div className="flex items-center gap-2">
           <span className="font-bold text-slate-800 text-sm">견적 인쇄 미리보기</span>
           <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded font-mono">
@@ -160,7 +176,7 @@ export function QuotationPrintPage() {
       </div>
 
       {/* A4 용지 영역 */}
-      <div className="max-w-[800px] mx-auto bg-white border border-slate-300 shadow-lg p-10 print:shadow-none print:border-none print:p-0 flex flex-col justify-between min-h-[1050px]">
+      <div className="max-w-[800px] mx-auto bg-white border border-slate-300 shadow-lg p-10 print:shadow-none print:border-none print:p-0 flex flex-col justify-between min-h-[1050px] print-area">
         <div>
           {/* 대제목 */}
           <div className="text-center mb-10">

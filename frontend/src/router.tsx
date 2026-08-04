@@ -137,7 +137,9 @@ export const router = createBrowserRouter([
   { path: '/mobile/more', element: <AuthGuard><MobileMorePage /></AuthGuard> },
 
   // ══ 인쇄 전용 페이지 (새 탭/팝업용 — token을 URL 쿼리로 전달) ══
-  // 출차증 인쇄 (AuthGuard 없이 독립 렌더링)
+  // 견적서 인쇄 (AuthGuard 없이 독립 렌더링)
+  { path: '/orders/quotations/print/:id', element: <QuotationPrintPage /> },
+  { path: '/sales/quotations/print/:id', element: <QuotationPrintPage /> },
   { path: '/print/statements/:id', element: <StatementPrintPage /> },
   { path: '/print/exit-pass/:id', element: <ExitPassPrintPage /> },
 
@@ -204,7 +206,6 @@ export const router = createBrowserRouter([
       { path: 'quality/socket-incoming/:soId', element: <SocketIncomingDetailPage /> },
       { path: 'orders/quotations', element: <Navigate to="/sales/quotations" replace /> },
       { path: 'orders/unordered', element: <Navigate to="/sales/quotations/unordered" replace /> },
-      { path: 'orders/quotations/print/:id', element: <QuotationPrintPage /> },
       // 영업 - 견적 (신규 경로)
       { path: 'sales/quotations', element: <QuotationPage /> },
       { path: 'sales/quotations/entry', element: <QuotationEntryPage /> },
@@ -225,7 +226,6 @@ export const router = createBrowserRouter([
       { path: 'sales/payment/status', element: <SalesDeliveryPage /> },
       { path: 'sales/delivery/discount', element: <SalesDeliveryPage /> },
       { path: 'sales/receivables', element: <SalesDeliveryPage /> },
-      { path: 'orders/quotations/print/:id', element: <QuotationPrintPage /> },
       { path: 'orders/projects', element: <ProjectPage /> },
       { path: 'orders/purchase-orders', element: <PurchaseOrdersPage /> },
       // 출하관리
