@@ -518,11 +518,12 @@ function QuotationFormModal({
       const idx = showItemSelectModal;
       setItems(prev => {
         const next = [...prev];
+        const socketSpec = item.spec || item.item_name || '';
         next[idx] = {
           ...next[idx],
           item_code: item.item_code,
           item_name: item.item_name,
-          spec: item.spec || '',
+          spec: socketSpec, // 2. 품목 선택 시 규격란에 소켓명/규격 자동 등록!
         };
         return next;
       });
@@ -758,47 +759,51 @@ function QuotationFormModal({
             </div>
           </div>
 
-          {/* 품목 추가 및 실시간 계산 그리드 */}
+          {/* 품목 추가 및 실시간 계산 그리드 (ERP 스타일) */}
           <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm overflow-hidden">
-            <div className="px-5 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-              <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">견적 세부 품목 명세</h4>
+            <div className="px-5 py-3 bg-slate-100 border-b border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">견적 세부 품목 명세</h4>
+                <span className="text-[11px] text-slate-500 font-medium">· ERP 규격 자동채번 &amp; 적요 지원</span>
+              </div>
               <button
                 type="button"
                 onClick={addRow}
-                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white font-semibold text-xs rounded hover:bg-blue-700 transition-colors shadow-sm"
+                className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white font-bold text-xs rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
               >
-                <Plus className="h-3 w-3" />
-                품목 추가
+                <Plus className="h-3.5 w-3.5" />
+                + 행추가
               </button>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left border-collapse">
+              <table className="w-full text-xs text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-100 bg-slate-50/50 text-slate-500 font-semibold text-xs uppercase tracking-wider">
-                    <th className="px-4 py-3 text-center w-12">No</th>
-                    <th className="px-4 py-3 w-40">품목코드 *</th>
-                    <th className="px-4 py-3 w-48">품목명</th>
-                    <th className="px-4 py-3 w-36">규격</th>
-                    <th className="px-4 py-3 text-right w-24">수량</th>
-                    <th className="px-4 py-3 text-right w-32">단가(원)</th>
-                    <th className="px-4 py-3 text-right w-36">공급가액(원)</th>
-                    <th className="px-4 py-3 text-right w-32">세액(원)</th>
-                    <th className="px-4 py-3 w-44">비고</th>
-                    <th className="px-4 py-3 text-center w-16">관리</th>
+                  <tr className="border-b border-slate-200 bg-slate-100 text-slate-700 font-extrabold divide-x divide-slate-200">
+                    <th className="px-3 py-2.5 text-center w-10">No</th>
+                    <th className="px-3 py-2.5 w-32">품목코드 *</th>
+                    <th className="px-3 py-2.5 w-48 text-left">품목명</th>
+                    <th className="px-3 py-2.5 w-36 text-left">규격 (소켓명 자동)</th>
+                    <th className="px-3 py-2.5 text-right w-20">수량</th>
+                    <th className="px-3 py-2.5 text-right w-28">단가(원)</th>
+                    <th className="px-3 py-2.5 text-right w-32">공급가액(원)</th>
+                    <th className="px-3 py-2.5 text-right w-28">세액(원)</th>
+                    <th className="px-3 py-2.5 w-36 text-left bg-amber-50/50 text-amber-900">적요</th>
+                    <th className="px-3 py-2.5 w-32 text-left">비고</th>
+                    <th className="px-3 py-2.5 text-center w-12">삭제</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 font-mono text-xs">
+                <tbody className="divide-y divide-slate-200 font-sans text-xs">
                   {items.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/20">
-                      <td className="px-4 py-2 text-center text-slate-400">{idx + 1}</td>
-                      <td className="px-4 py-2">
+                    <tr key={idx} className="hover:bg-blue-50/20 divide-x divide-slate-100">
+                      <td className="px-2 py-1.5 text-center text-slate-400 font-mono">{idx + 1}</td>
+                      <td className="px-2 py-1.5">
                         <div className="relative">
                           <input
                             type="text"
                             value={row.item_code}
                             onChange={(e) => updateRow(idx, 'item_code', e.target.value)}
-                            placeholder="코드 입력 또는 검색"
-                            className="w-full pr-7 pl-2 py-1.5 border border-slate-200 rounded font-mono focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-700"
+                            placeholder="코드 검색"
+                            className="w-full pr-7 pl-2 py-1 border border-slate-200 rounded font-mono text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 text-blue-700 font-bold"
                           />
                           <button
                             type="button"
@@ -809,60 +814,74 @@ function QuotationFormModal({
                           </button>
                         </div>
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-2 py-1.5">
                         <input
                           type="text"
                           value={row.item_name}
                           onChange={(e) => updateRow(idx, 'item_name', e.target.value)}
-                          placeholder="품목명 입력"
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded font-sans text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-700"
+                          placeholder="품목명"
+                          className="w-full px-2 py-1 border border-slate-200 rounded font-bold text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800"
                         />
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-2 py-1.5">
                         <input
                           type="text"
                           value={row.spec || ''}
                           onChange={(e) => updateRow(idx, 'spec', e.target.value)}
-                          placeholder="예: 850X550"
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-600"
+                          placeholder="규격/소켓명"
+                          className="w-full px-2 py-1 border border-slate-200 rounded text-xs font-mono font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 text-emerald-800 bg-emerald-50/20"
                         />
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-2 py-1.5">
                         <input
                           type="number"
-                          value={row.qty}
-                          onChange={(e) => updateRow(idx, 'qty', e.target.value)}
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded text-right font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-700"
+                          value={row.qty === 0 ? '' : row.qty}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => updateRow(idx, 'qty', e.target.value === '' ? 0 : Number(e.target.value))}
+                          placeholder="0"
+                          className="w-full px-2 py-1 border border-slate-200 rounded text-right font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 font-mono"
                         />
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-2 py-1.5">
                         <input
                           type="number"
-                          value={row.unit_price}
-                          onChange={(e) => updateRow(idx, 'unit_price', e.target.value)}
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded text-right font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-700"
+                          value={row.unit_price === 0 ? '' : row.unit_price}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => updateRow(idx, 'unit_price', e.target.value === '' ? 0 : Number(e.target.value))}
+                          placeholder="0"
+                          className="w-full px-2 py-1 border border-slate-200 rounded text-right font-bold focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-800 font-mono"
                         />
                       </td>
-                      <td className="px-4 py-2 text-right text-slate-700 font-semibold align-middle px-3">
-                        ₩{row.amount.toLocaleString()}
+                      <td className="px-2 py-1.5 text-right text-slate-800 font-bold font-mono align-middle">
+                        {row.amount ? row.amount.toLocaleString() : '0'}
                       </td>
-                      <td className="px-4 py-2 text-right text-slate-500 align-middle px-3">
-                        ₩{row.vat.toLocaleString()}
+                      <td className="px-2 py-1.5 text-right text-slate-500 font-mono align-middle">
+                        {row.vat ? row.vat.toLocaleString() : '0'}
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-2 py-1.5 bg-amber-50/20">
+                        <input
+                          type="text"
+                          value={row.summary_note || ''}
+                          onChange={(e) => updateRow(idx, 'summary_note', e.target.value)}
+                          placeholder="적요 내용 입력"
+                          className="w-full px-2 py-1 border border-amber-200/70 rounded text-xs focus:outline-none focus:ring-1 focus:ring-amber-500 text-amber-950 font-medium"
+                        />
+                      </td>
+                      <td className="px-2 py-1.5">
                         <input
                           type="text"
                           value={row.remarks || ''}
                           onChange={(e) => updateRow(idx, 'remarks', e.target.value)}
-                          placeholder="비고 입력"
-                          className="w-full px-2 py-1.5 border border-slate-200 rounded font-sans text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-600"
+                          placeholder="비고"
+                          className="w-full px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 text-slate-600"
                         />
                       </td>
-                      <td className="px-4 py-2 text-center">
+                      <td className="px-2 py-1.5 text-center">
                         <button
                           type="button"
                           onClick={() => removeRow(idx)}
-                          className="p-1 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          title="삭제"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
