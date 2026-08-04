@@ -288,19 +288,19 @@ async function printAllPalletLabels() {
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>파레트 위치 라벨 일괄</title>
 <style>
 @page{size:80mm 60mm;margin:0}
-body{margin:0;padding:0;font-family:'Malgun Gothic',sans-serif;background:#fff;}
-.label-card{width:80mm;height:60mm;padding:3mm;box-sizing:border-box;page-break-after:always;display:flex;flex-direction:column;justify-content:space-between;border:1px solid #ddd;}
-.header{display:flex;justify-content:space-between;border-bottom:0.4mm solid #1a237e;padding-bottom:1mm;font-size:7pt;font-weight:bold;}
+html,body{width:80mm;height:60mm;margin:0;padding:0;font-family:'Malgun Gothic',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;}
+.label-card{width:75mm;height:55mm;margin:1.5mm auto;padding:1.8mm 2.2mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.3mm solid #94a3b8;overflow:hidden;page-break-after:always;page-break-inside:avoid;}
+.header{display:flex;justify-content:space-between;align-items:center;border-bottom:0.4mm solid #1a237e;padding-bottom:0.4mm;font-size:7.5pt;font-weight:bold;}
 .company{color:#c00;}.title{color:#1a237e;}
-.body-row{display:flex;gap:3mm;align-items:center;flex:1;margin-top:1.5mm;}
-.qr-box .qr-img{width:22mm;height:22mm;border:0.2mm solid #ddd;}
-.info-box{flex:1;}
-.loc-code{font-size:15pt;font-weight:900;font-family:monospace;color:#1a237e;line-height:1.1;}
-.side-badge{font-size:8pt;color:#15803d;font-weight:bold;margin-top:1mm;}
-.rack-zone{font-size:7pt;color:#666;margin-top:0.5mm;}
-.barcode-box{text-align:center;border-top:0.2mm dashed #bbb;padding-top:1mm;margin-top:1mm;}
-.barcode-box svg{width:60mm;height:10mm;margin:0 auto;display:block;}
-.barcode-text{font-size:6pt;font-family:monospace;color:#555;letter-spacing:1px;margin-top:0.5mm;}
+.body-row{display:flex;gap:2.5mm;align-items:center;flex:1;margin-top:0.8mm;margin-bottom:0.8mm;overflow:hidden;}
+.qr-box .qr-img{width:18mm;height:18mm;border:0.2mm solid #cbd5e1;flex-shrink:0;}
+.info-box{flex:1;overflow:hidden;}
+.loc-code{font-size:14pt;font-weight:900;font-family:monospace;color:#1a237e;line-height:1.1;}
+.side-badge{font-size:7.5pt;color:#15803d;font-weight:bold;margin-top:0.5mm;}
+.rack-zone{font-size:6.5pt;color:#64748b;margin-top:0.3mm;}
+.barcode-box{text-align:center;border-top:0.2mm dashed #cbd5e1;padding-top:0.6mm;margin-top:0.4mm;}
+.barcode-box svg{width:52mm;height:8mm;margin:0 auto;display:block;}
+.barcode-text{font-size:6pt;font-family:monospace;color:#475569;letter-spacing:0.8px;margin-top:0.2mm;}
 </style></head><body>${labelCards.join('')}</body></html>`);
   w.document.close();
   setTimeout(() => { w.print(); w.close(); }, 500);
@@ -321,13 +321,13 @@ async function printRackLabel(locationCode: string, slotNo: 1 | 2, slot: PalletS
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>랙 라벨</title>
 <style>
 @page{size:80mm 60mm;margin:0}
-body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:0;margin:0;background:#fff;}
-.label-card{width:80mm;height:60mm;padding:3mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:1px solid #ddd;}
-.header{display:flex;justify-content:space-between;border-bottom:0.4mm solid #1a237e;padding-bottom:1mm;font-size:7pt;font-weight:bold;}
-.company{color:#c00;}.title{color:#1a237e;}.date{color:#666;font-size:6pt;}
-.body-row{display:flex;gap:3mm;align-items:center;flex:1;margin-top:1.5mm;}
-.qr-box .qr-img{width:22mm;height:22mm;border:0.2mm solid #ddd;}
-.info-box{flex:1;}
+html,body{width:80mm;height:60mm;margin:0;padding:0;font-family:'Malgun Gothic',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;}
+.label-card{width:75mm;height:55mm;margin:1.5mm auto;padding:1.8mm 2.2mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.3mm solid #94a3b8;overflow:hidden;page-break-after:always;page-break-inside:avoid;}
+.header{display:flex;justify-content:space-between;align-items:center;border-bottom:0.4mm solid #1a237e;padding-bottom:0.4mm;font-size:7.5pt;font-weight:bold;}
+.company{color:#c00;}.title{color:#1a237e;}.date{color:#666;font-size:6.5pt;}
+.body-row{display:flex;gap:2.5mm;align-items:center;flex:1;margin-top:0.8mm;margin-bottom:0.8mm;overflow:hidden;}
+.qr-box .qr-img{width:18mm;height:18mm;border:0.2mm solid #cbd5e1;flex-shrink:0;}
+.info-box{flex:1;overflow:hidden;}
 .loc-code{font-size:10pt;font-weight:900;font-family:monospace;color:#1a237e;}
 .field{font-size:7pt;margin-top:0.5mm;}
 .field .lbl{color:#777;}

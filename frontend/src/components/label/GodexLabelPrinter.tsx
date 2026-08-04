@@ -261,23 +261,23 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
       <!DOCTYPE html><html><head><meta charset="utf-8"><title>LOT 라벨</title>
       <style>
         @page { size: 80mm 60mm; margin: 0; }
-        body { font-family: 'Malgun Gothic', sans-serif; width: 80mm; height: 60mm; padding: 0; margin: 0; background: #fff; }
-        .label-card{width:80mm;height:60mm;padding:3mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:1px solid #ddd;}
-        .header{display:flex;justify-content:space-between;border-bottom:0.4mm solid #1a237e;padding-bottom:1mm;font-size:7pt;font-weight:bold;}
-        .company{color:#c00;}.title{color:#1a237e;}.date{color:#666;font-size:6pt;}
-        .body-row{display:flex;gap:3mm;align-items:center;flex:1;margin-top:1.5mm;}
-        .qr-box .qr-img{width:22mm;height:22mm;border:0.2mm solid #ddd;}
-        .info-box{flex:1;}
-        .lot-number{font-size:10pt;font-weight:900;font-family:monospace;color:#1d4ed8;}
-        .field{font-size:7pt;margin-top:0.5mm;}
-        .field .lbl{color:#777;}
-        .field .val{font-weight:bold;color:#111;}
-        .item-val{color:#0f172a;}
-        .loc-val{color:#065f46;}
-        .qty-bar{background:#f1f5f9;border:0.2mm solid #cbd5e1;padding:1mm 2mm;font-size:8pt;margin-top:1mm;display:flex;justify-content:space-between;}
-        .barcode-box{text-align:center;border-top:0.2mm dashed #bbb;padding-top:1mm;margin-top:1mm;}
-        .barcode-box svg{width:60mm;height:10mm;margin:0 auto;display:block;}
-        .barcode-text{font-size:6pt;font-family:monospace;color:#555;letter-spacing:1px;margin-top:0.5mm;}
+        html, body { width: 80mm; height: 60mm; margin: 0; padding: 0; background: #fff; font-family: 'Malgun Gothic', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; overflow: hidden; }
+        .label-card { width: 75mm; height: 55mm; margin: 1.5mm auto; padding: 1.8mm 2.2mm; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; border: 0.3mm solid #94a3b8; overflow: hidden; page-break-after: always; page-break-inside: avoid; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 0.4mm solid #1a237e; padding-bottom: 0.4mm; font-size: 7.5pt; font-weight: bold; }
+        .company { color: #c00; } .title { color: #1a237e; } .date { color: #666; font-size: 6.5pt; }
+        .body-row { display: flex; gap: 2.5mm; align-items: center; flex: 1; margin-top: 0.8mm; margin-bottom: 0.8mm; overflow: hidden; }
+        .qr-box .qr-img { width: 18mm; height: 18mm; border: 0.2mm solid #cbd5e1; flex-shrink: 0; }
+        .info-box { flex: 1; overflow: hidden; }
+        .lot-number { font-size: 9pt; font-weight: 900; font-family: monospace; color: #1d4ed8; letter-spacing: -0.2px; white-space: nowrap; }
+        .field { font-size: 6.5pt; margin-top: 0.2mm; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .field .lbl { color: #64748b; }
+        .field .val { font-weight: bold; color: #0f172a; }
+        .item-val { color: #0f172a; }
+        .loc-val { color: #065f46; }
+        .qty-bar { background: #f8fafc; border: 0.2mm solid #cbd5e1; padding: 0.6mm 1.2mm; font-size: 7.5pt; margin-top: 0.4mm; display: flex; justify-content: space-between; align-items: center; }
+        .barcode-box { text-align: center; border-top: 0.2mm dashed #cbd5e1; padding-top: 0.6mm; margin-top: 0.4mm; }
+        .barcode-box svg { width: 52mm; height: 8mm; margin: 0 auto; display: block; }
+        .barcode-text { font-size: 6pt; font-family: monospace; color: #475569; letter-spacing: 0.8px; margin-top: 0.2mm; }
       </style></head><body>${labelHtml}</body></html>
     `);
     win.document.close();

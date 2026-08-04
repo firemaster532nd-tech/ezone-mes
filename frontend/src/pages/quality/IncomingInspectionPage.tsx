@@ -2377,22 +2377,23 @@ function SocketDetailPanel({ soId, projectName }: { soId: number; projectName: s
         <title>소켓 인수검사 라벨</title>
         <style>
           @page { size: 80mm 60mm; margin: 0; }
-          body { font-family: 'Malgun Gothic', sans-serif; margin: 0; padding: 0; }
+          html, body { width: 80mm; height: 60mm; margin: 0; padding: 0; font-family: 'Malgun Gothic', sans-serif; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; overflow: hidden; }
           .labels { display: flex; flex-direction: column; }
           .label {
-            width: 80mm; height: 60mm; border: none;
-            padding: 5mm; box-sizing: border-box;
-            display: flex; flex-direction: column; gap: 1.5mm;
+            width: 75mm; height: 55mm; margin: 1.5mm auto;
+            padding: 2.5mm 3mm; box-sizing: border-box;
+            display: flex; flex-direction: column; gap: 1mm;
+            border: 0.3mm solid #94a3b8; overflow: hidden;
             page-break-after: always;
             page-break-inside: avoid;
           }
-          .lot { font-size: 14pt; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 1.5mm; }
-          .type { font-size: 12pt; font-weight: bold; color: #1a56db; }
-          .spec { font-size: 12pt; font-weight: bold; }
-          .project { font-size: 9pt; color: #555; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-          .date { font-size: 9pt; color: #555; }
-          .result { font-size: 9.5pt; font-weight: bold; color: #15803d; }
-          .seq { font-size: 9pt; color: #888; text-align: right; }
+          .lot { font-size: 11pt; font-weight: bold; border-bottom: 0.4mm solid #333; padding-bottom: 0.8mm; color: #1d4ed8; }
+          .type { font-size: 9.5pt; font-weight: bold; color: #1a56db; }
+          .spec { font-size: 9.5pt; font-weight: bold; }
+          .project { font-size: 7.5pt; color: #555; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .date { font-size: 7.5pt; color: #555; }
+          .result { font-size: 8pt; font-weight: bold; color: #15803d; }
+          .seq { font-size: 7.5pt; color: #888; text-align: right; }
         </style>
       </head>
       <body>
