@@ -150,7 +150,9 @@ body{font-family:'Malgun Gothic',sans-serif;width:80mm;height:60mm;padding:0;mar
         <div className="border-2 border-slate-800 rounded-lg p-3 bg-white flex flex-col justify-between shadow-sm space-y-2">
           <div className="flex justify-between items-center border-b pb-1 text-[9px]">
             <span className="font-bold text-rose-600">(주)이지원</span>
-            <span className="font-bold text-indigo-900">🏷️ 원부자재 LOT 라벨</span>
+            <span className="font-bold text-indigo-900 font-extrabold">
+              {lot.stock_type === 'CERTIFIED_AUDIT' ? '🛡️ 인정시험용 LOT' : '🏷️ 원부자재 LOT'}
+            </span>
             <span className="bg-blue-900 text-white font-bold text-[8px] px-1.5 py-0.5 rounded">1/{printCount}</span>
           </div>
           <div className="flex gap-2 text-[9px] items-center">
