@@ -260,9 +260,13 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
     win.document.write(`
       <!DOCTYPE html><html><head><meta charset="utf-8"><title>LOT 라벨</title>
       <style>
-        @page { size: 80mm 60mm; margin: 0; }
+        @page { size: 80mm 60mm; margin: 0 !important; }
+        @media print {
+          @page { size: 80mm 60mm; margin: 0 !important; }
+          html, body { width: 80mm !important; height: 60mm !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
+        }
         html, body { width: 80mm; height: 60mm; margin: 0; padding: 0; background: #fff; font-family: 'Malgun Gothic', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; overflow: hidden; }
-        .label-card { width: 72mm; height: 52mm; margin: 4mm auto; padding: 1.5mm 2mm; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; border: 0.4mm solid #334155; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }
+        .label-card { width: 70mm; height: 44mm; margin: 2mm auto; padding: 1mm 1.5mm; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; border: 0.3mm solid #334155; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }
         .label-card:not(:last-child) { page-break-after: always; break-after: always; }
         .label-card:last-child { page-break-after: avoid; break-after: avoid; }
         .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 0.3mm solid #1a237e; padding-bottom: 0.3mm; font-size: 7pt; font-weight: bold; }

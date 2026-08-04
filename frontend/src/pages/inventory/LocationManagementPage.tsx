@@ -287,22 +287,26 @@ async function printAllPalletLabels() {
   if (!w) { alert('팝업 차단 해제 후 다시 시도하세요.'); return; }
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>파레트 위치 라벨 일괄</title>
 <style>
-@page{size:80mm 60mm;margin:0}
+@page { size: 80mm 60mm; margin: 0 !important; }
+@media print {
+  @page { size: 80mm 60mm; margin: 0 !important; }
+  html, body { width: 80mm !important; height: 60mm !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
+}
 html,body{width:80mm;height:60mm;margin:0;padding:0;font-family:'Malgun Gothic',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;}
-.label-card{width:72mm;height:52mm;margin:4mm auto;padding:1.5mm 2mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.4mm solid #334155;overflow:hidden;page-break-inside:avoid;break-inside:avoid;}
+.label-card{width:70mm;height:44mm;margin:2mm auto;padding:1mm 1.5mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.3mm solid #334155;overflow:hidden;page-break-inside:avoid;break-inside:avoid;}
 .label-card:not(:last-child){page-break-after:always;break-after:always;}
 .label-card:last-child{page-break-after:avoid;break-after:avoid;}
-.header{display:flex;justify-content:space-between;align-items:center;border-bottom:0.3mm solid #1a237e;padding-bottom:0.3mm;font-size:7pt;font-weight:bold;}
+.header{display:flex;justify-content:space-between;align-items:center;border-bottom:0.3mm solid #1a237e;padding-bottom:0.2mm;font-size:6.5pt;font-weight:bold;}
 .company{color:#c00;}.title{color:#1a237e;}
-.body-row{display:flex;gap:2mm;align-items:center;flex:1;margin-top:0.5mm;margin-bottom:0.5mm;overflow:hidden;}
-.qr-box .qr-img{width:15mm;height:15mm;border:0.2mm solid #cbd5e1;flex-shrink:0;}
+.body-row{display:flex;gap:1.5mm;align-items:center;flex:1;margin-top:0.3mm;margin-bottom:0.3mm;overflow:hidden;}
+.qr-box .qr-img{width:12mm;height:12mm;border:0.2mm solid #cbd5e1;flex-shrink:0;}
 .info-box{flex:1;overflow:hidden;}
-.loc-code{font-size:13pt;font-weight:900;font-family:monospace;color:#1a237e;line-height:1.1;}
-.side-badge{font-size:7pt;color:#15803d;font-weight:bold;margin-top:0.3mm;}
-.rack-zone{font-size:6pt;color:#64748b;margin-top:0.2mm;}
-.barcode-box{text-align:center;border-top:0.2mm dashed #cbd5e1;padding-top:0.4mm;margin-top:0.3mm;}
-.barcode-box svg{width:45mm;height:7mm;margin:0 auto;display:block;}
-.barcode-text{font-size:5.5pt;font-family:monospace;color:#475569;letter-spacing:0.5px;margin-top:0.1mm;}
+.loc-code{font-size:11pt;font-weight:900;font-family:monospace;color:#1a237e;line-height:1.1;}
+.side-badge{font-size:6.5pt;color:#15803d;font-weight:bold;margin-top:0.2mm;}
+.rack-zone{font-size:5.5pt;color:#64748b;margin-top:0.1mm;}
+.barcode-box{text-align:center;border-top:0.2mm dashed #cbd5e1;padding-top:0.3mm;margin-top:0.2mm;}
+.barcode-box svg{width:45mm;height:6mm;margin:0 auto;display:block;}
+.barcode-text{font-size:5pt;font-family:monospace;color:#475569;letter-spacing:0.5px;margin-top:0.1mm;}
 </style></head><body>${labelCards.join('')}</body></html>`);
   w.document.close();
   setTimeout(() => { w.print(); w.close(); }, 500);
@@ -322,25 +326,29 @@ async function printRackLabel(locationCode: string, slotNo: 1 | 2, slot: PalletS
   if (!w) return;
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>랙 라벨</title>
 <style>
-@page{size:80mm 60mm;margin:0}
+@page { size: 80mm 60mm; margin: 0 !important; }
+@media print {
+  @page { size: 80mm 60mm; margin: 0 !important; }
+  html, body { width: 80mm !important; height: 60mm !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
+}
 html,body{width:80mm;height:60mm;margin:0;padding:0;font-family:'Malgun Gothic',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;}
-.label-card{width:72mm;height:52mm;margin:4mm auto;padding:1.5mm 2mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.4mm solid #334155;overflow:hidden;page-break-inside:avoid;break-inside:avoid;}
+.label-card{width:70mm;height:44mm;margin:2mm auto;padding:1mm 1.5mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.3mm solid #334155;overflow:hidden;page-break-inside:avoid;break-inside:avoid;}
 .label-card:not(:last-child){page-break-after:always;break-after:always;}
 .label-card:last-child{page-break-after:avoid;break-after:avoid;}
-.header{display:flex;justify-content:space-between;align-items:center;border-bottom:0.3mm solid #1a237e;padding-bottom:0.3mm;font-size:7pt;font-weight:bold;}
-.company{color:#c00;}.title{color:#1a237e;}.date{color:#666;font-size:6pt;}
-.body-row{display:flex;gap:2mm;align-items:center;flex:1;margin-top:0.5mm;margin-bottom:0.5mm;overflow:hidden;}
-.qr-box .qr-img{width:15mm;height:15mm;border:0.2mm solid #cbd5e1;flex-shrink:0;}
+.header{display:flex;justify-content:space-between;align-items:center;border-bottom:0.3mm solid #1a237e;padding-bottom:0.2mm;font-size:6.5pt;font-weight:bold;}
+.company{color:#c00;}.title{color:#1a237e;}.date{color:#666;font-size:5.5pt;}
+.body-row{display:flex;gap:1.5mm;align-items:center;flex:1;margin-top:0.3mm;margin-bottom:0.3mm;overflow:hidden;}
+.qr-box .qr-img{width:12mm;height:12mm;border:0.2mm solid #cbd5e1;flex-shrink:0;}
 .info-box{flex:1;overflow:hidden;}
-.loc-code{font-size:10pt;font-weight:900;font-family:monospace;color:#1a237e;}
-.field{font-size:7pt;margin-top:0.5mm;}
+.loc-code{font-size:9.5pt;font-weight:900;font-family:monospace;color:#1a237e;}
+.field{font-size:6pt;margin-top:0.3mm;}
 .field .lbl{color:#777;}
 .field .val{font-weight:bold;color:#111;}
 .lot-val{font-family:monospace;color:#1d4ed8;}
-.qty-val{font-size:9pt;color:#047857;}
-.barcode-box{text-align:center;border-top:0.2mm dashed #bbb;padding-top:1mm;margin-top:1mm;}
-.barcode-box svg{width:60mm;height:10mm;margin:0 auto;display:block;}
-.barcode-text{font-size:6pt;font-family:monospace;color:#555;letter-spacing:1px;margin-top:0.5mm;}
+.qty-val{font-size:8pt;color:#047857;}
+.barcode-box{text-align:center;border-top:0.2mm dashed #bbb;padding-top:0.5mm;margin-top:0.5mm;}
+.barcode-box svg{width:45mm;height:6mm;margin:0 auto;display:block;}
+.barcode-text{font-size:5pt;font-family:monospace;color:#555;letter-spacing:0.5px;margin-top:0.2mm;}
 </style></head><body>${labelHtml}</body></html>`);
   w.document.close();
   setTimeout(() => { w.print(); w.close(); }, 500);
