@@ -140,7 +140,7 @@ export async function materialLotsRoutes(app: FastifyInstance) {
 
   // ── GET /api/material-lots ────────────────────────────────────────────────
   app.get('/api/material-lots', { preHandler: requireAuth }, async (req) => {
-    const { category, location, search, active = '1' } = req.query as any;
+    const { category, location, search, active = '1', stock_type } = req.query as any;
     let sql = `
       SELECT ml.*,
         COALESCE(SUM(mt.qty) FILTER (WHERE mt.txn_type='IN' AND mt.txn_date = CURRENT_DATE), 0) AS today_in,
@@ -153,6 +153,7 @@ export async function materialLotsRoutes(app: FastifyInstance) {
     if (active !== '0') { sql += ` AND ml.is_active = TRUE`; }
     if (category) { params.push(category); sql += ` AND ml.category = $${params.length}`; }
     if (location) { params.push(location); sql += ` AND ml.location = $${params.length}`; }
+    if (stock_type) { params.push(stock_type); sql += ` AND ml.stock_type = $${params.length}`; }
     if (search) {
       params.push(`%${search}%`);
       sql += ` AND (ml.lot_number ILIKE $${params.length}

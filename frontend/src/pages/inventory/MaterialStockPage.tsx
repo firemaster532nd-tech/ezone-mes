@@ -235,40 +235,118 @@ function matchesCategory(lotCategory: string | undefined, filterCat: string): bo
 function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading: boolean; onRefresh: () => void }) {
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('전체');
+  const [stockTypeTab, setStockTypeTab] = useState<'ALL' | 'CERTIFIED_AUDIT' | 'NON_CERTIFIED'>('ALL');
   const [includeZero, setIncludeZero] = useState(true);
   const [printLot, setPrintLot] = useState<MaterialLot | null>(null);
 
-  const filtered = lots.filter(l =>
-    matchesCategory(l.category, cat) &&
-    (includeZero || Number(l.qty_current || 0) > 0) &&
-    (!search || l.lot_number.toLowerCase().includes(search.toLowerCase()) || l.item_name.toLowerCase().includes(search.toLowerCase()))
-  );
+  // URL Query param ?stock_type=... 자동 인식
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const st = params.get('stock_type');
+    if (st === 'CERTIFIED_AUDIT') setStockTypeTab('CERTIFIED_AUDIT');
+    else if (st === 'NON_CERTIFIED') setStockTypeTab('NON_CERTIFIED');
+  }, []);
 
-  const catTotals: Record<string, number> = {};
-  for (const l of lots) {
-    const k = l.category || '기타부자재';
-    catTotals[k] = (catTotals[k] || 0) + Number(l.qty_current || 0);
-  }
+  const filtered = lots.filter(l => {
+    if (stockTypeTab === 'CERTIFIED_AUDIT' && l.stock_type !== 'CERTIFIED_AUDIT') return false;
+    if (stockTypeTab === 'NON_CERTIFIED' && l.stock_type === 'CERTIFIED_AUDIT') return false;
+    if (!matchesCategory(l.category, cat)) return false;
+    if (!includeZero && Number(l.qty_current || 0) <= 0) return false;
+    if (search && !l.lot_number.toLowerCase().includes(search.toLowerCase()) && !l.item_name.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  const auditLots = lots.filter(l => l.stock_type === 'CERTIFIED_AUDIT' && Number(l.qty_current || 0) > 0);
+  const nonCertLots = lots.filter(l => l.stock_type !== 'CERTIFIED_AUDIT' && Number(l.qty_current || 0) > 0);
+
+  const auditTotalQty = auditLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
+  const nonCertTotalQty = nonCertLots.reduce((a, b) => a + Number(b.qty_current || 0), 0);
 
   return (
     <div className="space-y-4">
+      {/* 🛡️/🏭 재고 분류 선택 상단 대형 탭 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+        <button
+          onClick={() => setStockTypeTab('ALL')}
+          className={cn(
+            'p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-sm',
+            stockTypeTab === 'ALL'
+              ? 'bg-slate-900 text-white border-slate-900 ring-2 ring-slate-400'
+              : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+          )}
+        >
+          <div className="flex items-center gap-3">
+            <div className={cn('p-2.5 rounded-xl', stockTypeTab === 'ALL' ? 'bg-slate-800 text-amber-400' : 'bg-slate-100 text-slate-700')}>
+              <Package className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-extrabold opacity-80">통합 재고 전체</p>
+              <p className="text-lg font-black">{lots.length}개 LOT</p>
+            </div>
+          </div>
+          <span className="font-mono text-sm font-bold opacity-90">{(auditTotalQty + nonCertTotalQty).toLocaleString()}롤</span>
+        </button>
+
+        <button
+          onClick={() => setStockTypeTab('CERTIFIED_AUDIT')}
+          className={cn(
+            'p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-sm',
+            stockTypeTab === 'CERTIFIED_AUDIT'
+              ? 'bg-indigo-900 text-white border-indigo-700 ring-2 ring-indigo-500'
+              : 'bg-indigo-50/50 text-indigo-950 border-indigo-200 hover:bg-indigo-100/60'
+          )}
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-indigo-600 text-white shadow">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-extrabold text-indigo-300">🛡️ 인정시험용 재고 (공정심사)</p>
+              <p className="text-lg font-black text-white">{auditLots.length}개 LOT</p>
+            </div>
+          </div>
+          <span className="font-mono text-base font-black text-indigo-200">{auditTotalQty.toLocaleString()}롤</span>
+        </button>
+
+        <button
+          onClick={() => setStockTypeTab('NON_CERTIFIED')}
+          className={cn(
+            'p-3.5 rounded-2xl border text-left transition flex items-center justify-between shadow-sm',
+            stockTypeTab === 'NON_CERTIFIED'
+              ? 'bg-emerald-900 text-white border-emerald-700 ring-2 ring-emerald-500'
+              : 'bg-emerald-50/40 text-emerald-950 border-emerald-200 hover:bg-emerald-100/60'
+          )}
+        >
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-emerald-600 text-white shadow">
+              <Building2 className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-extrabold text-emerald-300">🏭 비인정용 재고 (현장실재고)</p>
+              <p className="text-lg font-black text-white">{nonCertLots.length}개 LOT</p>
+            </div>
+          </div>
+          <span className="font-mono text-base font-black text-emerald-200">{nonCertTotalQty.toLocaleString()}롤</span>
+        </button>
+      </div>
+
       {/* 요약 카드 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
           <div className="p-2.5 bg-slate-900 text-white rounded-lg"><Package className="h-5 w-5"/></div>
-          <div><p className="text-xs text-slate-500 font-bold">전체 보유 LOT</p><p className="text-xl font-black">{lots.length}개</p></div>
+          <div><p className="text-xs text-slate-500 font-bold">선택구분 총 LOT</p><p className="text-xl font-black">{filtered.length}개</p></div>
         </div>
         <div className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
           <div className="p-2.5 bg-blue-600 text-white rounded-lg"><BarChart3 className="h-5 w-5"/></div>
-          <div><p className="text-xs text-slate-500 font-bold">조회된 LOT</p><p className="text-xl font-black text-blue-700">{filtered.length}개</p></div>
+          <div><p className="text-xs text-slate-500 font-bold">조회 수 수량</p><p className="text-xl font-black text-blue-700">{filtered.reduce((a, l) => a + Number(l.qty_current || 0), 0).toLocaleString()}</p></div>
         </div>
         <div className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
-          <div className="p-2.5 bg-emerald-600 text-white rounded-lg"><BarChart3 className="h-5 w-5"/></div>
-          <div><p className="text-xs text-slate-500 font-bold">총 보유 수량</p><p className="text-xl font-black text-emerald-700">{filtered.reduce((a, l) => a + Number(l.qty_current || 0), 0).toLocaleString()}</p></div>
+          <div className="p-2.5 bg-indigo-600 text-white rounded-lg"><ShieldCheck className="h-5 w-5"/></div>
+          <div><p className="text-xs text-slate-500 font-bold">인정시험용 수량</p><p className="text-xl font-black text-indigo-700">{auditTotalQty.toLocaleString()}</p></div>
         </div>
         <div className="bg-white rounded-xl border p-4 flex items-center gap-3 shadow-sm">
-          <div className="p-2.5 bg-amber-500 text-white rounded-lg"><BarChart3 className="h-5 w-5"/></div>
-          <div><p className="text-xs text-slate-500 font-bold">금일 입고 LOT</p><p className="text-xl font-black text-amber-700">{lots.filter(l => Number(l.today_in || 0) > 0).length}개</p></div>
+          <div className="p-2.5 bg-emerald-600 text-white rounded-lg"><Building2 className="h-5 w-5"/></div>
+          <div><p className="text-xs text-slate-500 font-bold">비인정용 수량</p><p className="text-xl font-black text-emerald-700">{nonCertTotalQty.toLocaleString()}</p></div>
         </div>
       </div>
 
@@ -310,23 +388,36 @@ function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading:
           <table className="w-full text-sm">
             <thead className="bg-slate-900 text-white text-xs">
               <tr>
-                {['LOT번호','품목명','분류','규격','단위','위치','현재고','금일입고','금일출고','입고일','라벨'].map(h => (
+                {['재고구분', 'LOT번호', '품목명', '분류', '규격', '단위', '위치', '현재고', '금일입고', '금일출고', '입고일', '라벨'].map(h => (
                   <th key={h} className="px-3 py-2.5 text-left font-bold whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
-                <tr><td colSpan={11} className="text-center py-16 text-slate-400">
+                <tr><td colSpan={12} className="text-center py-16 text-slate-400">
                   <div className="flex flex-col items-center gap-2">
                     <RefreshCw className="h-6 w-6 animate-spin text-slate-300"/>
                     <span>로딩 중...</span>
                   </div>
                 </td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td colSpan={11} className="text-center py-16 text-slate-400">조회된 LOT가 없습니다.</td></tr>
+                <tr><td colSpan={12} className="text-center py-16 text-slate-400">조회된 LOT가 없습니다.</td></tr>
               ) : filtered.map(lot => (
                 <tr key={lot.lot_id} className="hover:bg-slate-50">
+                  <td className="px-3 py-2">
+                    {lot.stock_type === 'CERTIFIED_AUDIT' ? (
+                      <span className="px-2 py-0.5 bg-indigo-100 text-indigo-900 border border-indigo-300 rounded text-[10px] font-black flex items-center gap-1 w-fit">
+                        <ShieldCheck className="w-3 h-3 text-indigo-600" />
+                        인정시험용
+                      </span>
+                    ) : (
+                      <span className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-300 rounded text-[10px] font-bold flex items-center gap-1 w-fit">
+                        <Building2 className="w-3 h-3 text-slate-500" />
+                        비인정용
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 font-mono text-xs font-bold text-blue-700 whitespace-nowrap">{lot.lot_number}</td>
                   <td className="px-3 py-2 font-medium whitespace-nowrap">{lot.item_name}</td>
                   <td className="px-3 py-2"><span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[11px] font-bold">{lot.category}</span></td>
@@ -352,7 +443,7 @@ function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading:
             {!loading && filtered.length > 0 && (
               <tfoot className="bg-slate-50 border-t-2 border-slate-200 text-xs font-bold">
                 <tr>
-                  <td colSpan={6} className="px-3 py-2 text-slate-600">합계 ({filtered.length}개 LOT)</td>
+                  <td colSpan={7} className="px-3 py-2 text-slate-600">합계 ({filtered.length}개 LOT)</td>
                   <td className="px-3 py-2 text-right text-slate-900">{filtered.reduce((a,l)=>a+Number(l.qty_current||0),0).toLocaleString()}</td>
                   <td className="px-3 py-2 text-right text-emerald-600">+{filtered.reduce((a,l)=>a+Number(l.today_in||0),0).toLocaleString()}</td>
                   <td className="px-3 py-2 text-right text-red-600">-{filtered.reduce((a,l)=>a+Number(l.today_out||0),0).toLocaleString()}</td>

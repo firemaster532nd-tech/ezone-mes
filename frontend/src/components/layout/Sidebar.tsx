@@ -300,6 +300,9 @@ export const adminTopGroups: TopNavGroup[] = [
   {
     key: 'inventory', label: '재고관리', Icon: Boxes,
     children: [
+      { label: '🛡️ 인정시험용 재고 (공정심사)', path: '/inventory/material-stock?stock_type=CERTIFIED_AUDIT' },
+      { label: '🏭 비인정용 재고 (현장실재고)', path: '/inventory/material-stock?stock_type=NON_CERTIFIED' },
+      { label: '원부자재 재고수불대장', path: '/inventory/material-stock' },
       { label: '전체 LOT 재고현황', path: '/inventory/dashboard' },
       { label: '통합 재고수불대장', path: '/inventory/ledger' },
       { label: '초기/기초 재고 설정', path: '/inventory/initialize' },
