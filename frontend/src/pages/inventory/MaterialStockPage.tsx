@@ -75,11 +75,24 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 const firstOfMonth = () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); };
 
 function fmtDate(s?: string) { return s ? s.slice(0, 10) : '-'; }
-function fmtSpec(l: { density?: number; thickness?: number; width_mm?: number; length_mm?: number; item_spec?: string }) {
+function fmtSpec(l: { density?: number; thickness?: number; width_mm?: number; length_mm?: number; item_spec?: string; item_name?: string }) {
   if (l.item_spec && l.item_spec.trim()) return l.item_spec.trim();
-  const nums = [l.density && `${l.density}K`, l.thickness && `${l.thickness}T`, l.width_mm && `${l.width_mm}W`, l.length_mm && `${l.length_mm}L`]
-    .filter(Boolean).join(' ');
-  return nums || '-';
+  const nums = [
+    l.density && `${Number(l.density)}K`,
+    l.thickness && `${Number(l.thickness)}T`,
+    l.width_mm && `${Number(l.width_mm)}W`,
+    l.length_mm && `${Number(l.length_mm)}L`
+  ].filter(Boolean).join(' ');
+
+  if (nums) return nums;
+
+  // item_name에서 규격 문자열 (128K, 25T, 400W, 7400L 등) 추출
+  if (l.item_name) {
+    const match = l.item_name.match(/(\d+K|\d+T|\d+W|\d+L|\d+\*\d+|\d+mm|\d+kg)/gi);
+    if (match && match.length > 0) return match.join(' ');
+  }
+
+  return '-';
 }
 function fmtLoc(loc?: string) {
   if (!loc) return '-';
@@ -294,7 +307,15 @@ function Tab1Stock({ lots, loading, onRefresh }: { lots: MaterialLot[]; loading:
     if (stockTypeTab === 'NON_CERTIFIED' && l.stock_type !== 'NON_CERTIFIED') return false;
     if (!matchesCategory(l.category, cat, l.item_name, l.lot_number)) return false;
     if (!includeZero && Number(l.qty_current || 0) <= 0) return false;
-    if (search && !l.lot_number.toLowerCase().includes(search.toLowerCase()) && !l.item_name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const specText = fmtSpec(l).toLowerCase();
+      if (!l.lot_number.toLowerCase().includes(q) &&
+          !l.item_name.toLowerCase().includes(q) &&
+          !specText.includes(q)) {
+        return false;
+      }
+    }
     return true;
   });
 
