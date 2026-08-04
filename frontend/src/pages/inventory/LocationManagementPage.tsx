@@ -289,18 +289,18 @@ async function printAllPalletLabels() {
 <style>
 @page{size:80mm 60mm;margin:0}
 html,body{width:80mm;height:60mm;margin:0;padding:0;font-family:'Malgun Gothic',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;}
-.label-card{width:75mm;height:55mm;margin:1.5mm auto;padding:1.8mm 2.2mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.3mm solid #94a3b8;overflow:hidden;page-break-after:always;page-break-inside:avoid;}
-.header{display:flex;justify-content:space-between;align-items:center;border-bottom:0.4mm solid #1a237e;padding-bottom:0.4mm;font-size:7.5pt;font-weight:bold;}
+.label-card{width:68mm;height:48mm;margin:5mm auto;padding:1.5mm 2mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.4mm solid #334155;overflow:hidden;page-break-after:always;page-break-inside:avoid;}
+.header{display:flex;justify-content:space-between;align-items:center;border-bottom:0.3mm solid #1a237e;padding-bottom:0.3mm;font-size:7pt;font-weight:bold;}
 .company{color:#c00;}.title{color:#1a237e;}
-.body-row{display:flex;gap:2.5mm;align-items:center;flex:1;margin-top:0.8mm;margin-bottom:0.8mm;overflow:hidden;}
-.qr-box .qr-img{width:18mm;height:18mm;border:0.2mm solid #cbd5e1;flex-shrink:0;}
+.body-row{display:flex;gap:2mm;align-items:center;flex:1;margin-top:0.5mm;margin-bottom:0.5mm;overflow:hidden;}
+.qr-box .qr-img{width:15mm;height:15mm;border:0.2mm solid #cbd5e1;flex-shrink:0;}
 .info-box{flex:1;overflow:hidden;}
-.loc-code{font-size:14pt;font-weight:900;font-family:monospace;color:#1a237e;line-height:1.1;}
-.side-badge{font-size:7.5pt;color:#15803d;font-weight:bold;margin-top:0.5mm;}
-.rack-zone{font-size:6.5pt;color:#64748b;margin-top:0.3mm;}
-.barcode-box{text-align:center;border-top:0.2mm dashed #cbd5e1;padding-top:0.6mm;margin-top:0.4mm;}
-.barcode-box svg{width:52mm;height:8mm;margin:0 auto;display:block;}
-.barcode-text{font-size:6pt;font-family:monospace;color:#475569;letter-spacing:0.8px;margin-top:0.2mm;}
+.loc-code{font-size:13pt;font-weight:900;font-family:monospace;color:#1a237e;line-height:1.1;}
+.side-badge{font-size:7pt;color:#15803d;font-weight:bold;margin-top:0.3mm;}
+.rack-zone{font-size:6pt;color:#64748b;margin-top:0.2mm;}
+.barcode-box{text-align:center;border-top:0.2mm dashed #cbd5e1;padding-top:0.4mm;margin-top:0.3mm;}
+.barcode-box svg{width:45mm;height:7mm;margin:0 auto;display:block;}
+.barcode-text{font-size:5.5pt;font-family:monospace;color:#475569;letter-spacing:0.5px;margin-top:0.1mm;}
 </style></head><body>${labelCards.join('')}</body></html>`);
   w.document.close();
   setTimeout(() => { w.print(); w.close(); }, 500);
@@ -322,11 +322,11 @@ async function printRackLabel(locationCode: string, slotNo: 1 | 2, slot: PalletS
 <style>
 @page{size:80mm 60mm;margin:0}
 html,body{width:80mm;height:60mm;margin:0;padding:0;font-family:'Malgun Gothic',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;}
-.label-card{width:75mm;height:55mm;margin:1.5mm auto;padding:1.8mm 2.2mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.3mm solid #94a3b8;overflow:hidden;page-break-after:always;page-break-inside:avoid;}
-.header{display:flex;justify-content:space-between;align-items:center;border-bottom:0.4mm solid #1a237e;padding-bottom:0.4mm;font-size:7.5pt;font-weight:bold;}
-.company{color:#c00;}.title{color:#1a237e;}.date{color:#666;font-size:6.5pt;}
-.body-row{display:flex;gap:2.5mm;align-items:center;flex:1;margin-top:0.8mm;margin-bottom:0.8mm;overflow:hidden;}
-.qr-box .qr-img{width:18mm;height:18mm;border:0.2mm solid #cbd5e1;flex-shrink:0;}
+.label-card{width:68mm;height:48mm;margin:5mm auto;padding:1.5mm 2mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.4mm solid #334155;overflow:hidden;page-break-after:always;page-break-inside:avoid;}
+.header{display:flex;justify-content:space-between;align-items:center;border-bottom:0.3mm solid #1a237e;padding-bottom:0.3mm;font-size:7pt;font-weight:bold;}
+.company{color:#c00;}.title{color:#1a237e;}.date{color:#666;font-size:6pt;}
+.body-row{display:flex;gap:2mm;align-items:center;flex:1;margin-top:0.5mm;margin-bottom:0.5mm;overflow:hidden;}
+.qr-box .qr-img{width:15mm;height:15mm;border:0.2mm solid #cbd5e1;flex-shrink:0;}
 .info-box{flex:1;overflow:hidden;}
 .loc-code{font-size:10pt;font-weight:900;font-family:monospace;color:#1a237e;}
 .field{font-size:7pt;margin-top:0.5mm;}
