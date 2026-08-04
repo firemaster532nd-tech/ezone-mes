@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { 
   Search, X, Plus, Pencil, Trash2, ShoppingCart, 
   Printer, ArrowRightLeft, Calendar, FileText, 
-  Building2, ArrowRight, DollarSign, Calculator
+  Building2, ArrowRight, DollarSign, Calculator, Eye
 } from 'lucide-react';
 
 interface Company {
