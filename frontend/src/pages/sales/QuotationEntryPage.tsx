@@ -300,7 +300,7 @@ export function QuotationEntryPage() {
                 className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
             </div>
             <div>
-              <label className="text-xs text-slate-500 font-medium block mb-1">곬적일자 *</label>
+              <label className="text-xs text-slate-500 font-medium block mb-1">견적일자 *</label>
               <input type="date" value={qDate} onChange={e => setQDate(e.target.value)}
                 className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20" />
             </div>

@@ -19,7 +19,7 @@ export function SalesStatusPage({ type }: { type: 'quotation' | 'delivery' }) {
         setMonthly(r.data.monthly||[]); setByCust(r.data.by_customer||[]);
       }).catch(()=>{}).finally(()=>setLoading(false));
     } else {
-      // 곬적 현황은 일단 전보부터 가져오는 방식
+      // 견적 현황 정보 가져오는 방식
       api.get<{data:any[]}>(`/quotations?startDate=${year}-01-01&endDate=${year}-12-31`).then(r=>{
         const data = r.data||[];
         const monthMap: Record<number,{cnt:number;amount:number}> = {};
