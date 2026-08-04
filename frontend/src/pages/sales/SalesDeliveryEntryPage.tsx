@@ -39,6 +39,60 @@ export function SalesDeliveryEntryPage() {
   const [compSearch, setCompSearch]   = useState('');
   const [showCompDrop, setShowCompDrop] = useState(false);
 
+  // 견적서 불러오기 모달 상태
+  const [showQuotationModal, setShowQuotationModal] = useState(false);
+  const [quotationsList, setQuotationsList]         = useState<any[]>([]);
+  const [loadingQuotations, setLoadingQuotations]   = useState(false);
+
+  const handleOpenQuotationModal = async () => {
+    setShowQuotationModal(true);
+    setLoadingQuotations(true);
+    try {
+      const res = await api.get<{ data: any[] }>('/quotations');
+      setQuotationsList(res.data || []);
+    } catch {
+      toast.error('견적서 목록을 불러오지 못했습니다.');
+    } finally {
+      setLoadingQuotations(false);
+    }
+  };
+
+  const handleImportQuotation = async (quote: any) => {
+    try {
+      const details = await api.get<{ data: any }>(`/quotations/${quote.quotation_id}`);
+      const q = details.data;
+      setCustomerId(q.customer_id);
+      setCompanyName(q.company_name);
+      if (q.project_code) setProjectCode(q.project_code);
+      if (q.tax_type) setTaxType(q.tax_type);
+      setRemarks(`[견적번호: ${q.quotation_number}] ${q.remarks || ''}`);
+
+      if (q.items && q.items.length > 0) {
+        setItems(q.items.map((it: any): SaleItem => {
+          const qty = Number(it.qty || 1);
+          const unitPrice = Number(it.unit_price || 0);
+          const supply = Math.round(qty * unitPrice);
+          const vat = q.tax_type === 'TAX_EXCLUDED' ? Math.round(supply * 0.1) : 0;
+          return {
+            item_code: it.item_code || '',
+            item_name: it.item_name || '',
+            spec: it.spec || '',
+            qty,
+            unit_price: unitPrice,
+            supply_amount: supply,
+            vat_amount: vat,
+            total_amount: supply + vat,
+            remarks: it.remarks || ''
+          };
+        }));
+      }
+      toast.success(`견적서 [${q.quotation_number}]의 정보가 판매 입력창에 불러와졌습니다.`);
+      setShowQuotationModal(false);
+    } catch {
+      toast.error('견적서 상세를 불러오지 못했습니다.');
+    }
+  };
+
   useEffect(() => {
     api.get<{data:Company[]}>('/companies?type=CUSTOMER&limit=200').then(r=>setCompanies(r.data||[])).catch(()=>{});
     if (!isEdit) {
@@ -95,6 +149,15 @@ export function SalesDeliveryEntryPage() {
           <h1 className="text-base font-bold text-slate-800">판매 {isEdit?'수정':'입력'}</h1>
         </div>
         <div className="flex gap-2">
+          <button 
+            type="button"
+            onClick={handleOpenQuotationModal}
+            className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-bold transition-colors shadow-sm"
+          >
+            <FileText className="h-4 w-4" />
+            <span>📋 견적서 불러오기</span>
+          </button>
+
           {isEdit && (
             <button onClick={()=>{ api.post(`/sales-delivery/${id}/tax-invoice`,{}).then(r=>navigate(`/sales/tax-invoice/${r.data.ti_id}`)).catch(()=>toast.error('실패')); }}
               className="flex items-center gap-1 px-3 py-1.5 border rounded-lg text-sm hover:bg-slate-50">
@@ -193,6 +256,62 @@ export function SalesDeliveryEntryPage() {
           </div>
         </div>
       </div>
+
+      {/* 견적서 불러오기 모달 */}
+      {showQuotationModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200">
+            <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <FileText className="h-4 w-4 text-emerald-400" />
+                <span>등록된 견적서 선택하여 불러오기</span>
+              </h3>
+              <button onClick={() => setShowQuotationModal(false)} className="text-slate-400 hover:text-white">✕</button>
+            </div>
+            
+            <div className="p-4 max-h-[60vh] overflow-y-auto divide-y divide-slate-100">
+              {loadingQuotations ? (
+                <div className="py-8 text-center text-slate-400 text-xs">견적서 목록을 로딩 중입니다...</div>
+              ) : quotationsList.length === 0 ? (
+                <div className="py-8 text-center text-slate-400 text-xs">등록된 견적서가 없습니다.</div>
+              ) : (
+                quotationsList.map((q: any) => (
+                  <div 
+                    key={q.quotation_id} 
+                    onClick={() => handleImportQuotation(q)}
+                    className="p-3.5 hover:bg-emerald-50/60 cursor-pointer transition-colors flex items-center justify-between rounded-lg"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-mono font-bold text-xs text-blue-600">[{q.quotation_number}]</span>
+                        <strong className="text-sm text-slate-800 font-bold">{q.company_name}</strong>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">{q.status}</span>
+                      </div>
+                      <p className="text-xs text-slate-500 font-mono">견적일: {q.quotation_date} | 현장: {q.project_code || '일반현장'}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-sm font-bold text-slate-900 font-mono">
+                        ₩{(Number(q.total_amount || 0) + Number(q.total_vat || 0)).toLocaleString()}원
+                      </span>
+                      <button className="block mt-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded shadow-xs ml-auto">
+                        불러오기 ↵
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="p-3 bg-slate-50 border-t border-slate-200 text-right">
+              <button 
+                onClick={() => setShowQuotationModal(false)}
+                className="px-4 py-1.5 border border-slate-300 text-slate-600 text-xs font-semibold rounded-lg hover:bg-white"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

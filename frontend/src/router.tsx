@@ -140,6 +140,7 @@ export const router = createBrowserRouter([
   // 견적서 인쇄 (AuthGuard 없이 독립 렌더링)
   { path: '/orders/quotations/print/:id', element: <QuotationPrintPage /> },
   { path: '/sales/quotations/print/:id', element: <QuotationPrintPage /> },
+  { path: '/quotations/print/:id', element: <QuotationPrintPage /> },
   { path: '/print/statements/:id', element: <StatementPrintPage /> },
   { path: '/print/exit-pass/:id', element: <ExitPassPrintPage /> },
 
