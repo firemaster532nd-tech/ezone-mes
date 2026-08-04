@@ -692,16 +692,16 @@ export async function wmsRoutes(app: FastifyInstance) {
       SELECT
         al.lot_id AS id,
         COALESCE(al.item_name, al.lot_type, '반제품 조립품') AS item_name,
-        al.spec, al.lot_number, COALESCE(al.remaining_qty, al.qty) AS qty, 'EA' AS unit,
-        COALESCE(al.rack_location, '조립 현장') AS shipment_site_name,
+        '표준규격' AS spec, al.lot_number, COALESCE(al.remaining_qty, al.qty) AS qty, 'EA' AS unit,
+        COALESCE(al.staging_location, '조립 현장') AS shipment_site_name,
         al.created_at::date AS shipment_order_date,
         al.location_id,
-        COALESCE(sl.location_code, al.staging_location, al.rack_location) AS location_code,
-        COALESCE(sl.display_name, al.staging_location, al.rack_location) AS display_name,
+        COALESCE(sl.location_code, al.staging_location) AS location_code,
+        COALESCE(sl.display_name, al.staging_location) AS display_name,
         al.created_at
       FROM assembly_lot al
       LEFT JOIN storage_locations sl ON sl.location_id = al.location_id
-      WHERE (al.staging_location IS NOT NULL OR al.rack_location IS NOT NULL OR al.location_id IS NOT NULL)
+      WHERE (al.staging_location IS NOT NULL OR al.location_id IS NOT NULL)
         AND al.status IN ('ACTIVE', 'STOCK', 'COMPLETE')
 
       ORDER BY shipment_site_name, shipment_order_date, id

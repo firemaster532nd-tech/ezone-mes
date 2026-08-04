@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/shared/PageHeader';
 import {
   Package, Search, RefreshCw, Printer, Plus, Trash2,
   ArrowDownCircle, ArrowUpCircle, MoveRight, Settings2,
-  Download, BarChart3, List, BookOpen, Edit3
+  Download, BarChart3, List, BookOpen, Edit3, ShieldCheck, Building2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
