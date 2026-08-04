@@ -209,14 +209,14 @@ export function QuotationPrintPage() {
                     공<br/>급<br/>자
                   </td>
                   <td className="px-2.5 py-1.5 border border-slate-300 bg-slate-50/50 font-semibold text-slate-500 w-20">등록번호</td>
-                  <td colSpan={3} className="px-2.5 py-1.5 border border-slate-300 font-bold font-mono text-sm">107-87-03004</td>
+                  <td colSpan={3} className="px-2.5 py-1.5 border border-slate-300 font-bold font-mono text-sm">232-88-00624</td>
                 </tr>
                 <tr>
                   <td className="px-2.5 py-1.5 border border-slate-300 bg-slate-50/50 font-semibold text-slate-500">상 호</td>
                   <td className="px-2.5 py-1.5 border border-slate-300 font-bold">㈜이지원</td>
                   <td className="px-2.5 py-1.5 border border-slate-300 bg-slate-50/50 font-semibold text-slate-500 w-12">대 표</td>
                   <td className="px-2.5 py-1.5 border border-slate-300 font-bold text-center relative w-16">
-                    최진영
+                    박민선
                     <div className="absolute right-0.5 top-0 w-8 h-8 rounded-full border border-red-500/30 flex items-center justify-center text-[6px] text-red-500 font-bold rotate-12 select-none pointer-events-none opacity-80">
                       이지원印
                     </div>
@@ -225,7 +225,7 @@ export function QuotationPrintPage() {
                 <tr>
                   <td className="px-2.5 py-1.5 border border-slate-300 bg-slate-50/50 font-semibold text-slate-500">주 소</td>
                   <td colSpan={3} className="px-2.5 py-1.5 border border-slate-300 text-slate-700">
-                    경기도 용인시 처인구 남사읍 남사로 88-15
+                    경기도 화성시 장안면 장안로227번길 166-18
                   </td>
                 </tr>
                 <tr>
@@ -236,9 +236,9 @@ export function QuotationPrintPage() {
                 </tr>
                 <tr>
                   <td className="px-2.5 py-1.5 border border-slate-300 bg-slate-50/50 font-semibold text-slate-500">전화번호</td>
-                  <td className="px-2.5 py-1.5 border border-slate-300 font-mono">031-333-0300</td>
+                  <td className="px-2.5 py-1.5 border border-slate-300 font-mono">070-8870-0300</td>
                   <td className="px-2.5 py-1.5 border border-slate-300 bg-slate-50/50 font-semibold text-slate-500">팩 스</td>
-                  <td className="px-2.5 py-1.5 border border-slate-300 font-mono">031-333-0301</td>
+                  <td className="px-2.5 py-1.5 border border-slate-300 font-mono">02-6455-0300</td>
                 </tr>
               </tbody>
             </table>

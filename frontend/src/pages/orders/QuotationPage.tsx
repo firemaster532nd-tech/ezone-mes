@@ -1070,11 +1070,11 @@ function QuotationPreviewModal({
         </div>
         <div class="box">
           <h4>공급자 (제출자)</h4>
-          <p><b>등록번호:</b> 107-87-03004</p>
-          <p><b>상호 / 대표자:</b> (주)이지원 / 최진영 (직인생략)</p>
-          <p><b>주소:</b> 경기도 용인시 처인구 남사읍 남사로 88-15</p>
+          <p><b>등록번호:</b> 232-88-00624</p>
+          <p><b>상호 / 대표자:</b> (주)이지원 / 박민선 (직인생략)</p>
+          <p><b>주소:</b> 경기도 화성시 장안면 장안로227번길 166-18</p>
           <p><b>업태 / 종목:</b> 제조업 / 내화채움구조체, 차열시트</p>
-          <p><b>전화 / 팩스:</b> TEL: 031-333-0300 / FAX: 031-333-0301</p>
+          <p><b>전화 / 팩스:</b> TEL: 070-8870-0300 / FAX: 02-6455-0300</p>
         </div>
       </div>
       <div class="sum-bar">
@@ -1110,7 +1110,7 @@ function QuotationPreviewModal({
       <div class="footer">
         <p>위와 같이 견적서를 제출합니다.</p>
         <p><b>${quotation.quotation_date}</b></p>
-        <p style="font-size:14pt;font-weight:bold;margin-top:15px;color:#1e3a8a;">(주) 이 지 원  대 표 이 사  최 진 영</p>
+        <p style="font-size:14pt;font-weight:bold;margin-top:15px;color:#1e3a8a;">(주) 이 지 원  대 표 이 사  박 민 선</p>
       </div>
       <script>window.print();</script>
       </body></html>
@@ -1213,15 +1213,15 @@ function QuotationPreviewModal({
                 </div>
                 <div className="grid grid-cols-3 gap-1">
                   <span className="text-slate-400">등록번호:</span>
-                  <span className="col-span-2 font-mono font-bold">107-87-03004</span>
+                  <span className="col-span-2 font-mono font-bold">232-88-00624</span>
                 </div>
                 <div className="grid grid-cols-3 gap-1">
                   <span className="text-slate-400">상호 / 대표자:</span>
-                  <span className="col-span-2 font-bold">(주)이지원 / 최진영 (직인생략)</span>
+                  <span className="col-span-2 font-bold">(주)이지원 / 박민선 (직인생략)</span>
                 </div>
                 <div className="grid grid-cols-3 gap-1">
                   <span className="text-slate-400">주소:</span>
-                  <span className="col-span-2">경기도 용인시 처인구 남사읍 남사로 88-15</span>
+                  <span className="col-span-2">경기도 화성시 장안면 장안로227번길 166-18</span>
                 </div>
                 <div className="grid grid-cols-3 gap-1">
                   <span className="text-slate-400">업태 / 종목:</span>
@@ -1229,7 +1229,7 @@ function QuotationPreviewModal({
                 </div>
                 <div className="grid grid-cols-3 gap-1">
                   <span className="text-slate-400">전화 / 팩스:</span>
-                  <span className="col-span-2 font-mono">TEL: 031-333-0300 / FAX: 031-333-0301</span>
+                  <span className="col-span-2 font-mono">TEL: 070-8870-0300 / FAX: 02-6455-0300</span>
                 </div>
               </div>
             </div>
@@ -1303,7 +1303,7 @@ function QuotationPreviewModal({
             <div className="pt-6 border-t border-slate-200 text-center space-y-2 text-xs text-slate-500">
               <p className="font-semibold text-slate-700">위와 같이 견적서를 제출합니다.</p>
               <p className="font-bold text-slate-900 text-sm tracking-widest">{quotation.quotation_date}</p>
-              <p className="font-extrabold text-blue-900 text-base tracking-wider mt-2">(주) 이 지 원  대 표 이 사  최 진 영</p>
+              <p className="font-extrabold text-blue-900 text-base tracking-wider mt-2">(주) 이 지 원  대 표 이 사  박 민 선</p>
             </div>
 
           </div>
