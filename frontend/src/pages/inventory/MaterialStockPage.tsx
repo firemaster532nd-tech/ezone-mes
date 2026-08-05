@@ -28,6 +28,7 @@ interface MaterialLot {
   received_date?: string;
   supplier_name?: string;
   notes?: string;
+  stock_type?: string;
 }
 
 interface Transaction {
@@ -102,154 +103,80 @@ function fmtLoc(loc?: string) {
 
 import { generateStandardLotLabelHtml, generateSerializedLotLabelBatchHtml, generateQrDataUrl, generateCode128Svg } from '@/lib/barcodeGenerator';
 
-// ─── LOT 라벨 인쇄 모달 ───────────────────────────────────────────────────────
+// ─── LOT 라벨 인쇄 모달 ───────────────────────────────────────────────
 function LabelModal({ lot, onClose }: { lot: MaterialLot; onClose: () => void }) {
-  const [qrUrl, setQrUrl] = useState<string>('');
-  const totalQty = Math.max(1, Math.round(Number(lot.qty_current || 1)));
-  const [printCount, setPrintCount] = useState<number>(totalQty);
+  const [printCount, setPrintCount] = useState<number>(Math.max(1, Math.round(Number(lot.qty_current || 1))));
 
-  useEffect(() => {
-    generateQrDataUrl(lot.lot_number, 200).then(setQrUrl);
-  }, [lot.lot_number]);
-
-  const doPrint = async () => {
-    const count = Math.max(1, printCount);
-    
-    const labelHtml = await generateSerializedLotLabelBatchHtml(
-      lot.lot_number,
-      lot.item_name,
-      fmtSpec(lot),
-      lot.location || '-',
-      totalQty,
-      lot.unit,
-      fmtDate(lot.received_date),
-      count
+  const openLabel = () => {
+    const params = new URLSearchParams({
+      lotNumber: lot.lot_number || '',
+      itemName:  lot.item_name  || '',
+      spec:      fmtSpec(lot),
+      qty:       String(Math.max(1, printCount)),
+      unit:      lot.unit || 'EA',
+      lotDate:   lot.received_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+      category:  lot.category || '',
+      location:  lot.location || '',
+      lotType:   'IN',
+    });
+    if (lot.thickness) params.set('thickness', String(lot.thickness));
+    window.open(
+      `/lot-label.html?${params.toString()}`,
+      '_blank',
+      'width=960,height=780,menubar=no,toolbar=no,scrollbars=yes'
     );
-
-    const w = window.open('', '_blank', 'width=500,height=600');
-    if (!w) return;
-    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>라벨 출력 (${count}매)</title>
-<style>
-@page { size: 80mm 60mm; margin: 0 !important; }
-@media print {
-  @page { size: 80mm 60mm; margin: 0 !important; }
-  html, body { width: 80mm !important; height: 60mm !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
-}
-html,body{width:80mm;height:60mm;margin:0;padding:0;background:#fff;font-family:'Malgun Gothic',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;}
-.label-card{width:70mm;height:44mm;margin:2mm auto;padding:1mm 1.5mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.3mm solid #334155;overflow:hidden;page-break-inside:avoid;break-inside:avoid;}
-.label-card:not(:last-child){page-break-after:always;break-after:always;}
-.label-card:last-child{page-break-after:avoid;break-after:avoid;}
-.header{display:flex;justify-content:space-between;align-items:center;border-bottom:0.3mm solid #1a237e;padding-bottom:0.2mm;font-size:6.5pt;font-weight:bold;}
-.company{color:#c00;}.title{color:#1a237e;}.date{color:#666;font-size:5.5pt;}
-.body-row{display:flex;gap:1.5mm;align-items:center;flex:1;margin-top:0.3mm;margin-bottom:0.3mm;overflow:hidden;}
-.qr-box .qr-img{width:12mm;height:12mm;border:0.2mm solid #cbd5e1;flex-shrink:0;}
-.info-box{flex:1;overflow:hidden;}
-.lot-number{font-size:8.5pt;font-weight:900;font-family:monospace;color:#1d4ed8;letter-spacing:-0.2px;white-space:nowrap;}
-.field{font-size:6pt;margin-top:0.2mm;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.field .lbl{color:#64748b;}
-.field .val{font-weight:bold;color:#0f172a;}
-.item-val{color:#0f172a;}
-.loc-val{color:#065f46;}
-.qty-bar{background:#f8fafc;border:0.2mm solid #cbd5e1;padding:0.4mm 1mm;font-size:6.8pt;margin-top:0.3mm;display:flex;justify-content:space-between;align-items:center;}
-.barcode-box{text-align:center;border-top:0.2mm dashed #cbd5e1;padding-top:0.3mm;margin-top:0.2mm;}
-.barcode-box svg{width:45mm;height:6mm;margin:0 auto;display:block;}
-.barcode-text{font-size:5pt;font-family:monospace;color:#475569;letter-spacing:0.5px;margin-top:0.1mm;}
-</style></head><body>${labelHtml}</body></html>`);
-    w.document.close();
-    setTimeout(() => { w.print(); w.close(); }, 500);
   };
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-84 p-5 space-y-4">
+      <div className="bg-white rounded-xl shadow-xl w-80 p-5 space-y-4">
         <div className="flex justify-between items-center">
-          <h3 className="font-bold text-sm text-slate-800 flex items-center gap-1.5"><Printer className="h-4 w-4 text-blue-600"/>LOT 라벨 발행 (순번 1/N~N/N)</h3>
+          <h3 className="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+            <Printer className="h-4 w-4 text-blue-600"/>고덱스 라벨 출력
+          </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700 text-lg leading-none">&times;</button>
         </div>
-        {/* 라벨 실물 미리보기 (80×60mm 비율) */}
-        <div className="border-2 border-slate-800 rounded-lg p-3 bg-white flex flex-col justify-between shadow-sm space-y-2">
-          <div className="flex justify-between items-center border-b pb-1 text-[9px]">
-            <span className="font-bold text-rose-600">(주)이지원</span>
-            <span className="font-bold text-indigo-900 font-extrabold">
-              {lot.stock_type === 'CERTIFIED_AUDIT' ? '🛡️ 인정시험용 LOT' : '🏷️ 원부자재 LOT'}
-            </span>
-            <span className="bg-blue-900 text-white font-bold text-[8px] px-1.5 py-0.5 rounded">1/{printCount}</span>
-          </div>
-          <div className="flex gap-2 text-[9px] items-center">
-            {qrUrl ? (
-              <img src={qrUrl} alt="QR" className="h-16 w-16 aspect-square border border-slate-200 p-0.5 rounded flex-shrink-0"/>
-            ) : (
-              <div className="h-16 w-16 bg-slate-100 animate-pulse rounded"/>
-            )}
-            <div className="flex-1 space-y-0.5 overflow-hidden">
-              <p className="font-black text-[10px] text-indigo-700 font-mono tracking-tight">{lot.lot_number}</p>
-              <p className="font-bold text-slate-900 truncate">{lot.item_name}</p>
-              <p className="text-red-700 font-bold text-[8.5px] truncate">규격: {fmtSpec(lot)}</p>
-              <p className="text-emerald-700 text-[8px] font-semibold">위치: {lot.location || '-'}</p>
-              <p className="font-bold text-slate-800 text-[9px]">총 수량: {Number(lot.qty_current).toLocaleString()} {lot.unit}</p>
-            </div>
-          </div>
-          <div className="border-t border-dashed border-slate-300 pt-1 text-center">
-            <div dangerouslySetInnerHTML={{ __html: generateCode128Svg(lot.lot_number, 24) }} />
-            <div className="font-mono text-[8px] text-slate-500 font-bold tracking-wider mt-0.5">{lot.lot_number}</div>
-          </div>
+
+        {/* LOT 정보 확인 */}
+        <div className="bg-slate-50 rounded-lg p-3 text-xs text-slate-700 space-y-1 border border-slate-200">
+          <p><span className="font-bold text-slate-400">LOT</span>  <span className="font-mono font-black text-blue-700">{lot.lot_number}</span></p>
+          <p><span className="font-bold text-slate-400">품목</span>  {lot.item_name}</p>
+          <p><span className="font-bold text-slate-400">규격</span>  {fmtSpec(lot) || '-'}</p>
+          <p><span className="font-bold text-slate-400">위치</span>  <span className="text-emerald-700 font-bold">{lot.location || '-'}</span></p>
+          <p><span className="font-bold text-slate-400">수량</span>  {Number(lot.qty_current || 0).toLocaleString()} {lot.unit}</p>
         </div>
 
-        {/* 인쇄 매수 및 1/N 순번 설정 컨트롤 */}
-        <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-2">
-          <div className="flex justify-between items-center text-xs">
-            <label className="font-bold text-slate-700">라벨 출력 매수 (순번 1/{printCount}):</label>
+        {/* 라벨 매수 설정 */}
+        <div className="space-y-1">
+          <div className="flex justify-between items-center">
+            <label className="text-xs font-bold text-slate-700">라벨 출력 매수</label>
             <button
               type="button"
               onClick={() => setPrintCount(Math.max(1, Number(lot.qty_current || 1)))}
               className="text-[11px] text-blue-700 bg-blue-50 hover:bg-blue-100 font-bold px-2 py-0.5 rounded border border-blue-200"
             >
-              총 수량({lot.qty_current}개) 매수 자동 적용
+              수량 자동적용 ({lot.qty_current || 1})
             </button>
           </div>
           <div className="flex items-center gap-2">
             <input
-              type="number"
-              min={1}
-              max={1000}
-              value={printCount}
+              type="number" min={1} max={1000} value={printCount}
               onChange={e => setPrintCount(Math.max(1, parseInt(e.target.value || '1', 10)))}
-              className="flex-1 px-3 py-1.5 border rounded-md text-sm font-bold font-mono text-center focus:ring-2 focus:ring-blue-500"
+              className="flex-1 px-3 py-2 border rounded-lg text-sm font-bold font-mono text-center focus:ring-2 focus:ring-blue-500"
             />
-            <span className="text-xs font-bold text-slate-600">장 (1/{printCount} ~ {printCount}/{printCount})</span>
+            <span className="text-xs font-bold text-slate-500">장</span>
           </div>
         </div>
 
         <div className="flex flex-col gap-2">
-          <button onClick={doPrint} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2 shadow transition">
-            <Printer className="h-4 w-4"/> 라벨 {printCount}장 순번 출력 (1/{printCount}~{printCount}/{printCount})
-          </button>
-          
           <button
-            type="button"
-            onClick={() => {
-              const headers = ['LOT_NUMBER', 'ITEM_NAME', 'SPEC', 'QTY', 'UNIT', 'LOCATION', 'STOCK_TYPE'];
-              const row = [
-                `"${lot.lot_number}"`,
-                `"${lot.item_name}"`,
-                `"${fmtSpec(lot)}"`,
-                `"${lot.qty_current}"`,
-                `"${lot.unit}"`,
-                `"${lot.location || '-'}"`,
-                `"${lot.stock_type === 'CERTIFIED_AUDIT' ? '인정시험용' : '비인정용'}"`
-              ];
-              const csvContent = '\uFEFF' + headers.join(',') + '\n' + row.join(',');
-              const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `GoLabel_${lot.lot_number}.csv`;
-              a.click();
-              URL.revokeObjectURL(url);
-              toast.success('📥 GoLabel 소프트웨어 연동용 CSV 파일이 다운로드되었습니다.');
-            }}
-            className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 border border-slate-300 transition"
+            onClick={openLabel}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2 shadow transition"
           >
-            <Download className="h-3.5 w-3.5 text-slate-600"/> GoLabel 소프트웨어 연동용 CSV 다운로드
+            <Printer className="h-4 w-4"/> 🏷️ Godex 라벨 출력 ({printCount}장)
+          </button>
+          <button onClick={onClose} className="w-full py-2 border border-gray-300 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-50">
+            닫기
           </button>
         </div>
       </div>

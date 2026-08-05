@@ -9,12 +9,24 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { WmsInventoryModal } from '@/components/WmsInventoryModal';
 import { RackTransferModal } from '@/components/RackTransferModal';
-import { generateRackLocationLabelHtml, generateRackLotLabelHtml } from '@/lib/barcodeGenerator';
+import { generateRackLocationLabelHtml, generateRackLotLabelHtml, generateSerializedLotLabelBatchHtml } from '@/lib/barcodeGenerator';
+import { printHtmlViaQzTray, printLabelsViaQzTray } from '@/lib/qzTrayPrinter';
+import { PrintPreviewModal } from '@/components/common/PrintPreviewModal';
 
 // ─── 랙 로케이션 마스터 ────────────────────────────────────────────────────────
 export const ZONE_1_COLS = ['O','N','M','L','K','J','I','H','G','F','E','D','C','B','A'];
 export const ZONE_2_COLS = ['P','Q','R'];
 export const RACK_TIERS = [3, 2, 1];
+export const FIELD_ZONES = [
+  { code: 'FIELD-1F-IN',      label: '1공장 안',       emoji: '🏭' },
+  { code: 'FIELD-1F-MAT',     label: '1공장 원재료창고', emoji: '📦' },
+  { code: 'FIELD-1F-TENT',    label: '1공장 천막',      emoji: '🎪' },
+  { code: 'FIELD-1F-OUTDOOR', label: '1공장 야적',      emoji: '⛺' },
+  { code: 'FIELD-2F-LEFT',    label: '2공장 왼쪽',      emoji: '🏢' },
+  { code: 'FIELD-2F-RIGHT',   label: '2공장 오른쪽',    emoji: '🏗️' },
+  { code: 'FIELD-2F-TENT',    label: '2공장 천막',      emoji: '🎨' },
+  { code: 'FIELD-2F-OUTDOOR', label: '2공장 야적',      emoji: '📌' },
+];
 
 // 파레트 슬롯 타입
 export type PalletType = 'certified' | 'non_certified' | 'empty';
@@ -262,75 +274,54 @@ function GraphicRackMap({
 
 // ─── 메인 페이지 ────────────────────────────────────────────────────────────
 // ─── 랙/파레트 위치 라벨 일괄 인쇄 (80×60mm) ──────────────────────────────
-async function printAllPalletLabels() {
-  const rows = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R'];
-  const levels = [1, 2, 3];
-  const allLocations: { code: string; p: 1 | 2 }[] = [];
+// printAllPalletLabels는 컴포넌트 내부로 이동 (setPreviewHtml 접근 필요)
 
-  for (const r of rows) {
-    for (const l of levels) {
-      const code = `${r}${l}`;
-      allLocations.push({ code, p: 1 });
-      allLocations.push({ code, p: 2 });
-    }
-  }
+// printRackLabel는 컴포넌트 내부로 이동 (setPreviewHtml 접근 필요)
 
-  const labelCards = await Promise.all(
-    allLocations.map(({ code, p }) => {
-      const locFull = `${code}-P${p}`;
-      const sideText = p === 1 ? '오른쪽 파레트 (P1)' : '왼쪽 파레트 (P2)';
-      return generateRackLocationLabelHtml(locFull, sideText, code);
-    })
-  );
+export function LocationManagementPage() {
+  const [selectedLocation, setSelectedLocation] = useState('');
+  const [rackStatusMap, setRackStatusMap] = useState<Record<string, RackCellStatus>>({});
+  const [availableLots, setAvailableLots] = useState<AvailableLot[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const w = window.open('', '_blank', 'width=900,height=700');
-  if (!w) { alert('팝업 차단 해제 후 다시 시도하세요.'); return; }
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>파레트 위치 라벨 일괄</title>
+  // ─── 인쇄 미리보기 상태 ─────────────────────────────────────────────────────
+  const [previewHtml, setPreviewHtml] = useState<string>('');
+
+  // 랙 위치 라벨 미리보기
+  const printRackLocationLabelOnly = async (code: string, p?: 1 | 2) => {
+    const locFull = p ? `${code}-P${p}` : code;
+    const sideText = p === 1 ? '오른쪽 파레트 (P1)' : p === 2 ? '왼쪽 파레트 (P2)' : '구역 바코드';
+    // rackStatusMap에서 해당 슬롯 재고 조회
+    const cellData = rackStatusMap[code];
+    const slot = p === 1 ? cellData?.pallet1 : p === 2 ? cellData?.pallet2 : null;
+    const stockInfo = slot && slot.type !== 'empty' ? {
+      lotNumber: slot.lot_number,
+      itemName: slot.item_name,
+      qty: slot.qty,
+      type: slot.type,
+    } : null;
+    const html = await generateRackLocationLabelHtml(locFull, sideText, code, stockInfo);
+    const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>랙 위치 라벨</title>
+<style>
+@page { size: 80mm 60mm; margin: 0; }
+html, body { width:80mm; height:60mm; margin:0; padding:0; overflow:hidden; font-family:'Malgun Gothic',sans-serif; background:white; }
+@media print { @page { size: 80mm 60mm; margin: 0; } html,body { margin:0; padding:0; } }
+</style></head><body>${html}</body></html>`;
+    setPreviewHtml(fullHtml);
+  };
+
+  // 랙 LOT(제품) 라벨 미리보기 — 기존 디자인 CSS 완전 유지
+  const printRackLabel = async (locationCode: string, slotNo: 1 | 2, slot: PalletSlot) => {
+    const locFull = `${locationCode}-P${slotNo}`;
+    const lotNo = slot.lot_number || '-';
+    const item = slot.item_name || '-';
+    const qty = `${Number(slot.qty || 0).toLocaleString()} EA`;
+    const sideText = slotNo === 1 ? 'P1 오른쪽' : 'P2 왼쪽';
+    const labelHtml = await generateRackLotLabelHtml(locFull, sideText, lotNo, item, qty);
+    const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>랙 라벨</title>
 <style>
 @page { size: 80mm 60mm; margin: 0 !important; }
-@media print {
-  @page { size: 80mm 60mm; margin: 0 !important; }
-  html, body { width: 80mm !important; height: 60mm !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
-}
-html,body{width:80mm;height:60mm;margin:0;padding:0;font-family:'Malgun Gothic',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;}
-.label-card{width:70mm;height:44mm;margin:2mm auto;padding:1mm 1.5mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.3mm solid #334155;overflow:hidden;page-break-inside:avoid;break-inside:avoid;}
-.label-card:not(:last-child){page-break-after:always;break-after:always;}
-.label-card:last-child{page-break-after:avoid;break-after:avoid;}
-.header{display:flex;justify-content:space-between;align-items:center;border-bottom:0.3mm solid #1a237e;padding-bottom:0.2mm;font-size:6.5pt;font-weight:bold;}
-.company{color:#c00;}.title{color:#1a237e;}
-.body-row{display:flex;gap:1.5mm;align-items:center;flex:1;margin-top:0.3mm;margin-bottom:0.3mm;overflow:hidden;}
-.qr-box .qr-img{width:12mm;height:12mm;border:0.2mm solid #cbd5e1;flex-shrink:0;}
-.info-box{flex:1;overflow:hidden;}
-.loc-code{font-size:11pt;font-weight:900;font-family:monospace;color:#1a237e;line-height:1.1;}
-.side-badge{font-size:6.5pt;color:#15803d;font-weight:bold;margin-top:0.2mm;}
-.rack-zone{font-size:5.5pt;color:#64748b;margin-top:0.1mm;}
-.barcode-box{text-align:center;border-top:0.2mm dashed #cbd5e1;padding-top:0.3mm;margin-top:0.2mm;}
-.barcode-box svg{width:45mm;height:6mm;margin:0 auto;display:block;}
-.barcode-text{font-size:5pt;font-family:monospace;color:#475569;letter-spacing:0.5px;margin-top:0.1mm;}
-</style></head><body>${labelCards.join('')}</body></html>`);
-  w.document.close();
-  setTimeout(() => { w.print(); w.close(); }, 500);
-}
-
-// ─── 랙 LOT 라벨 인쇄 (80×60mm) ────────────────────────────────────────────
-async function printRackLabel(locationCode: string, slotNo: 1 | 2, slot: PalletSlot) {
-  const locFull = `${locationCode}-P${slotNo}`;
-  const lotNo   = slot.lot_number || '-';
-  const item    = slot.item_name  || '-';
-  const qty     = `${Number(slot.qty || 0).toLocaleString()} EA`;
-  const sideText= slotNo === 1 ? 'P1 오른쪽' : 'P2 왼쪽';
-
-  const labelHtml = await generateRackLotLabelHtml(locFull, sideText, lotNo, item, qty);
-
-  const w = window.open('', '_blank', 'width=450,height=380');
-  if (!w) return;
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>랙 라벨</title>
-<style>
-@page { size: 80mm 60mm; margin: 0 !important; }
-@media print {
-  @page { size: 80mm 60mm; margin: 0 !important; }
-  html, body { width: 80mm !important; height: 60mm !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
-}
+@media print { @page { size: 80mm 60mm; margin: 0 !important; } html,body { width:80mm !important; height:60mm !important; margin:0 !important; padding:0 !important; overflow:hidden !important; } }
 html,body{width:80mm;height:60mm;margin:0;padding:0;font-family:'Malgun Gothic',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;}
 .label-card{width:70mm;height:44mm;margin:2mm auto;padding:1mm 1.5mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.3mm solid #334155;overflow:hidden;page-break-inside:avoid;break-inside:avoid;}
 .label-card:not(:last-child){page-break-after:always;break-after:always;}
@@ -349,16 +340,51 @@ html,body{width:80mm;height:60mm;margin:0;padding:0;font-family:'Malgun Gothic',
 .barcode-box{text-align:center;border-top:0.2mm dashed #bbb;padding-top:0.5mm;margin-top:0.5mm;}
 .barcode-box svg{width:45mm;height:6mm;margin:0 auto;display:block;}
 .barcode-text{font-size:5pt;font-family:monospace;color:#555;letter-spacing:0.5px;margin-top:0.2mm;}
-</style></head><body>${labelHtml}</body></html>`);
-  w.document.close();
-  setTimeout(() => { w.print(); w.close(); }, 500);
-}
+</style></head><body>${labelHtml}</body></html>`;
+    setPreviewHtml(fullHtml);
+  };
 
-export function LocationManagementPage() {
-  const [selectedLocation, setSelectedLocation] = useState('');
-  const [rackStatusMap, setRackStatusMap] = useState<Record<string, RackCellStatus>>({});
-  const [availableLots, setAvailableLots] = useState<AvailableLot[]>([]);
-  const [loading, setLoading] = useState(false);
+  // 파레트 위치 라벨 일괄 미리보기
+  const printAllPalletLabels = async () => {
+    const rows = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R'];
+    const levels = [1, 2, 3];
+    const allLocations: { code: string; p: 1 | 2 }[] = [];
+    for (const r of rows) {
+      for (const l of levels) {
+        const code = `${r}${l}`;
+        allLocations.push({ code, p: 1 });
+        allLocations.push({ code, p: 2 });
+      }
+    }
+    const labelCards = await Promise.all(
+      allLocations.map(({ code, p }) => {
+        const locFull = `${code}-P${p}`;
+        const sideText = p === 1 ? '오른쪽 파레트 (P1)' : '왼쪽 파레트 (P2)';
+        return generateRackLocationLabelHtml(locFull, sideText, code);
+      })
+    );
+    const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>파레트 위치 라벨 일괄</title>
+<style>
+@page { size: 80mm 60mm; margin: 0 !important; }
+@media print { @page { size: 80mm 60mm; margin: 0 !important; } html,body { width:80mm !important; height:60mm !important; margin:0 !important; padding:0 !important; overflow:hidden !important; } }
+html,body{width:80mm;height:60mm;margin:0;padding:0;font-family:'Malgun Gothic',sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;overflow:hidden;}
+.label-card{width:70mm;height:44mm;margin:2mm auto;padding:1mm 1.5mm;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;border:0.3mm solid #334155;overflow:hidden;page-break-inside:avoid;break-inside:avoid;}
+.label-card:not(:last-child){page-break-after:always;break-after:always;}
+.label-card:last-child{page-break-after:avoid;break-after:avoid;}
+.header{display:flex;justify-content:space-between;align-items:center;border-bottom:0.3mm solid #1a237e;padding-bottom:0.2mm;font-size:6.5pt;font-weight:bold;}
+.company{color:#c00;}.title{color:#1a237e;}
+.body-row{display:flex;gap:1.5mm;align-items:center;flex:1;margin-top:0.3mm;margin-bottom:0.3mm;overflow:hidden;}
+.qr-box .qr-img{width:12mm;height:12mm;border:0.2mm solid #cbd5e1;flex-shrink:0;}
+.info-box{flex:1;overflow:hidden;}
+.loc-code{font-size:11pt;font-weight:900;font-family:monospace;color:#1a237e;line-height:1.1;}
+.side-badge{font-size:6.5pt;color:#15803d;font-weight:bold;margin-top:0.2mm;}
+.rack-zone{font-size:5.5pt;color:#64748b;margin-top:0.1mm;}
+.barcode-box{text-align:center;border-top:0.2mm dashed #cbd5e1;padding-top:0.3mm;margin-top:0.2mm;}
+.barcode-box svg{width:45mm;height:6mm;margin:0 auto;display:block;}
+.barcode-text{font-size:5pt;font-family:monospace;color:#475569;letter-spacing:0.5px;margin-top:0.1mm;}
+</style></head><body>${labelCards.join('')}</body></html>`;
+    setPreviewHtml(fullHtml);
+  };
 
   // 셀 모달 상태
   const [cellModalOpen, setCellModalOpen] = useState(false);
@@ -383,7 +409,142 @@ export function LocationManagementPage() {
   const [outSearching, setOutSearching] = useState(false);
   const [outProcessing, setOutProcessing] = useState(false);
 
+  // 일괄 위치 라벨 선택 모달
+  const [bulkPrintOpen, setBulkPrintOpen] = useState(false);
+  const [selectedBulkLocs, setSelectedBulkLocs] = useState<Set<string>>(new Set());
+  const [bulkCopies, setBulkCopies] = useState(1);
+
+  const toggleBulkLoc = (loc: string) => {
+    setSelectedBulkLocs(prev => {
+      const next = new Set(prev);
+      if (next.has(loc)) next.delete(loc); else next.add(loc);
+      return next;
+    });
+  };
+
+  const selectAllBulk = () => {
+    const all = new Set<string>();
+    [...ZONE_1_COLS, ...ZONE_2_COLS].forEach(col =>
+      RACK_TIERS.forEach(tier => { all.add(`${col}${tier}-P1`); all.add(`${col}${tier}-P2`); })
+    );
+    FIELD_ZONES.forEach(z => all.add(z.code));
+    setSelectedBulkLocs(all);
+  };
+
+  const handleBulkPrint = async () => {
+    if (selectedBulkLocs.size === 0) { toast.error('하나 이상 선택하세요.'); return; }
+    const locsArray = [...selectedBulkLocs];
+    const totalLabels = locsArray.length * bulkCopies;
+
+    toast.info(`📄 ${totalLabels}장 라벨 생성 중...`);
+
+    // 모든 라벨 HTML(div 조각) 사전 생성
+    const labelDivs: string[] = [];
+    for (const loc of locsArray) {
+      const isField = loc.startsWith('FIELD-');
+      const sideText = isField ? '구역 바코드' : loc.endsWith('-P1') ? '오른쪽 파레트 (P1)' : '왼쪽 파레트 (P2)';
+      const code = isField ? loc : loc.replace(/-P[12]$/, '');
+      const div = await generateRackLocationLabelHtml(loc, sideText, code, (() => {
+        if (isField) return null;
+        const cellKey = loc.replace(/-P[12]$/, '');
+        const slotKey = loc.endsWith('-P1') ? 'pallet1' : 'pallet2';
+        const slot = rackStatusMap[cellKey]?.[slotKey];
+        return slot && slot.type !== 'empty' ? { lotNumber: slot.lot_number, itemName: slot.item_name, qty: slot.qty, type: slot.type } : null;
+      })());
+      for (let i = 0; i < bulkCopies; i++) labelDivs.push(div);
+    }
+
+    // JSON으로 직렬화해서 새 창에 embed (XSS 없음, 동일 origin)
+    const labelsJson = JSON.stringify(labelDivs);
+
+    // 새 창에서 1장씩 순차 print() — page-break CSS 완전 우회
+    const winHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>위치라벨 순차인쇄</title>
+<style>
+  @page { size: 80mm 60mm; margin: 0; }
+  html, body { margin: 0; padding: 0; width: 80mm; height: 60mm; overflow: hidden; background: white; font-family: 'Malgun Gothic', Arial, sans-serif; }
+  #container { width: 80mm; height: 60mm; overflow: hidden; }
+</style>
+</head>
+<body>
+  <div id="container"></div>
+  <script>
+    var labels = ${labelsJson};
+    var idx = 0;
+    function printNext() {
+      if (idx >= labels.length) {
+        document.title = '완료';
+        document.body.innerHTML = '<div style="font-family:sans-serif;padding:16px;font-size:13px;color:#333;">✅ ' + labels.length + '장 인쇄 완료. 창을 닫으세요.</div>';
+        return;
+      }
+      document.getElementById('container').innerHTML = labels[idx++];
+      setTimeout(function() {
+        window.print();
+        setTimeout(printNext, 400);
+      }, 150);
+    }
+    window.onload = function() { setTimeout(printNext, 300); };
+  </script>
+</body></html>`;
+
+    setBulkPrintOpen(false);
+
+    const w = window.open('', '_blank', 'width=420,height=320');
+    if (w) {
+      w.document.open();
+      w.document.write(winHtml);
+      w.document.close();
+      toast.success(`✅ ${totalLabels}장 순차 인쇄 시작 — 인쇄 다이얼로그를 ${totalLabels}번 확인하세요.`);
+    } else {
+      // 팝업 차단 시 QZ Tray 모달로 폴백
+      const fallbackHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>위치라벨(${totalLabels}장)</title>
+<style>
+  @page { size: 80mm 60mm; margin: 0; }
+  html, body { margin: 0; padding: 0; width: 80mm; background: white; font-family: 'Malgun Gothic', Arial, sans-serif; }
+  * { page-break-inside: auto !important; break-inside: auto !important; }
+  .lp { display: block; width: 80mm; height: 60mm; overflow: hidden; page-break-after: always; break-after: page; }
+  .lp:last-child { page-break-after: avoid; break-after: avoid; }
+</style></head><body>
+${labelDivs.map(d => `<div class="lp">${d}</div>`).join('')}
+</body></html>`;
+      setPreviewHtml(fallbackHtml);
+      toast.warning('팝업이 차단됨 — 주소창 팝업 허용 후 다시 시도하거나 QZ Tray 인쇄를 사용하세요.');
+    }
+  };
+
+  // QZ Tray 전용 일괄 인쇄 — 라벨당 qz.print() 1회 직접 호출
+  const handleBulkPrintQz = async () => {
+    if (selectedBulkLocs.size === 0) { toast.error('하나 이상 선택하세요.'); return; }
+    const locsArray = [...selectedBulkLocs];
+    const totalLabels = locsArray.length * bulkCopies;
+
+    toast.info(`📄 QZ Tray 전송 준비 중 (${totalLabels}장)...`);
+
+    const labelDivs: string[] = [];
+    for (const loc of locsArray) {
+      const isField = loc.startsWith('FIELD-');
+      const sideText = isField ? '구역 바코드' : loc.endsWith('-P1') ? '오른쪽 파레트 (P1)' : '왼쪽 파레트 (P2)';
+      const code = isField ? loc : loc.replace(/-P[12]$/, '');
+      const div = await generateRackLocationLabelHtml(loc, sideText, code, (() => {
+        if (isField) return null;
+        const cellKey = loc.replace(/-P[12]$/, '');
+        const slotKey = loc.endsWith('-P1') ? 'pallet1' : 'pallet2';
+        const slot = rackStatusMap[cellKey]?.[slotKey];
+        return slot && slot.type !== 'empty' ? { lotNumber: slot.lot_number, itemName: slot.item_name, qty: slot.qty, type: slot.type } : null;
+      })());
+      for (let i = 0; i < bulkCopies; i++) labelDivs.push(div);
+    }
+
+    setBulkPrintOpen(false);
+    try {
+      await printLabelsViaQzTray(labelDivs);
+      toast.success(`✅ ${totalLabels}장 고덱스 인쇄 완료!`);
+    } catch (err: any) {
+      toast.error(`QZ Tray 오류: ${err.message || 'QZ Tray 실행 중인지 확인하세요.'}`);
+    }
+  };
+
   // 데이터 로드 — /api/wms/rack-map 단일 엔드포인트
+
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -441,7 +602,7 @@ export function LocationManagementPage() {
           lot_id: l.lot_id,
           lot_number: l.lot_number,
           item_name: l.item_name,
-          qty: l.remaining_qty,
+          qty: l.remaining_qty ?? 0,   // ← remaining_qty를 qty로 매핑
         };
 
         if (palletSlot === 1) {
@@ -648,10 +809,7 @@ export function LocationManagementPage() {
             출고 처리
           </button>
           <button
-            onClick={() => printAllPalletLabels(
-              [{ title: '존1', cols: ZONE_1_COLS }, { title: '존2', cols: ZONE_2_COLS }],
-              RACK_TIERS
-            )}
+            onClick={() => setBulkPrintOpen(true)}
             className="flex items-center gap-2 px-3.5 py-2 bg-blue-600 text-white border border-blue-700 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm"
           >
             <Printer className="h-4 w-4" />
@@ -803,6 +961,49 @@ export function LocationManagementPage() {
                   )}
                 </div>
 
+                {/* ─── 🖨️ 3구역 라벨 인쇄 ─── */}
+                <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 space-y-2">
+                  <p className="text-xs font-extrabold text-indigo-900 flex items-center gap-1.5">
+                    <Printer className="h-4 w-4 text-indigo-600" />
+                    🖨️ [{activeCellCode}] 구역 라벨 인쇄
+                  </p>
+
+                  {/* 구역 위치 라벨 */}
+                  <button
+                    type="button"
+                    onClick={() => printRackLocationLabelOnly(activeCellCode)}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-white border-2 border-indigo-300 hover:bg-indigo-100 hover:border-indigo-500 rounded-lg text-xs font-bold text-indigo-800 transition-all shadow-sm"
+                  >
+                    📍 구역 위치 라벨 출력 ({activeCellCode})
+                  </button>
+
+                  {/* 보관 중인 LOT별 라벨 */}
+                  {availableLots.filter(l => l.location === activeCellCode || l.location?.startsWith(activeCellCode)).length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[10px] font-bold text-slate-500">보관 중인 LOT 라벨:</p>
+                      {availableLots
+                        .filter(l => l.location === activeCellCode || l.location?.startsWith(activeCellCode))
+                        .map((lot) => (
+                          <button
+                            key={lot.lot_id}
+                            type="button"
+                            onClick={() => printRackLabel(activeCellCode, 1, {
+                              slot_no: 1,
+                              type: 'certified',
+                              lot_number: lot.lot_number,
+                              item_name: lot.item_name,
+                              qty: lot.remaining_qty,
+                            })}
+                            className="w-full flex items-center justify-between gap-2 py-2 px-3 bg-white border-2 border-blue-200 hover:bg-blue-50 hover:border-blue-400 rounded-lg text-xs font-bold text-blue-800 transition-all shadow-sm"
+                          >
+                            <span>🏷 {lot.lot_number}</span>
+                            <span className="text-slate-600 font-mono">{lot.item_name} · {lot.remaining_qty} EA</span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
+                </div>
+
                 {/* 폼: 이 구역에 자재 배치 */}
                 <form onSubmit={handleAssignToPallet} className="bg-slate-50 border-2 border-blue-200 p-4 rounded-xl space-y-3">
                   <span className="text-xs font-extrabold text-blue-900 flex items-center gap-1">
@@ -882,15 +1083,23 @@ export function LocationManagementPage() {
                 <div className="flex justify-between items-center">
                   <span className={cn('text-xs font-black text-white px-2 py-0.5 rounded font-mono',
                     activeCell.pallet2.type !== 'empty' ? (activeCell.pallet2.type === 'non_certified' ? 'bg-amber-500' : 'bg-indigo-600') : 'bg-slate-400'
-                  )}>P2 (왼쪽 파레트)</span>
-                  <div className="flex items-center gap-2">
-                    {activeCell.pallet2.type === 'certified' && activeCell.pallet2.lot_number && (
+                  )}>P2 (왼쪽)</span>
+                  <div className="flex items-center gap-1.5">
+                    {/* 위치 라벨 — 빈 파레트도 출력 가능 */}
+                    <button
+                      type="button"
+                      onClick={() => printRackLocationLabelOnly(activeCellCode, 2)}
+                      className="text-[10px] text-slate-500 font-bold hover:text-indigo-600 border border-slate-200 hover:border-indigo-300 px-1.5 py-0.5 rounded transition-colors"
+                      title="P2 위치 라벨 인쇄"
+                    >📍 위치</button>
+                    {/* LOT 라벨 — 재고 있을 때 (인정/비인정 모두) */}
+                    {activeCell.pallet2.type !== 'empty' && activeCell.pallet2.item_name && (
                       <button
                         type="button"
                         onClick={() => printRackLabel(activeCellCode, 2, activeCell.pallet2)}
-                        className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-0.5"
-                        title="80×60mm LOT 라벨 인쇄"
-                      >🖨 라벨</button>
+                        className="text-[10px] text-blue-600 font-bold hover:text-blue-800 border border-blue-200 hover:border-blue-400 px-1.5 py-0.5 rounded transition-colors"
+                        title="P2 LOT 라벨 인쇄"
+                      >🖨 LOT</button>
                     )}
                     {activeCell.pallet2.type !== 'empty' && (
                       <button onClick={() => handleClearPallet(2)} className="text-[10px] text-rose-600 font-bold hover:underline">비우기 ✕</button>
@@ -902,7 +1111,7 @@ export function LocationManagementPage() {
                     <p className="font-black text-slate-900 text-xs truncate">{activeCell.pallet2.item_name}</p>
                     {activeCell.pallet2.lot_number && <p className="text-[10px] text-slate-600 font-mono">LOT: {activeCell.pallet2.lot_number}</p>}
                     {activeCell.pallet2.type === 'certified' && (
-                      <p className="text-[10px] text-indigo-900 font-black font-mono mt-0.5">수량: {Number(activeCell.pallet2.qty||0).toLocaleString()} EA</p>
+                      <p className="text-[10px] text-indigo-900 font-black font-mono mt-0.5">수량: {Number(activeCell.pallet2.qty || 0).toLocaleString()} EA</p>
                     )}
                     {activeCell.pallet2.type === 'non_certified' && (
                       <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold">⚠ 비인정재고</span>
@@ -923,15 +1132,23 @@ export function LocationManagementPage() {
                 <div className="flex justify-between items-center">
                   <span className={cn('text-xs font-black text-white px-2 py-0.5 rounded font-mono',
                     activeCell.pallet1.type !== 'empty' ? (activeCell.pallet1.type === 'non_certified' ? 'bg-amber-500' : 'bg-emerald-600') : 'bg-slate-400'
-                  )}>P1 (오른쪽 파레트)</span>
-                  <div className="flex items-center gap-2">
-                    {activeCell.pallet1.type === 'certified' && activeCell.pallet1.lot_number && (
+                  )}>P1 (오른쪽)</span>
+                  <div className="flex items-center gap-1.5">
+                    {/* 위치 라벨 — 빈 파레트도 출력 가능 */}
+                    <button
+                      type="button"
+                      onClick={() => printRackLocationLabelOnly(activeCellCode, 1)}
+                      className="text-[10px] text-slate-500 font-bold hover:text-emerald-600 border border-slate-200 hover:border-emerald-300 px-1.5 py-0.5 rounded transition-colors"
+                      title="P1 위치 라벨 인쇄"
+                    >📍 위치</button>
+                    {/* LOT 라벨 — 재고 있을 때 (인정/비인정 모두) */}
+                    {activeCell.pallet1.type !== 'empty' && activeCell.pallet1.item_name && (
                       <button
                         type="button"
                         onClick={() => printRackLabel(activeCellCode, 1, activeCell.pallet1)}
-                        className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-0.5"
-                        title="80×60mm LOT 라벨 인쇄"
-                      >🖨 라벨</button>
+                        className="text-[10px] text-blue-600 font-bold hover:text-blue-800 border border-blue-200 hover:border-blue-400 px-1.5 py-0.5 rounded transition-colors"
+                        title="P1 LOT 라벨 인쇄"
+                      >🖨 LOT</button>
                     )}
                     {activeCell.pallet1.type !== 'empty' && (
                       <button onClick={() => handleClearPallet(1)} className="text-[10px] text-rose-600 font-bold hover:underline">비우기 ✕</button>
@@ -943,7 +1160,7 @@ export function LocationManagementPage() {
                     <p className="font-black text-slate-900 text-xs truncate">{activeCell.pallet1.item_name}</p>
                     {activeCell.pallet1.lot_number && <p className="text-[10px] text-slate-600 font-mono">LOT: {activeCell.pallet1.lot_number}</p>}
                     {activeCell.pallet1.type === 'certified' && (
-                      <p className="text-[10px] text-emerald-800 font-black font-mono mt-0.5">수량: {Number(activeCell.pallet1.qty||0).toLocaleString()} EA</p>
+                      <p className="text-[10px] text-emerald-800 font-black font-mono mt-0.5">수량: {Number(activeCell.pallet1.qty || 0).toLocaleString()} EA</p>
                     )}
                     {activeCell.pallet1.type === 'non_certified' && (
                       <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold">⚠ 비인정재고</span>
@@ -954,6 +1171,56 @@ export function LocationManagementPage() {
                   <p className="text-[11px] text-slate-400 py-3 text-center">P1 (오른쪽) 빈 파레트</p>
                 )}
               </div>
+            </div>
+
+            {/* ─── 🖨️ 라벨 인쇄 전용 섹션 ─── */}
+            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 space-y-2">
+              <p className="text-xs font-extrabold text-indigo-900 flex items-center gap-1.5">
+                <Printer className="h-4 w-4 text-indigo-600" />
+                🖨️ [{activeCellCode}] 라벨 인쇄
+              </p>
+
+              {/* 위치 라벨 행 */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => printRackLocationLabelOnly(activeCellCode, 2)}
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-white border-2 border-indigo-300 hover:bg-indigo-100 hover:border-indigo-500 rounded-lg text-xs font-bold text-indigo-800 transition-all shadow-sm"
+                >
+                  📍 P2(왼쪽) 위치라벨
+                </button>
+                <button
+                  type="button"
+                  onClick={() => printRackLocationLabelOnly(activeCellCode, 1)}
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-white border-2 border-indigo-300 hover:bg-indigo-100 hover:border-indigo-500 rounded-lg text-xs font-bold text-indigo-800 transition-all shadow-sm"
+                >
+                  📍 P1(오른쪽) 위치라벨
+                </button>
+              </div>
+
+              {/* LOT 라벨 행 — 재고 있을 때만 */}
+              {(activeCell.pallet2.type !== 'empty' || activeCell.pallet1.type !== 'empty') && (
+                <div className="grid grid-cols-2 gap-2">
+                  {activeCell.pallet2.type !== 'empty' && activeCell.pallet2.item_name ? (
+                    <button
+                      type="button"
+                      onClick={() => printRackLabel(activeCellCode, 2, activeCell.pallet2)}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 bg-white border-2 border-blue-300 hover:bg-blue-50 hover:border-blue-500 rounded-lg text-xs font-bold text-blue-800 transition-all shadow-sm"
+                    >
+                      🏷 P2 LOT 라벨
+                    </button>
+                  ) : <div />}
+                  {activeCell.pallet1.type !== 'empty' && activeCell.pallet1.item_name ? (
+                    <button
+                      type="button"
+                      onClick={() => printRackLabel(activeCellCode, 1, activeCell.pallet1)}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 bg-white border-2 border-blue-300 hover:bg-blue-50 hover:border-blue-500 rounded-lg text-xs font-bold text-blue-800 transition-all shadow-sm"
+                    >
+                      🏷 P1 LOT 라벨
+                    </button>
+                  ) : <div />}
+                </div>
+              )}
             </div>
 
             {/* 재고 배치 폼 (인정재고만) */}
@@ -1118,6 +1385,151 @@ export function LocationManagementPage() {
         onClose={() => setTransferModalOpen(false)}
         onSuccess={loadData}
         initialFromLocation={selectedLocation}
+      />
+
+      {/* 파레트 위치 라벨 선택 모달 */}
+      {bulkPrintOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-3">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden">
+
+            {/* 헤더 */}
+            <div className="p-5 border-b flex justify-between items-center bg-slate-50 flex-shrink-0">
+              <div>
+                <h2 className="font-extrabold text-lg text-slate-900 flex items-center gap-2">
+                  <Printer className="h-5 w-5 text-blue-600" />
+                  파레트 위치 라벨 선택 인쇄
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">인쇄할 라벨을 클릭으로 선택 — 선택: <b className="text-blue-700">{selectedBulkLocs.size}개</b> / 웉수: <b className="text-blue-700">{bulkCopies}매</b> = 총 <b className="text-emerald-700">{selectedBulkLocs.size * bulkCopies}장</b></p>
+              </div>
+              <button onClick={() => setBulkPrintOpen(false)} className="text-slate-400 hover:text-slate-700 p-1">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* 콘텐츠 스크롤 */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-6">
+
+              {/* 1구역 (A~O) */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-extrabold text-slate-800">🏢 1구역 랙 A~O · 45셀 × 2 = <span className="text-blue-700">90 파레트</span></h3>
+                  <button
+                    onClick={() => { const s = new Set(selectedBulkLocs); [...ZONE_1_COLS].forEach(c => RACK_TIERS.forEach(t => { s.add(`${c}${t}-P1`); s.add(`${c}${t}-P2`); })); setSelectedBulkLocs(s); }}
+                    className="text-xs text-blue-600 font-bold hover:underline"
+                  >존 전체 선택</button>
+                </div>
+                <div className="grid gap-1.5" style={{gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))'}}>
+                  {[...ZONE_1_COLS].flatMap(col =>
+                    RACK_TIERS.flatMap(tier =>
+                      (['P1','P2'] as const).map(p => {
+                        const loc = `${col}${tier}-${p}`;
+                        const sel = selectedBulkLocs.has(loc);
+                        return (
+                          <button key={loc} onClick={() => toggleBulkLoc(loc)}
+                            className={`text-[11px] font-mono font-bold py-1.5 px-1 rounded-lg border-2 transition-all select-none ${sel ? 'bg-blue-600 text-white border-blue-700 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50'}`}>
+                            {loc}
+                          </button>
+                        );
+                      })
+                    )
+                  )}
+                </div>
+              </div>
+
+              {/* 2구역 (P~R) */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-extrabold text-slate-800">🏬 2구역 랙 P~R · 9셀 × 2 = <span className="text-indigo-700">18 파레트</span></h3>
+                  <button
+                    onClick={() => { const s = new Set(selectedBulkLocs); [...ZONE_2_COLS].forEach(c => RACK_TIERS.forEach(t => { s.add(`${c}${t}-P1`); s.add(`${c}${t}-P2`); })); setSelectedBulkLocs(s); }}
+                    className="text-xs text-indigo-600 font-bold hover:underline"
+                  >존 전체 선택</button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {[...ZONE_2_COLS].flatMap(col =>
+                    RACK_TIERS.flatMap(tier =>
+                      (['P1','P2'] as const).map(p => {
+                        const loc = `${col}${tier}-${p}`;
+                        const sel = selectedBulkLocs.has(loc);
+                        return (
+                          <button key={loc} onClick={() => toggleBulkLoc(loc)}
+                            className={`text-[11px] font-mono font-bold py-1.5 px-2 rounded-lg border-2 transition-all select-none ${sel ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:bg-indigo-50'}`}>
+                            {loc}
+                          </button>
+                        );
+                      })
+                    )
+                  )}
+                </div>
+              </div>
+
+              {/* 3구역 FIELD */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-extrabold text-slate-800">🏭 3구역 공장 필드 <span className="text-emerald-700">8 구역</span></h3>
+                  <button
+                    onClick={() => { const s = new Set(selectedBulkLocs); FIELD_ZONES.forEach(z => s.add(z.code)); setSelectedBulkLocs(s); }}
+                    className="text-xs text-emerald-600 font-bold hover:underline"
+                  >구역 전체 선택</button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {FIELD_ZONES.map(z => {
+                    const sel = selectedBulkLocs.has(z.code);
+                    return (
+                      <button key={z.code} onClick={() => toggleBulkLoc(z.code)}
+                        className={`text-xs font-bold py-2 px-3 rounded-xl border-2 transition-all flex items-center gap-1.5 select-none ${sel ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50'}`}>
+                        <span>{z.emoji}</span><span>{z.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* 푸터 툴링 */}
+            <div className="p-4 border-t bg-slate-50 flex-shrink-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={selectAllBulk} className="px-3 py-1.5 border border-slate-300 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-100">전체 선택 (람108+필드8)</button>
+                <button onClick={() => setSelectedBulkLocs(new Set())} className="px-3 py-1.5 border border-slate-300 text-slate-700 text-xs font-bold rounded-lg hover:bg-slate-100">전체 해제</button>
+                <div className="flex items-center gap-2 ml-1">
+                  <label className="text-xs font-bold text-slate-700">인쇄 매수:</label>
+                  <input
+                    type="number" min={1} max={10} value={bulkCopies}
+                    onChange={e => setBulkCopies(Math.max(1, Math.min(10, Number(e.target.value))))}
+                    className="w-16 border border-slate-300 rounded-lg px-2 py-1 text-sm font-bold text-center"
+                  />
+                  <span className="text-xs text-slate-500">매 × {selectedBulkLocs.size}개 = 총 <b className="text-blue-700">{selectedBulkLocs.size * bulkCopies}장</b></span>
+                </div>
+                <div className="ml-auto flex gap-2">
+                  <button onClick={() => setBulkPrintOpen(false)} className="px-4 py-2 border border-slate-300 text-slate-600 text-sm font-bold rounded-lg hover:bg-slate-100">취소</button>
+                  <button
+                    onClick={handleBulkPrintQz}
+                    disabled={selectedBulkLocs.size === 0}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-sm font-bold rounded-lg flex items-center gap-2 shadow"
+                  >
+                    <Printer className="h-4 w-4" />
+                    고덱스 QZ Tray ({selectedBulkLocs.size * bulkCopies}장)
+                  </button>
+                  <button
+                    onClick={handleBulkPrint}
+                    disabled={selectedBulkLocs.size === 0}
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white text-sm font-bold rounded-lg flex items-center gap-2 shadow"
+                  >
+                    <Printer className="h-4 w-4" />
+                    브라우저 인쇄 ({selectedBulkLocs.size * bulkCopies}장)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 인쇄 미리보기 모달 */}
+      <PrintPreviewModal
+        isOpen={!!previewHtml}
+        onClose={() => setPreviewHtml('')}
+        htmlContent={previewHtml}
       />
     </div>
   );

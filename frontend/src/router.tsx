@@ -112,6 +112,7 @@ import { SalesDeliveryPage } from '@/pages/sales/SalesDeliveryPage';
 import { SalesDeliveryEntryPage } from '@/pages/sales/SalesDeliveryEntryPage';
 import { SalesStatusPage } from '@/pages/sales/SalesStatusPage';
 import { TaxInvoicePage } from '@/pages/sales/TaxInvoicePage';
+import ScanLocationPage from '@/pages/ScanLocationPage';
 
 
 // ─── 라우트 에러 바운더리 ───
@@ -131,6 +132,9 @@ function RouteErrorBoundary() {
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   { path: '/auth/force-change-password', element: <ForceChangePasswordPage /> },
+
+  // QR 스캔 페이지 — 로그인 없이 접근 가능 (스마트폰 스캔 용도)
+  { path: '/scan', element: <ScanLocationPage /> },
 
   // ── 모바일 전용 화면 (AuthGuard 내에서 직접 접근) ──
   { path: '/mobile', element: <AuthGuard><MobileHomePage /></AuthGuard> },

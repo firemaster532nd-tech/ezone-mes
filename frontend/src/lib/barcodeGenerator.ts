@@ -75,32 +75,40 @@ export async function generateQrDataUrl(text: string, size = 200): Promise<strin
   }
 }
 
-/**
- * 렉 파레트 위치 전용 라벨 HTML 생성 (80×60mm) - QR + 바코드 동시 인쇄
- */
-export async function generateRackLocationLabelHtml(locFull: string, sideText: string, code: string): Promise<string> {
-  const qrDataUrl = await generateQrDataUrl(locFull, 220);
-  const barcodeSvg = generateCode128Svg(locFull, 36);
+export interface RackLabelStockInfo {
+  lotNumber?: string;
+  itemName?: string;
+  qty?: number | string;
+  type?: 'certified' | 'non_certified' | 'empty';
+}
+
+export async function generateRackLocationLabelHtml(
+  locFull: string,
+  sideText: string,
+  code: string,
+  _stockInfo?: RackLabelStockInfo | null   // 현재 미사용 — QR URL 스캔 페이지로 재고 표시
+): Promise<string> {
+  // QR에는 스캔 시 재고 조회 URL 인코딩 (스마트폰/PC에서 바로 재고 확인)
+  const BASE_URL = typeof window !== 'undefined'
+    ? window.location.origin
+    : 'https://이지원.kr';
+  const qrUrl = `${BASE_URL}/scan?loc=${encodeURIComponent(locFull)}`;
+
+  const qrDataUrl = await generateQrDataUrl(qrUrl, 400);
+  const barcodeSvg = generateCode128Svg(locFull, 45);
 
   return `
-<div class="label-card">
-  <div class="header">
-    <span class="company">(주)이지원</span>
-    <span class="title">📍 랙 파레트 위치 라벨</span>
+<div style="width: 76mm; height: 56mm; margin: 2mm auto; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 0.6mm solid #000; overflow: hidden; page-break-inside: avoid; break-inside: avoid; background: white;">
+  <div style="font-size: 25pt; font-weight: 900; font-family: 'Malgun Gothic', sans-serif; color: #000; letter-spacing: 1px; text-align: center; margin-bottom: 2mm; line-height: 1;">
+    ${locFull}
   </div>
-  <div class="body-row">
-    <div class="qr-box">
-      <img src="${qrDataUrl}" alt="QR" class="qr-img"/>
-    </div>
-    <div class="info-box">
-      <div class="loc-code">${locFull}</div>
-      <div class="side-badge">${sideText}</div>
-      <div class="rack-zone">구역/렉: ${code}</div>
-    </div>
+  <div style="display: flex; justify-content: center; align-items: center; width: 100%; margin-bottom: 2mm;">
+    <img src="${qrDataUrl}" alt="QR" style="width: 25mm; height: 25mm; border: 0.3mm solid #000;" />
   </div>
-  <div class="barcode-box">
-    ${barcodeSvg}
-    <div class="barcode-text">${locFull}</div>
+  <div style="text-align: center; width: 100%;">
+    <div style="width: 70mm; margin: 0 auto; display: flex; justify-content: center; padding-top: 1mm; border-top: 0.3mm dashed #000;">
+      ${barcodeSvg.replace('width="100%"', 'width="100%" style="max-height: 12mm;"')}
+    </div>
   </div>
 </div>`;
 }

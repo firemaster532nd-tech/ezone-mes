@@ -238,6 +238,68 @@ export async function wmsRoutes(app: FastifyInstance) {
     }
   });
 
+  // ── GET /api/wms/location-scan?loc=A1-P2 ──────────────────────────────────
+  // QR 스캔 페이지용 — 특정 위치의 재고 현황 반환 (로그인 불필요)
+  app.get('/api/wms/location-scan', async (req, reply) => {
+    const { loc } = req.query as { loc?: string };
+    if (!loc) return reply.status(400).send({ error: 'loc 파라미터가 필요합니다.' });
+
+    try {
+      const locParam = `%${loc}%`;
+
+      // 비인정재고
+      const { rows: ncs } = await pool.query(`
+        SELECT ncs.id, ncs.rack_code, ncs.pallet_no,
+               ncs.item_name, ncs.spec, ncs.lot_number, ncs.qty, ncs.unit,
+               ncs.status, ncs.category,
+               sl.location_code
+        FROM non_certified_stock ncs
+        LEFT JOIN storage_locations sl ON sl.location_id = ncs.location_id
+        WHERE ncs.status NOT IN ('DISPOSED')
+          AND (sl.location_code = $1 OR ncs.rack_code ILIKE $2)
+        ORDER BY ncs.id
+      `, [loc, locParam]);
+
+      // 인정재고 (완제품 lot)
+      const { rows: lots } = await pool.query(`
+        SELECT al.lot_id, al.lot_number, al.qty,
+               COALESCE(al.remaining_qty, al.qty) AS remaining_qty,
+               COALESCE(al.item_name, al.lot_type, al.lot_number) AS item_name,
+               al.staging_location, al.status,
+               sl.location_code
+        FROM assembly_lot al
+        LEFT JOIN storage_locations sl ON sl.location_id = al.location_id
+        WHERE al.status IN ('ACTIVE','STOCK','COMPLETE')
+          AND (sl.location_code = $1 OR al.staging_location ILIKE $2)
+        ORDER BY al.lot_id
+      `, [loc, locParam]).catch(() => ({ rows: [] as any[] }));
+
+      // 자재 lot
+      const { rows: mats } = await pool.query(`
+        SELECT ml.lot_id, ml.lot_number, ml.category, ml.item_name,
+               ml.qty_current AS qty, ml.unit,
+               ml.location,
+               sl.location_code
+        FROM material_lots ml
+        LEFT JOIN storage_locations sl ON sl.location_id = ml.location_id
+        WHERE ml.is_active = TRUE
+          AND (sl.location_code = $1 OR ml.location ILIKE $2)
+        ORDER BY ml.lot_id
+      `, [loc, locParam]);
+
+      return {
+        loc,
+        scannedAt: new Date().toISOString(),
+        non_certified: ncs,
+        lots,
+        material_lots: mats,
+        total: ncs.length + lots.length + mats.length,
+      };
+    } catch (e: any) {
+      return reply.status(500).send({ error: e.message });
+    }
+  });
+
   // ── GET /api/wms/inventory ─────────────────────────────────────────────────
   // 통합 재고 목록 (필터: location_id, wms_status, category, search)
   app.get('/api/wms/inventory', async (req) => {

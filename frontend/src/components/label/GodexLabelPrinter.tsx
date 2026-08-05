@@ -1,15 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Printer, Barcode, Wifi, WifiOff, AlertCircle, CheckCircle, Package } from 'lucide-react';
 import { generateStandardLotLabelHtml, generateSerializedLotLabelBatchHtml } from '@/lib/barcodeGenerator';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// QZ Tray 타입 선언
-// ─────────────────────────────────────────────────────────────────────────────
-declare global {
-  interface Window {
-    qz: any;
-  }
-}
+import { printHtmlViaQzTray } from '@/lib/qzTrayPrinter';
 
 interface LabelData {
   lot_number: string;
@@ -33,112 +25,7 @@ interface GodexLabelPrinterProps {
   onClose?: () => void;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ZPL 생성 함수 (고덱스 ZPL 호환)
-// ─────────────────────────────────────────────────────────────────────────────
-function buildZpl(data: LabelData, copies: number = 1): string {
-  const {
-    lot_number = '',
-    item_name = '',
-    category = '',
-    density = '',
-    thickness = '',
-    width_mm = '',
-    length_mm = '',
-    unit = 'EA',
-    qty_current = '',
-    received_date = '',
-    location = '',
-    location_name = '',
-  } = data;
-
-  // 규격 문자열 조합
-  const spec = [
-    density ? `${density}K` : '',
-    thickness ? `${thickness}T` : '',
-    width_mm ? `${width_mm}W` : '',
-    length_mm ? `${length_mm}L` : '',
-  ].filter(Boolean).join(' ');
-
-  // 날짜 포맷 (YYYY-MM-DD → YY.MM.DD)
-  const dateStr = received_date
-    ? received_date.slice(2).replace(/-/g, '.')
-    : new Date().toISOString().slice(2, 10).replace(/-/g, '.');
-
-  // 라벨 크기: 60mm × 40mm (2.36" × 1.57") @ 203 dpi
-  // 1mm ≈ 8 dots (203dpi)
-  return `
-^XA
-^PW480
-^LL320
-^CI28
-
-^FO10,10^A0N,22,22^FD${category}^FS
-^FO10,36^A0N,28,28^FD${item_name.slice(0,28)}^FS
-^FO10,68^A0N,22,22^FD규격: ${spec}^FS
-^FO10,92^A0N,20,20^FD수량: ${qty_current} ${unit}^FS
-^FO10,114^A0N,20,20^FD입고일: ${dateStr}^FS
-
-^FO10,140^A0N,24,24^FD위치: ${location_name || location || '위치 미지정'}^FS
-^FO10,165^BY2,3,50^BCN,50,Y,N,N
-^FD${lot_number}^FS
-
-^FO10,240^A0N,18,18^FDLOT: ${lot_number}^FS
-
-^PQ${copies},0,1,Y
-^XZ
-  `.trim();
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// QZ Tray 연결 훅
-// ─────────────────────────────────────────────────────────────────────────────
-function useQzTray() {
-  const [connected, setConnected] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [printers, setPrinters] = useState<string[]>([]);
-
-  const connect = async () => {
-    try {
-      if (!window.qz) {
-        setError('QZ Tray가 설치되지 않았습니다. qz.io에서 다운로드하세요.');
-        return false;
-      }
-      if (!window.qz.websocket.isActive()) {
-        await window.qz.websocket.connect();
-      }
-      setConnected(true);
-      setError(null);
-
-      // 프린터 목록 조회
-      const list = await window.qz.printers.find();
-      setPrinters(Array.isArray(list) ? list : [list]);
-      return true;
-    } catch (e: any) {
-      setError(e.message || 'QZ Tray 연결 실패');
-      setConnected(false);
-      return false;
-    }
-  };
-
-  const disconnect = async () => {
-    try {
-      if (window.qz?.websocket?.isActive()) {
-        await window.qz.websocket.disconnect();
-      }
-      setConnected(false);
-    } catch (_) {}
-  };
-
-  const print = async (printerName: string, zpl: string) => {
-    if (!window.qz) throw new Error('QZ Tray가 필요합니다.');
-    const config = window.qz.configs.create(printerName);
-    const data = [{ type: 'raw', format: 'plain', data: zpl }];
-    await window.qz.print(config, data);
-  };
-
-  return { connected, error, printers, connect, disconnect, print };
-}
+// ZPL removed, moved to HTML pixel method.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 라벨 미리보기 컴포넌트 (60×40mm 시뮬레이션)
@@ -200,7 +87,6 @@ function LabelPreview({ data }: { data: LabelData }) {
 // 메인 컴포넌트
 // ─────────────────────────────────────────────────────────────────────────────
 export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copies: initialCopies = 1, onClose }: GodexLabelPrinterProps) {
-  const { connected, error, printers, connect, disconnect, print } = useQzTray();
   const [selectedPrinter, setSelectedPrinter] = useState(initialPrinter || '');
   const [copies, setCopies] = useState(initialCopies);
   const [printing, setPrinting] = useState(false);
@@ -209,7 +95,7 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
 
   // QZ Tray JS 스크립트 동적 로드
   useEffect(() => {
-    if (window.qz) { setQzLoaded(true); return; }
+    if ((window as any).qz) { setQzLoaded(true); return; }
     const script = document.createElement('script');
     script.src = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
     script.onload = () => setQzLoaded(true);
@@ -218,21 +104,70 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
     return () => { document.head.removeChild(script); };
   }, []);
 
-  const handleConnect = async () => {
-    await connect();
-  };
-
   const handlePrint = async () => {
-    if (!selectedPrinter) { alert('프린터를 선택해주세요.'); return; }
     setPrinting(true);
     setPrintResult(null);
     try {
-      const zpl = buildZpl(labelData, copies);
-      await print(selectedPrinter, zpl);
+      const spec = [
+        labelData.density ? `${labelData.density}K` : '',
+        labelData.thickness ? `${labelData.thickness}T` : '',
+        labelData.width_mm ? `${labelData.width_mm}W` : '',
+        labelData.length_mm ? `${labelData.length_mm}L` : '',
+      ].filter(Boolean).join(' ');
+
+      const count = copies > 0 ? copies : Math.max(1, Number(labelData.qty_current || 1));
+      
+      // HTML 생성
+      const labelHtmlContent = await generateSerializedLotLabelBatchHtml(
+        labelData.lot_number,
+        labelData.item_name || '품목명 미지정',
+        spec,
+        labelData.location_name || labelData.location || '-',
+        Number(labelData.qty_current || 1),
+        labelData.unit || 'EA',
+        labelData.received_date,
+        count
+      );
+
+      // 전체 HTML 랩핑 (흑백, 크기 조정)
+      const fullHtml = `
+      <!DOCTYPE html><html><head><meta charset="utf-8"><title>LOT 라벨</title>
+      <style>
+        @page { size: 80mm 60mm; margin: 0 !important; }
+        @media print {
+          @page { size: 80mm 60mm; margin: 0 !important; }
+          html, body { width: 80mm !important; height: 60mm !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
+        }
+        html, body { width: 80mm; height: 60mm; margin: 0; padding: 0; background: #fff; font-family: 'Malgun Gothic', sans-serif; overflow: hidden; transform: scale(0.96); transform-origin: top left; }
+        * { color: black !important; border-color: black !important; background-color: transparent !important; }
+        .label-card { width: 76mm; height: 56mm; margin: 2mm auto; padding: 1.5mm 2mm; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; border: 0.4mm solid #000; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }
+        .label-card:not(:last-child) { page-break-after: always; break-after: always; }
+        .label-card:last-child { page-break-after: avoid; break-after: avoid; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 0.3mm solid #000; padding-bottom: 0.5mm; font-size: 7pt; font-weight: bold; }
+        .company { color: #000; } .title { color: #000; } .date { color: #000; font-size: 6pt; }
+        .body-row { display: flex; gap: 2mm; align-items: center; flex: 1; margin-top: 0.5mm; margin-bottom: 0.5mm; overflow: hidden; }
+        .qr-box .qr-img { width: 16mm; height: 16mm; border: 0.2mm solid #000; flex-shrink: 0; }
+        .info-box { flex: 1; overflow: hidden; }
+        .lot-number { font-size: 9pt; font-weight: 900; font-family: monospace; color: #000; letter-spacing: -0.2px; white-space: nowrap; }
+        .field { font-size: 6.5pt; margin-top: 0.3mm; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .field .lbl { color: #000; }
+        .field .val { font-weight: bold; color: #000; }
+        .item-val { color: #000; }
+        .loc-val { color: #000; }
+        .qty-bar { border: 0.2mm solid #000; padding: 0.5mm 1.5mm; font-size: 7pt; margin-top: 0.5mm; display: flex; justify-content: space-between; align-items: center; }
+        .barcode-box { text-align: center; border-top: 0.2mm dashed #000; padding-top: 0.5mm; margin-top: 0.5mm; }
+        .barcode-box svg { width: 60mm; height: 8mm; margin: 0 auto; display: block; }
+        .barcode-text { font-size: 5.5pt; font-family: monospace; color: #000; letter-spacing: 0.5px; margin-top: 0.2mm; }
+      </style></head><body>${labelHtmlContent}</body></html>
+      `;
+
+      await printHtmlViaQzTray(fullHtml, selectedPrinter || undefined, { copies: 1 });
       setPrintResult('success');
     } catch (e: any) {
       setPrintResult('error');
       alert('인쇄 실패: ' + (e.message || e));
+    } finally {
+      setPrinting(false);
     }
   };
   const handleBrowserPrint = async () => {
@@ -266,24 +201,24 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
           html, body { width: 80mm !important; height: 60mm !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
         }
         html, body { width: 80mm; height: 60mm; margin: 0; padding: 0; background: #fff; font-family: 'Malgun Gothic', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; overflow: hidden; }
-        .label-card { width: 70mm; height: 44mm; margin: 2mm auto; padding: 1mm 1.5mm; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; border: 0.3mm solid #334155; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }
+        .label-card { width: 76mm; height: 56mm; margin: 2mm auto; padding: 1.5mm 2mm; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; border: 0.4mm solid #334155; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }
         .label-card:not(:last-child) { page-break-after: always; break-after: always; }
         .label-card:last-child { page-break-after: avoid; break-after: avoid; }
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 0.3mm solid #1a237e; padding-bottom: 0.3mm; font-size: 7pt; font-weight: bold; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 0.3mm solid #1a237e; padding-bottom: 0.5mm; font-size: 7pt; font-weight: bold; }
         .company { color: #c00; } .title { color: #1a237e; } .date { color: #666; font-size: 6pt; }
         .body-row { display: flex; gap: 2mm; align-items: center; flex: 1; margin-top: 0.5mm; margin-bottom: 0.5mm; overflow: hidden; }
-        .qr-box .qr-img { width: 15mm; height: 15mm; border: 0.2mm solid #cbd5e1; flex-shrink: 0; }
+        .qr-box .qr-img { width: 16mm; height: 16mm; border: 0.2mm solid #cbd5e1; flex-shrink: 0; }
         .info-box { flex: 1; overflow: hidden; }
-        .lot-number { font-size: 8.5pt; font-weight: 900; font-family: monospace; color: #1d4ed8; letter-spacing: -0.2px; white-space: nowrap; }
-        .field { font-size: 6pt; margin-top: 0.2mm; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .lot-number { font-size: 9pt; font-weight: 900; font-family: monospace; color: #1d4ed8; letter-spacing: -0.2px; white-space: nowrap; }
+        .field { font-size: 6.5pt; margin-top: 0.3mm; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .field .lbl { color: #64748b; }
         .field .val { font-weight: bold; color: #0f172a; }
         .item-val { color: #0f172a; }
         .loc-val { color: #065f46; }
-        .qty-bar { background: #f8fafc; border: 0.2mm solid #cbd5e1; padding: 0.4mm 1mm; font-size: 6.8pt; margin-top: 0.3mm; display: flex; justify-content: space-between; align-items: center; }
-        .barcode-box { text-align: center; border-top: 0.2mm dashed #cbd5e1; padding-top: 0.4mm; margin-top: 0.3mm; }
-        .barcode-box svg { width: 45mm; height: 7mm; margin: 0 auto; display: block; }
-        .barcode-text { font-size: 5.5pt; font-family: monospace; color: #475569; letter-spacing: 0.5px; margin-top: 0.1mm; }
+        .qty-bar { background: #f8fafc; border: 0.2mm solid #cbd5e1; padding: 0.5mm 1.5mm; font-size: 7pt; margin-top: 0.5mm; display: flex; justify-content: space-between; align-items: center; }
+        .barcode-box { text-align: center; border-top: 0.2mm dashed #cbd5e1; padding-top: 0.5mm; margin-top: 0.5mm; }
+        .barcode-box svg { width: 60mm; height: 8mm; margin: 0 auto; display: block; }
+        .barcode-text { font-size: 5.5pt; font-family: monospace; color: #475569; letter-spacing: 0.5px; margin-top: 0.2mm; }
       </style></head><body>${labelHtml}</body></html>
     `);
     win.document.close();

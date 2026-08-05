@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { HelpCircle, Plus, Package, MapPin, AlertTriangle, CheckCircle, Trash2, Download, RefreshCw, X } from 'lucide-react';
+import { HelpCircle, Plus, Package, MapPin, AlertTriangle, CheckCircle, Trash2, Download, RefreshCw, X, Printer } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -401,13 +401,41 @@ export function NonCertifiedStockPage() {
                   <td className="px-4 py-3 text-xs text-slate-400 max-w-32 truncate" title={item.notes || ''}>{item.notes || '-'}</td>
                   <td className="px-4 py-3 text-xs text-slate-400">{item.registered_at?.slice(0, 10)}</td>
                   <td className="px-4 py-3 text-center">
-                    <button
-                      onClick={() => handleDispose(item.id)}
-                      className="text-rose-500 hover:text-rose-700 transition-colors"
-                      title="폐기/소진 처리"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center justify-center gap-1">
+                      {item.lot_number && !item.lot_number.includes('미확인') && (
+                        <button
+                          onClick={() => {
+                            const params = new URLSearchParams({
+                              lotNumber: item.lot_number || '',
+                              itemName:  item.item_name || '',
+                              spec:      item.spec || '',
+                              qty:       String(item.qty || 1),
+                              unit:      item.unit || 'EA',
+                              lotDate:   item.registered_at?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+                              category:  '',
+                              location:  item.rack_code || '',
+                              lotType:   'IN',
+                            });
+                            window.open(
+                              `/lot-label.html?${params.toString()}`,
+                              '_blank',
+                              'width=960,height=780,menubar=no,toolbar=no,scrollbars=yes'
+                            );
+                          }}
+                          className="text-blue-500 hover:text-blue-700 transition-colors"
+                          title="라벨 출력"
+                        >
+                          <Printer className="h-4 w-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDispose(item.id)}
+                        className="text-rose-500 hover:text-rose-700 transition-colors"
+                        title="폐기/소진 처리"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

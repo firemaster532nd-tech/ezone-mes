@@ -52,21 +52,33 @@ export function RackTransferModal({
     if (initialFromLocation) setFromLoc(initialFromLocation);
   }, [initialFromLocation]);
 
-  // 출발지 정보 조회
+  // 출발지 정보 조회 - rack-map에서 해당 위치 재고 필터링
   const fetchSourceStock = useCallback(async (code: string) => {
     if (!code) { setSourceInfo(null); return; }
     setLoadingSource(true);
     try {
-      // rack-map 또는 lookup API로 해당 위치 재고 검색
-      const res = await api.get<{ data: any }>(`/wms/search?q=${encodeURIComponent(code)}`);
-      if (res.data) {
+      const res = await api.get<any>('/wms/rack-map');
+      const payload = res.data?.data ?? res.data ?? {};
+      const ncs: any[] = payload.non_certified ?? [];
+      const lots: any[] = payload.lots ?? [];
+      const mats: any[] = payload.material_lots ?? [];
+
+      // location_code가 정확히 일치하는 항목 찾기
+      const allItems = [
+        ...ncs.map(r => ({ ...r, _qty: Number(r.qty ?? 0), _name: r.item_name, _lot: r.lot_number, _cat: '비인정재고' })),
+        ...lots.map(r => ({ ...r, _qty: Number(r.remaining_qty ?? r.qty ?? 0), _name: r.item_name, _lot: r.lot_number, _cat: '인정재고' })),
+        ...mats.map(r => ({ ...r, _qty: Number(r.qty_current ?? 0), _name: r.item_name, _lot: r.lot_number, _cat: r.category || '자재' })),
+      ].filter(r => r.location_code === code);
+
+      if (allItems.length > 0) {
+        const item = allItems[0];
         setSourceInfo({
-          item_name: res.data.item_name || '품목명 없음',
-          lot_number: res.data.lot_number || 'LOT 없음',
-          qty: Number(res.data.remaining_qty ?? res.data.qty_current ?? res.data.qty ?? 0),
-          category: res.data.category || '일반재고',
+          item_name: item._name || '품목명 없음',
+          lot_number: item._lot || 'LOT 없음',
+          qty: item._qty,
+          category: item._cat,
         });
-        setTransferQty(Number(res.data.remaining_qty ?? res.data.qty_current ?? res.data.qty ?? 0));
+        setTransferQty(item._qty);
       } else {
         setSourceInfo(null);
       }
@@ -82,17 +94,22 @@ export function RackTransferModal({
     if (!code) { setDestInfo(null); return; }
     setLoadingDest(true);
     try {
-      const res = await api.get<{ data: any }>(`/wms/search?q=${encodeURIComponent(code)}`);
-      if (res.data) {
-        const lotNo = res.data.lot_number || '';
-        const isSame = !!currentSourceLot && lotNo === currentSourceLot;
-        setDestInfo({
-          item_name: res.data.item_name || '재고 존재',
-          lot_number: lotNo,
-          qty: Number(res.data.remaining_qty ?? res.data.qty_current ?? res.data.qty ?? 0),
-          isEmpty: false,
-          isSameLot: isSame,
-        });
+      const res = await api.get<any>('/wms/rack-map');
+      const payload = res.data?.data ?? res.data ?? {};
+      const ncs: any[] = payload.non_certified ?? [];
+      const lots: any[] = payload.lots ?? [];
+      const mats: any[] = payload.material_lots ?? [];
+
+      const allItems = [
+        ...ncs.map(r => ({ ...r, _qty: Number(r.qty ?? 0), _name: r.item_name, _lot: r.lot_number })),
+        ...lots.map(r => ({ ...r, _qty: Number(r.remaining_qty ?? r.qty ?? 0), _name: r.item_name, _lot: r.lot_number })),
+        ...mats.map(r => ({ ...r, _qty: Number(r.qty_current ?? 0), _name: r.item_name, _lot: r.lot_number })),
+      ].filter(r => r.location_code === code);
+
+      if (allItems.length > 0) {
+        const item = allItems[0];
+        const isSame = !!currentSourceLot && item._lot === currentSourceLot;
+        setDestInfo({ item_name: item._name || '재고 존재', lot_number: item._lot || '', qty: item._qty, isEmpty: false, isSameLot: isSame });
       } else {
         setDestInfo({ item_name: '', lot_number: '', qty: 0, isEmpty: true, isSameLot: false });
       }
@@ -102,6 +119,9 @@ export function RackTransferModal({
       setLoadingDest(false);
     }
   }, []);
+
+
+
 
   useEffect(() => {
     fetchSourceStock(fromLoc);

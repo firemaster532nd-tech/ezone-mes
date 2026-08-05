@@ -8,7 +8,6 @@ import {
   BarChart2, Printer, X, CheckCircle, Search, RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { GodexLabelPrinter } from '@/components/label/GodexLabelPrinter';
 
 // 스캔 결과 타입
 interface ScannedItem {
@@ -426,7 +425,34 @@ export function LogisticsScannerPage() {
             <p className="text-center text-xs text-gray-400 py-2">
               QZ Tray가 실행 중이면 아래 버튼으로 바로 출력됩니다.
             </p>
-            <GodexLabelPrinterWrapper item={scannedItem} />
+            <button
+              onClick={() => {
+                const params = new URLSearchParams({
+                  lotNumber: scannedItem.lot_number || '',
+                  itemName:  scannedItem.item_name  || '',
+                  spec: [
+                    scannedItem.thickness && `${scannedItem.thickness}T`,
+                    scannedItem.width_mm  && `${scannedItem.width_mm}W`,
+                    scannedItem.length_mm && `${scannedItem.length_mm}L`,
+                  ].filter(Boolean).join(' ') || scannedItem.spec || '',
+                  qty:     '1',
+                  unit:    scannedItem.unit || 'EA',
+                  lotDate: scannedItem.received_date?.slice(0, 10) || new Date().toISOString().slice(0, 10),
+                  category: scannedItem.category || '',
+                  location: scannedItem.location_name || scannedItem.location || '',
+                  lotType:  'IN',
+                });
+                if (scannedItem.thickness) params.set('thickness', String(scannedItem.thickness));
+                window.open(
+                  `/lot-label.html?${params.toString()}`,
+                  '_blank',
+                  'width=960,height=780,menubar=no,toolbar=no,scrollbars=yes'
+                );
+              }}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2"
+            >
+              <Printer className="h-4 w-4" /> 🏷️ Godex 라벨 출력
+            </button>
             <button onClick={resetAction}
               className="w-full border border-gray-300 text-gray-600 font-bold py-2 rounded-xl hover:bg-gray-50 text-sm">
               닫기
@@ -435,27 +461,5 @@ export function LogisticsScannerPage() {
         )}
       </div>
     </div>
-  );
-}
-
-function GodexLabelPrinterWrapper({ item }: { item: ScannedItem }) {
-  return (
-    <GodexLabelPrinter
-      labelData={{
-        lot_number: item.lot_number,
-        item_name: item.item_name,
-        category: item.category,
-        density: item.density,
-        thickness: item.thickness,
-        width_mm: item.width_mm,
-        length_mm: item.length_mm,
-        unit: item.unit,
-        qty_current: item.qty_current,
-        received_date: item.received_date,
-        location: item.location,
-        location_name: item.location_name,
-      }}
-      onClose={() => {}}
-    />
   );
 }
