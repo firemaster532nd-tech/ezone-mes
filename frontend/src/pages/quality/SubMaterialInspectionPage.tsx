@@ -308,42 +308,43 @@ export function SubMaterialInspectionPage() {
 
 
   const handleOpenPrintBlankForm = () => {
-    const isCeramic96 = tab === '세라믹울 96K';
-    const isCeramic120 = tab === '세라믹울 120K';
-    const isGlasswool = tab.includes('그라스울');
-    
+    const isCeramic   = tab === '세라믹울';
+    const isGlasswool = tab === '그라스울-롤' || tab === '그라스울-보드';
+    const isSealant   = tab === '실란트';
+
     let items = [
       { name: '겉모양 (외관)', standard: '한도견본 기준 색상, 수지 부착상태, 파손 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
       { name: '치수 - 두께 (㎜)', standard: '25mm / 38mm / 50mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
       { name: '치수 - 너비/폭 (㎜)', standard: '150 / 200 / 300 / 400 / 600mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
-      { name: '치수 - 길이 (㎜)', standard: '3,000 / 5,000 / 7,200mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
-      { name: '밀도 (kg/㎥)', standard: '96 kg/㎥ 이상', method: '계산식 (질량/부피)', cycle: '매로트', condition: 'n=3, c=0' },
-      { name: '제조사 시험 성적서', standard: '밀도 96kg/㎥ 이상, 숏 25% 이하, 수축율 3% 이하', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0' },
-      { name: '공인기관 의뢰 (1회/년)', standard: 'KTR 공인성적서 (숏 7%, 가열선수축율 1.2%)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0' }
+      { name: '치수 - 길이 (㎜)', standard: '3,000 / 3,600 / 5,000 / 7,200 / 7,400mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
+      { name: '밀도 (kg/㎥)', standard: '96 kg/㎥ 이상 (KSM 3803)', method: '계산식 (질량/부피)', cycle: '매로트', condition: 'n=3, c=0' },
+      { name: '제조사 시험 성적서', standard: '밀도 96kg/㎥ 이상, 숏 25% 이하, 가열선수축율 3% 이하', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0' },
+      { name: '공인기관 의뢰 (1회/년)', standard: 'KTR 공인성적서 (숏 7%, 가열선수축율 1.2% — KSM 3803)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0' }
     ];
 
-    if (isCeramic120) {
-      items[4] = { name: '밀도 (kg/㎥)', standard: '120 kg/㎥ 이상', method: '계산식 (질량/부피)', cycle: '매로트', condition: 'n=3, c=0' };
-    } else if (isGlasswool) {
+    if (isGlasswool) {
       items = [
-        { name: '겉모양 (외관)', standard: '한도견본 기준 오염, 찌그러짐, 찢김 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
-        { name: '치수 - 두께 (㎜)', standard: '25mm / 40mm / 50mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: '겉모양 (외관)', standard: '한도견본 기준 오염, 찌그러짐, 찢김/파손 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: '치수 - 두께 (㎜)', standard: '25mm / 38mm / 50mm / 75mm / 100mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
         { name: '치수 - 너비/폭 (㎜)', standard: '600mm / 1,000mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
-        { name: '치수 - 길이 (㎜)', standard: '1,000mm / 2,000mm / 10,000mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
-        { name: '밀도 (kg/㎥)', standard: '48 kg/㎥ / 64 kg/㎥ 이상', method: '계산식', cycle: '매로트', condition: 'n=3, c=0' },
-        { name: '제조사 시험 성적서', standard: '열전도율 ≤0.034 W/m·K, 불연성 난연1급', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0' }
+        { name: '치수 - 길이 (㎜)', standard: '1,200mm / 1,400mm / 2,000mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: '밀도 (kg/㎥)', standard: '24 / 32 / 48 / 64 / 96 kg/㎥ 이상', method: '계산식 (질량/부피)', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: '제조사 시험 성적서', standard: '열전도율 ≤0.034~0.036 W/m·K, 불연성 난연1급', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0' },
+        { name: '공인기관 의뢰 (1회/년)', standard: 'KCL / KTR 공인성적서 (KSM 3808/3809 적합)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0' }
       ];
-    } else if (tab === '방화실란트') {
+    } else if (isSealant) {
       items = [
         { name: '겉모양 (외관)', standard: '용기 파손, 겔화, 굳음 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
-        { name: '비 중', standard: '1.35 ± 0.05', method: '비중계', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: '비 중', standard: '1.35 ± 0.05 (비중계)', method: '비중계', cycle: '매로트', condition: 'n=3, c=0' },
         { name: '제조사 시험 성적서', standard: '불연성 난연1급, 비중 1.35 시험치 확인', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0' },
-        { name: '공인기관 의뢰', standard: '불연 또는 난연 1급 공인성적서 적합', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0' }
+        { name: '공인기관 의뢰 (1회/년)', standard: '불연 또는 난연 1급 공인성적서 적합', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0' }
       ];
     }
 
+    const formCode = isCeramic ? 'EZC-D-124-1' : tab === '그라스울-롤' ? 'EZC-D-122-1' : tab === '그라스울-보드' ? 'EZC-D-127-1' : 'EZC-D-125-1';
+
     setPrintModalData({
-      formCode: isCeramic96 ? 'EZC-D-124-1' : isCeramic120 ? 'EZC-D-124-3' : isGlasswool ? 'EZC-D-122-1' : 'EZC-D-125-1',
+      formCode,
       formTitle: `부자재 인수검사 성적서 (${tab} 빈 양식지)`,
       categoryName: `${tab} / (주)이지원 품질인정 부자재`,
       itemName: `${tab} 인수검사 수동 검사 서식`,
@@ -358,6 +359,7 @@ export function SubMaterialInspectionPage() {
       certInfo: '[사규 C-301 부자재 인수검사 수동 현장 기록용 빈 서식]'
     });
   };
+
 
 
   const outOfRange = (v: string) => {
