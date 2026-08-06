@@ -539,19 +539,38 @@ function CreateProcessInspectionModal({
 
   useEffect(() => {
     Promise.all([
-      api.get<{ data: WorkOrderOption[] }>('/work-orders').catch(() => ({ data: [] })),
-      api.get<{ data: any[] }>('/fn-purchase-orders/pending').catch(() => ({ data: [] }))
-    ]).then(([woRes, poRes]) => {
-      const woList = woRes.data || [];
-      const poList = (poRes.data || []).map((po: any) => ({
+      api.get<any>('/work-orders').catch(() => ({ data: [] })),
+      api.get<any>('/fn-purchase-orders/pending').catch(() => ({ data: [] })),
+      api.get<any>('/purchase-orders').catch(() => ({ data: [] }))
+    ]).then(([woRes, fnPoRes, poRes]) => {
+      const woList = Array.isArray(woRes) ? woRes : (woRes.data || []);
+      const fnPoList = (Array.isArray(fnPoRes) ? fnPoRes : (fnPoRes.data || [])).map((po: any) => ({
         wo_id: po.fn_po_item_id || po.po_id || 990000 + (po.fn_po_item_id || 1),
-        wo_number: po.po_number || po.fn_lot_number || `PO-${po.fn_po_item_id}`,
+        wo_number: po.po_number || po.fn_lot_number || `FN-PO-${po.fn_po_item_id || Date.now()}`,
         process_code: po.item_type === 'SLEEVE' ? 'ASM' : 'CUT',
         cert_id: null,
         structure_code: po.item_label || po.project_name || '에프엔테크 발주서'
       }));
-      setWorkOrders([...woList, ...poList]);
+
+      const stdPoList = (Array.isArray(poRes) ? poRes : (poRes.data || [])).map((po: any) => ({
+        wo_id: po.order_id || 880000 + (po.order_id || 1),
+        wo_number: po.po_number || `SO-${po.order_id}`,
+        process_code: 'ASM',
+        cert_id: po.cert_id || null,
+        structure_code: po.project_name || po.customer_name || '수주 발주서'
+      }));
+
+      const combined = [...woList, ...fnPoList, ...stdPoList];
+      // 중복 wo_id / wo_number 제거
+      const uniqueMap = new Map();
+      combined.forEach((item) => {
+        const key = `${item.wo_id}-${item.wo_number}`;
+        if (!uniqueMap.has(key)) uniqueMap.set(key, item);
+      });
+
+      setWorkOrders(Array.from(uniqueMap.values()));
     });
+
 
     api.get<{ data: FormTemplate[] }>('/process-inspections/templates')
       .then((res) => setTemplates(res.data || []))
@@ -918,25 +937,26 @@ function CreateProcessInspectionModal({
             <label className="block text-xs font-black text-blue-900 flex items-center gap-1">
               <span>📋 발주서 / 수주 작업지시서 불러오기 (클릭 시 인정구조·양식·규격 100% 자동 연동)</span>
             </label>
-            <span className="text-xs bg-blue-600 text-white font-bold px-2 py-0.5 rounded-md">
-              대기중: {workOrders.length}건
+            <span className="text-xs bg-blue-600 text-white font-bold px-2.5 py-1 rounded-lg">
+              전체 불러오기 대기: {workOrders.length}건
             </span>
           </div>
           <div className="flex gap-2">
             <select
               value={woId}
               onChange={(e) => handleWoChange(e.target.value)}
-              className="flex-1 bg-white border-2 border-blue-400 font-bold rounded-lg px-3 py-2 text-shop-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-inner"
+              className="flex-1 bg-white border-2 border-blue-400 font-extrabold rounded-lg px-3 py-2 text-shop-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-inner"
             >
-              <option value="">-- [선택] 발주서 / 수주 작업지시서를 클릭하세요 (자동 채움) --</option>
+              <option value="">-- [선택] 발주서 / 수주 작업지시서를 클릭하세요 (전체 {workOrders.length}건) --</option>
               {workOrders.map((wo) => (
-                <option key={wo.wo_id} value={wo.wo_id}>
-                  발주/지시 [{wo.wo_number}] | 공정: {wo.process_code} {wo.structure_code ? `| 구조: ${wo.structure_code}` : ''}
+                <option key={`${wo.wo_id}-${wo.wo_number}`} value={wo.wo_id}>
+                  [{wo.wo_number}] 공정: {wo.process_code} | 구조/품목: {wo.structure_code || '표준'}
                 </option>
               ))}
             </select>
           </div>
         </div>
+
 
 
         <div className="grid grid-cols-2 gap-4 mb-4">

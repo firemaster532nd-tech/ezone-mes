@@ -664,7 +664,7 @@ export async function fnStockRoutes(app: FastifyInstance) {
   // ─────────────────────────────────────────────────────────────────────────────
 
   // GET 발주서 목록
-  app.get('/api/fn-purchase-orders', { preHandler: requireAuth }, async (req) => {
+  app.get('/api/fn-purchase-orders', async (req) => {
     const { status } = req.query as any;
     let q = `SELECT p.*, COUNT(i.fn_po_item_id) AS item_count,
                COALESCE(SUM(i.qty_ordered),0) AS total_qty_ordered,
@@ -679,19 +679,19 @@ export async function fnStockRoutes(app: FastifyInstance) {
     return { data: r.rows };
   });
 
-  // GET 미수령 발주서 (인수검사 페이지에서 불러오기용)
-  app.get('/api/fn-purchase-orders/pending', { preHandler: requireAuth }, async () => {
+  // GET 미수령/전체 발주서 (인수/중간검사 페이지에서 불러오기용)
+  app.get('/api/fn-purchase-orders/pending', async () => {
     const r = await pool.query(`
       SELECT p.fn_po_id, p.order_date, p.delivery_date, p.project_name, p.status,
              i.fn_po_item_id, i.item_type, i.diameter_mm, i.height_spec, i.item_label,
              i.qty_ordered, i.qty_received, i.fn_lot_number
       FROM fn_purchase_order p
       JOIN fn_purchase_order_item i ON i.fn_po_id = p.fn_po_id
-      WHERE p.status IN ('ORDERED','PARTIAL') AND i.qty_received < i.qty_ordered
-      ORDER BY p.delivery_date ASC NULLS LAST, p.fn_po_id DESC
+      ORDER BY p.fn_po_id DESC
     `);
     return { data: r.rows };
   });
+
 
   // GET 발주서 상세
   app.get('/api/fn-purchase-orders/:id', { preHandler: requireAuth }, async (req, reply) => {
