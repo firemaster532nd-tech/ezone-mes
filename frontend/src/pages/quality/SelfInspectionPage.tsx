@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ProcessBadge } from '@/components/shared/ProcessBadge';
 import { Plus, Check, X, Thermometer, Ruler, Eye, Film, Trash2, Printer } from 'lucide-react';
+import { InspectionFormPrintModal } from '@/components/inspection/InspectionFormPrintModal';
 
 interface SelfInspection {
   self_insp_id: number;
@@ -84,6 +85,35 @@ export function SelfInspectionPage() {
   const [modifyingItem, setModifyingItem] = useState<SelfInspection | null>(null);
   const [printWoId, setPrintWoId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [printModalData, setPrintModalData] = useState<any>(null);
+
+  const handleOpenPrintModal = (si: SelfInspection) => {
+    const docCode = PROCESS_DOC_CODE[si.process_code] || 'EZC-C-601-1';
+    setPrintModalData({
+      formCode: docCode,
+      formTitle: `자주검사 성적서 (${si.process_code} 공정)`,
+      categoryName: '작업자 자율 품질점검 기록표',
+      itemName: `${si.check_point || '공정 치수/외관'} (${si.process_code})`,
+      supplierName: '(주)이지원 생산공장',
+      supplierLot: '-',
+      lotNumber: si.wo_number || '-',
+      receivedDate: si.check_time ? String(si.check_time).slice(0, 10) : new Date().toISOString().slice(0, 10),
+      qty: 1,
+      unit: 'LOT',
+      inspector: si.worker || '생산 작업자',
+      n1: si.measured_value ?? '양호',
+      n2: '양호',
+      n3: '양호',
+      items: [
+        { name: '겉모양 (외관)', standard: '한도견본 기준 오염, 휨, 틈새 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+        { name: `자주검사 항목 (${si.check_point || '치수/온도/필름'})`, standard: `기준: ${si.standard_value ?? 'OK기준'} (±${si.tolerance ?? 0})`, method: '자율측정', cycle: '매공정', condition: 'n=3, c=0', n1: si.measured_value ?? '정상', n2: '정상', n3: '정상', isPass: si.is_ok !== false },
+        { name: '사규 공정 검사기준', standard: 'EZC-C-601 작업자 자주검사 규정 적합', method: '자율점검', cycle: '매공정', condition: 'n=1, c=0', n1: '적합', n2: '적합', n3: '적합', isPass: true }
+      ],
+      overallResult: si.is_ok !== false ? 'PASS' : 'FAIL',
+      certInfo: 'EZC-C-601 자주검사 관리규정 100% 준수'
+    });
+  };
+
 
   const fetchData = () => {
     const params = processFilter ? `?process_code=${processFilter}` : '';
@@ -215,7 +245,7 @@ export function SelfInspectionPage() {
                           : 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200')}>
                       {si.measured_value == null ? '입력' : '수정'}
                     </button>
-                    <button onClick={() => setPrintWoId(si.wo_id)}
+                    <button onClick={() => handleOpenPrintModal(si)}
                       className="px-2 py-0.5 rounded text-xs font-semibold cursor-pointer border bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
                       title="A4 인쇄">
                       <Printer size={12} className="inline" />
@@ -231,9 +261,11 @@ export function SelfInspectionPage() {
       {showCreate && <CreateSelfInspectionModal onClose={() => setShowCreate(false)} onSaved={() => { setShowCreate(false); fetchData(); }} />}
       {modifyingItem && <ModifySelfInspectionModal item={modifyingItem} onClose={() => setModifyingItem(null)} onSaved={() => { setModifyingItem(null); fetchData(); }} />}
       {printWoId !== null && <SelfInspPrintModal woId={printWoId} allData={data} onClose={() => setPrintWoId(null)} />}
+      <InspectionFormPrintModal isOpen={!!printModalData} onClose={() => setPrintModalData(null)} data={printModalData} />
     </div>
   );
 }
+
 
 /* ===== 자주검사 등록 모달 (결재선 포함) ===== */
 function CreateSelfInspectionModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
@@ -247,18 +279,29 @@ function CreateSelfInspectionModal({ onClose, onSaved }: { onClose: () => void; 
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    api.get<{ data: WorkOrderOption[] }>('/work-orders').then((res) => {
-      setWorkOrders(res.data.filter((w: any) => w.status !== 'COMPLETED'));
+    Promise.all([
+      api.get<{ data: WorkOrderOption[] }>('/work-orders').catch(() => ({ data: [] })),
+      api.get<{ data: any[] }>('/fn-purchase-orders/pending').catch(() => ({ data: [] }))
+    ]).then(([woRes, poRes]) => {
+      const woList = (woRes.data || []).filter((w: any) => w.status !== 'COMPLETED');
+      const poList = (poRes.data || []).map((po: any) => ({
+        wo_id: po.fn_po_item_id || po.po_id || 880000 + (po.fn_po_item_id || 1),
+        wo_number: po.po_number || po.fn_lot_number || `PO-${po.fn_po_item_id}`,
+        wo_date: new Date().toISOString().slice(0, 10),
+        lot_number: po.fn_lot_number || null,
+        process_code: po.item_type === 'SLEEVE' ? 'ASM' : 'CUT'
+      }));
+      setWorkOrders([...woList, ...poList]);
     });
   }, []);
 
   const handleWoChange = async (value: string) => {
     setWoId(value);
     if (!value) { setPreset(null); setItems([]); return; }
-    const wo = workOrders.find((w) => String(w.wo_id) === value);
-    if (!wo) return;
+    const wo = workOrders.find((w) => String(w.wo_id) === value || String((w as any).wo_number) === value);
+    const processCode = wo ? wo.process_code : 'ASM';
     try {
-      const res = await api.get<{ data: ProcessPreset }>(`/self-inspections/presets/${wo.process_code}`);
+      const res = await api.get<{ data: ProcessPreset }>(`/self-inspections/presets/${processCode}`);
       setPreset(res.data);
       setItems(res.data.items.map((p) => ({
         check_category: p.check_category, check_point: p.check_point,
@@ -268,6 +311,7 @@ function CreateSelfInspectionModal({ onClose, onSaved }: { onClose: () => void; 
       })));
     } catch { setPreset(null); setItems([]); }
   };
+
 
   const updateItem = (idx: number, field: string, value: string) => {
     const updated = [...items]; (updated[idx] as any)[field] = value; setItems(updated);

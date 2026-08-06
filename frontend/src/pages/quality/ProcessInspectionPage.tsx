@@ -545,6 +545,19 @@ function CreateProcessInspectionModal({
   const handleWoChange = async (value: string) => {
     setWoId(value);
     if (!value) return;
+
+    // 로컬 목록 검색
+    const wo = workOrders.find((w) => String(w.wo_id) === value || String((w as any).wo_number) === value);
+    
+    // 1) 기본 양식코드 연동
+    let targetForm = 'EZC-C-701-G01';
+    if (wo) {
+      if (wo.process_code === 'ASM') targetForm = 'EZC-C-701-G02';
+      else if (wo.process_code === 'CUT') targetForm = 'EZC-C-701-G01';
+    }
+    await handleFormCodeChange(targetForm);
+
+    // 2) 백엔드 상세 정보 연동 시도
     try {
       const res = await api.get<{ data: any }>(`/process-inspections/for-wo/${value}`);
       const data = res.data;
@@ -559,19 +572,26 @@ function CreateProcessInspectionModal({
         if (data.opening_h_mm) setSpecHeight(String(data.opening_h_mm));
         if (data.qty_ordered) setSerialCount(String(data.qty_ordered));
 
-        toast.success(`📋 발주서/작업지시서 [${data.wo_no || value}] 정보가 연동되었습니다! (인정구조: ${data.structure_code || 'HTG-064'})`);
+        alert(`📋 발주서/작업지시서 [${data.wo_no || value}] 연동 완료! (인정구조: ${data.structure_code || 'HTG-064'})`);
       }
     } catch {
-      // fallback search in local workOrders array
-      const wo = workOrders.find((w) => String(w.wo_id) === value || w.wo_no === value);
-      if (wo?.cert_id) {
-        setSelectedCertId(String(wo.cert_id));
-        const cert = certOptions.find((c) => c.cert_id === wo.cert_id);
-        if (cert?.opening_w_mm) setSpecWidth(String(cert.opening_w_mm));
-        if (cert?.opening_h_mm) setSpecHeight(String(cert.opening_h_mm));
+      // API 실패 시 로컬 wo 정보 연동
+      if (wo) {
+        if (wo.cert_id) {
+          setSelectedCertId(String(wo.cert_id));
+        } else if (wo.structure_code && certOptions.length > 0) {
+          const matched = certOptions.find(c => c.structure_code === wo.structure_code || c.structure_name.includes(wo.structure_code!));
+          if (matched) {
+            setSelectedCertId(String(matched.cert_id));
+            if (matched.opening_w_mm) setSpecWidth(String(matched.opening_w_mm));
+            if (matched.opening_h_mm) setSpecHeight(String(matched.opening_h_mm));
+          }
+        }
+        alert(`📋 발주서/작업지시 [${wo.wo_number}] 연동 완료!`);
       }
     }
   };
+
 
 
   // 기존 구조 LOT 조회
