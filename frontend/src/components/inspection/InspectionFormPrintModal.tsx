@@ -58,11 +58,11 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-white print:static">
-      <div className="bg-white rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl relative border border-slate-300 print:shadow-none print:border-none print:w-full print:max-w-none print:p-0">
+    <div className="print-modal-overlay fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="print-modal-box bg-white rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl relative border border-slate-300">
         
         {/* 모달 상단 조종 바 (인쇄 시 숨김) */}
-        <div className="flex justify-between items-center border-b border-slate-200 pb-3 print:hidden">
+        <div className="print-hidden-toolbar flex justify-between items-center border-b border-slate-200 pb-3">
           <div className="flex items-center gap-3">
             <span className="px-2.5 py-1 bg-slate-900 text-blue-400 font-mono font-bold text-xs rounded-lg">
               {data.formCode || 'EZC-D-101-1'}
@@ -127,22 +127,61 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
           </div>
         </div>
 
-
         {/* ========================================================================= */}
         {/* 사규 원본 성적서 PDF 1:1 정밀 복원 레이아웃 (Printable Area) */}
         {/* ========================================================================= */}
-        <div className="print:m-0 print:p-0">
+        <div>
           <style>{`
             @media print {
-              @page { size: A4 portrait; margin: 10mm; }
-              body * { visibility: hidden; }
-              #printable-form, #printable-form * { visibility: visible; }
-              #printable-form { position: absolute; left: 0; top: 0; width: 100%; padding: 0; margin: 0; }
-              .print\\:hidden { display: none !important; }
+              @page {
+                size: A4 portrait;
+                margin: 5mm 8mm;
+              }
+              html, body {
+                background: #ffffff !important;
+                color: #000000 !important;
+                width: 100% !important;
+                height: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: visible !important;
+              }
+              .print-modal-overlay {
+                position: static !important;
+                background: transparent !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                overflow: visible !important;
+                display: block !important;
+              }
+              .print-modal-box {
+                position: static !important;
+                box-shadow: none !important;
+                border: none !important;
+                max-width: 100% !important;
+                width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                background: #ffffff !important;
+              }
+              .print-hidden-toolbar {
+                display: none !important;
+              }
+              #printable-form {
+                display: block !important;
+                visibility: visible !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 10px !important;
+                border: 2px solid #000000 !important;
+                background: #ffffff !important;
+                box-sizing: border-box !important;
+              }
             }
           `}</style>
 
           <div id="printable-form" className="border-2 border-slate-900 p-6 bg-white text-slate-900 text-xs font-sans">
+
             
             {/* 서식 헤더: 코드명 | (주)이지원 | A4 규격 */}
             <div className="flex justify-between items-center border-b-2 border-slate-900 pb-1.5 mb-3">
