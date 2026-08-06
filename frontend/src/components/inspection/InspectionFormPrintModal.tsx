@@ -286,26 +286,32 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                         <td className="border border-slate-900">육안</td>
                         <td className="border border-slate-900" rowSpan={3}>매로트</td>
                         <td className="border border-slate-900" rowSpan={3}>n=3, c=0</td>
-                        <td className="border border-slate-900 font-mono font-bold">{data.n1 || '양호'}</td>
-                        <td className="border border-slate-900 font-mono font-bold">{data.n2 || '양호'}</td>
-                        <td className="border border-slate-900 font-mono font-bold">{data.n3 || '양호'}</td>
-                        <td className="border border-slate-900 font-bold">☑ 적합 □ 부적합</td>
+                        <td className="border border-slate-900 font-mono font-bold">{isBlankForm ? '' : (data.n1 || '양호')}</td>
+                        <td className="border border-slate-900 font-mono font-bold">{isBlankForm ? '' : (data.n2 || '양호')}</td>
+                        <td className="border border-slate-900 font-mono font-bold">{isBlankForm ? '' : (data.n3 || '양호')}</td>
+                        <td className="border border-slate-900 font-bold">
+                          {isBlankForm ? '□ 적합 □ 부적합' : '☑ 적합 □ 부적합'}
+                        </td>
                       </tr>
                       <tr className="h-7">
                         <td className="border border-slate-900 text-left px-2">성 상: 고체 / 가루 / 펠렛 정상</td>
                         <td className="border border-slate-900">육안</td>
-                        <td className="border border-slate-900 font-mono">정상</td>
-                        <td className="border border-slate-900 font-mono">정상</td>
-                        <td className="border border-slate-900 font-mono">정상</td>
-                        <td className="border border-slate-900 font-bold">☑ 적합 □ 부적합</td>
+                        <td className="border border-slate-900 font-mono">{isBlankForm ? '' : '정상'}</td>
+                        <td className="border border-slate-900 font-mono">{isBlankForm ? '' : '정상'}</td>
+                        <td className="border border-slate-900 font-mono">{isBlankForm ? '' : '정상'}</td>
+                        <td className="border border-slate-900 font-bold">
+                          {isBlankForm ? '□ 적합 □ 부적합' : '☑ 적합 □ 부적합'}
+                        </td>
                       </tr>
                       <tr className="h-7">
                         <td className="border border-slate-900 text-left px-2">냄 새: 무취 / 자극취 없음</td>
                         <td className="border border-slate-900">육안</td>
-                        <td className="border border-slate-900 font-mono">무취</td>
-                        <td className="border border-slate-900 font-mono">무취</td>
-                        <td className="border border-slate-900 font-mono">무취</td>
-                        <td className="border border-slate-900 font-bold">☑ 적합 □ 부적합</td>
+                        <td className="border border-slate-900 font-mono">{isBlankForm ? '' : '무취'}</td>
+                        <td className="border border-slate-900 font-mono">{isBlankForm ? '' : '무취'}</td>
+                        <td className="border border-slate-900 font-mono">{isBlankForm ? '' : '무취'}</td>
+                        <td className="border border-slate-900 font-bold">
+                          {isBlankForm ? '□ 적합 □ 부적합' : '☑ 적합 □ 부적합'}
+                        </td>
                       </tr>
 
                       {/* 2) 제조사 시험 성적서 확인 */}
@@ -315,8 +321,12 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                         <td className="border border-slate-900">성적서확인</td>
                         <td className="border border-slate-900">1회/입고</td>
                         <td className="border border-slate-900">n=1, c=0</td>
-                        <td className="border border-slate-900 font-mono text-center" colSpan={3}>제조사 성적서 확인 완료</td>
-                        <td className="border border-slate-900 font-bold">☑ 적합 □ 부적합</td>
+                        <td className="border border-slate-900 font-mono text-center" colSpan={3}>
+                          {isBlankForm ? '' : '제조사 성적서 확인 완료'}
+                        </td>
+                        <td className="border border-slate-900 font-bold">
+                          {isBlankForm ? '□ 적합 □ 부적합' : '☑ 적합 □ 부적합'}
+                        </td>
                       </tr>
 
                       {/* 3) 공인기관 의뢰 (1회/년) 1년 주기 유효성 */}
@@ -329,14 +339,15 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                         <td className="border border-slate-900 font-bold text-blue-900">1회 / 년</td>
                         <td className="border border-slate-900">n=1, c=0</td>
                         <td className="border border-slate-900 font-mono text-center font-bold text-blue-900" colSpan={3}>
-                          공인성적서 연동
+                          {isBlankForm ? '' : '공인성적서 연동'}
                         </td>
-                        <td className="border border-slate-900 font-bold text-emerald-900">☑ 적합 □ 부적합</td>
+                        <td className="border border-slate-900 font-bold text-emerald-900">
+                          {isBlankForm ? '□ 적합 □ 부적합' : '☑ 적합 □ 부적합'}
+                        </td>
                       </tr>
                     </>
                   )}
                 </tbody>
-
               </table>
             </div>
 
@@ -359,10 +370,10 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                 <div className="text-[10px] text-slate-800 mt-2 space-y-1 bg-slate-50 p-2 rounded border border-slate-400">
                   <p className="font-extrabold text-blue-900">※ 공인성적서 1년 주기 자동 연동 정보 (사규 제11조 7단계 역추적):</p>
                   <p className="font-mono text-slate-900 font-bold">
-                    - 공인시험 기관 : {data.certAgency || 'KTR 한국화학융합시험연구원 / FITI / KCL'}<br/>
-                    - 공인성적서 번호 : {data.certNumber || 'KTR-2026-0415'}<br/>
-                    - 성적서 발행일자 : {data.certIssuedDate || '2026년 04월 15일'} (1년 유효기간 연동)<br/>
-                    - 시험결과 평가 : {data.certResultText || '숏함유량 9.8%, 밀도 100 kg/㎥ (적합)'}
+                    - 공인시험 기관 : {isBlankForm ? '' : (data.certAgency || 'KTR 한국화학융합시험연구원 / FITI / KCL')}<br/>
+                    - 공인성적서 번호 : {isBlankForm ? '' : (data.certNumber || 'KTR-2026-0415')}<br/>
+                    - 성적서 발행일자 : {isBlankForm ? '' : (data.certIssuedDate || '2026년 04월 15일')}<br/>
+                    - 시험결과 평가 : {isBlankForm ? '' : (data.certResultText || '숏함유량 9.8%, 밀도 100 kg/㎥ (적합)')}
                   </p>
                 </div>
               </div>
@@ -370,9 +381,10 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
               {/* (주)이지원 품질보증 직인 도장 */}
               <div className="col-span-4 flex flex-col items-center justify-center border-l-2 border-slate-400 pl-3">
                 <span className="font-extrabold text-xs text-slate-900 mb-1">(주) 이 지 원 품질보증</span>
-                <img src="/이지원도장.png" alt="이지원 도장" className="h-14 w-14 object-contain" />
+                {!isBlankForm && <img src="/이지원도장.png" alt="이지원 도장" className="h-14 w-14 object-contain" />}
               </div>
             </div>
+
 
             <div className="text-[9px] text-slate-500 text-right font-mono">
               (주)이지원 MES 생산품질시스템 사규 표준성적서 자동발행 (Rev 8.0)
