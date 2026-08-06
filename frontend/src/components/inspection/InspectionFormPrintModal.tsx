@@ -46,12 +46,12 @@ import { useInspectors } from '@/hooks/useInspectors';
 export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFormPrintModalProps) {
   const { inspectors } = useInspectors();
   const [selectedInspector, setSelectedInspector] = useState<string>('김정용 책임');
+  const [isBlankForm, setIsBlankForm] = useState<boolean>(false);
 
   if (!isOpen || !data) return null;
 
-
   const isPass = data.overallResult === 'PASS' || data.overallResult === '합격';
-  const displayInspector = data.inspector || selectedInspector;
+  const displayInspector = isBlankForm ? '' : (data.inspector || selectedInspector);
 
   const handlePrint = () => {
     window.print();
@@ -68,32 +68,55 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
               {data.formCode || 'EZC-D-101-1'}
             </span>
             <h3 className="font-bold text-slate-800 text-base">
-              📄 사규 원본 성적서 양식 A4 인쇄 미리보기 (작성자 선택 + 검토/승인 빈칸)
+              📄 사규 원본 성적서 양식 A4 인쇄 미리보기
             </h3>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* 작성자 드롭다운 선택 */}
-            <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-300">
-              <span className="text-xs font-bold text-slate-600">✍️ 검사 작성자 선택:</span>
-              <select
-                value={displayInspector}
-                onChange={(e) => setSelectedInspector(e.target.value)}
-                className="bg-white border border-slate-300 text-xs font-bold rounded-lg px-2 py-1 outline-none text-slate-800"
+            {/* 빈 양식지 / 실측데이터 출력 토글 */}
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-300">
+              <button
+                type="button"
+                onClick={() => setIsBlankForm(false)}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+                  !isBlankForm ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:text-slate-900'
+                }`}
               >
-                {inspectors.map((name) => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-
-              </select>
+                📝 검사 결과 성적서
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsBlankForm(true)}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+                  isBlankForm ? 'bg-amber-600 text-white shadow' : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                📄 빈 수동 서식 양식지
+              </button>
             </div>
+
+            {/* 작성자 드롭다운 선택 */}
+            {!isBlankForm && (
+              <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-300">
+                <span className="text-xs font-bold text-slate-600">✍️ 작성자:</span>
+                <select
+                  value={displayInspector}
+                  onChange={(e) => setSelectedInspector(e.target.value)}
+                  className="bg-white border border-slate-300 text-xs font-bold rounded-lg px-2 py-1 outline-none text-slate-800"
+                >
+                  {inspectors.map((name) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <button
               onClick={handlePrint}
               className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow transition-all"
             >
               <Printer className="h-4 w-4" />
-              A4 원본 성적서 인쇄 (PDF 저장)
+              {isBlankForm ? '빈 양식지 A4 인쇄' : 'A4 성적서 인쇄'}
             </button>
             <button
               onClick={onClose}
@@ -103,6 +126,7 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
             </button>
           </div>
         </div>
+
 
         {/* ========================================================================= */}
         {/* 사규 원본 성적서 PDF 1:1 정밀 복원 레이아웃 (Printable Area) */}
@@ -167,23 +191,23 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                   <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5 w-24">품    명</td>
                   <td className="border border-slate-900 font-extrabold px-3 py-1.5 text-blue-900">{data.itemName}</td>
                   <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5 w-24">입고일자</td>
-                  <td className="border border-slate-900 font-mono px-3 py-1.5">{data.receivedDate || new Date().toISOString().slice(0, 10)}</td>
+                  <td className="border border-slate-900 font-mono px-3 py-1.5">{isBlankForm ? '' : (data.receivedDate || new Date().toISOString().slice(0, 10))}</td>
                   <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5 w-24">검사일자</td>
-                  <td className="border border-slate-900 font-mono px-3 py-1.5">{data.receivedDate || new Date().toISOString().slice(0, 10)}</td>
+                  <td className="border border-slate-900 font-mono px-3 py-1.5">{isBlankForm ? '' : (data.receivedDate || new Date().toISOString().slice(0, 10))}</td>
                 </tr>
                 <tr>
                   <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5">입 고 처</td>
-                  <td className="border border-slate-900 px-3 py-1.5">{data.supplierName || '공급업체'}</td>
+                  <td className="border border-slate-900 px-3 py-1.5">{isBlankForm ? '' : (data.supplierName || '공급업체')}</td>
                   <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5">입고처 로트번호</td>
-                  <td className="border border-slate-900 font-mono px-3 py-1.5">{data.supplierLot || '-'}</td>
+                  <td className="border border-slate-900 font-mono px-3 py-1.5">{isBlankForm ? '' : (data.supplierLot || '-')}</td>
                   <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5">검 사 자</td>
-                  <td className="border border-slate-900 font-bold px-3 py-1.5">{displayInspector}</td>
+                  <td className="border border-slate-900 font-bold px-3 py-1.5">{isBlankForm ? '' : displayInspector}</td>
                 </tr>
                 <tr>
                   <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5">인수검사 로트번호</td>
-                  <td className="border border-slate-900 font-mono font-extrabold px-3 py-1.5 text-blue-900">{data.lotNumber || '-'}</td>
+                  <td className="border border-slate-900 font-mono font-extrabold px-3 py-1.5 text-blue-900">{isBlankForm ? '' : (data.lotNumber || '-')}</td>
                   <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5">로트 수량</td>
-                  <td className="border border-slate-900 font-bold px-3 py-1.5" colSpan={3}>{data.qty ? `${data.qty} ${data.unit || '개'}` : '-'}</td>
+                  <td className="border border-slate-900 font-bold px-3 py-1.5" colSpan={3}>{isBlankForm ? '' : (data.qty ? `${data.qty} ${data.unit || '개'}` : '-')}</td>
                 </tr>
               </tbody>
             </table>
@@ -214,14 +238,15 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                         <td className="border border-slate-900">{it.method || '실측'}</td>
                         <td className="border border-slate-900">{it.cycle || '매로트'}</td>
                         <td className="border border-slate-900">{it.condition || 'n=3, c=0'}</td>
-                        <td className="border border-slate-900 font-mono font-bold">{it.n1 ?? (data.n1 || '-')}</td>
-                        <td className="border border-slate-900 font-mono font-bold">{it.n2 ?? (data.n2 || '-')}</td>
-                        <td className="border border-slate-900 font-mono font-bold">{it.n3 ?? (data.n3 || '-')}</td>
-                        <td className="border border-slate-900 font-bold text-emerald-900">
-                          {it.isPass !== false ? '☑ 적합 □ 부적합' : '□ 적합 ☑ 부적합'}
+                        <td className="border border-slate-900 font-mono font-bold">{isBlankForm ? '' : (it.n1 ?? (data.n1 || '-'))}</td>
+                        <td className="border border-slate-900 font-mono font-bold">{isBlankForm ? '' : (it.n2 ?? (data.n2 || '-'))}</td>
+                        <td className="border border-slate-900 font-mono font-bold">{isBlankForm ? '' : (it.n3 ?? (data.n3 || '-'))}</td>
+                        <td className="border border-slate-900 font-bold text-slate-900">
+                          {isBlankForm ? '□ 적합 □ 부적합' : (it.isPass !== false ? '☑ 적합 □ 부적합' : '□ 적합 ☑ 부적합')}
                         </td>
                       </tr>
                     ))
+
                   ) : (
                     <>
                       {/* 1) 겉모양 / 육안 실측 */}
@@ -292,10 +317,10 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                   <span className="font-bold text-xs text-slate-900">판    정:</span>
                   <div className="flex items-center gap-5">
                     <label className="flex items-center gap-1.5 font-extrabold text-emerald-900 text-sm">
-                      <span>{isPass ? '☑ 합 격 (PASS)' : '□ 합 격 (PASS)'}</span>
+                      <span>{isBlankForm ? '□ 합 격 (PASS)' : (isPass ? '☑ 합 격 (PASS)' : '□ 합 격 (PASS)')}</span>
                     </label>
-                    <label className="flex items-center gap-1.5 font-extrabold text-rose-700 text-sm">
-                      <span>{!isPass ? '☑ 불합격 (FAIL)' : '□ 불합격 (FAIL)'}</span>
+                    <label className="flex items-center gap-1.5 font-bold text-red-900 text-sm">
+                      <span>{isBlankForm ? '□ 부적합 (FAIL)' : (!isPass ? '☑ 부적합 (FAIL)' : '□ 부적합 (FAIL)')}</span>
                     </label>
                   </div>
                 </div>

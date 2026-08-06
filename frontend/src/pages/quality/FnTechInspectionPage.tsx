@@ -324,10 +324,19 @@ export function FnTechInspectionPage() {
     <div className="min-h-screen bg-slate-900 text-white p-4 pb-24">
       <div className="max-w-2xl mx-auto space-y-4">
         {/* 헤더 */}
-        <div className="pt-2 pb-1">
-          <h1 className="text-xl font-black text-white">⚡ 에프엔테크 인수검사</h1>
-          <p className="text-xs text-slate-400 mt-0.5">D128(일체형슬리브) · D129(보호철판) · D130(고무패킹) · 합격 시 FN테크 재고 자동 반영</p>
+        <div className="pt-2 pb-1 flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-black text-white">⚡ 에프엔테크 인수검사</h1>
+            <p className="text-xs text-slate-400 mt-0.5">D128(일체형슬리브) · D129(보호철판) · D130(고무패킹) · 합격 시 FN테크 재고 자동 반영</p>
+          </div>
+          <button
+            onClick={() => handleOpenPrintModal({ item_name: `${tab} (빈 양식지)` })}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-xl text-xs font-bold transition shadow"
+          >
+            <Printer className="h-4 w-4 text-amber-400" /> 📄 빈 양식지 인쇄
+          </button>
         </div>
+
 
         {/* 탭 */}
         <div className="flex gap-2 flex-wrap">

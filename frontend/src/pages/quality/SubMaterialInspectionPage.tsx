@@ -284,8 +284,26 @@ export function SubMaterialInspectionPage() {
     });
   };
 
-  const outOfRange = (v: string) => {
+  const handleOpenPrintBlankForm = () => {
+    const isCeramic96 = tab === '세라믹울 96K';
+    const isCeramic120 = tab === '세라믹울 120K';
+    setPrintModalData({
+      formCode: isCeramic96 ? 'EZC-D-124-1' : isCeramic120 ? 'EZC-D-124-3' : 'EZC-D-122-1',
+      formTitle: `부자재 인수검사 성적서 (${tab} 빈 양식지)`,
+      categoryName: `${tab} / (주)이지원 품질인정 부자재`,
+      itemName: `${tab} 인수검사 수동 검사 서식`,
+      supplierName: '',
+      supplierLot: '',
+      lotNumber: '',
+      qty: '',
+      unit: info.unit,
+      inspector: '',
+      overallResult: 'PASS',
+      certInfo: '[사규 C-301 부자재 인수검사 수동 현장 기록용 빈 서식]'
+    });
+  };
 
+  const outOfRange = (v: string) => {
     const n = parseFloat(v);
     return !isNaN(n) && (n < info.minVal || n > info.maxVal);
   };
@@ -296,14 +314,24 @@ export function SubMaterialInspectionPage() {
         title="📦 부자재 인수검사"
         description="세라믹울(D124) · 그라스울-롤(D122) · 그라스울-보드(D127) · 실란트(D125) 인수검사 성적서 등록"
       >
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-all shadow"
-        >
-          <Plus className="h-4 w-4" />
-          신규 등록
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleOpenPrintBlankForm}
+            className="flex items-center gap-2 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-all shadow"
+          >
+            <Printer className="h-4 w-4 text-amber-400" />
+            📄 사규 빈 양식지 인쇄
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-all shadow"
+          >
+            <Plus className="h-4 w-4" />
+            신규 등록
+          </button>
+        </div>
       </PageHeader>
+
 
       {/* 탭 */}
       <div className="flex flex-wrap gap-2">

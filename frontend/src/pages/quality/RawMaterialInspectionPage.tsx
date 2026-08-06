@@ -109,20 +109,47 @@ export function RawMaterialInspectionPage() {
     });
   };
 
+  const handleOpenPrintBlankForm = () => {
+    setPrintModalData({
+      formCode: 'EZC-D-101-1',
+      formTitle: '원자재 인수검사 성적서 (빈 양식지)',
+      categoryName: '난연컴파운드 / 팽창흑연 / EVA / EP100',
+      itemName: '원자재 인수검사 표준 서식',
+      supplierName: '',
+      supplierLot: '',
+      lotNumber: '',
+      qty: '',
+      unit: 'kg',
+      inspector: '',
+      overallResult: 'PASS',
+      certInfo: '[사규 C-301 원자재 인수검사 수동 검사 기록용 빈 서식]'
+    });
+  };
+
   return (
     <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
       <PageHeader 
         title="🧪 원재료 인수검사 (D101~D104)" 
         description="차열시트 배합원료 파우더 (D101 난연컴파운드, D102 팽창흑연, D103 EVA, D104 EP100) 인수검사 및 사규 성적서 발행"
       >
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-all shadow"
-        >
-          <Plus className="h-4 w-4" />
-          신규 원재료 인수검사 등록
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleOpenPrintBlankForm}
+            className="flex items-center gap-2 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-all shadow"
+          >
+            <Printer className="h-4 w-4 text-amber-400" />
+            📄 사규 빈 양식지 인쇄
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-all shadow"
+          >
+            <Plus className="h-4 w-4" />
+            신규 원재료 인수검사 등록
+          </button>
+        </div>
       </PageHeader>
+
 
       {/* D101~D104 원재료 대상 품목 가이드 카드리스트 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
