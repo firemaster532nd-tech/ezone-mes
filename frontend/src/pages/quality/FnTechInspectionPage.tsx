@@ -3,6 +3,8 @@ import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { Printer } from 'lucide-react';
 import { GodexLabelPrinter } from '@/components/label/GodexLabelPrinter';
+import { InspectionFormPrintModal } from '@/components/inspection/InspectionFormPrintModal';
+
 
 // ─── 타입 ────────────────────────────────────────────────────
 type FnTab = '일체형슬리브' | '보호철판' | '고무패킹';
@@ -75,6 +77,28 @@ export function FnTechInspectionPage() {
   const [notes, setNotes] = useState('');
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [history, setHistory] = useState<any[]>([]);
+  const [printModalData, setPrintModalData] = useState<any>(null);
+
+  const handleOpenPrintModal = (r: any) => {
+    setPrintModalData({
+      formCode: FORM_CODE[tab] || 'EZC-D-128-1',
+      formTitle: `부자재 인수검사 성적서 (${r.item_name || tab})`,
+      categoryName: 'EZ-FN-P100 / 에프엔테크 내화채움구조',
+      itemName: r.item_name || tab,
+      receivedDate: String(r.inspected_at || new Date().toISOString()).slice(0, 10),
+      lotNumber: r.lot_number || '-',
+      supplierLot: r.supplier_lot || 'FN-260801-01',
+      supplierName: '(주)에프엔테크',
+      qty: r.qty || 1,
+      unit: '개',
+      inspector: r.inspector || inspector,
+      n1: '3.5 mm',
+      n2: '3.5 mm',
+      n3: '3.5 mm',
+      overallResult: r.overall_result === 'PASS' ? 'PASS' : 'FAIL',
+      certInfo: '[인정번호: FS-NP24-1112-2 (EZ-FN-P100)] | [밀도 1.2 g/㎤ 이상, 길이 415mm 이상, 질량 155g 이상 적합]'
+    });
+  };
 
   // 검사 측정값 (n1/n2/n3 × 각 필드)
   const [measurements, setMeasurements] = useState<Record<string, string>>({});
@@ -370,9 +394,14 @@ export function FnTechInspectionPage() {
           {/* 검사자 + 위치 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={LBL}>검사자</label>
-              <input className={INP} value={inspector} onChange={e => setInspector(e.target.value)} />
+              <label className={LBL}>검사 담당자 (작성자 선택)</label>
+              <select className={SEL} value={inspector} onChange={e => setInspector(e.target.value)}>
+                {['김정용 책임', '최진영 책임', '임병용 파트장', '이동민 파트장', '김봉민 책임', '생산 작업자'].map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
             </div>
+
             <div>
               <label className={LBL}>입고 적재 위치</label>
               <select className={SEL} value={location} onChange={e => setLocation(e.target.value)}>
@@ -473,9 +502,17 @@ export function FnTechInspectionPage() {
                     <td className="py-1.5 font-mono text-emerald-400">{r.lot_number || '-'}</td>
                     <td className="py-1.5 text-right text-white">{r.qty}</td>
                     <td className="py-1.5 text-center">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${r.overall_result === 'PASS' ? 'bg-emerald-900 text-emerald-300' : 'bg-red-900 text-red-300'}`}>
-                        {r.overall_result === 'PASS' ? 'PASS' : 'FAIL'}
-                      </span>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${r.overall_result === 'PASS' ? 'bg-emerald-900 text-emerald-300' : 'bg-red-900 text-red-300'}`}>
+                          {r.overall_result === 'PASS' ? 'PASS' : 'FAIL'}
+                        </span>
+                        <button
+                          onClick={() => handleOpenPrintModal(r)}
+                          className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] rounded flex items-center gap-1 shadow-sm"
+                        >
+                          <Printer className="h-3 w-3" /> 인쇄
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
