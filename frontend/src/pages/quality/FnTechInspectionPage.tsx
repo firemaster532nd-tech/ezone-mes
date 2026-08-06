@@ -332,11 +332,12 @@ export function FnTechInspectionPage() {
             <p className="text-xs text-slate-400 mt-0.5">D128(일체형슬리브) · D129(보호철판) · D130(고무패킹) · 합격 시 FN테크 재고 자동 반영</p>
           </div>
           <button
-            onClick={() => handleOpenPrintModal({ item_name: `${tab} (빈 양식지)` })}
+            onClick={() => handleOpenPrintModal({ item_name: `에프엔테크 ${tab} (빈 양식지)` })}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-xl text-xs font-bold transition shadow"
           >
-            <Printer className="h-4 w-4 text-amber-400" /> 📄 빈 양식지 인쇄
+            <Printer className="h-4 w-4 text-amber-400" /> 📄 {tab} 빈 양식지 인쇄
           </button>
+
         </div>
 
 

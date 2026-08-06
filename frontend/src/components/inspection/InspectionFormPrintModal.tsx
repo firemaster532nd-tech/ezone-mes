@@ -45,17 +45,26 @@ import { useInspectors } from '@/hooks/useInspectors';
 
 export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFormPrintModalProps) {
   const { inspectors } = useInspectors();
-  const [selectedInspector, setSelectedInspector] = useState<string>('김정용 책임');
+  const [selectedInspector, setSelectedInspector] = useState<string>('');
   const [isBlankForm, setIsBlankForm] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (data?.inspector) {
+      setSelectedInspector(data.inspector);
+    } else if (inspectors.length > 0) {
+      setSelectedInspector(inspectors[0]);
+    }
+  }, [data?.inspector, inspectors]);
 
   if (!isOpen || !data) return null;
 
   const isPass = data.overallResult === 'PASS' || data.overallResult === '합격';
-  const displayInspector = isBlankForm ? '' : (data.inspector || selectedInspector);
+  const displayInspector = isBlankForm ? '' : (selectedInspector || data.inspector || '김정용 책임');
 
   const handlePrint = () => {
     window.print();
   };
+
 
   return (
     <div className="print-modal-overlay fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 overflow-y-auto">
