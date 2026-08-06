@@ -83,10 +83,18 @@ export function FnTechInspectionPage() {
   const [printModalData, setPrintModalData] = useState<any>(null);
   const [printLabelData, setPrintLabelData] = useState<any>(null);
 
+  const getFullItemName = (r?: any) => {
+    if (r?.item_name) return r.item_name;
+    const diamStr = `${sleeveDiam}파이`;
+    const heightStr = sleeveDiam === 100 ? ` (${sleeveHeight})` : '';
+    return `${tab} ${diamStr}${heightStr}`;
+  };
+
   const handleOpenLabelPrinter = (r: any) => {
+    const itemName = getFullItemName(r);
     setPrintLabelData({
       lot_number: r.lot_number || lotNumber,
-      item_name: r.item_name || tab,
+      item_name: itemName,
       category: tab,
       qty_current: r.qty || qty || 1,
       unit: '개',
@@ -97,17 +105,18 @@ export function FnTechInspectionPage() {
     setShowLabelPrinter(true);
   };
 
-
   const handleOpenPrintModal = (r: any) => {
     const isPlate = tab === '보호철판';
     const isSleeve = tab === '일체형슬리브';
+    const itemName = getFullItemName(r);
     
     setPrintModalData({
       formCode: isSleeve ? 'EZC-D-128-1' : isPlate ? 'EZC-D-129-1' : 'EZC-D-130-1',
-      formTitle: `부자재 인수검사 성적서 (${r.item_name || tab})`,
+      formTitle: `부자재 인수검사 성적서 (${itemName})`,
       categoryName: isSleeve ? 'EZ-FN-P100 / 에프엔테크 일체형슬리브' : isPlate ? 'EZ-FN-P100 / 에프엔테크 보호철판(GI)' : 'EZ-FN-P100 / 에프엔테크 고무패킹',
-      itemName: r.item_name || `${tab} (${selectedSize || '100A'})`,
+      itemName: itemName,
       receivedDate: String(r.inspected_at || new Date().toISOString()).slice(0, 10),
+
       lotNumber: r.lot_number || '-',
       supplierLot: r.supplier_lot || 'FN-260801-01',
       supplierName: '(주)에프엔테크',
@@ -236,9 +245,8 @@ export function FnTechInspectionPage() {
     if (result !== '합격') { toast.error('합격 판정 후 등록 가능합니다.'); return; }
 
     try {
-      const finalItemName = tab === '일체형슬리브' 
-        ? `${tab} ${sleeveDiam}파이${sleeveDiam === 100 ? ' ' + sleeveHeight : ''}`
-        : `${tab} ${selectedSize}`;
+      const finalItemName = getFullItemName();
+
 
       // 검사 성적서 등록
       await api.post('/inspections', {
@@ -325,34 +333,32 @@ export function FnTechInspectionPage() {
           <p className="text-sm font-bold text-slate-300">▼ 입고 정보</p>
 
           <div className="grid grid-cols-2 gap-3">
-            {tab === '일체형슬리브' ? (
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className={LBL}>파이 *</label>
-                  <select className={SEL} value={sleeveDiam} onChange={e => setSleeveDiam(Number(e.target.value))}>
-                    <option value={50}>50파이</option>
-                    <option value={75}>75파이</option>
-                    <option value={100}>100파이</option>
-                  </select>
-                </div>
-                {sleeveDiam === 100 && (
-                  <div className="flex-1">
-                    <label className={LBL}>높이 *</label>
-                    <select className={SEL} value={sleeveHeight} onChange={e => setSleeveHeight(e.target.value)}>
-                      {SLEEVE_HEIGHTS_100.map(h => <option key={h} value={h}>{h}</option>)}
-                    </select>
-                  </div>
-                )}
-              </div>
-            ) : (
+            <div className="col-span-2 grid grid-cols-2 gap-2">
               <div>
-                <label className={LBL}>규격 *</label>
-                <select className={SEL} value={selectedSize} onChange={e => setSelectedSize(e.target.value)}>
-                  <option value="">선택</option>
-                  {spec.sizes.map(s => <option key={s} value={s}>{s}</option>)}
+                <label className={LBL}>파이 규격 (50/75/100) *</label>
+                <select className={SEL} value={sleeveDiam} onChange={e => setSleeveDiam(Number(e.target.value))}>
+                  <option value={50}>50파이</option>
+                  <option value={75}>75파이</option>
+                  <option value={100}>100파이 (높이 선택 가능)</option>
                 </select>
               </div>
-            )}
+
+              {sleeveDiam === 100 ? (
+                <div>
+                  <label className={LBL}>100파이 전용 높이 (H) *</label>
+                  <select className={SEL} value={sleeveHeight} onChange={e => setSleeveHeight(e.target.value)}>
+                    {SLEEVE_HEIGHTS_100.map(h => (
+                      <option key={h} value={h}>{h}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="flex items-center pt-5 text-xs font-bold text-slate-400">
+                  ※ {sleeveDiam}파이는 단일 기본 높이가 적용됩니다.
+                </div>
+              )}
+            </div>
+
             <div>
               <label className={LBL}>LOT 번호 (자동채번) *</label>
               <input className={`${INP} font-mono font-bold text-emerald-400`} value={lotNumber} onChange={e => setLotNumber(e.target.value)} placeholder="자동채번..." />
