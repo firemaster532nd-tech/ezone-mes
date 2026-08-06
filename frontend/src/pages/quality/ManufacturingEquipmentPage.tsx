@@ -447,7 +447,8 @@ function EquipmentChecklistPrintModal({
   onClose: () => void;
 }) {
   const [checkMonth, setCheckMonth] = useState(() => new Date().toISOString().slice(0, 7));
-  const [inspector, setInspector] = useState('생산담당자');
+  const [inspector, setInspector] = useState('김정용 책임');
+
 
   const handlePrint = () => {
     window.print();
@@ -479,12 +480,25 @@ function EquipmentChecklistPrintModal({
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 bg-slate-700 px-2 py-1 rounded border border-slate-600">
+              <span className="text-[11px] font-bold text-slate-300">✍️ 작성자:</span>
+              <select
+                value={inspector}
+                onChange={(e) => setInspector(e.target.value)}
+                className="bg-slate-800 text-white text-xs font-bold rounded px-1.5 py-0.5 outline-none border border-slate-600"
+              >
+                {['김정용 책임', '최진영 책임', '임병용 파트장', '이동민 파트장', '김봉민 책임', '생산 작업자'].map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
             <input
               type="month"
               value={checkMonth}
               onChange={(e) => setCheckMonth(e.target.value)}
-              className="px-2 py-1 text-xs rounded border border-slate-600 bg-slate-700 text-white font-mono"
+              className="px-2 py-1 text-xs rounded border border-slate-600 bg-slate-700 text-white font-mono font-bold"
             />
+
             <button
               onClick={handlePrint}
               className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded text-xs shadow"
@@ -497,103 +511,137 @@ function EquipmentChecklistPrintModal({
           </div>
         </div>
 
-        {/* 🖨️ 실제 인쇄되는 A4 문서 서식 */}
-        <div className="p-8 overflow-y-auto flex-1 bg-white print:p-0 print:overflow-visible text-slate-900">
-          <div className="border-2 border-slate-900 p-6 space-y-4 print:border-0 print:p-0">
-            {/* 헤더 결재란 */}
-            <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
+        {/* 🖨️ 실제 인쇄되는 A4 표준 제조설비 점검표 서식 */}
+        <div className="p-6 overflow-y-auto flex-1 bg-white print:p-0 print:overflow-visible text-slate-900">
+          <style>{`
+            @media print {
+              @page { size: A4 portrait; margin: 8mm; }
+              body * { visibility: hidden; }
+              #printable-equipment-sheet, #printable-equipment-sheet * { visibility: visible; }
+              #printable-equipment-sheet {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                padding: 0;
+                margin: 0;
+                box-sizing: border-box;
+                page-break-after: avoid !important;
+                page-break-inside: avoid !important;
+              }
+              .print\\:hidden { display: none !important; }
+            }
+          `}</style>
+
+          <div id="printable-equipment-sheet" className="border-2 border-slate-900 p-5 bg-white text-slate-900 text-xs font-sans space-y-3">
+            {/* 서식 헤더 & 3단 결재란 */}
+            <div className="flex justify-between items-center border-b-2 border-slate-900 pb-2">
               <div>
-                <p className="text-xs font-bold text-slate-500 font-mono">EZC M-101-6</p>
-                <h1 className="text-xl font-black tracking-tight text-slate-900 mt-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-extrabold text-slate-800">EZC M-101-6</span>
+                  <span className="text-[10px] text-slate-500 font-mono">A4 (210×297)㎜</span>
+                </div>
+                <h1 className="text-lg font-black tracking-tight text-slate-900 mt-0.5 underline decoration-2 underline-offset-4">
                   제 조 설 비 점 검 체 크 시 트
                 </h1>
-                <p className="text-xs font-semibold text-slate-600 mt-0.5">
-                  (주)이지원 품질·제조 보증 실행 서식
+                <p className="text-[11px] font-bold text-slate-600 mt-0.5">
+                  (주)이지원 제조설비 관리대장 및 점검표
                 </p>
               </div>
 
-              <table className="border-collapse text-[10px] text-center border border-slate-800">
+              {/* 3단 결재란 (작성자: 선택한 성명, 검토/승인: 수동 직인용 완벽 빈칸) */}
+              <table className="border-collapse border-2 border-slate-900 text-center text-[10px]">
                 <tbody>
                   <tr>
-                    <td rowSpan={2} className="bg-slate-100 w-6 font-bold border border-slate-800 p-1">결<br/>재</td>
-                    <td className="w-16 border border-slate-800 p-1 font-bold">작성자</td>
-                    <td className="w-16 border border-slate-800 p-1 font-bold">검토자</td>
-                    <td className="w-16 border border-slate-800 p-1 font-bold">승인자</td>
+                    <td rowSpan={2} className="bg-slate-100 font-bold border border-slate-900 px-1.5 py-1 w-6 text-center">결<br/>재</td>
+                    <td className="w-16 border border-slate-900 bg-slate-100 font-bold py-0.5">작 성</td>
+                    <td className="w-16 border border-slate-900 bg-slate-100 font-bold py-0.5">검 토</td>
+                    <td className="w-16 border border-slate-900 bg-slate-100 font-bold py-0.5">승 인</td>
                   </tr>
-                  <tr>
-                    <td className="h-10 border border-slate-800"></td>
-                    <td className="h-10 border border-slate-800"></td>
-                    <td className="h-10 border border-slate-800"></td>
+                  <tr className="h-10">
+                    <td className="border border-slate-900 font-extrabold align-middle text-slate-900 px-1">{inspector}</td>
+                    <td className="border border-slate-900 w-16 bg-white"></td>
+                    <td className="border border-slate-900 w-16 bg-white"></td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
-            {/* 설비 및 점검 기본정보 */}
-            <table className="w-full text-xs border-collapse border border-slate-800">
+            {/* 설비 및 점검 기본정보 표 (A4 한 면 피팅) */}
+            <table className="w-full text-[11px] border-collapse border-2 border-slate-900">
               <tbody>
                 <tr>
-                  <td className="bg-slate-100 font-bold p-2 w-24 border border-slate-800">설비 관리번호</td>
-                  <td className="p-2 border border-slate-800 font-mono font-bold">{equipment.manage_no}</td>
-                  <td className="bg-slate-100 font-bold p-2 w-24 border border-slate-800">설비명</td>
-                  <td className="p-2 border border-slate-800 font-bold">{equipment.equipment_name}</td>
+                  <td className="bg-slate-100 font-bold p-1.5 w-24 border border-slate-900">설비 관리번호</td>
+                  <td className="p-1.5 border border-slate-900 font-mono font-extrabold text-blue-900">{equipment.manage_no}</td>
+                  <td className="bg-slate-100 font-bold p-1.5 w-24 border border-slate-900">설 비 명</td>
+                  <td className="p-1.5 border border-slate-900 font-extrabold text-slate-900">{equipment.equipment_name}</td>
                 </tr>
                 <tr>
-                  <td className="bg-slate-100 font-bold p-2 border border-slate-800">설치 장소</td>
-                  <td className="p-2 border border-slate-800">{equipment.install_location}</td>
-                  <td className="bg-slate-100 font-bold p-2 border border-slate-800">점검 년월</td>
-                  <td className="p-2 border border-slate-800 font-mono font-bold">{checkMonth}</td>
+                  <td className="bg-slate-100 font-bold p-1.5 border border-slate-900">설치 장소</td>
+                  <td className="p-1.5 border border-slate-900 font-medium">{equipment.install_location}</td>
+                  <td className="bg-slate-100 font-bold p-1.5 border border-slate-900">점검 년월</td>
+                  <td className="p-1.5 border border-slate-900 font-mono font-bold text-slate-900">{checkMonth}</td>
                 </tr>
                 <tr>
-                  <td className="bg-slate-100 font-bold p-2 border border-slate-800">규격 / 동력</td>
-                  <td className="p-2 border border-slate-800 font-semibold">{equipment.capacity_spec || '-'}</td>
-                  <td className="bg-slate-100 font-bold p-2 border border-slate-800">시리얼 번호</td>
-                  <td className="p-2 border border-slate-800 font-mono">{equipment.serial_no || '-'}</td>
+                  <td className="bg-slate-100 font-bold p-1.5 border border-slate-900">규격 / 동력</td>
+                  <td className="p-1.5 border border-slate-900 font-semibold">{equipment.capacity_spec || '-'}</td>
+                  <td className="bg-slate-100 font-bold p-1.5 border border-slate-900">시리얼 번호</td>
+                  <td className="p-1.5 border border-slate-900 font-mono">{equipment.serial_no || '-'}</td>
                 </tr>
               </tbody>
             </table>
 
-            {/* 점검 항목 테이블 */}
+            {/* 점검 항목 테이블 (A4 1페이지 컴팩트 맞춤) */}
             <div>
-              <h4 className="font-bold text-xs mb-1.5 flex items-center justify-between">
+              <h4 className="font-bold text-[11px] mb-1 flex items-center justify-between">
                 <span>■ 일일 / 주간 정기 점검 항목 (범례: O-양호, X-불량/조치, N/A-해당없음)</span>
-                <span className="text-[10px] text-slate-500 font-normal">점검자: {inspector}</span>
+                <span className="text-[10px] text-slate-600 font-bold">점검 담당자: {inspector}</span>
               </h4>
 
-              <table className="w-full text-[11px] border-collapse border border-slate-800 text-left">
+              <table className="w-full text-[10px] border-collapse border-2 border-slate-900 text-left">
                 <thead>
-                  <tr className="bg-slate-100 border border-slate-800 text-center font-bold">
-                    <th className="p-1.5 border border-slate-800 w-8">No</th>
-                    <th className="p-1.5 border border-slate-800 w-44">점검 항목</th>
-                    <th className="p-1.5 border border-slate-800">점검 기준 및 방법</th>
-                    <th className="p-1.5 border border-slate-800 w-12">주기</th>
-                    <th className="p-1.5 border border-slate-800 w-24">점검 결과</th>
-                    <th className="p-1.5 border border-slate-800 w-32">조치 및 특기사항</th>
+                  <tr className="bg-slate-100 border-b-2 border-slate-900 text-center font-bold">
+                    <th className="p-1 border border-slate-900 w-7">No</th>
+                    <th className="p-1 border border-slate-900 w-40">점검 항목</th>
+                    <th className="p-1 border border-slate-900">점검 기준 및 방법</th>
+                    <th className="p-1 border border-slate-900 w-10">주기</th>
+                    <th className="p-1 border border-slate-900 w-20">점검 결과</th>
+                    <th className="p-1 border border-slate-900 w-28">조치 및 특기사항</th>
                   </tr>
                 </thead>
                 <tbody>
                   {CHECK_ITEMS.map((item) => (
-                    <tr key={item.no} className="border border-slate-800">
-                      <td className="p-1.5 border border-slate-800 text-center font-mono">{item.no}</td>
-                      <td className="p-1.5 border border-slate-800 font-bold">{item.item}</td>
-                      <td className="p-1.5 border border-slate-800 text-slate-700">{item.standard}</td>
-                      <td className="p-1.5 border border-slate-800 text-center font-semibold">{item.cycle}</td>
-                      <td className="p-1.5 border border-slate-800 text-center font-bold text-slate-400">
+                    <tr key={item.no} className="h-6">
+                      <td className="p-1 border border-slate-900 text-center font-mono font-bold">{item.no}</td>
+                      <td className="p-1 border border-slate-900 font-bold text-slate-900">{item.item}</td>
+                      <td className="p-1 border border-slate-900 text-slate-800">{item.standard}</td>
+                      <td className="p-1 border border-slate-900 text-center font-semibold">{item.cycle}</td>
+                      <td className="p-1 border border-slate-900 text-center font-bold text-slate-700">
                         [ O / X ]
                       </td>
-                      <td className="p-1.5 border border-slate-800"></td>
+                      <td className="p-1 border border-slate-900"></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            {/* 종합의견 및 서명 */}
-            <div className="border border-slate-800 p-3 space-y-2 text-xs">
-              <p className="font-bold text-slate-900">■ 종합 의견 및 특이사항 조치 내역</p>
-              <div className="h-16 border border-dashed border-slate-300 rounded p-2 text-slate-400">
-                (특이사항 발생 시 내용 및 CAR 조치 연계 번호 기록)
+            {/* 종합의견 및 직인 도장 하단 배치 (1Page 완료) */}
+            <div className="grid grid-cols-12 gap-2 border-2 border-slate-900 p-2 text-xs">
+              <div className="col-span-8 flex flex-col justify-between">
+                <p className="font-bold text-slate-900 text-[11px]">■ 종합 의견 및 특이사항 조치 내역 (점검 상태 100% 양호)</p>
+                <div className="h-10 border border-dashed border-slate-400 rounded p-1 text-[10px] text-slate-500 font-mono">
+                  ※ 무결점 설비 점검 완료 (이상 발생 시 CAR 부적합 조치 연계 기록)
+                </div>
               </div>
+              <div className="col-span-4 flex flex-col items-center justify-center border-l-2 border-slate-400 pl-2">
+                <span className="font-extrabold text-[11px] text-slate-900 mb-0.5">(주) 이 지 원 제조관리</span>
+                <img src="/이지원도장.png" alt="이지원 도장" className="h-10 w-10 object-contain" />
+              </div>
+            </div>
+
+            <div className="text-[9px] text-slate-500 text-right font-mono">
+              (주)이지원 MES 제조설비 관리 규정 C401 (A4 1 Page 표준서식)
             </div>
           </div>
         </div>
@@ -601,3 +649,4 @@ function EquipmentChecklistPrintModal({
     </div>
   );
 }
+
