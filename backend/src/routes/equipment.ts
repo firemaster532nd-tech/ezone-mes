@@ -235,17 +235,20 @@ export async function equipmentRoutes(app: FastifyInstance) {
   // ── 제조설비 REST API ──────────────────────────────────────────────────
   // 1. 전체 조회
   app.get('/api/equipment/manufacturing', async () => {
-    const res = await pool.query(`
-      SELECT 
-        equipment_id, manage_no, equipment_name, serial_no, capacity_spec,
-        manufacturer, install_location,
-        TO_CHAR(purchase_date, 'YYYY-MM-DD') AS purchase_date,
-        memo, is_active
-      FROM manufacturing_equipment
-      WHERE is_active = TRUE
-      ORDER BY manage_no ASC;
-    `);
-    return { data: res.rows };
+    try {
+      const res = await pool.query(`
+        SELECT 
+          equipment_id, manage_no, equipment_name, serial_no, capacity_spec,
+          manufacturer, purchase_date, install_location, memo, is_active,
+          created_at, updated_at
+        FROM manufacturing_equipment
+        WHERE is_active = TRUE
+        ORDER BY equipment_id ASC;
+      `);
+      return { data: res.rows };
+    } catch {
+      return { data: [] };
+    }
   });
 
   // 2. 제조설비 등록

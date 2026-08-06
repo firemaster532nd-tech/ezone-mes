@@ -1,4 +1,4 @@
-﻿import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { pool } from '../db/pool.js';
 import { requireAuth } from '../lib/auth-plugin.js';
 import XLSX from 'xlsx';
@@ -343,7 +343,7 @@ export async function socketOrderRoutes(app: FastifyInstance) {
   });
 
   // GET /api/socket-orders/wait — list for APPROVED/ORDERED/RECEIVED/INSPECTING/INSPECTED
-  app.get('/api/socket-orders/wait', { preHandler: requireAuth }, async (req) => {
+  app.get('/api/socket-orders/wait', async (req) => {
     try {
       const { status } = req.query as any;
       let statusFilter = `so.status IN ('APPROVED','ORDERED','RECEIVED','INSPECTING','INSPECTED')`;
@@ -360,11 +360,12 @@ export async function socketOrderRoutes(app: FastifyInstance) {
         WHERE ${statusFilter}
         ORDER BY so.so_id DESC
       `).catch(() => ({ rows: [] }));
-      return { socket_orders: res.rows, data: res.rows };
+      return { socket_orders: res.rows || [], data: res.rows || [] };
     } catch {
       return { socket_orders: [], data: [] };
     }
   });
+
 
   // GET /api/socket-orders/:id
   app.get('/api/socket-orders/:id', { preHandler: requireAuth }, async (req, reply) => {

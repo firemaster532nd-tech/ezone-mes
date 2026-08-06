@@ -248,21 +248,35 @@ export async function approvalRoutes(app: FastifyInstance) {
 
   /** GET /api/approvals/counts - 결재 건수 요약 (배지용) */
   app.get('/api/approvals/counts', async (request) => {
-    const { worker_id } = request.query as { worker_id: string };
-    if (!worker_id) return { data: { review: 0, approve: 0, total: 0 } };
-    const wid = parseInt(worker_id);
+    try {
+      const { worker_id } = request.query as { worker_id: string };
+      if (!worker_id) return { data: { review: 0, approve: 0, total: 0 } };
+      const wid = parseInt(worker_id, 10);
+      if (isNaN(wid)) return { data: { review: 0, approve: 0, total: 0 } };
 
-    const result = await pool.query(`
-      SELECT
-        COUNT(*) FILTER (WHERE reviewer_id = $1 AND status = 'REVIEW') as review_count,
-        COUNT(*) FILTER (WHERE approver_id = $1 AND status = 'PENDING_APPROVE') as approve_count
-      FROM approval
-    `, [wid]);
+      const result = await pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE reviewer_id = $1 AND status = 'REVIEW') as review_count,
+          COUNT(*) FILTER (WHERE approver_id = $1 AND status = 'PENDING_APPROVE') as approve_count
+        FROM approval
+      `, [wid]);
 
-    const r = parseInt(result.rows[0].review_count) || 0;
-    const a = parseInt(result.rows[0].approve_count) || 0;
-    return { data: { review: r, approve: a, total: r + a } };
+      const r = result.rows[0];
+      const review = parseInt(r?.review_count || 0);
+      const approve = parseInt(r?.approve_count || 0);
+
+      return {
+        data: {
+          review,
+          approve,
+          total: review + approve,
+        },
+      };
+    } catch {
+      return { data: { review: 0, approve: 0, total: 0 } };
+    }
   });
+
 
   /** POST /api/approvals/:id/review - 검토 (검토자 또는 admin이 처리) */
   app.post('/api/approvals/:id/review', async (request, reply) => {

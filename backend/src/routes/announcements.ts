@@ -177,9 +177,10 @@ export async function announcementRoutes(app: FastifyInstance) {
   });
 
   // GET /api/announcements/unread-count  ─ 공지 + 쪽지 합산 미읽음
-  app.get('/api/announcements/unread-count', { preHandler: requireAuth }, async (req) => {
+  app.get('/api/announcements/unread-count', async (req) => {
     try {
-      const me = req.auth!;
+      const me = (req as any).auth;
+      if (!me?.worker_id) return { count: 0 };
       const { rows } = await pool.query(
         `SELECT COUNT(*)::int AS count
          FROM announcement_receipt r
@@ -192,6 +193,7 @@ export async function announcementRoutes(app: FastifyInstance) {
       return { count: 0 };
     }
   });
+
 
   // GET /api/announcements/:id  ─ 공지 상세 + 읽음 처리
   app.get<{ Params: { id: string } }>(

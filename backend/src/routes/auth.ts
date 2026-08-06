@@ -468,8 +468,11 @@ export async function authRoutes(app: FastifyInstance) {
       ORDER BY d.dept_name NULLS LAST, w.worker_name
     `, [me.worker_id]);
     return { workers: rows };
+  });
+
   // GET /api/inspectors (기초등록 회사 인원 전체 목록 조회 - 성적서 및 검사자 드롭다운용)
   app.get('/api/inspectors', async () => {
+
     try {
       const { rows } = await pool.query(`
         SELECT
