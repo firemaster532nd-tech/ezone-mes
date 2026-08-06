@@ -47,10 +47,10 @@ async function requestWithRetry<T>(path: string, options?: RequestInit, retryCou
     throw netErr;
   }
 
-  // Cold start 관련 에러: 500/502/503/504 → 재시도 (최대 3회, 1s, 2s, 3s 간격)
-  if ((res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504) && retryCount < 3) {
-    const delay = (retryCount + 1) * 1000;
-    console.warn(`[API] ${res.status} 응답 — ${delay / 1000}초 후 재시도 (${retryCount + 1}/3)`);
+  // Cold start / 일시적 에러: 405/500/502/503/504 → 재시도 (최대 3회)
+  if ((res.status === 405 || res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504) && retryCount < 3) {
+    const delay = (retryCount + 1) * 1500;
+    console.warn(`[API] ${res.status} 응답 — ${delay / 1000}초 후 재시도 (${retryCount + 1}/3) path=${path}`);
     await new Promise(resolve => setTimeout(resolve, delay));
     return requestWithRetry<T>(path, options, retryCount + 1);
   }

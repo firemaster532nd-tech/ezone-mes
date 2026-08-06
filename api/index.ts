@@ -1,6 +1,10 @@
 /**
- * Vercel Serverless Function — Fastify 앱을 @vercel/node 방식으로 래핑
- * POST/PUT/PATCH/DELETE 포함 모든 메서드 100% 허용
+ * Vercel Serverless Function — Fastify 앱 래핑
+ * POST/PUT/PATCH/DELETE 포함 모든 HTTP 메서드 100% 허용
+ *
+ * 핵심 설정:
+ *   - bodyParser: false  → Fastify가 직접 body 파싱 (POST body 소멸 방지)
+ *   - externalResolver: true → Fastify가 응답 처리함을 Vercel에 명시 (405 방지)
  */
 import type { IncomingMessage, ServerResponse } from 'http';
 
@@ -20,36 +24,36 @@ async function getApp() {
 }
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
-  // Vercel이 POST/PUT/DELETE 등을 405로 막는 현상 원천 차단:
-  // OPTIONS preflight 즉시 처리
+  // CORS 헤더 — 모든 응답에 선처리
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+
+  // OPTIONS preflight 즉시 완료
   if (req.method === 'OPTIONS') {
-    res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, Accept, Origin',
-      'Access-Control-Max-Age': '86400',
-    });
+    res.writeHead(204);
     res.end();
     return;
   }
 
   try {
     const app = await getApp();
-    // Fastify 내부 서버로 요청 위임 (POST/PUT/DELETE 포함 전 메서드 통과)
     app.server.emit('request', req, res);
   } catch (err: any) {
     const msg = err?.message || String(err);
     console.error('[api/index] 오류:', msg);
     if (!res.headersSent) {
-      res.writeHead(500, {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      });
+      res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Internal Server Error', detail: msg }));
     }
   }
 }
 
+// 핵심: Vercel이 body를 미리 소비하지 않도록 bodyParser 비활성화
+//       externalResolver로 Fastify가 응답을 처리함을 명시 → 405 원천 차단
 export const config = {
-  maxDuration: 60,
+  api: {
+    bodyParser: false,
+    externalResolver: true,
+  },
 };
