@@ -421,12 +421,20 @@ export function SubMaterialInspectionPage() {
                 )}
               </div>
 
-              {/* 검사자 */}
               <div>
-                <label className="block font-medium text-slate-700 mb-1">검사 담당자</label>
-                <input value={inspector} onChange={e => setInspector(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" required />
+                <label className="block font-medium text-slate-700 mb-1">검사 담당자 (작성자 선택)</label>
+                <select
+                  value={inspector}
+                  onChange={e => setInspector(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
+                  required
+                >
+                  {['김정용 책임', '최진영 책임', '임병용 파트장', '이동민 파트장', '김봉민 책임', '생산 작업자'].map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
               </div>
+
 
               {/* 비고 */}
               <div>
