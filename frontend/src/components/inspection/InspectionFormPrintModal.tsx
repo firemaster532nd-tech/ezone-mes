@@ -203,61 +203,82 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                   </tr>
                 </thead>
                 <tbody>
-                  {/* 1) 겉모양 / 육안 실측 */}
-                  <tr className="h-7">
-                    <td className="border border-slate-900 font-bold bg-slate-50" rowSpan={3}>겉모양 (외관)</td>
-                    <td className="border border-slate-900 text-left px-2">외 관: 한도견본 기준 오염, 찌그러짐 파손 없음</td>
-                    <td className="border border-slate-900">육안</td>
-                    <td className="border border-slate-900" rowSpan={3}>매로트</td>
-                    <td className="border border-slate-900" rowSpan={3}>n=3, c=0</td>
-                    <td className="border border-slate-900 font-mono font-bold">{data.n1 || '양호'}</td>
-                    <td className="border border-slate-900 font-mono font-bold">{data.n2 || '양호'}</td>
-                    <td className="border border-slate-900 font-mono font-bold">{data.n3 || '양호'}</td>
-                    <td className="border border-slate-900 font-bold">☑ 적합 □ 부적합</td>
-                  </tr>
-                  <tr className="h-7">
-                    <td className="border border-slate-900 text-left px-2">성 상: 고체 / 가루 / 펠렛 정상</td>
-                    <td className="border border-slate-900">육안</td>
-                    <td className="border border-slate-900 font-mono">정상</td>
-                    <td className="border border-slate-900 font-mono">정상</td>
-                    <td className="border border-slate-900 font-mono">정상</td>
-                    <td className="border border-slate-900 font-bold">☑ 적합 □ 부적합</td>
-                  </tr>
-                  <tr className="h-7">
-                    <td className="border border-slate-900 text-left px-2">냄 새: 무취 / 자극취 없음</td>
-                    <td className="border border-slate-900">육안</td>
-                    <td className="border border-slate-900 font-mono">무취</td>
-                    <td className="border border-slate-900 font-mono">무취</td>
-                    <td className="border border-slate-900 font-mono">무취</td>
-                    <td className="border border-slate-900 font-bold">☑ 적합 □ 부적합</td>
-                  </tr>
+                  {data.items && data.items.length > 0 ? (
+                    data.items.map((it, idx) => (
+                      <tr key={idx} className="h-7">
+                        <td className="border border-slate-900 font-bold bg-slate-50">{it.name}</td>
+                        <td className="border border-slate-900 text-left px-2 font-mono font-medium">{it.standard}</td>
+                        <td className="border border-slate-900">{it.method || '실측'}</td>
+                        <td className="border border-slate-900">{it.cycle || '매로트'}</td>
+                        <td className="border border-slate-900">{it.condition || 'n=3, c=0'}</td>
+                        <td className="border border-slate-900 font-mono font-bold">{it.n1 ?? (data.n1 || '-')}</td>
+                        <td className="border border-slate-900 font-mono font-bold">{it.n2 ?? (data.n2 || '-')}</td>
+                        <td className="border border-slate-900 font-mono font-bold">{it.n3 ?? (data.n3 || '-')}</td>
+                        <td className="border border-slate-900 font-bold text-emerald-900">
+                          {it.isPass !== false ? '☑ 적합 □ 부적합' : '□ 적합 ☑ 부적합'}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <>
+                      {/* 1) 겉모양 / 육안 실측 */}
+                      <tr className="h-7">
+                        <td className="border border-slate-900 font-bold bg-slate-50" rowSpan={3}>겉모양 (외관)</td>
+                        <td className="border border-slate-900 text-left px-2">외 관: 한도견본 기준 오염, 찌그러짐 파손 없음</td>
+                        <td className="border border-slate-900">육안</td>
+                        <td className="border border-slate-900" rowSpan={3}>매로트</td>
+                        <td className="border border-slate-900" rowSpan={3}>n=3, c=0</td>
+                        <td className="border border-slate-900 font-mono font-bold">{data.n1 || '양호'}</td>
+                        <td className="border border-slate-900 font-mono font-bold">{data.n2 || '양호'}</td>
+                        <td className="border border-slate-900 font-mono font-bold">{data.n3 || '양호'}</td>
+                        <td className="border border-slate-900 font-bold">☑ 적합 □ 부적합</td>
+                      </tr>
+                      <tr className="h-7">
+                        <td className="border border-slate-900 text-left px-2">성 상: 고체 / 가루 / 펠렛 정상</td>
+                        <td className="border border-slate-900">육안</td>
+                        <td className="border border-slate-900 font-mono">정상</td>
+                        <td className="border border-slate-900 font-mono">정상</td>
+                        <td className="border border-slate-900 font-mono">정상</td>
+                        <td className="border border-slate-900 font-bold">☑ 적합 □ 부적합</td>
+                      </tr>
+                      <tr className="h-7">
+                        <td className="border border-slate-900 text-left px-2">냄 새: 무취 / 자극취 없음</td>
+                        <td className="border border-slate-900">육안</td>
+                        <td className="border border-slate-900 font-mono">무취</td>
+                        <td className="border border-slate-900 font-mono">무취</td>
+                        <td className="border border-slate-900 font-mono">무취</td>
+                        <td className="border border-slate-900 font-bold">☑ 적합 □ 부적합</td>
+                      </tr>
 
-                  {/* 2) 제조사 시험 성적서 확인 */}
-                  <tr className="h-8">
-                    <td className="border border-slate-900 font-bold bg-slate-50">제조사 성적서</td>
-                    <td className="border border-slate-900 text-left px-2 font-mono">밀도, 수분율, 점도 제조처 성적서 시험치 확인</td>
-                    <td className="border border-slate-900">성적서확인</td>
-                    <td className="border border-slate-900">1회/입고</td>
-                    <td className="border border-slate-900">n=1, c=0</td>
-                    <td className="border border-slate-900 font-mono text-center" colSpan={3}>제조사 성적서 확인 완료</td>
-                    <td className="border border-slate-900 font-bold">☑ 적합 □ 부적합</td>
-                  </tr>
+                      {/* 2) 제조사 시험 성적서 확인 */}
+                      <tr className="h-8">
+                        <td className="border border-slate-900 font-bold bg-slate-50">제조사 성적서</td>
+                        <td className="border border-slate-900 text-left px-2 font-mono">밀도, 수분율, 점도 제조처 성적서 시험치 확인</td>
+                        <td className="border border-slate-900">성적서확인</td>
+                        <td className="border border-slate-900">1회/입고</td>
+                        <td className="border border-slate-900">n=1, c=0</td>
+                        <td className="border border-slate-900 font-mono text-center" colSpan={3}>제조사 성적서 확인 완료</td>
+                        <td className="border border-slate-900 font-bold">☑ 적합 □ 부적합</td>
+                      </tr>
 
-                  {/* 3) 공인기관 의뢰 (1회/년) 1년 주기 유효성 */}
-                  <tr className="h-9 bg-blue-50/30">
-                    <td className="border border-slate-900 font-bold text-blue-900">공인기관 의뢰<br/>(1회 / 년)</td>
-                    <td className="border border-slate-900 text-left px-2 font-mono text-blue-950 font-bold">
-                      숏함유율 ≤25% | 가열선수축율 ≤4% | MI, 밀도, 인장강도 공인성적서 기준 충족
-                    </td>
-                    <td className="border border-slate-900 font-bold">공인성적서</td>
-                    <td className="border border-slate-900 font-bold text-blue-900">1회 / 년</td>
-                    <td className="border border-slate-900">n=1, c=0</td>
-                    <td className="border border-slate-900 font-mono text-center font-bold text-blue-900" colSpan={3}>
-                      공인성적서 연동
-                    </td>
-                    <td className="border border-slate-900 font-bold text-emerald-900">☑ 적합 □ 부적합</td>
-                  </tr>
+                      {/* 3) 공인기관 의뢰 (1회/년) 1년 주기 유효성 */}
+                      <tr className="h-9 bg-blue-50/30">
+                        <td className="border border-slate-900 font-bold text-blue-900">공인기관 의뢰<br/>(1회 / 년)</td>
+                        <td className="border border-slate-900 text-left px-2 font-mono text-blue-950 font-bold">
+                          숏함유율 ≤25% | 가열선수축율 ≤4% | MI, 밀도, 인장강도 공인성적서 기준 충족
+                        </td>
+                        <td className="border border-slate-900 font-bold">공인성적서</td>
+                        <td className="border border-slate-900 font-bold text-blue-900">1회 / 년</td>
+                        <td className="border border-slate-900">n=1, c=0</td>
+                        <td className="border border-slate-900 font-mono text-center font-bold text-blue-900" colSpan={3}>
+                          공인성적서 연동
+                        </td>
+                        <td className="border border-slate-900 font-bold text-emerald-900">☑ 적합 □ 부적합</td>
+                      </tr>
+                    </>
+                  )}
                 </tbody>
+
               </table>
             </div>
 

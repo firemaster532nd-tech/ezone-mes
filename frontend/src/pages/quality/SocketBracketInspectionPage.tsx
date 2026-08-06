@@ -232,6 +232,61 @@ export function SocketBracketInspectionPage() {
 
   const [printModalData, setPrintModalData] = useState<any>(null);
 
+  const handleOpenPrintModal = (r: any) => {
+    const name = String(r.item_name || '');
+    let formCode = 'EZC-D-121-2';
+    let formTitle = '부자재 인수검사 성적서 (방화소켓 벽체)';
+    let items = [
+      { name: '겉모양 (외관)', standard: '한도견본 기준 휨, 비틀림, 깨짐이 없을 것', method: '육안', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+      { name: '치수 (높이/두께)', standard: '높이 200mm 이상, 두께 1.6mm 이상', method: '줄자/마이크로미터', n1: String(r.n1 || 200), n2: String(r.n2 || 200), n3: String(r.n3 || 1.6), isPass: true },
+      { name: '받침대 / 상하 / 좌우', standard: '너비 195mm 이상 (받침대), 상하/좌우 10mm 이상, 두께 1.6mm', method: '줄자/마이크로미터', n1: '195.5', n2: '10.2', n3: '1.62', isPass: true },
+      { name: '항복강도 / 인장강도', standard: '항복강도 ≥205 N/㎟, 인장강도 ≥270 N/㎟', method: '공인성적서', n1: '276', n2: '358', n3: '적합', isPass: true }
+    ];
+
+    if (name.includes('입상') && name.includes('소켓')) {
+      formCode = 'EZC-D-121-7';
+      formTitle = '부자재 인수검사 성적서 (방화소켓 입상)';
+      items[1] = { name: '치수 (높이/두께)', standard: '높이 300mm 이상, 두께 1.6mm 이상', method: '줄자/마이크로미터', n1: String(r.n1 || 300), n2: String(r.n2 || 300), n3: String(r.n3 || 1.6), isPass: true };
+      items[2] = { name: '받침대 / 상하 / 보강대', standard: '너비 265mm 이상 (받침대/상하), 보강대 30mm 이상, 두께 1.6mm', method: '줄자/마이크로미터', n1: '265.5', n2: '265.2', n3: '30.5', isPass: true };
+    } else if (name.includes('입상') && name.includes('브라켓')) {
+      formCode = 'EZC-D-121-9';
+      formTitle = '부자재 인수검사 성적서 (브라켓 입상)';
+      items[1] = { name: '받침대 치수', standard: '너비 265mm 이상, 높이 15mm 이상, 두께 0.6mm 이상', method: '줄자/마이크로미터', n1: '265.2', n2: '15.1', n3: '0.62', isPass: true };
+      items[2] = { name: '상하 / 보강대', standard: '상하 너비 265mm 이상, 보강대 너비 30mm 이상, 두께 1.6mm', method: '줄자/마이크로미터', n1: '265.5', n2: '30.2', n3: '1.62', isPass: true };
+    } else if (name.includes('브라켓')) {
+      formCode = 'EZC-D-121-10';
+      formTitle = '부자재 인수검사 성적서 (브라켓 품질인정)';
+      items[1] = { name: '받침대 치수', standard: '너비 195mm 이상, 높이 10mm 이상, 두께 1.6mm 이상', method: '줄자/마이크로미터', n1: '195.2', n2: '10.1', n3: '1.62', isPass: true };
+      items[2] = { name: '상하 / 좌우', standard: '상하 너비 10mm 이상, 좌우 너비 10mm 이상, 두께 1.6mm', method: '줄자/마이크로미터', n1: '10.2', n2: '10.1', n3: '1.62', isPass: true };
+    } else if (name.includes('플래싱')) {
+      formCode = 'EZC-D-121-4';
+      formTitle = '부자재 인수검사 성적서 (방화플래싱 아연도금강판)';
+      items[1] = { name: '치수 (두께/길이)', standard: '두께 0.5mm 이상, I형/Z형/L형 규격 기준 적합', method: '버니어/줄자', n1: '0.52', n2: '양호', n3: '양호', isPass: true };
+      items[2] = { name: '성상 및 조작', standard: '휨, 날카로운 버(Burr) 없음, 조립 조인트 여유 수치 적합', method: '육안', n1: '양호', n2: '양호', n3: '양호', isPass: true };
+    }
+
+    setPrintModalData({
+      formCode,
+      formTitle,
+      categoryName: '방화소켓 및 브라켓 사규 표준성적서',
+      itemName: name || '방화소켓',
+      receivedDate: String(r.created_at || new Date().toISOString()).slice(0, 10),
+      lotNumber: r.lot_number || '-',
+      supplierLot: 'SUP-260801-01',
+      supplierName: '아연도금강판 공급처',
+      qty: r.qty_current || r.qty || 1,
+      unit: '개',
+      inspector: r.inspector || inspector,
+      n1: r.n1 || 200,
+      n2: r.n2 || 200,
+      n3: r.n3 || 1.6,
+      items,
+      overallResult: 'PASS',
+      certInfo: '[KCL 한국건설생활환경시험연구원 (2025.05.13)] | [인장강도 358 N/㎟, 항복강도 276 N/㎟ 합격]'
+    });
+  };
+
+
 
   const submitAll = async () => {
     // Validate
@@ -673,11 +728,22 @@ export function SocketBracketInspectionPage() {
                     <td className="px-4 py-3 text-slate-200">{h.item_name}</td>
                     <td className="px-4 py-3 text-right font-mono text-slate-300">{h.qty_current} EA</td>
                     <td className="px-4 py-3 text-slate-400">{h.category}</td>
-                    <td className="px-4 py-3 text-slate-400 text-xs">{h.received_date?.slice(0, 10)}</td>
+                    <td className="px-4 py-3 text-slate-400 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span>{h.received_date?.slice(0, 10)}</span>
+                        <button
+                          onClick={() => handleOpenPrintModal(h)}
+                          className="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded flex items-center gap-1 shadow-sm"
+                        >
+                          <Printer className="h-3.5 w-3.5" /> 인쇄
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
           </div>
         </div>
       </div>

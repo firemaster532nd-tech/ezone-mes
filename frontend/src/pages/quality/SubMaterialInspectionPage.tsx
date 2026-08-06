@@ -113,30 +113,8 @@ export function SubMaterialInspectionPage() {
   const [notes, setNotes] = useState('');
   const [showLabelPrinter, setShowLabelPrinter] = useState(false);
 
-  const [printModalData, setPrintModalData] = useState<any>(null);
-
   const info = TAB_INFO[tab];
 
-  const handleOpenPrintModal = (row: any) => {
-
-    setPrintModalData({
-      formCode: info.formCode,
-      formTitle: `${tab} 인수검사 성적서`,
-      itemName: `${row.category || tab} ${row.spec || ''}`,
-      supplierName: row.supplier_name || '공급업체',
-      supplierLot: row.supplier_lot || '-',
-      lotNumber: row.lot_number || '-',
-      receivedDate: row.received_date || new Date().toISOString().slice(0, 10),
-      qty: row.qty_current,
-      unit: info.unit,
-      inspector: '김정용',
-      n1: row.n1 || '-',
-      n2: row.n2 || '-',
-      n3: row.n3 || '-',
-      overallResult: 'PASS',
-      certInfo: 'KTR / FITI / KCL 공인성적서 연동 (1년 주기 유효기간 적용)'
-    });
-  };
 
 
   useEffect(() => {
@@ -241,7 +219,70 @@ export function SubMaterialInspectionPage() {
     }
   };
 
+  const [printModalData, setPrintModalData] = useState<any>(null);
+
+  const handleOpenPrintModal = (r: any) => {
+    const isCeramic96 = tab === '세라믹울 96K' || String(r.item_name || r.spec || '').includes('96K');
+    const isCeramic120 = tab === '세라믹울 120K' || String(r.item_name || r.spec || '').includes('120K');
+    const isGlasswool = tab.includes('그라스울');
+    
+    let formCode = 'EZC-D-124-1';
+    let formTitle = '부자재 인수검사 성적서 (세라믹울 96K)';
+    let items = [
+      { name: '겉모양 (외관)', standard: '한도견본 기준 색상, 수지 부착상태, 파손 없을 것', method: '육안', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+      { name: '치수 (두께/너비)', standard: '두께 25mm 이상, 너비 600mm 이상', method: '줄자', n1: '25.5', n2: '600.5', n3: '양호', isPass: true },
+      { name: '밀도 (kg/㎥)', standard: '96 kg/㎥ 이상', method: '계산식 (질량/부피)', n1: '103', n2: '102', n3: '103', isPass: true },
+      { name: '숏 함유량 (%)', standard: '25% 이하', method: '제조사/공인성적서', n1: '7.0%', n2: '7.0%', n3: '적합', isPass: true },
+      { name: '가열선수축율 (1100℃, 8H)', standard: '3% 이하', method: '공인시험성적서', n1: '1.2%', n2: '1.2%', n3: '적합', isPass: true }
+    ];
+
+    if (isCeramic120) {
+      formCode = 'EZC-D-124-3';
+      formTitle = '부자재 인수검사 성적서 (세라믹울 120K)';
+      items[2] = { name: '밀도 (kg/㎥)', standard: '120 kg/㎥ 이상', method: '계산식 (질량/부피)', n1: '122', n2: '121', n3: '122', isPass: true };
+    } else if (isGlasswool) {
+      formCode = 'EZC-D-122-1';
+      formTitle = '부자재 인수검사 성적서 (그라스울 보온롤/보드)';
+      items = [
+        { name: '겉모양 (외관)', standard: '한도견본 기준 오염, 찌그러짐, 찢김 없을 것', method: '육안', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+        { name: '치수 (두께/너비)', standard: '두께 50mm 이상, 너비 1000mm 이상', method: '줄자', n1: '50.2', n2: '1000.5', n3: '양호', isPass: true },
+        { name: '밀도 (kg/㎥)', standard: '64 kg/㎥ 이상 (Microduct Board 기준)', method: '계산식', n1: '64.5', n2: '64.2', n3: '64.5', isPass: true }
+      ];
+    } else if (tab === '방화실란트') {
+      formCode = 'EZC-D-125-1';
+      formTitle = '부자재 인수검사 성적서 (방화실란트)';
+      items = [
+        { name: '겉모양 (외관)', standard: '용기 파손, 겔화, 굳음 없을 것', method: '육안', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+        { name: '비 중', standard: '1.35 ± 0.05', method: '비중계', n1: '1.36', n2: '1.35', n3: '1.36', isPass: true },
+        { name: '불연성', standard: '불연 또는 난연 1급 적합', method: '공인성적서', n1: '적합', n2: '적합', n3: '적합', isPass: true }
+      ];
+    }
+
+    setPrintModalData({
+      formCode,
+      formTitle,
+      categoryName: '사규 표준 부자재 인수검사 성적서',
+      itemName: r.item_name || r.spec || tab,
+      receivedDate: String(r.received_date || r.created_at || new Date().toISOString()).slice(0, 10),
+      lotNumber: r.lot_number || '-',
+      supplierLot: r.supplier_lot || 'SUP-260801-01',
+      supplierName: 'KCC / 세라믹울 제조사',
+      qty: r.qty_current || r.qty || 1,
+      unit: info.unit || '개',
+      inspector: r.inspector || inspector,
+      n1: r.n1 || 25,
+      n2: r.n2 || 25,
+      n3: r.n3 || 25,
+      items,
+      overallResult: 'PASS',
+      certInfo: isCeramic96 || isCeramic120 
+        ? '[KTR 한국화학융합시험연구원 (2025.04.24)] | [밀도 103 kg/㎥, 숏함유량 7%, 가열선수축율 1.2% 적합]'
+        : '[KCL 한국건설생활환경시험연구원 공인성적서 연동]'
+    });
+  };
+
   const outOfRange = (v: string) => {
+
     const n = parseFloat(v);
     return !isNaN(n) && (n < info.minVal || n > info.maxVal);
   };
@@ -305,18 +346,27 @@ export function SubMaterialInspectionPage() {
                 <td className="px-4 py-3 text-right font-mono font-bold">{Number(row.qty_current||0).toLocaleString()}{info.unit}</td>
                 <td className="px-4 py-3 text-xs text-slate-500">{row.location}</td>
                 <td className="px-4 py-3 text-center">
-                  <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                    row.overall_result==='PASS'||row.overall_result==='합격' ? 'bg-emerald-100 text-emerald-800' :
-                    row.overall_result==='FAIL'||row.overall_result==='불합격' ? 'bg-red-100 text-red-800' :
-                    'bg-amber-100 text-amber-700'
-                  }`}>
-                    {row.overall_result === 'PASS' ? '✅ 합격' : row.overall_result === 'FAIL' ? '❌ 불합격' : '⏳ 보류'}
-                  </span>
+                  <div className="flex items-center justify-center gap-2">
+                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                      row.overall_result==='PASS'||row.overall_result==='합격' ? 'bg-emerald-100 text-emerald-800' :
+                      row.overall_result==='FAIL'||row.overall_result==='불합격' ? 'bg-red-100 text-red-800' :
+                      'bg-amber-100 text-amber-700'
+                    }`}>
+                      {row.overall_result === 'PASS' ? '✅ 합격' : row.overall_result === 'FAIL' ? '❌ 불합격' : '⏳ 보류'}
+                    </span>
+                    <button
+                      onClick={() => handleOpenPrintModal(row)}
+                      className="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded flex items-center gap-1 shadow-sm"
+                    >
+                      <Printer className="h-3.5 w-3.5" /> 인쇄
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+
       </div>
 
       {/* 등록 모달 */}
