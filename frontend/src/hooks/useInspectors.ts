@@ -8,8 +8,17 @@ const DEFAULT_INSPECTORS = [
   '이동민 파트장',
   '김봉민 책임',
   '박민선 대표',
+  '김대원 대리',
+  '이준호 주임',
+  '박성훈 사원',
+  '정현우 사원',
+  '한상민 책임',
+  '강동현 주임',
+  '조민석 사원',
+  '윤서준 사원',
   '생산 작업자'
 ];
+
 
 export function useInspectors() {
   const [inspectors, setInspectors] = useState<string[]>(DEFAULT_INSPECTORS);

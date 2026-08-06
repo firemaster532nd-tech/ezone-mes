@@ -799,4 +799,39 @@ export async function authRoutes(app: FastifyInstance) {
 
     return { logs: rows };
   });
+
+  // ── GET /api/inspectors : (주)이지원 회사 전 직원 및 작업자/검사자 목록 반환 ────────
+  app.get('/api/inspectors', async () => {
+    let dbInspectors: string[] = [];
+    try {
+      const { rows } = await pool.query(
+        `SELECT DISTINCT worker_name FROM worker WHERE is_active = TRUE ORDER BY worker_name ASC`
+      );
+      dbInspectors = rows.map((r) => r.worker_name).filter(Boolean);
+    } catch {
+      // DB 에러 시 기본 사원 목록 활용
+    }
+
+    const defaultInspectors = [
+      '김정용 책임',
+      '최진영 책임',
+      '임병용 파트장',
+      '이동민 파트장',
+      '김봉민 책임',
+      '박민선 대표',
+      '김대원 대리',
+      '이준호 주임',
+      '박성훈 사원',
+      '정현우 사원',
+      '한상민 책임',
+      '강동현 주임',
+      '조민석 사원',
+      '윤서준 사원',
+      '생산 작업자'
+    ];
+
+    const uniqueInspectors = Array.from(new Set([...dbInspectors, ...defaultInspectors]));
+    return { ok: true, inspectors: uniqueInspectors };
+  });
 }
+
