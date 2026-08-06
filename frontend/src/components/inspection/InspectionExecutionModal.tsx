@@ -36,48 +36,135 @@ interface Props {
 }
 
 // ─── 탭별 검사 항목 정의 ────────────────────────────────────────────────────
+// 원칙: 두께/너비/길이는 '이상(≥)' 기준 → minVal만 지정, maxVal 없음 (상한 없음)
+//       밀도는 규격상 하한만 (이상) → maxVal 없음
+//       실란트 비중(용량)만 범위(±허용오차) 적용
 function buildItems(tab: string, spec: string): InspItem[] {
-  const thickNum = spec.includes('25T') ? 25 : spec.includes('38T') ? 38 : spec.includes('50T') ? 50 : 25;
-  const widthNum = parseInt(spec.match(/(\d+)W/)?.[1] || '600');
-  const lengthNum = parseInt(spec.match(/(\d+)L/)?.[1] || '7400');
+  const thickNum = spec.includes('25T') ? 25
+    : spec.includes('38T') ? 38
+    : spec.includes('50T') ? 50
+    : spec.includes('75T') ? 75
+    : spec.includes('100T') ? 100
+    : 25;
+  const widthNum  = parseInt(spec.match(/(\d+)W/)?.[1] || '0');
+  const lengthNum = parseInt(spec.match(/(\d+)L/)?.[1] || '0');
   const densityNum = parseInt(spec.match(/^(\d+)K/)?.[1] || '96');
 
   if (tab === '세라믹울') return [
-    { id: 'visual', name: '겉모양 (외관)', type: 'visual', standard: '색상 균일, 수지 부착 정상, 파손·이물질 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'thick', name: '두께 (㎜)', type: 'measure', unit: 'mm', minVal: thickNum * 0.92, maxVal: thickNum * 1.1, step: 0.01, standard: `${thickNum}mm 이상 (±2mm)`, method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'width', name: '너비/폭 (㎜)', type: 'measure', unit: 'mm', minVal: widthNum * 0.98, maxVal: widthNum * 1.05, step: 1, standard: `${widthNum}mm 이상`, method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'length', name: '길이 (㎜)', type: 'measure', unit: 'mm', minVal: lengthNum * 0.98, maxVal: lengthNum * 1.05, step: 1, standard: `${lengthNum}mm 이상`, method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'density', name: `밀도 (kg/㎥)`, type: 'measure', unit: 'kg/㎥', minVal: densityNum, maxVal: densityNum * 1.25, step: 0.1, standard: `${densityNum} kg/㎥ 이상 (KSM 3803)`, method: '계산식', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'mfr_doc', name: '제조사 시험성적서', type: 'doc', standard: `밀도 ${densityNum}kg/㎥↑, 숏 ≤25%, 가열선수축율 ≤3%`, method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', autoDefault: '확인완료' },
-    { id: 'cert', name: '공인기관 의뢰(1회/년)', type: 'doc', standard: 'KTR 공인성적서 (숏 ≤7%, 가열선수축율 ≤1.2%)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', autoDefault: '연동완료' },
+    { id: 'visual', name: '겉모양 (외관)', type: 'visual',
+      standard: '색상 균일, 수지 부착 정상, 파손·이물질 없을 것',
+      method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
+    // 두께: 이상(≥) — 상한 없음
+    { id: 'thick', name: `두께 (㎜)`, type: 'measure', unit: 'mm',
+      minVal: thickNum, step: 0.01,
+      standard: `${thickNum}mm 이상 (KSM 3803 기준)`,
+      method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
+    // 너비: 이상(≥) — 상한 없음
+    ...(widthNum > 0 ? [{ id: 'width', name: '너비/폭 (㎜)', type: 'measure' as const, unit: 'mm',
+      minVal: widthNum, step: 1,
+      standard: `${widthNum}mm 이상`,
+      method: '줄자', cycle: '매로트', condition: 'n=3, c=0' }] : []),
+    // 길이: 이상(≥) — 상한 없음
+    ...(lengthNum > 0 ? [{ id: 'length', name: '길이 (㎜)', type: 'measure' as const, unit: 'mm',
+      minVal: lengthNum, step: 1,
+      standard: `${lengthNum}mm 이상`,
+      method: '줄자', cycle: '매로트', condition: 'n=3, c=0' }] : []),
+    // 밀도: 이상(≥) — 상한 없음
+    { id: 'density', name: `밀도 (kg/㎥)`, type: 'measure', unit: 'kg/㎥',
+      minVal: densityNum, step: 0.1,
+      standard: `${densityNum} kg/㎥ 이상 (KSM 3803)`,
+      method: '계산식', cycle: '매로트', condition: 'n=3, c=0' },
+    { id: 'mfr_doc', name: '제조사 시험성적서', type: 'doc',
+      standard: `밀도 ${densityNum}kg/㎥↑, 숏 ≤25%, 가열선수축율 ≤3%`,
+      method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', autoDefault: '확인완료' },
+    { id: 'cert', name: '공인기관 의뢰(1회/년)', type: 'doc',
+      standard: 'KTR 공인성적서 (숏 ≤7%, 가열선수축율 ≤1.2%)',
+      method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', autoDefault: '연동완료' },
   ];
 
   if (tab === '그라스울-롤') return [
-    { id: 'visual', name: '겉모양 (외관)', type: 'visual', standard: '오염, 찌그러짐, 찢김 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'thick', name: '두께 (㎜)', type: 'measure', unit: 'mm', minVal: thickNum * 0.92, maxVal: thickNum * 1.1, step: 0.1, standard: `${thickNum}mm 이상 (KSM 3808)`, method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'width', name: '너비/폭 (㎜)', type: 'measure', unit: 'mm', minVal: widthNum * 0.98, maxVal: widthNum * 1.05, step: 1, standard: `${widthNum || 1000}mm 이상`, method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'length', name: '길이 (㎜)', type: 'measure', unit: 'mm', minVal: lengthNum * 0.98, maxVal: lengthNum * 1.05, step: 1, standard: `${lengthNum || 1400}mm 이상`, method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'density', name: `밀도 (kg/㎥)`, type: 'measure', unit: 'kg/㎥', minVal: densityNum, maxVal: densityNum * 1.3, step: 0.1, standard: `${densityNum} kg/㎥ 이상 (KSM 3808)`, method: '계산식', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'mfr_doc', name: '제조사 시험성적서', type: 'doc', standard: '열전도율 ≤0.034 W/m·K, 불연성 난연1급', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', autoDefault: '확인완료' },
-    { id: 'cert', name: '공인기관 의뢰(1회/년)', type: 'doc', standard: 'KCL / KTR 공인성적서 (그라스울 KSM 3808 적합)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', autoDefault: '연동완료' },
+    { id: 'visual', name: '겉모양 (외관)', type: 'visual',
+      standard: '오염, 찌그러짐, 찢김 없을 것',
+      method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
+    { id: 'thick', name: '두께 (㎜)', type: 'measure', unit: 'mm',
+      minVal: thickNum, step: 0.1,
+      standard: `${thickNum}mm 이상 (KSM 3808)`,
+      method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
+    ...(widthNum > 0 ? [{ id: 'width', name: '너비/폭 (㎜)', type: 'measure' as const, unit: 'mm',
+      minVal: widthNum, step: 1,
+      standard: `${widthNum}mm 이상`,
+      method: '줄자', cycle: '매로트', condition: 'n=3, c=0' }] : [
+      { id: 'width', name: '너비/폭 (㎜)', type: 'measure' as const, unit: 'mm',
+        minVal: 1000, step: 1, standard: '1,000mm 이상',
+        method: '줄자', cycle: '매로트', condition: 'n=3, c=0' }
+    ]),
+    ...(lengthNum > 0 ? [{ id: 'length', name: '길이 (㎜)', type: 'measure' as const, unit: 'mm',
+      minVal: lengthNum, step: 1,
+      standard: `${lengthNum}mm 이상`,
+      method: '줄자', cycle: '매로트', condition: 'n=3, c=0' }] : [
+      { id: 'length', name: '길이 (㎜)', type: 'measure' as const, unit: 'mm',
+        minVal: 1400, step: 1, standard: '1,400mm 이상',
+        method: '줄자', cycle: '매로트', condition: 'n=3, c=0' }
+    ]),
+    { id: 'density', name: `밀도 (kg/㎥)`, type: 'measure', unit: 'kg/㎥',
+      minVal: densityNum, step: 0.1,
+      standard: `${densityNum} kg/㎥ 이상 (KSM 3808)`,
+      method: '계산식', cycle: '매로트', condition: 'n=3, c=0' },
+    { id: 'mfr_doc', name: '제조사 시험성적서', type: 'doc',
+      standard: '열전도율 ≤0.034 W/m·K, 불연성 난연1급',
+      method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', autoDefault: '확인완료' },
+    { id: 'cert', name: '공인기관 의뢰(1회/년)', type: 'doc',
+      standard: 'KCL / KTR 공인성적서 (그라스울 KSM 3808 적합)',
+      method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', autoDefault: '연동완료' },
   ];
 
   if (tab === '그라스울-보드') return [
-    { id: 'visual', name: '겉모양 (외관)', type: 'visual', standard: '오염, 찌그러짐, 파손 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'thick', name: '두께 (㎜)', type: 'measure', unit: 'mm', minVal: thickNum * 0.92, maxVal: thickNum * 1.1, step: 0.1, standard: `${thickNum}mm 이상 (KSM 3809)`, method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'width', name: '너비/폭 (㎜)', type: 'measure', unit: 'mm', minVal: widthNum * 0.98, maxVal: widthNum * 1.05, step: 1, standard: `${widthNum || 1000}mm 이상`, method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'length', name: '길이 (㎜)', type: 'measure', unit: 'mm', minVal: 1150, maxVal: 1300, step: 1, standard: '1,200mm 이상 (KSM 3809)', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'density', name: `밀도 (kg/㎥)`, type: 'measure', unit: 'kg/㎥', minVal: densityNum, maxVal: densityNum * 1.3, step: 0.1, standard: `${densityNum} kg/㎥ 이상 (KSM 3809)`, method: '계산식', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'mfr_doc', name: '제조사 시험성적서', type: 'doc', standard: '열전도율 ≤0.036 W/m·K, 불연성 난연1급', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', autoDefault: '확인완료' },
-    { id: 'cert', name: '공인기관 의뢰(1회/년)', type: 'doc', standard: 'KCL / KTR 공인성적서 (그라스울 보드 KSM 3809 적합)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', autoDefault: '연동완료' },
+    { id: 'visual', name: '겉모양 (외관)', type: 'visual',
+      standard: '오염, 찌그러짐, 파손 없을 것',
+      method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
+    { id: 'thick', name: '두께 (㎜)', type: 'measure', unit: 'mm',
+      minVal: thickNum, step: 0.1,
+      standard: `${thickNum}mm 이상 (KSM 3809)`,
+      method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
+    ...(widthNum > 0 ? [{ id: 'width', name: '너비/폭 (㎜)', type: 'measure' as const, unit: 'mm',
+      minVal: widthNum, step: 1,
+      standard: `${widthNum}mm 이상`,
+      method: '줄자', cycle: '매로트', condition: 'n=3, c=0' }] : [
+      { id: 'width', name: '너비/폭 (㎜)', type: 'measure' as const, unit: 'mm',
+        minVal: 600, step: 1, standard: '600mm 이상',
+        method: '줄자', cycle: '매로트', condition: 'n=3, c=0' }
+    ]),
+    { id: 'length', name: '길이 (㎜)', type: 'measure', unit: 'mm',
+      minVal: 1200, step: 1,
+      standard: '1,200mm 이상 (KSM 3809)',
+      method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
+    { id: 'density', name: `밀도 (kg/㎥)`, type: 'measure', unit: 'kg/㎥',
+      minVal: densityNum, step: 0.1,
+      standard: `${densityNum} kg/㎥ 이상 (KSM 3809)`,
+      method: '계산식', cycle: '매로트', condition: 'n=3, c=0' },
+    { id: 'mfr_doc', name: '제조사 시험성적서', type: 'doc',
+      standard: '열전도율 ≤0.036 W/m·K, 불연성 난연1급',
+      method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', autoDefault: '확인완료' },
+    { id: 'cert', name: '공인기관 의뢰(1회/년)', type: 'doc',
+      standard: 'KCL / KTR 공인성적서 (그라스울 보드 KSM 3809 적합)',
+      method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', autoDefault: '연동완료' },
   ];
 
-  // 실란트
+  // 실란트 — 비중/용량은 ±허용오차 범위(양방향)
   return [
-    { id: 'visual', name: '겉모양 (외관)', type: 'visual', standard: '용기 파손, 겔화, 굳음 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'density_s', name: '비중 (용량 mL)', type: 'measure', unit: 'mL', minVal: 290, maxVal: 310, step: 0.1, standard: '300mL ±10 (1.35 ± 0.05)', method: '비중계', cycle: '매로트', condition: 'n=3, c=0' },
-    { id: 'mfr_doc', name: '제조사 시험성적서', type: 'doc', standard: '불연성 난연1급, 비중 1.35 시험치 확인', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', autoDefault: '확인완료' },
-    { id: 'cert', name: '공인기관 의뢰(1회/년)', type: 'doc', standard: '불연 또는 난연 1급 공인성적서 적합', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', autoDefault: '연동완료' },
+    { id: 'visual', name: '겉모양 (외관)', type: 'visual',
+      standard: '용기 파손, 겔화, 굳음 없을 것',
+      method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
+    { id: 'density_s', name: '비중 (용량 mL)', type: 'measure', unit: 'mL',
+      minVal: 290, maxVal: 310, step: 0.1,
+      standard: '300mL ±10 (비중 1.35 ± 0.05)',
+      method: '비중계', cycle: '매로트', condition: 'n=3, c=0' },
+    { id: 'mfr_doc', name: '제조사 시험성적서', type: 'doc',
+      standard: '불연성 난연1급, 비중 1.35 시험치 확인',
+      method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', autoDefault: '확인완료' },
+    { id: 'cert', name: '공인기관 의뢰(1회/년)', type: 'doc',
+      standard: '불연 또는 난연 1급 공인성적서 적합',
+      method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', autoDefault: '연동완료' },
   ];
 }
 
@@ -126,19 +213,26 @@ export function InspectionExecutionModal({
   if (!isOpen) return null;
 
   // ── 값 변경 및 실시간 검증 ──────────────────────────────────────────────
+  // 검증 원칙: minVal만 있으면 '이상(≥)' 검사만 → 하한 미달 시 경고
+  //            maxVal도 있으면 '범위' 검사 → 초과도 경고 (실란트 비중 등)
   const updateResult = (id: string, field: string, value: string) => {
     setResults(prev => {
       const item = items.find(it => it.id === id)!;
       const updated = { ...prev[id], [field]: value };
       const errors: string[] = [];
 
-      if (item.type === 'measure' && item.minVal !== undefined && item.maxVal !== undefined) {
+      if (item.type === 'measure' && item.minVal !== undefined) {
         const vals = [updated.n1, updated.n2, updated.n3].map(v => parseFloat(v)).filter(v => !isNaN(v));
         vals.forEach((v, i) => {
+          // 하한 검사: 항상 수행 (이상 기준)
           if (v < item.minVal!) {
-            errors.push(`⚠️ n${i+1} = ${v}${item.unit} → 기준 최소값 ${item.minVal}${item.unit} 미달! (${(item.minVal! - v).toFixed(2)}${item.unit} 부족)`);
-          } else if (v > item.maxVal!) {
-            errors.push(`⚠️ n${i+1} = ${v}${item.unit} → 기준 최대값 ${item.maxVal}${item.unit} 초과! (+${(v - item.maxVal!).toFixed(2)}${item.unit})`);
+            const diff = (item.minVal! - v).toFixed(2);
+            errors.push(`⚠️ n${i+1} = ${v}${item.unit} → 기준 ${item.minVal}${item.unit} 이상 미달! (${diff}${item.unit} 부족)`);
+          }
+          // 상한 검사: maxVal이 있을 때만 (실란트 비중 등 ±허용오차 항목)
+          else if (item.maxVal !== undefined && v > item.maxVal) {
+            const diff = (v - item.maxVal).toFixed(2);
+            errors.push(`⚠️ n${i+1} = ${v}${item.unit} → 기준 최대값 ${item.maxVal}${item.unit} 초과! (+${diff}${item.unit})`);
           }
         });
         // 반복값 경고
@@ -150,6 +244,7 @@ export function InspectionExecutionModal({
       return { ...prev, [id]: updated };
     });
   };
+
 
   // ── 전체 판정 ──────────────────────────────────────────────────────────
   const computeOverall = (): 'PASS' | 'FAIL' => {
@@ -419,7 +514,9 @@ export function InspectionExecutionModal({
                             />
                             {out && (
                               <p className="text-[10px] text-red-600 font-bold text-center mt-0.5">
-                                {outMin ? `↓ 최소 ${it.minVal}${it.unit}` : `↑ 최대 ${it.maxVal}${it.unit}`}
+                                {outMin
+                                  ? `↓ ${it.minVal}${it.unit} 이상 미달 — FAIL 판정`
+                                  : `↑ 최대 ${it.maxVal}${it.unit} 초과 — FAIL 판정`}
                               </p>
                             )}
                           </div>
@@ -427,13 +524,15 @@ export function InspectionExecutionModal({
                       })}
                     </div>
 
-                    {/* 기준범위 시각화 */}
+                    {/* 기준 표시: maxVal 없으면 '이상', 있으면 '범위' */}
                     {it.minVal !== undefined && (
                       <p className="text-[10px] text-slate-500 mt-1.5 text-center font-mono">
-                        허용 범위: {it.minVal} ~ {it.maxVal} {it.unit}
+                        {it.maxVal !== undefined
+                          ? <>허용 범위: {it.minVal} ~ {it.maxVal} {it.unit} (±허용오차)</>
+                          : <>기준: <span className="font-bold text-slate-700">{it.minVal}{it.unit} 이상 (≥)</span></>}
                         {r.n1 && r.n2 && r.n3 && !hasError && (
                           <span className="ml-2 text-emerald-700 font-bold">
-                            평균: {((parseFloat(r.n1)+parseFloat(r.n2)+parseFloat(r.n3))/3).toFixed(2)}{it.unit}
+                            평균: {((parseFloat(r.n1)+parseFloat(r.n2)+parseFloat(r.n3))/3).toFixed(2)}{it.unit} ✓
                           </span>
                         )}
                       </p>
