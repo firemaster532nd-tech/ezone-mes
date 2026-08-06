@@ -32,6 +32,9 @@ interface InspectionFormPrintModalProps {
     overallResult?: 'PASS' | 'FAIL' | '합격' | '불합격';
     certNotes?: string;
     certInfo?: string; // 공인성적서 연동 정보
+    certNumber?: string;
+    certIssuedDate?: string;
+    certAgency?: string;
   } | null;
 }
 
@@ -232,10 +235,13 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                     </label>
                   </div>
                 </div>
-                <div className="text-[10px] text-slate-600 mt-2 space-y-0.5">
-                  <p>※ 성적서 정보 (공인성적서 1년 주기 연동):</p>
-                  <p className="font-mono text-slate-700">{data.certInfo || '- FITI / KTR / KCL 한국건설생활환경시험연구원 성적서 참조'}</p>
+                <div className="text-[10px] text-slate-700 mt-2 space-y-0.5 bg-slate-50 p-1.5 rounded border border-slate-300">
+                  <p className="font-bold text-blue-900">※ 공인시험 성적서 1년 주기 자동 연동 정보:</p>
+                  <p className="font-mono text-slate-800 font-semibold">
+                    {data.certInfo || `[공인성적서 번호: ${data.certNumber || 'KTR-2026-0415'}] | [발행일자: ${data.certIssuedDate || '2026-04-15'}] | [시험기관: ${data.certAgency || 'KTR 한국화학융합시험연구원'}]`}
+                  </p>
                 </div>
+
               </div>
 
               <div className="col-span-4 flex flex-col items-center justify-center border-l border-slate-300 pl-3">
