@@ -86,16 +86,24 @@ export function FnTechInspectionPage() {
   const getFullItemName = (r?: any) => {
     if (r?.item_name) return r.item_name;
     const diamStr = `${sleeveDiam}파이`;
-    const heightStr = sleeveDiam === 100 ? ` (${sleeveHeight})` : '';
+    const heightStr = sleeveDiam === 100 ? ` ${sleeveHeight}` : '';
     return `${tab} ${diamStr}${heightStr}`;
+  };
+
+  const getSpecText = (r?: any) => {
+    const d = r?.sleeve_diam || sleeveDiam;
+    const h = r?.sleeve_height || sleeveHeight;
+    return d === 100 ? `${d}파이 ${h}` : `${d}파이`;
   };
 
   const handleOpenLabelPrinter = (r: any) => {
     const itemName = getFullItemName(r);
+    const specText = getSpecText(r);
     setPrintLabelData({
       lot_number: r.lot_number || lotNumber,
       item_name: itemName,
       category: tab,
+      thickness: specText, // 라벨 규격 란에 파이 + 높이 명확히 표출
       qty_current: r.qty || qty || 1,
       unit: '개',
       received_date: String(r.inspected_at || new Date().toISOString()).slice(0, 10),
@@ -109,6 +117,16 @@ export function FnTechInspectionPage() {
     const isPlate = tab === '보호철판';
     const isSleeve = tab === '일체형슬리브';
     const itemName = getFullItemName(r);
+    const diam = r?.sleeve_diam || sleeveDiam;
+
+    // 사규 D128-1 / D129-1 PDF 원본 규격
+    const sleeveSpecText = diam === 50 ? '50A (외경 145±1.0, 내경 88±1.0, 두께 3.5±0.5mm)'
+      : diam === 75 ? '75A (외경 174±1.0, 내경 117±1.0, 두께 3.5±0.5mm)'
+      : '100A (외경 200±1.0, 내경 141±1.0, 두께 3.5±0.5mm)';
+
+    const plateSpecText = diam === 50 ? '50A (외경 135±1.0, 내경 67±1.0, 두께 1.5mm 이상)'
+      : diam === 75 ? '75A (외경 165±1.0, 내경 95±1.0, 두께 1.5mm 이상)'
+      : '100A (외경 190±1.0, 내경 122±1.0, 두께 1.5mm 이상)';
     
     setPrintModalData({
       formCode: isSleeve ? 'EZC-D-128-1' : isPlate ? 'EZC-D-129-1' : 'EZC-D-130-1',
@@ -116,7 +134,6 @@ export function FnTechInspectionPage() {
       categoryName: isSleeve ? 'EZ-FN-P100 / 에프엔테크 일체형슬리브' : isPlate ? 'EZ-FN-P100 / 에프엔테크 보호철판(GI)' : 'EZ-FN-P100 / 에프엔테크 고무패킹',
       itemName: itemName,
       receivedDate: String(r.inspected_at || new Date().toISOString()).slice(0, 10),
-
       lotNumber: r.lot_number || '-',
       supplierLot: r.supplier_lot || 'FN-260801-01',
       supplierName: '(주)에프엔테크',
@@ -128,11 +145,11 @@ export function FnTechInspectionPage() {
       n3: isPlate ? '1.5 mm' : '3.5 mm',
       items: isPlate ? [
         { name: '겉모양 (외관)', standard: '한도견본 기준 휨, 비틀림, 깨짐이 없을 것', method: '육안', n1: '양호', n2: '양호', n3: '양호', isPass: true },
-        { name: '치수 (외경/내경/두께)', standard: '100A: 외경 190±1.0, 내경 122±1.0, 두께 1.5mm 이상', method: '줄자/버니어', n1: '190.1', n2: '122.2', n3: '1.52', isPass: true },
+        { name: `치수 (${diam}A 외경/내경/두께)`, standard: plateSpecText, method: '줄자/버니어', n1: '정상', n2: '정상', n3: '정상', isPass: true },
         { name: '항복강도 / 인장강도', standard: '항복강도 ≥205 N/㎟, 인장강도 ≥270 N/㎟', method: '공인성적서', n1: '276', n2: '353', n3: '적합', isPass: true }
       ] : [
         { name: '겉모양 (외관)', standard: '한도견본 기준 휨, 비틀림, 깨짐이 없을 것', method: '육안', n1: '양호', n2: '양호', n3: '양호', isPass: true },
-        { name: '치수 (외경/내경/두께)', standard: '100A: 외경 200±1.0, 내경 141±1.0, 두께 3.5±0.5mm', method: '줄자/버니어', n1: '200.2', n2: '141.1', n3: '3.55', isPass: true },
+        { name: `치수 (${diam}A 외경/내경/두께)`, standard: sleeveSpecText, method: '줄자/버니어', n1: '정상', n2: '정상', n3: '정상', isPass: true },
         { name: 'MFR / 충격강도', standard: 'MVR 20~50 ㎤/10min, Izod 충격강도 15~25 kJ/㎡', method: '제조사성적서', n1: '31', n2: '19', n3: '적합', isPass: true }
       ],
       overallResult: r.overall_result === 'PASS' ? 'PASS' : 'FAIL',
@@ -141,6 +158,7 @@ export function FnTechInspectionPage() {
         : '[인정번호: FS-NP24-1112-2 (EZ-FN-P100)] | [밀도 1.2 g/㎤ 이상, 길이 415mm 이상, 질량 155g 이상 적합]'
     });
   };
+
 
 
   // 검사 측정값 (n1/n2/n3 × 각 필드)
