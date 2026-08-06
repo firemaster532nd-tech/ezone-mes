@@ -1,6 +1,7 @@
+import { useState, useEffect } from 'react';
 import { useInspectors } from '@/hooks/useInspectors';
-
 import { api } from '@/lib/api';
+
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Plus, Printer } from 'lucide-react';
 import { InspectionFormPrintModal } from '@/components/inspection/InspectionFormPrintModal';

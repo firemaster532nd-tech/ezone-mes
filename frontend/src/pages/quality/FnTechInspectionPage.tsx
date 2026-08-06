@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react';
 import { useInspectors } from '@/hooks/useInspectors';
 import { api } from '@/lib/api';
+
 
 import { toast } from 'sonner';
 import { Printer } from 'lucide-react';
