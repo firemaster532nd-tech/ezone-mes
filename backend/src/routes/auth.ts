@@ -468,42 +468,6 @@ export async function authRoutes(app: FastifyInstance) {
     return { workers: rows };
   });
 
-  // GET /api/inspectors (기초등록 회사 인원 전체 목록 조회 - 성적서 및 검사자 드롭다운용)
-  app.get('/api/inspectors', async () => {
-
-    try {
-      const { rows } = await pool.query(`
-        SELECT
-          w.worker_id,
-          w.worker_name,
-          COALESCE(w.position, '') AS position,
-          COALESCE(d.dept_name, '') AS dept_name
-        FROM worker w
-        LEFT JOIN department d ON d.dept_id = w.dept_id
-        WHERE COALESCE(w.is_active, TRUE) = TRUE
-        ORDER BY w.worker_id ASC
-      `);
-
-      const list = rows.map(r => {
-        const name = r.worker_name.trim();
-        const pos = r.position ? r.position.trim() : '';
-        return pos ? `${name} ${pos}` : name;
-      });
-
-      // 기본 고정 관리자 백업 포함
-      const defaultNames = ['김정용 책임', '최진영 책임', '임병용 파트장', '이동민 파트장', '김봉민 책임', '박민선 대표'];
-      const combined = Array.from(new Set([...list, ...defaultNames]));
-
-      return { inspectors: combined, workers: rows };
-    } catch (e: any) {
-      return {
-        inspectors: ['김정용 책임', '최진영 책임', '임병용 파트장', '이동민 파트장', '김봉민 책임', '박민선 대표'],
-        error: e.message
-      };
-    }
-  });
-
-
 
   // POST /api/auth/users  (admin ?„ìš©: ? ê·œ ê³„ì • ?±ë¡)
   app.post('/api/auth/users', { preHandler: requireRole('admin') }, async (req, reply) => {
