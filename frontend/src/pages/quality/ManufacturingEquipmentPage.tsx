@@ -642,8 +642,9 @@ function EquipmentChecklistPrintModal({
               </div>
               <div className="col-span-4 flex flex-col items-center justify-center border-l-2 border-slate-400 pl-2">
                 <span className="font-extrabold text-[11px] text-slate-900 mb-0.5">(주) 이 지 원 제조관리</span>
-                <img src="/이지원도장.png" alt="이지원 도장" className="h-10 w-10 object-contain" />
+                <img src="/ezone_stamp.png" alt="(주)이지원 품질보증 직인" className="h-12 w-12 object-contain mix-blend-multiply" />
               </div>
+
             </div>
 
             <div className="text-[9px] text-slate-500 text-right font-mono">

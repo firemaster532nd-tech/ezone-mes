@@ -397,8 +397,9 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
               {/* (주)이지원 품질보증 직인 도장 */}
               <div className="col-span-4 flex flex-col items-center justify-center border-l-2 border-slate-400 pl-3">
                 <span className="font-extrabold text-xs text-slate-900 mb-1">(주) 이 지 원 품질보증</span>
-                {!isBlankForm && <img src="/이지원도장.png" alt="이지원 도장" className="h-14 w-14 object-contain" />}
+                {!isBlankForm && <img src="/ezone_stamp.png" alt="(주)이지원 품질보증 직인" className="h-16 w-16 object-contain mix-blend-multiply" />}
               </div>
+
             </div>
 
 
