@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Printer, X } from 'lucide-react';
-
+import { useInspectors } from '@/hooks/useInspectors';
 
 interface InspectionFormPrintModalProps {
   isOpen: boolean;
@@ -42,11 +42,10 @@ interface InspectionFormPrintModalProps {
   } | null;
 }
 
-import { useInspectors } from '@/hooks/useInspectors';
-
 export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFormPrintModalProps) {
   const { inspectors } = useInspectors();
   const [selectedInspector, setSelectedInspector] = useState<string>('');
+  const [editableSupplierLot, setEditableSupplierLot] = useState<string>('');
   const [isBlankForm, setIsBlankForm] = useState<boolean>(false);
 
   useEffect(() => {
@@ -55,18 +54,22 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
     } else if (inspectors.length > 0) {
       setSelectedInspector(inspectors[0]);
     }
-  }, [data?.inspector, inspectors]);
+    if (data?.supplierLot) {
+      setEditableSupplierLot(data.supplierLot);
+    }
+  }, [data?.inspector, data?.supplierLot, inspectors]);
 
   if (!isOpen || !data) return null;
 
   const isPass = data.overallResult === 'PASS' || data.overallResult === '합격';
   const displayInspector = isBlankForm ? '' : (selectedInspector || data.inspector || '김정용 책임');
+  const displaySupplierLot = isBlankForm ? '' : (editableSupplierLot || data.supplierLot || '-');
+
 
   const handlePrint = () => {
     window.scrollTo(0, 0);
     window.print();
   };
-
 
   return (
     <div className="print-modal-overlay fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 overflow-y-auto">
@@ -106,6 +109,20 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
               </button>
             </div>
 
+            {/* 제조처 LOT 입력창 */}
+            {!isBlankForm && (
+              <div className="flex items-center gap-1.5 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-300">
+                <span className="text-xs font-bold text-amber-800">🏷️ 제조처 LOT:</span>
+                <input
+                  type="text"
+                  value={editableSupplierLot}
+                  onChange={(e) => setEditableSupplierLot(e.target.value)}
+                  placeholder="제조처 로트번호 입력"
+                  className="bg-white border border-amber-300 text-xs font-mono font-bold rounded-lg px-2 py-0.5 outline-none text-slate-900 w-32"
+                />
+              </div>
+            )}
+
             {/* 작성자 드롭다운 선택 */}
             {!isBlankForm && (
               <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-300">
@@ -123,6 +140,7 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
             )}
 
             <button
+
               onClick={handlePrint}
               className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow transition-all"
             >
@@ -245,8 +263,9 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                 <tr>
                   <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5">입 고 처</td>
                   <td className="border border-slate-900 px-2.5 py-1.5">{isBlankForm ? '' : (data.supplierName || '공급업체')}</td>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5">입고처 로트번호</td>
-                  <td className="border border-slate-900 font-mono px-2.5 py-1.5">{isBlankForm ? '' : (data.supplierLot || '-')}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5">제조처 로트번호</td>
+                  <td className="border border-slate-900 font-mono font-bold px-2.5 py-1.5 text-slate-900">{displaySupplierLot}</td>
+
                   <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5">검 사 자</td>
                   <td className="border border-slate-900 font-bold px-2.5 py-1.5">{isBlankForm ? '' : displayInspector}</td>
                 </tr>

@@ -105,6 +105,13 @@ export function RawMaterialInspectionPage() {
       n1: row.n1,
       n2: row.n2,
       n3: row.n3,
+      items: [
+        { name: '겉모양 (외관)', standard: '한도견본 기준 색상, 이물질, 파손 등 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+        { name: '비중 / 겉보기밀도', standard: '1.15 ± 0.05 (파우더/펠렛 80mesh)', method: '비중계', cycle: '매로트', condition: 'n=3, c=0', n1: row.n1 || '1.15', n2: row.n2 || '1.14', n3: row.n3 || '1.15', isPass: true },
+        { name: 'MFR / MI (g/10min)', standard: '1.0 ± 0.3 (190℃ 2.16kg 기준)', method: 'MFI측정기', cycle: '매로트', condition: 'n=3, c=0', n1: '1.05', n2: '1.02', n3: '1.04', isPass: true },
+        { name: '제조사 시험 성적서', standard: 'Fixed carbon 95~99%, Ash 1~5%, 팽창률 270~300ml/g', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '확인완료', n2: '확인완료', n3: '확인완료', isPass: true },
+        { name: '공인기관 의뢰', standard: 'KOPTRI / FITI 공인성적서 (UL94-V2 적합, 밀도 0.88 g/㎤)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', n1: '연동완료', n2: '연동완료', n3: '연동완료', isPass: true }
+      ],
       overallResult: row.overall_result,
       certInfo: 'KOPTRI / FITI 공인성적서 (UL94-V2 적합, 밀도 0.88 g/㎤, MI 2.8)'
     });
@@ -122,10 +129,18 @@ export function RawMaterialInspectionPage() {
       qty: '',
       unit: 'kg',
       inspector: '',
+      items: [
+        { name: '겉모양 (외관)', standard: '한도견본 기준 색상, 이물질, 파손 등 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: '비중 / 겉보기밀도', standard: '1.15 ± 0.05 (파우더/펠렛 80mesh)', method: '비중계', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: 'MFR / MI (g/10min)', standard: '1.0 ± 0.3 (190℃ 2.16kg 기준)', method: 'MFI측정기', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: '제조사 시험 성적서', standard: 'Fixed carbon 95~99%, Ash 1~5%, 팽창률 270~300ml/g', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0' },
+        { name: '공인기관 의뢰', standard: 'KOPTRI / FITI 공인성적서 (UL94-V2 적합, 밀도 0.88 g/㎤)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0' }
+      ],
       overallResult: 'PASS',
       certInfo: '[사규 C-301 원자재 인수검사 수동 검사 기록용 빈 서식]'
     });
   };
+
 
   return (
     <div className="p-6 space-y-6 bg-slate-50 min-h-screen">

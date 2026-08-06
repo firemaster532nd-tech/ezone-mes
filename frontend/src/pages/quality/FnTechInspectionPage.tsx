@@ -146,14 +146,26 @@ export function FnTechInspectionPage() {
       n2: isPlate ? '1.5 mm' : '3.5 mm',
       n3: isPlate ? '1.5 mm' : '3.5 mm',
       items: isPlate ? [
-        { name: '겉모양 (외관)', standard: '한도견본 기준 휨, 비틀림, 깨짐이 없을 것', method: '육안', n1: '양호', n2: '양호', n3: '양호', isPass: true },
-        { name: `치수 (${diam}A 외경/내경/두께)`, standard: plateSpecText, method: '줄자/버니어', n1: '정상', n2: '정상', n3: '정상', isPass: true },
-        { name: '항복강도 / 인장강도', standard: '항복강도 ≥205 N/㎟, 인장강도 ≥270 N/㎟', method: '공인성적서', n1: '276', n2: '353', n3: '적합', isPass: true }
+        { name: '겉모양 (외관)', standard: '한도견본 기준 휨, 비틀림, 깨짐이 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+        { name: `치수 - 외경 (${diam}A)`, standard: diam === 50 ? '135 (±1.0) mm' : diam === 75 ? '165 (±1.0) mm' : '190 (±1.0) mm', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '190.2', n2: '190.1', n3: '190.3', isPass: true },
+        { name: `치수 - 내경 (${diam}A)`, standard: diam === 50 ? '67 (±1.0) mm' : diam === 75 ? '95 (±1.0) mm' : '122 (±1.0) mm', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '122.1', n2: '122.0', n3: '122.2', isPass: true },
+        { name: `치수 - 두께 (${diam}A)`, standard: '1.5 mm 이상', method: '버니어캘리퍼스', cycle: '매로트', condition: 'n=3, c=0', n1: '1.55', n2: '1.54', n3: '1.55', isPass: true },
+        { name: '제조사 시험 성적서', standard: '항복강도 ≥205 N/㎟, 인장강도 ≥270 N/㎟', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '확인완료', n2: '확인완료', n3: '확인완료', isPass: true },
+        { name: '공인기관 의뢰', standard: 'KCL 공인성적서 (항복강도 276, 인장강도 353 N/㎟)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', n1: '연동완료', n2: '연동완료', n3: '연동완료', isPass: true }
+      ] : isSleeve ? [
+        { name: '겉모양 (외관)', standard: '한도견본 기준 휨, 비틀림, 깨짐이 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+        { name: `치수 - 외경 (${diam}A)`, standard: diam === 50 ? '145 (±1.0) mm' : diam === 75 ? '174 (±1.0) mm' : '200 (±1.0) mm', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '200.3', n2: '200.2', n3: '200.4', isPass: true },
+        { name: `치수 - 내경 (${diam}A)`, standard: diam === 50 ? '88 (±1.0) mm' : diam === 75 ? '117 (±1.0) mm' : '141 (±1.0) mm', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '141.2', n2: '141.1', n3: '141.3', isPass: true },
+        { name: `치수 - 두께 (${diam}A)`, standard: '3.5 (±0.5) mm', method: '버니어캘리퍼스', cycle: '매로트', condition: 'n=3, c=0', n1: '3.52', n2: '3.51', n3: '3.53', isPass: true },
+        { name: '제조사 시험 성적서', standard: 'MVR 20~50 ㎤/10min, Izod 충격강도 15~25, 항복강도 20~60', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '31', n2: '19', n3: '35 (적합)', isPass: true }
       ] : [
-        { name: '겉모양 (외관)', standard: '한도견본 기준 휨, 비틀림, 깨짐이 없을 것', method: '육안', n1: '양호', n2: '양호', n3: '양호', isPass: true },
-        { name: `치수 (${diam}A 외경/내경/두께)`, standard: sleeveSpecText, method: '줄자/버니어', n1: '정상', n2: '정상', n3: '정상', isPass: true },
-        { name: 'MFR / 충격강도', standard: 'MVR 20~50 ㎤/10min, Izod 충격강도 15~25 kJ/㎡', method: '제조사성적서', n1: '31', n2: '19', n3: '적합', isPass: true }
+        { name: '겉모양 (외관)', standard: '한도견본 기준 휨, 비틀림, 깨짐이 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+        { name: `치수 - 외경 (${diam}A)`, standard: '주문치수 (±1.0) mm', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '정상', n2: '정상', n3: '정상', isPass: true },
+        { name: `치수 - 내경 (${diam}A)`, standard: '주문치수 (±1.0) mm', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '정상', n2: '정상', n3: '정상', isPass: true },
+        { name: `치수 - 높이/두께`, standard: '주문치수 이상', method: '버니어캘리퍼스', cycle: '매로트', condition: 'n=3, c=0', n1: '정상', n2: '정상', n3: '정상', isPass: true },
+        { name: '제조사 시험 성적서', standard: '비중 1.12~1.16, 경도(Shore A) 54~58, 연신율 356~394%', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '1.14', n2: '56', n3: '370% (적합)', isPass: true }
       ],
+
       overallResult: r.overall_result === 'PASS' ? 'PASS' : 'FAIL',
       certInfo: isPlate 
         ? '[KCL 한국건설생활환경시험연구원 (2025.05.13)] | [인장강도 353 N/㎟, 항복강도 276 N/㎟ (합격)]'

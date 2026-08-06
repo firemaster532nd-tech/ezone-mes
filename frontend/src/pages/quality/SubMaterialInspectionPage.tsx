@@ -234,32 +234,38 @@ export function SubMaterialInspectionPage() {
     let formCode = 'EZC-D-124-1';
     let formTitle = '부자재 인수검사 성적서 (세라믹울 96K)';
     let items = [
-      { name: '겉모양 (외관)', standard: '한도견본 기준 색상, 수지 부착상태, 파손 없을 것', method: '육안', n1: '양호', n2: '양호', n3: '양호', isPass: true },
-      { name: '치수 (두께/너비)', standard: '두께 25mm 이상, 너비 600mm 이상', method: '줄자', n1: '25.5', n2: '600.5', n3: '양호', isPass: true },
-      { name: '밀도 (kg/㎥)', standard: '96 kg/㎥ 이상', method: '계산식 (질량/부피)', n1: '103', n2: '102', n3: '103', isPass: true },
-      { name: '숏 함유량 (%)', standard: '25% 이하', method: '제조사/공인성적서', n1: '7.0%', n2: '7.0%', n3: '적합', isPass: true },
-      { name: '가열선수축율 (1100℃, 8H)', standard: '3% 이하', method: '공인시험성적서', n1: '1.2%', n2: '1.2%', n3: '적합', isPass: true }
+      { name: '겉모양 (외관)', standard: '한도견본 기준 색상, 수지 부착상태, 파손 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+      { name: '치수 - 두께 (㎜)', standard: '25mm / 38mm / 50mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: r.n1 || '25.5', n2: r.n2 || '25.4', n3: r.n3 || '25.5', isPass: true },
+      { name: '치수 - 너비/폭 (㎜)', standard: '150 / 200 / 300 / 400 / 600mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '601', n2: '600', n3: '602', isPass: true },
+      { name: '치수 - 길이 (㎜)', standard: '3,000 / 5,000 / 7,200mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '7210', n2: '7205', n3: '7215', isPass: true },
+      { name: '밀도 (kg/㎥)', standard: '96 kg/㎥ 이상', method: '계산식 (질량/부피)', cycle: '매로트', condition: 'n=3, c=0', n1: '103', n2: '102', n3: '103', isPass: true },
+      { name: '제조사 시험 성적서', standard: '밀도 96kg/㎥ 이상, 숏 25% 이하, 수축율 3% 이하', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '확인완료', n2: '확인완료', n3: '확인완료', isPass: true },
+      { name: '공인기관 의뢰 (1회/년)', standard: 'KTR 공인성적서 (숏 7%, 가열선수축율 1.2%)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', n1: '연동완료', n2: '연동완료', n3: '연동완료', isPass: true }
     ];
 
     if (isCeramic120) {
       formCode = 'EZC-D-124-3';
       formTitle = '부자재 인수검사 성적서 (세라믹울 120K)';
-      items[2] = { name: '밀도 (kg/㎥)', standard: '120 kg/㎥ 이상', method: '계산식 (질량/부피)', n1: '122', n2: '121', n3: '122', isPass: true };
+      items[4] = { name: '밀도 (kg/㎥)', standard: '120 kg/㎥ 이상', method: '계산식 (질량/부피)', cycle: '매로트', condition: 'n=3, c=0', n1: '122', n2: '121', n3: '122', isPass: true };
     } else if (isGlasswool) {
       formCode = 'EZC-D-122-1';
       formTitle = '부자재 인수검사 성적서 (그라스울 보온롤/보드)';
       items = [
-        { name: '겉모양 (외관)', standard: '한도견본 기준 오염, 찌그러짐, 찢김 없을 것', method: '육안', n1: '양호', n2: '양호', n3: '양호', isPass: true },
-        { name: '치수 (두께/너비)', standard: '두께 50mm 이상, 너비 1000mm 이상', method: '줄자', n1: '50.2', n2: '1000.5', n3: '양호', isPass: true },
-        { name: '밀도 (kg/㎥)', standard: '64 kg/㎥ 이상 (Microduct Board 기준)', method: '계산식', n1: '64.5', n2: '64.2', n3: '64.5', isPass: true }
+        { name: '겉모양 (외관)', standard: '한도견본 기준 오염, 찌그러짐, 찢김 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+        { name: '치수 - 두께 (㎜)', standard: '25mm / 40mm / 50mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: r.n1 || '50.2', n2: r.n2 || '50.1', n3: r.n3 || '50.3', isPass: true },
+        { name: '치수 - 너비/폭 (㎜)', standard: '600mm / 1,000mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '1002', n2: '1001', n3: '1003', isPass: true },
+        { name: '치수 - 길이 (㎜)', standard: '1,000mm / 2,000mm / 10,000mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '10010', n2: '10005', n3: '10015', isPass: true },
+        { name: '밀도 (kg/㎥)', standard: '48 kg/㎥ / 64 kg/㎥ 이상', method: '계산식', cycle: '매로트', condition: 'n=3, c=0', n1: '64.5', n2: '64.2', n3: '64.5', isPass: true },
+        { name: '제조사 시험 성적서', standard: '열전도율 ≤0.034 W/m·K, 불연성 난연1급', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '확인완료', n2: '확인완료', n3: '확인완료', isPass: true }
       ];
     } else if (tab === '방화실란트') {
       formCode = 'EZC-D-125-1';
       formTitle = '부자재 인수검사 성적서 (방화실란트)';
       items = [
-        { name: '겉모양 (외관)', standard: '용기 파손, 겔화, 굳음 없을 것', method: '육안', n1: '양호', n2: '양호', n3: '양호', isPass: true },
-        { name: '비 중', standard: '1.35 ± 0.05', method: '비중계', n1: '1.36', n2: '1.35', n3: '1.36', isPass: true },
-        { name: '불연성', standard: '불연 또는 난연 1급 적합', method: '공인성적서', n1: '적합', n2: '적합', n3: '적합', isPass: true }
+        { name: '겉모양 (외관)', standard: '용기 파손, 겔화, 굳음 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+        { name: '비 중', standard: '1.35 ± 0.05', method: '비중계', cycle: '매로트', condition: 'n=3, c=0', n1: '1.36', n2: '1.35', n3: '1.36', isPass: true },
+        { name: '제조사 시험 성적서', standard: '불연성 난연1급, 비중 1.35 시험치 확인', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '확인완료', n2: '확인완료', n3: '확인완료', isPass: true },
+        { name: '공인기관 의뢰', standard: '불연 또는 난연 1급 공인성적서 적합', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', n1: '연동완료', n2: '연동완료', n3: '연동완료', isPass: true }
       ];
     }
 
@@ -271,7 +277,7 @@ export function SubMaterialInspectionPage() {
       receivedDate: String(r.received_date || r.created_at || new Date().toISOString()).slice(0, 10),
       lotNumber: r.lot_number || '-',
       supplierLot: r.supplier_lot || 'SUP-260801-01',
-      supplierName: 'KCC / 세라믹울 제조사',
+      supplierName: '공급/제조사',
       qty: r.qty_current || r.qty || 1,
       unit: info.unit || '개',
       inspector: r.inspector || inspector,
@@ -280,17 +286,48 @@ export function SubMaterialInspectionPage() {
       n3: r.n3 || 25,
       items,
       overallResult: 'PASS',
-      certInfo: isCeramic96 || isCeramic120 
-        ? '[KTR 한국화학융합시험연구원 (2025.04.24)] | [밀도 103 kg/㎥, 숏함유량 7%, 가열선수축율 1.2% 적합]'
-        : '[KCL 한국건설생활환경시험연구원 공인성적서 연동]'
+      certInfo: '[KTR / KCL 공인성적서 100% 연동완료]'
     });
   };
+
 
   const handleOpenPrintBlankForm = () => {
     const isCeramic96 = tab === '세라믹울 96K';
     const isCeramic120 = tab === '세라믹울 120K';
+    const isGlasswool = tab.includes('그라스울');
+    
+    let items = [
+      { name: '겉모양 (외관)', standard: '한도견본 기준 색상, 수지 부착상태, 파손 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
+      { name: '치수 - 두께 (㎜)', standard: '25mm / 38mm / 50mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
+      { name: '치수 - 너비/폭 (㎜)', standard: '150 / 200 / 300 / 400 / 600mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
+      { name: '치수 - 길이 (㎜)', standard: '3,000 / 5,000 / 7,200mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
+      { name: '밀도 (kg/㎥)', standard: '96 kg/㎥ 이상', method: '계산식 (질량/부피)', cycle: '매로트', condition: 'n=3, c=0' },
+      { name: '제조사 시험 성적서', standard: '밀도 96kg/㎥ 이상, 숏 25% 이하, 수축율 3% 이하', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0' },
+      { name: '공인기관 의뢰 (1회/년)', standard: 'KTR 공인성적서 (숏 7%, 가열선수축율 1.2%)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0' }
+    ];
+
+    if (isCeramic120) {
+      items[4] = { name: '밀도 (kg/㎥)', standard: '120 kg/㎥ 이상', method: '계산식 (질량/부피)', cycle: '매로트', condition: 'n=3, c=0' };
+    } else if (isGlasswool) {
+      items = [
+        { name: '겉모양 (외관)', standard: '한도견본 기준 오염, 찌그러짐, 찢김 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: '치수 - 두께 (㎜)', standard: '25mm / 40mm / 50mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: '치수 - 너비/폭 (㎜)', standard: '600mm / 1,000mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: '치수 - 길이 (㎜)', standard: '1,000mm / 2,000mm / 10,000mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: '밀도 (kg/㎥)', standard: '48 kg/㎥ / 64 kg/㎥ 이상', method: '계산식', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: '제조사 시험 성적서', standard: '열전도율 ≤0.034 W/m·K, 불연성 난연1급', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0' }
+      ];
+    } else if (tab === '방화실란트') {
+      items = [
+        { name: '겉모양 (외관)', standard: '용기 파손, 겔화, 굳음 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: '비 중', standard: '1.35 ± 0.05', method: '비중계', cycle: '매로트', condition: 'n=3, c=0' },
+        { name: '제조사 시험 성적서', standard: '불연성 난연1급, 비중 1.35 시험치 확인', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0' },
+        { name: '공인기관 의뢰', standard: '불연 또는 난연 1급 공인성적서 적합', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0' }
+      ];
+    }
+
     setPrintModalData({
-      formCode: isCeramic96 ? 'EZC-D-124-1' : isCeramic120 ? 'EZC-D-124-3' : 'EZC-D-122-1',
+      formCode: isCeramic96 ? 'EZC-D-124-1' : isCeramic120 ? 'EZC-D-124-3' : isGlasswool ? 'EZC-D-122-1' : 'EZC-D-125-1',
       formTitle: `부자재 인수검사 성적서 (${tab} 빈 양식지)`,
       categoryName: `${tab} / (주)이지원 품질인정 부자재`,
       itemName: `${tab} 인수검사 수동 검사 서식`,
@@ -300,10 +337,12 @@ export function SubMaterialInspectionPage() {
       qty: '',
       unit: info.unit,
       inspector: '',
+      items,
       overallResult: 'PASS',
       certInfo: '[사규 C-301 부자재 인수검사 수동 현장 기록용 빈 서식]'
     });
   };
+
 
   const outOfRange = (v: string) => {
     const n = parseFloat(v);

@@ -241,33 +241,49 @@ export function SocketBracketInspectionPage() {
     let formCode = 'EZC-D-121-2';
     let formTitle = '부자재 인수검사 성적서 (방화소켓 벽체)';
     let items = [
-      { name: '겉모양 (외관)', standard: '한도견본 기준 휨, 비틀림, 깨짐이 없을 것', method: '육안', n1: '양호', n2: '양호', n3: '양호', isPass: true },
-      { name: '치수 (높이/두께)', standard: '높이 200mm 이상, 두께 1.6mm 이상', method: '줄자/마이크로미터', n1: String(r.n1 || 200), n2: String(r.n2 || 200), n3: String(r.n3 || 1.6), isPass: true },
-      { name: '받침대 / 상하 / 좌우', standard: '너비 195mm 이상 (받침대), 상하/좌우 10mm 이상, 두께 1.6mm', method: '줄자/마이크로미터', n1: '195.5', n2: '10.2', n3: '1.62', isPass: true },
-      { name: '항복강도 / 인장강도', standard: '항복강도 ≥205 N/㎟, 인장강도 ≥270 N/㎟', method: '공인성적서', n1: '276', n2: '358', n3: '적합', isPass: true }
+      { name: '겉모양 (외관)', standard: '한도견본 기준 휨, 비틀림, 깨짐이 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+      { name: '치수 - 소켓 높이 (㎜)', standard: '200mm 이상 (벽체 소켓 규격)', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: String(r.n1 || 200), n2: String(r.n2 || 200), n3: String(r.n3 || 200), isPass: true },
+      { name: '치수 - 철판 두께 (㎜)', standard: '1.6mm 이상 (아연도금강판)', method: '마이크로미터', cycle: '매로트', condition: 'n=3, c=0', n1: '1.62', n2: '1.61', n3: '1.62', isPass: true },
+      { name: '치수 - 받침대/날개 (㎜)', standard: '너비 195mm 이상, 상하/좌우 10mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '195.5', n2: '10.2', n3: '10.1', isPass: true },
+      { name: '제조사 시험 성적서', standard: '항복강도 ≥205 N/㎟, 인장강도 ≥270 N/㎟', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '확인완료', n2: '확인완료', n3: '확인완료', isPass: true },
+      { name: '공인기관 의뢰', standard: 'KCL 공인시험 성적서 (항복강도 276, 인장강도 358 N/㎟)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', n1: '연동완료', n2: '연동완료', n3: '연동완료', isPass: true }
     ];
 
     if (name.includes('입상') && name.includes('소켓')) {
       formCode = 'EZC-D-121-7';
       formTitle = '부자재 인수검사 성적서 (방화소켓 입상)';
-      items[1] = { name: '치수 (높이/두께)', standard: '높이 300mm 이상, 두께 1.6mm 이상', method: '줄자/마이크로미터', n1: String(r.n1 || 300), n2: String(r.n2 || 300), n3: String(r.n3 || 1.6), isPass: true };
-      items[2] = { name: '받침대 / 상하 / 보강대', standard: '너비 265mm 이상 (받침대/상하), 보강대 30mm 이상, 두께 1.6mm', method: '줄자/마이크로미터', n1: '265.5', n2: '265.2', n3: '30.5', isPass: true };
+      items[1] = { name: '치수 - 소켓 높이 (㎜)', standard: '300mm 이상 (입상 소켓 규격)', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: String(r.n1 || 300), n2: String(r.n2 || 300), n3: String(r.n3 || 300), isPass: true };
+      items[3] = { name: '치수 - 받침대/보강대 (㎜)', standard: '너비 265mm 이상 (받침대/상하), 보강대 30mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '265.5', n2: '265.2', n3: '30.5', isPass: true };
     } else if (name.includes('입상') && name.includes('브라켓')) {
       formCode = 'EZC-D-121-9';
       formTitle = '부자재 인수검사 성적서 (브라켓 입상)';
-      items[1] = { name: '받침대 치수', standard: '너비 265mm 이상, 높이 15mm 이상, 두께 0.6mm 이상', method: '줄자/마이크로미터', n1: '265.2', n2: '15.1', n3: '0.62', isPass: true };
-      items[2] = { name: '상하 / 보강대', standard: '상하 너비 265mm 이상, 보강대 너비 30mm 이상, 두께 1.6mm', method: '줄자/마이크로미터', n1: '265.5', n2: '30.2', n3: '1.62', isPass: true };
+      items = [
+        { name: '겉모양 (외관)', standard: '한도견본 기준 휨, 비틀림, 깨짐이 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+        { name: '치수 - 받침대 (㎜)', standard: '너비 265mm 이상, 높이 15mm 이상, 두께 0.6mm 이상', method: '줄자/마이크로미터', cycle: '매로트', condition: 'n=3, c=0', n1: '265.2', n2: '15.1', n3: '0.62', isPass: true },
+        { name: '치수 - 상하 / 보강대', standard: '상하 너비 265mm 이상, 보강대 너비 30mm 이상, 두께 1.6mm', method: '줄자/마이크로미터', cycle: '매로트', condition: 'n=3, c=0', n1: '265.5', n2: '30.2', n3: '1.62', isPass: true },
+        { name: '제조사 시험 성적서', standard: '항복강도 ≥205 N/㎟, 인장강도 ≥270 N/㎟', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '확인완료', n2: '확인완료', n3: '확인완료', isPass: true },
+        { name: '공인기관 의뢰', standard: 'KCL 공인성적서 참조 (항복강도 276, 인장강도 358 N/㎟)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', n1: '연동완료', n2: '연동완료', n3: '연동완료', isPass: true }
+      ];
     } else if (name.includes('브라켓')) {
       formCode = 'EZC-D-121-10';
       formTitle = '부자재 인수검사 성적서 (브라켓 품질인정)';
-      items[1] = { name: '받침대 치수', standard: '너비 195mm 이상, 높이 10mm 이상, 두께 1.6mm 이상', method: '줄자/마이크로미터', n1: '195.2', n2: '10.1', n3: '1.62', isPass: true };
-      items[2] = { name: '상하 / 좌우', standard: '상하 너비 10mm 이상, 좌우 너비 10mm 이상, 두께 1.6mm', method: '줄자/마이크로미터', n1: '10.2', n2: '10.1', n3: '1.62', isPass: true };
+      items = [
+        { name: '겉모양 (외관)', standard: '한도견본 기준 휨, 비틀림, 깨짐이 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+        { name: '치수 - 받침대 (㎜)', standard: '너비 195mm 이상, 높이 10mm 이상, 두께 1.6mm 이상', method: '줄자/마이크로미터', cycle: '매로트', condition: 'n=3, c=0', n1: '195.2', n2: '10.1', n3: '1.62', isPass: true },
+        { name: '치수 - 상하 / 좌우', standard: '상하 너비 10mm 이상, 좌우 너비 10mm 이상, 두께 1.6mm', method: '줄자/마이크로미터', cycle: '매로트', condition: 'n=3, c=0', n1: '10.2', n2: '10.1', n3: '1.62', isPass: true },
+        { name: '제조사 시험 성적서', standard: '항복강도 ≥205 N/㎟, 인장강도 ≥270 N/㎟', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '확인완료', n2: '확인완료', n3: '확인완료', isPass: true }
+      ];
     } else if (name.includes('플래싱')) {
       formCode = 'EZC-D-121-4';
       formTitle = '부자재 인수검사 성적서 (방화플래싱 아연도금강판)';
-      items[1] = { name: '치수 (두께/길이)', standard: '두께 0.5mm 이상, I형/Z형/L형 규격 기준 적합', method: '버니어/줄자', n1: '0.52', n2: '양호', n3: '양호', isPass: true };
-      items[2] = { name: '성상 및 조작', standard: '휨, 날카로운 버(Burr) 없음, 조립 조인트 여유 수치 적합', method: '육안', n1: '양호', n2: '양호', n3: '양호', isPass: true };
+      items = [
+        { name: '겉모양 (외관)', standard: '한도견본 기준 휨, 비틀림, 날카로운 버(Burr) 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+        { name: '치수 - 두께 (㎜)', standard: '두께 0.5mm 이상 (I형 / Z형 / L형 규격 적합)', method: '마이크로미터', cycle: '매로트', condition: 'n=3, c=0', n1: '0.52', n2: '0.51', n3: '0.52', isPass: true },
+        { name: '치수 - 너비/날개 (㎜)', standard: '도면 지정 주문 치수 (±1.0mm)', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '정상', n2: '정상', n3: '정상', isPass: true },
+        { name: '제조사 시험 성적서', standard: '아연도금 부착량, 항복강도 ≥205 N/㎟ 시험치 확인', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '확인완료', n2: '확인완료', n3: '확인완료', isPass: true }
+      ];
     }
+
 
     setPrintModalData({
       formCode,
