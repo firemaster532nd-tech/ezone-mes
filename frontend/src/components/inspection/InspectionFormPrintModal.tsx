@@ -7,6 +7,7 @@ interface InspectionItem {
   name: string;
   standard: string;
   standardOptions?: string[]; // 여러 기준치를 ○ 체크로 선택
+  selectedStdIdx?: number | null;  // 규격에 맞는 자동 선택 인덱스
   method?: string;
   cycle?: string;
   condition?: string;
@@ -92,13 +93,13 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
       data.overallResult === 'PASS' || data.overallResult === '합격' ? 'pass' :
       data.overallResult === 'FAIL' || data.overallResult === '불합격' ? 'fail' : ''
     );
-    // 항목별 편집 초기값
+    // 항목별 편집 초기값 — selectedStdIdx를 data에서 자동 반영
     const initItems = (data.items || []).map(it => ({
       n1: it.n1 !== undefined ? String(it.n1) : '',
       n2: it.n2 !== undefined ? String(it.n2) : '',
       n3: it.n3 !== undefined ? String(it.n3) : '',
       result: (it.isPass === true ? 'pass' : it.isPass === false ? 'fail' : '') as 'pass' | 'fail' | '',
-      selectedStdIdx: null as number | null,
+      selectedStdIdx: it.selectedStdIdx !== undefined ? it.selectedStdIdx : null as number | null,
     }));
     setItemEdits(initItems);
   }, [data]);
@@ -122,21 +123,22 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
 
   // 체크박스 렌더: ○ 선택 / ● 선택됨
   const renderCheckOptions = (options: string[], selectedIdx: number | null, onChange: (i: number) => void, isBlankMode: boolean) => (
-    <div className="flex flex-col gap-0.5 text-left text-[9.5px]">
+    <div className="flex flex-col gap-0 text-left text-[8px]">
       {options.map((opt, i) => (
-        <label key={i} className="flex items-center gap-1 cursor-pointer select-none">
+        <label key={i} className="flex items-center gap-0.5 cursor-pointer select-none std-check-label">
           <span
-            className={`text-sm leading-none ${selectedIdx === i ? 'text-slate-900 font-black' : 'text-slate-400'}`}
+            className={`leading-none ${selectedIdx === i ? 'text-slate-900 font-black' : 'text-slate-400'}`}
             onClick={() => onChange(i)}
-            style={{ cursor: 'pointer' }}
+            style={{ cursor: 'pointer', fontSize: '10px' }}
           >
             {selectedIdx === i ? '●' : '○'}
           </span>
-          <span className={selectedIdx === i ? 'font-bold text-slate-900' : 'text-slate-600'}>{opt}</span>
+          <span className={`text-[8px] ${selectedIdx === i ? 'font-bold text-slate-900' : 'text-slate-500'}`}>{opt}</span>
         </label>
       ))}
     </div>
   );
+
 
   // 인라인 편집 input (인쇄 시 값만 보임)
   const EditInput = ({ value, onChange, placeholder, className = '', type = 'text' }: {
@@ -267,19 +269,29 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
               #printable-form {
                 position: fixed !important; left: 5mm !important; top: 5mm !important;
                 width: 200mm !important; height: 287mm !important;
-                margin: 0 !important; padding: 14px 18px !important;
+                margin: 0 !important; padding: 10px 14px !important;
                 border: 2px solid #000000 !important; background: #ffffff !important;
                 box-sizing: border-box !important; z-index: 99999999 !important;
+                font-size: 8px !important;
                 display: flex !important; flex-direction: column !important;
               }
-              /* 인쇄 시 input 테두리 숨기고 값만 표시 */
-              #printable-form input, #printable-form select {
-                border: none !important; border-bottom: 1px solid #999 !important;
+              /* 인쇄 시 검사항목 표 글씨 8px, 행높이 최소화 */
+              #printable-form table td, #printable-form table th {
+                font-size: 7.5px !important;
+                padding: 1px 2px !important;
+                line-height: 1.2 !important;
+              }
+              #printable-form table tr { height: auto !important; min-height: 0 !important; }
+              /* n1/n2/n3 열 소시 */
+              #printable-form input {
+                border: none !important; border-bottom: 0.5px solid #999 !important;
                 background: transparent !important; outline: none !important;
+                font-size: 7.5px !important;
                 -webkit-print-color-adjust: exact !important;
               }
-              /* ○● 체크 항목 인쇄 */
-              .std-check-label { display: flex !important; align-items: center !important; gap: 2px !important; }
+              #printable-form select { display: none !important; }
+              /* ○● 체크 항목 */
+              .std-check-label { display: flex !important; align-items: center !important; gap: 1px !important; font-size: 7px !important; }
             }
           `}</style>
 
@@ -411,18 +423,18 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
             {/* 검사항목 표 */}
             <div className="mb-1">
               <h4 className="font-bold text-xs mb-1 text-slate-900">■ 검사항목 및 성적치 (측정 실측치 n1, n2, n3)</h4>
-              <table className="w-full border-collapse border-2 border-slate-900 text-center text-[10.5px]">
+              <table className="w-full border-collapse border-2 border-slate-900 text-center text-[9px]">
                 <thead>
                   <tr className="bg-slate-100 font-bold border-b-2 border-slate-900">
-                    <th className="border border-slate-900 py-1.5 px-1 w-24">검사항목</th>
-                    <th className="border border-slate-900 py-1.5 px-1">기준 및 허용차</th>
-                    <th className="border border-slate-900 py-1.5 px-1 w-16">검사방법</th>
-                    <th className="border border-slate-900 py-1.5 px-1 w-14">검사주기</th>
-                    <th className="border border-slate-900 py-1.5 px-1 w-14">검사조건</th>
-                    <th className="border border-slate-900 py-1.5 px-1 w-10">n1</th>
-                    <th className="border border-slate-900 py-1.5 px-1 w-10">n2</th>
-                    <th className="border border-slate-900 py-1.5 px-1 w-10">n3</th>
-                    <th className="border border-slate-900 py-1.5 px-1 w-20">검사 결과</th>
+                    <th className="border border-slate-900 py-1 px-1 w-[72px] text-[9px]">검사항목</th>
+                    <th className="border border-slate-900 py-1 px-1 text-[9px]">기준 및 허용차</th>
+                    <th className="border border-slate-900 py-1 px-1 w-14 text-[9px]">검사방법</th>
+                    <th className="border border-slate-900 py-1 px-1 w-12 text-[9px]">검사주기</th>
+                    <th className="border border-slate-900 py-1 px-1 w-14 text-[9px]">검사조건</th>
+                    <th className="border border-slate-900 py-1 px-1 w-9 text-[9px]">n1</th>
+                    <th className="border border-slate-900 py-1 px-1 w-9 text-[9px]">n2</th>
+                    <th className="border border-slate-900 py-1 px-1 w-9 text-[9px]">n3</th>
+                    <th className="border border-slate-900 py-1 px-1 w-[56px] text-[9px]">검사 결과</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -438,11 +450,11 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                         : (edit.result || (it.isPass === true ? 'pass' : it.isPass === false ? 'fail' : ''));
 
                       return (
-                        <tr key={idx} className="h-11 print:h-10">
-                          <td className="border border-slate-900 font-bold bg-slate-50 text-left px-1">{it.name}</td>
+                        <tr key={idx} className="border-b border-slate-300">
+                          <td className="border border-slate-900 font-bold bg-slate-50 text-left px-1 text-[8.5px] whitespace-pre-line leading-tight">{it.name}</td>
 
                           {/* 기준 및 허용차 — standardOptions가 있으면 ○ 체크, 없으면 텍스트 */}
-                          <td className="border border-slate-900 text-left px-2 font-mono font-medium">
+                          <td className="border border-slate-900 text-left px-1 font-mono text-[8px]">
                             {hasOptions
                               ? renderCheckOptions(
                                   it.standardOptions!,
@@ -450,34 +462,34 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                                   (i) => updateItem(idx, 'selectedStdIdx', edit.selectedStdIdx === i ? null : i),
                                   isBlank
                                 )
-                              : it.standard
+                              : <span className="text-[8px]">{it.standard}</span>
                             }
                           </td>
 
-                          <td className="border border-slate-900">{it.method || '실측'}</td>
-                          <td className="border border-slate-900">{it.cycle || '매로트'}</td>
-                          <td className="border border-slate-900">{it.condition || 'n=3, c=0'}</td>
+                          <td className="border border-slate-900 text-[8px]">{it.method || '실측'}</td>
+                          <td className="border border-slate-900 text-[8px]">{it.cycle || '매로트'}</td>
+                          <td className="border border-slate-900 text-[8px]">{it.condition || 'n=3, c=0'}</td>
 
-                          {/* n1 / n2 / n3 — 빈양식지: 직접 입력, 결과성적서: 값 표시 + 수정 가능 */}
-                          <td className="border border-slate-900 font-mono font-bold p-0.5">
+                          {/* n1 / n2 / n3 — 글씨 하한으로 축소 */}
+                          <td className="border border-slate-900 font-mono font-bold p-0">
                             <input type="text" value={displayN1}
                               onChange={e => updateItem(idx, 'n1', e.target.value)}
-                              className="w-full text-center text-[10px] font-mono font-bold border-0 focus:outline-none bg-transparent" />
+                              className="w-full text-center text-[8.5px] font-mono font-bold border-0 focus:outline-none bg-transparent py-0.5" />
                           </td>
-                          <td className="border border-slate-900 font-mono font-bold p-0.5">
+                          <td className="border border-slate-900 font-mono font-bold p-0">
                             <input type="text" value={displayN2}
                               onChange={e => updateItem(idx, 'n2', e.target.value)}
-                              className="w-full text-center text-[10px] font-mono font-bold border-0 focus:outline-none bg-transparent" />
+                              className="w-full text-center text-[8.5px] font-mono font-bold border-0 focus:outline-none bg-transparent py-0.5" />
                           </td>
-                          <td className="border border-slate-900 font-mono font-bold p-0.5">
+                          <td className="border border-slate-900 font-mono font-bold p-0">
                             <input type="text" value={displayN3}
                               onChange={e => updateItem(idx, 'n3', e.target.value)}
-                              className="w-full text-center text-[10px] font-mono font-bold border-0 focus:outline-none bg-transparent" />
+                              className="w-full text-center text-[8.5px] font-mono font-bold border-0 focus:outline-none bg-transparent py-0.5" />
                           </td>
 
-                          {/* 검사 결과 — 클릭으로 적합/부적합 토글 */}
+                          {/* 검사 결과 — 이력 데이터는 항상 합격(●적합) 지정 */}
                           <td className="border border-slate-900 font-bold text-slate-900 cursor-pointer select-none">
-                            <div className="flex flex-col gap-0.5 items-center text-[9.5px]">
+                            <div className="flex flex-col gap-0.5 items-center text-[8px]">
                               <span
                                 className={`cursor-pointer ${itemResult === 'pass' ? 'text-emerald-800 font-black' : 'text-slate-400'}`}
                                 onClick={() => updateItem(idx, 'result', itemResult === 'pass' ? '' : 'pass')}
@@ -542,15 +554,21 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                   </div>
                 </div>
 
-                {/* 비고 */}
-                <div className="text-[10px] text-slate-800 bg-slate-50 p-2 rounded border border-slate-400">
+                {/* 비고 — certInfo 우선 표시, 없으면 입력 가능 */}
+                <div className="text-[9px] text-slate-800 bg-slate-50 p-2 rounded border border-slate-400">
                   <p className="font-extrabold text-blue-900 mb-1">※ 비고 / 공인성적서 연동 정보:</p>
+                  {/* result 모드에서는 certInfo를 상단에 고정 표시한 후 추가 메모 입력 가능 */}
+                  {!isBlank && data.certInfo && (
+                    <div className="whitespace-pre-line font-mono text-emerald-900 font-bold text-[9px] mb-1 px-1 py-0.5 bg-emerald-50 border border-emerald-300 rounded">
+                      {data.certInfo}
+                    </div>
+                  )}
                   <textarea
-                    value={editNotes || (isBlank ? '' : (data.certInfo || ''))}
+                    value={editNotes}
                     onChange={e => setEditNotes(e.target.value)}
-                    placeholder="비고 내용 입력 (비워두기 가능)"
-                    rows={3}
-                    className="w-full text-[10px] font-mono text-slate-900 bg-transparent border-0 focus:outline-none resize-none"
+                    placeholder="추가 비고 내용 입력 (비워두기 가능)"
+                    rows={isBlank ? 3 : 2}
+                    className="w-full text-[9px] font-mono text-slate-700 bg-transparent border-0 focus:outline-none resize-none"
                   />
                 </div>
               </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useInspectors } from '@/hooks/useInspectors';
 import { api } from '@/lib/api';
+import { buildPrintModalData } from '@/lib/buildPrintModalData';
 
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Plus, Printer, PlayCircle } from 'lucide-react';
@@ -299,119 +300,12 @@ export function SubMaterialInspectionPage() {
   const [printModalData, setPrintModalData] = useState<any>(null);
 
   const handleOpenPrintModal = (r: any) => {
-    const spec = String(r.spec || r.item_name || '');
-    
-    // spec에서 밀도 추출 (예: '96K 25T ...' → 96)
-    const densityMatch = spec.match(/^(\d+)K/);
-    const density = densityMatch ? parseInt(densityMatch[1]) : 96;
+    setPrintModalData(buildPrintModalData(r, tab, inspector, info.unit || '개'));
+  };
 
-    let formCode = 'EZC-D-124-1';
-    let formTitle = '부자재 인수검사 성적서 (세라믹울)';
-    let items: any[] = [];
 
-    if (tab === '세라믹울') {
-      formCode = density >= 120 ? 'EZC-D-124-3' : density >= 104 ? 'EZC-D-124-2' : 'EZC-D-124-1';
-      formTitle = `부자재 인수검사 성적서 (세라믹울 ${density}K)`;
-      items = [
-        { name: '겉모양 (외관)', standard: '한도견본 기준 색상, 수지 부착상태, 파손 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
-        { name: '치수 - 두께 (㎜)',
-          standard: `${spec.includes('25T') ? '25' : spec.includes('38T') ? '38' : '50'}mm 이상`,
-          standardOptions: ['25mm 이상 (±2mm)', '38mm 이상 (±2mm)', '50mm 이상 (±2mm)'],
-          method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: r.n1 || '25.5', n2: r.n2 || '25.4', n3: r.n3 || '25.5', isPass: true },
-        { name: '치수 - 너비/폭 (㎜)',
-          standard: spec.includes('W') ? `${spec.match(/(\d+)W/)?.[1] || '600'}mm 이상` : '200~600mm 이상',
-          standardOptions: ['150mm 이상', '200mm 이상', '300mm 이상', '400mm 이상', '600mm 이상', '1000mm 이상'],
-          method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: (parseInt(spec.match(/(\d+)W/)?.[1] || '600') + 2).toString(), n2: (parseInt(spec.match(/(\d+)W/)?.[1] || '600') + 1).toString(), n3: (parseInt(spec.match(/(\d+)W/)?.[1] || '600') + 3).toString(), isPass: true },
-        { name: '치수 - 길이 (㎜)',
-          standard: spec.includes('L') ? `${spec.match(/(\d+)L/)?.[1] || '7400'}mm 이상` : '5,000~7,400mm 이상',
-          standardOptions: ['3,000mm 이상', '5,000mm 이상', '7,200mm 이상', '7,400mm 이상'],
-          method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: (parseInt(spec.match(/(\d+)L/)?.[1] || '7400') + 10).toString(), n2: (parseInt(spec.match(/(\d+)L/)?.[1] || '7400') + 5).toString(), n3: (parseInt(spec.match(/(\d+)L/)?.[1] || '7400') + 8).toString(), isPass: true },
-        { name: `밀도 (kg/㎥)`,
-          standard: `${density} kg/㎥ 이상 (KSM 3803)`,
-          standardOptions: ['96 kg/㎥ 이상', '100 kg/㎥ 이상', '104 kg/㎥ 이상', '120 kg/㎥ 이상'],
-          method: '계산식 (질량/부피)', cycle: '매로트', condition: 'n=3, c=0', n1: (density + 5).toString(), n2: (density + 4).toString(), n3: (density + 5).toString(), isPass: true },
-        { name: '제조사 시험 성적서', standard: `밀도 ${density}kg/㎥ 이상, 숏 25% 이하, 가열선수축율 3% 이하`, method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '확인완료', n2: '확인완료', n3: '확인완료', isPass: true },
-        { name: '공인기관 의뢰 (1회/년)', standard: 'KTR 공인성적서 (숏 7%, 가열선수축율 1.2% — 세라믹울 KSM 3803)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', n1: '연동완료', n2: '연동완료', n3: '연동완료', isPass: true }
-      ];
-    } else if (tab === '그라스울-롤') {
-      formCode = 'EZC-D-122-1';
-      formTitle = `부자재 인수검사 성적서 (그라스울 보온롤 ${density}K)`;
-      items = [
-        { name: '겉모양 (외관)', standard: '한도견본 기준 오염, 찌그러짐, 찢김 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
-        { name: '치수 - 두께 (㎜)',
-          standard: `${spec.includes('25T') ? '25' : spec.includes('38T') ? '38' : '50'}mm 이상 (KSM 3808)`,
-          standardOptions: ['25mm 이상', '38mm 이상', '50mm 이상', '75mm 이상', '100mm 이상'],
-          method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: r.n1 || '25.5', n2: r.n2 || '25.4', n3: r.n3 || '25.5', isPass: true },
-        { name: '치수 - 너비/폭 (㎜)',
-          standard: spec.includes('W') ? `${spec.match(/(\d+)W/)?.[1] || '1000'}mm 이상` : '600 / 1,000mm 이상',
-          standardOptions: ['600mm 이상', '1,000mm 이상'],
-          method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '1002', n2: '1001', n3: '1003', isPass: true },
-        { name: '치수 - 길이 (㎜)',
-          standard: spec.includes('L') ? `${spec.match(/(\d+)L/)?.[1] || '1400'}mm 이상` : '1,400 / 2,000mm 이상',
-          standardOptions: ['1,400mm 이상', '2,000mm 이상'],
-          method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '1405', n2: '1403', n3: '1406', isPass: true },
-        { name: `밀도 (kg/㎥)`,
-          standard: `${density} kg/㎥ 이상 (KSM 3808)`,
-          standardOptions: ['24 kg/㎥ 이상', '32 kg/㎥ 이상', '48 kg/㎥ 이상', '64 kg/㎥ 이상'],
-          method: '계산식 (질량/부피)', cycle: '매로트', condition: 'n=3, c=0', n1: (density + 2).toString(), n2: (density + 1).toString(), n3: (density + 2).toString(), isPass: true },
-        { name: '제조사 시험 성적서', standard: `열전도율 ≤0.034 W/m·K, 불연성 난연1급, 밀도 ${density}kg/㎥ 이상`, method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '확인완료', n2: '확인완료', n3: '확인완료', isPass: true },
-        { name: '공인기관 의뢰 (1회/년)', standard: 'KCL / KTR 공인성적서 (그라스울 KSM 3808 적합)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', n1: '연동완료', n2: '연동완료', n3: '연동완료', isPass: true }
-      ];
-    } else if (tab === '그라스울-보드') {
-      formCode = 'EZC-D-127-1';
-      formTitle = `부자재 인수검사 성적서 (그라스울 보드 ${density}K)`;
-      items = [
-        { name: '겉모양 (외관)', standard: '한도견본 기준 오염, 찌그러짐, 파손 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
-        { name: '치수 - 두께 (㎜)',
-          standard: `${spec.includes('25T') ? '25' : spec.includes('38T') ? '38' : '50'}mm 이상 (KSM 3809)`,
-          standardOptions: ['25mm 이상', '38mm 이상', '50mm 이상', '75mm 이상', '100mm 이상'],
-          method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: r.n1 || '25.5', n2: r.n2 || '25.4', n3: r.n3 || '25.5', isPass: true },
-        { name: '치수 - 너비/폭 (㎜)',
-          standard: spec.includes('W') ? `${spec.match(/(\d+)W/)?.[1] || '1000'}mm 이상` : '600 / 1,000mm 이상',
-          standardOptions: ['600mm 이상', '1,000mm 이상'],
-          method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '1002', n2: '1001', n3: '1003', isPass: true },
-        { name: '치수 - 길이 (㎜)',
-          standard: spec.includes('L') ? `${spec.match(/(\d+)L/)?.[1] || '1200'}mm 이상` : '1,200mm 이상',
-          standardOptions: ['1,200mm 이상'],
-          method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '1205', n2: '1203', n3: '1206', isPass: true },
-        { name: `밀도 (kg/㎥)`,
-          standard: `${density} kg/㎥ 이상 (KSM 3809)`,
-          standardOptions: ['48 kg/㎥ 이상', '64 kg/㎥ 이상', '96 kg/㎥ 이상'],
-          method: '계산식 (질량/부피)', cycle: '매로트', condition: 'n=3, c=0', n1: (density + 2).toString(), n2: (density + 1).toString(), n3: (density + 2).toString(), isPass: true },
-        { name: '제조사 시험 성적서', standard: `열전도율 ≤0.036 W/m·K, 불연성 난연1급, 밀도 ${density}kg/㎥`, method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '확인완료', n2: '확인완료', n3: '확인완료', isPass: true },
-        { name: '공인기관 의뢰 (1회/년)', standard: 'KCL / KTR 공인성적서 (그라스울 보드 KSM 3809 적합)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', n1: '연동완료', n2: '연동완료', n3: '연동완료', isPass: true }
-      ];
-    } else {
-      // 실란트
-      formCode = 'EZC-D-125-1';
-      formTitle = '부자재 인수검사 성적서 (방화실란트)';
-      items = [
-        { name: '겉모양 (외관)', standard: '용기 파손, 겔화, 굳음 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
-        { name: '비 중', standard: '1.35 ± 0.05', method: '비중계', cycle: '매로트', condition: 'n=3, c=0', n1: r.n1 || '1.36', n2: r.n2 || '1.35', n3: r.n3 || '1.36', isPass: true },
-        { name: '제조사 시험 성적서', standard: '불연성 난연1급, 비중 1.35 시험치 확인', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '확인완료', n2: '확인완료', n3: '확인완료', isPass: true },
-        { name: '공인기관 의뢰', standard: '불연 또는 난연 1급 공인성적서 적합', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', n1: '연동완료', n2: '연동완료', n3: '연동완료', isPass: true }
-      ];
-    }
 
-    setPrintModalData({
-      formCode,
-      formTitle,
-      categoryName: '사규 표준 부자재 인수검사 성적서',
-      itemName: r.item_name || r.spec || tab,
-      receivedDate: String(r.received_date || r.created_at || new Date().toISOString()).slice(0, 10),
-      lotNumber: r.lot_number || '-',
-      supplierLot: r.supplier_lot || '-',
-      supplierName: r.supplier_name || '공급/제조사',
-      qty: r.qty_current || r.qty || 1,
-      unit: info.unit || '개',
-      inspector: r.inspector || inspector,
-      n1: r.n1 || 25,
-      n2: r.n2 || 25,
-      n3: r.n3 || 25,
-      items,
-      overallResult: 'PASS',
-      certInfo: '[KTR / KCL 공인성적서 100% 연동완료]'
-    });
+
 
   };
 
