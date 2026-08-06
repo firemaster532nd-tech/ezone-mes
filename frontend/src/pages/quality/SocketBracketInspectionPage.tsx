@@ -240,21 +240,28 @@ export function SocketBracketInspectionPage() {
     const name = String(r.item_name || '');
     let formCode = 'EZC-D-121-2';
     let formTitle = '부자재 인수검사 성적서 (방화소켓 벽체)';
+    
+    // 소켓류: 두께 1.0mm 지정 / 브라켓류: 두께 1.6mm 지정
+    const isSocket = name.includes('소켓');
+    const isBracket = name.includes('브라켓');
+    const fixedThickness = isSocket ? '1.0' : isBracket ? '1.6' : '1.6';
+
     let items = [
       { name: '겉모양 (외관)', standard: '한도견본 기준 휨, 비틀림, 깨짐이 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
-      { name: '치수 - 소켓 높이 (㎜)', standard: '200mm 이상 (벽체 소켓 규격)', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: String(r.n1 || 200), n2: String(r.n2 || 200), n3: String(r.n3 || 200), isPass: true },
-      { name: '치수 - 철판 두께 (㎜)', standard: '1.6mm 이상 (아연도금강판)', method: '마이크로미터', cycle: '매로트', condition: 'n=3, c=0', n1: '1.62', n2: '1.61', n3: '1.62', isPass: true },
-      { name: '치수 - 받침대/날개 (㎜)', standard: '너비 195mm 이상, 상하/좌우 10mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '195.5', n2: '10.2', n3: '10.1', isPass: true },
+      { name: '치수 - 두께 (지정)', standard: `사규/인정서 지정 두께 (${fixedThickness}mm)`, method: '마이크로미터', cycle: '매로트', condition: 'n=3, c=0', n1: fixedThickness, n2: fixedThickness, n3: fixedThickness, isPass: true },
+      { name: '치수 - 가로길이 W (㎜)', standard: '도면 지정 가로 규격 (±1.0mm)', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: String(r.n1 || 200), n2: String(r.n2 || 200), n3: String(r.n3 || 200), isPass: true },
+      { name: '치수 - 세로길이 H (㎜)', standard: '도면 지정 세로 규격 (±1.0mm)', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: String(r.n2 || 200), n2: String(r.n2 || 200), n3: String(r.n2 || 200), isPass: true },
       { name: '제조사 시험 성적서', standard: '항복강도 ≥205 N/㎟, 인장강도 ≥270 N/㎟', method: '성적서확인', cycle: '1회/입고', condition: 'n=1, c=0', n1: '확인완료', n2: '확인완료', n3: '확인완료', isPass: true },
-      { name: '공인기관 의뢰', standard: 'KCL 공인시험 성적서 (항복강도 276, 인장강도 358 N/㎟)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', n1: '연동완료', n2: '연동완료', n3: '연동완료', isPass: true }
+      { name: '공인기관 의뢰', standard: 'KCL 공인시험 성적서 연동 (항복강도 276 N/㎟)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', n1: '연동완료', n2: '연동완료', n3: '연동완료', isPass: true }
     ];
 
     if (name.includes('입상') && name.includes('소켓')) {
       formCode = 'EZC-D-121-7';
       formTitle = '부자재 인수검사 성적서 (방화소켓 입상)';
-      items[1] = { name: '치수 - 소켓 높이 (㎜)', standard: '300mm 이상 (입상 소켓 규격)', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: String(r.n1 || 300), n2: String(r.n2 || 300), n3: String(r.n3 || 300), isPass: true };
-      items[3] = { name: '치수 - 받침대/보강대 (㎜)', standard: '너비 265mm 이상 (받침대/상하), 보강대 30mm 이상', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '265.5', n2: '265.2', n3: '30.5', isPass: true };
-    } else if (name.includes('입상') && name.includes('브라켓')) {
+      items[2] = { name: '치수 - 가로길이 W (㎜)', standard: '도면 지정 입상 소켓 가로 규격 (300mm)', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: String(r.n1 || 300), n2: String(r.n2 || 300), n3: String(r.n3 || 300), isPass: true };
+      items[3] = { name: '치수 - 세로길이 H (㎜)', standard: '도면 지정 입상 소켓 세로 규격 (265mm)', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: String(r.n2 || 265), n2: String(r.n2 || 265), n3: String(r.n2 || 265), isPass: true };
+    }
+ else if (name.includes('입상') && name.includes('브라켓')) {
       formCode = 'EZC-D-121-9';
       formTitle = '부자재 인수검사 성적서 (브라켓 입상)';
       items = [

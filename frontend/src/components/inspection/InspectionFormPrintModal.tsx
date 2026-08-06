@@ -72,113 +72,127 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
   };
 
   return (
-    <div className="print-modal-overlay fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="print-modal-box bg-white rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl relative border border-slate-300">
+    <div className="print-modal-overlay fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="print-modal-box bg-white rounded-2xl max-w-5xl w-full p-6 space-y-4 shadow-2xl relative border border-slate-300">
         
-        {/* 모달 상단 조종 바 (인쇄 시 숨김) */}
-        <div className="print-hidden-toolbar flex justify-between items-center border-b border-slate-200 pb-3">
-          <div className="flex items-center gap-3">
-            <span className="px-2.5 py-1 bg-slate-900 text-blue-400 font-mono font-bold text-xs rounded-lg">
-              {data.formCode || 'EZC-D-101-1'}
-            </span>
-            <h3 className="font-bold text-slate-800 text-base">
-              📄 사규 원본 성적서 양식 A4 인쇄 미리보기
-            </h3>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* 빈 양식지 / 실측데이터 출력 토글 */}
-            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-300">
+        {/* 모달 상단 조종 바 (인쇄 시 숨김) - 2단 가로 100% 렌더링으로 세로 쏠림 소멸 */}
+        <div className="print-hidden-toolbar border-b border-slate-200 pb-3 space-y-2.5" style={{ writingMode: 'horizontal-tb', direction: 'ltr' }}>
+          {/* Row 1: 제목 및 닫기 버튼 */}
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <span className="px-3 py-1 bg-slate-900 text-blue-400 font-mono font-black text-sm rounded-lg shadow-sm">
+                {data.formCode || 'EZC-D-101-1'}
+              </span>
+              <h3 className="font-extrabold text-slate-900 text-base flex items-center gap-2">
+                📄 (주)이지원 품질보증 A4 검사성적서 인쇄 미리보기
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
               <button
-                type="button"
-                onClick={() => setIsBlankForm(false)}
-                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
-                  !isBlankForm ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:text-slate-900'
-                }`}
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl text-xs shadow-md transition-all"
               >
-                📝 검사 결과 성적서
+                <Printer className="h-4 w-4" />
+                {isBlankForm ? '빈 양식지 A4 인쇄' : 'A4 성적서 인쇄'}
               </button>
               <button
-                type="button"
-                onClick={() => setIsBlankForm(true)}
-                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
-                  isBlankForm ? 'bg-amber-600 text-white shadow' : 'text-slate-600 hover:text-slate-900'
-                }`}
+                onClick={onClose}
+                className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors"
               >
-                📄 빈 수동 서식 양식지
+                <X className="h-5 w-5" />
               </button>
             </div>
+          </div>
 
-            {/* 제조처 LOT 입력창 */}
-            {!isBlankForm && (
-              <div className="flex items-center gap-1.5 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-300">
-                <span className="text-xs font-bold text-amber-800">🏷️ 제조처 LOT:</span>
-                <input
-                  type="text"
-                  value={editableSupplierLot}
-                  onChange={(e) => setEditableSupplierLot(e.target.value)}
-                  placeholder="제조처 로트번호 입력"
-                  className="bg-white border border-amber-300 text-xs font-mono font-bold rounded-lg px-2 py-0.5 outline-none text-slate-900 w-32"
-                />
-              </div>
-            )}
-
-            {/* 작성자 드롭다운 선택 */}
-            {!isBlankForm && (
-              <div className="flex items-center gap-1.5 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-300">
-                <span className="text-xs font-bold text-slate-600">✍️ 작성자:</span>
-                <select
-                  value={displayInspector}
-                  onChange={(e) => setSelectedInspector(e.target.value)}
-                  className="bg-white border border-slate-300 text-xs font-bold rounded-lg px-2 py-1 outline-none text-slate-800"
+          {/* Row 2: 세부 제어 툴바 */}
+          <div className="flex items-center justify-between gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200 flex-wrap">
+            <div className="flex items-center gap-2">
+              {/* 성적서 / 빈양식지 선택 */}
+              <div className="flex bg-white p-1 rounded-lg border border-slate-300 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => setIsBlankForm(false)}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+                    !isBlankForm ? 'bg-blue-600 text-white shadow' : 'text-slate-600 hover:text-slate-900'
+                  }`}
                 >
-                  {inspectors.map((name) => (
-                    <option key={name} value={name}>{name}</option>
-                  ))}
+                  📝 검사 결과 성적서
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsBlankForm(true)}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+                    isBlankForm ? 'bg-amber-600 text-white shadow' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  📄 빈 수동 서식 양식지
+                </button>
+              </div>
+
+              {/* 제조처 LOT */}
+              {!isBlankForm && (
+                <div className="flex items-center gap-1.5 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-300">
+                  <span className="text-xs font-bold text-amber-900">🏷️ 제조처 LOT:</span>
+                  <input
+                    type="text"
+                    value={editableSupplierLot}
+                    onChange={(e) => setEditableSupplierLot(e.target.value)}
+                    placeholder="제조처 로트번호"
+                    className="bg-white border border-amber-300 text-xs font-mono font-bold rounded px-2 py-0.5 outline-none text-slate-900 w-28"
+                  />
+                </div>
+              )}
+
+              {/* 작성자 */}
+              {!isBlankForm && (
+                <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-lg border border-slate-300">
+                  <span className="text-xs font-bold text-slate-700">✍️ 작성자:</span>
+                  <select
+                    value={displayInspector}
+                    onChange={(e) => setSelectedInspector(e.target.value)}
+                    className="bg-white text-xs font-bold rounded px-1.5 py-0.5 outline-none text-slate-800"
+                  >
+                    {inspectors.map((name) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* 치수 규격 콤보박스 */}
+              <div className="flex items-center gap-1 bg-blue-100/70 px-2.5 py-1 rounded-lg border border-blue-300 text-xs">
+                <span className="font-bold text-blue-950">📐 규격선택:</span>
+                <select className="bg-white border border-blue-300 font-bold rounded px-1.5 py-0.5 text-xs text-blue-900">
+                  <option value="1000x1400">그라스울 1000 × 1400 mm</option>
+                  <option value="600x5000">세라믹울 600 × 5000 mm</option>
+                  <option value="600x3000">세라믹울 600 × 3000 mm</option>
+                  <option value="150x5000">세라믹울 150 × 5000 mm</option>
+                  <option value="CUSTOM">직접 입력 규격</option>
+                </select>
+                <select className="bg-white border border-blue-300 font-bold rounded px-1.5 py-0.5 text-xs text-blue-900">
+                  <option value="25">두께 25 mm</option>
+                  <option value="38">두께 38 mm</option>
+                  <option value="50">두께 50 mm</option>
+                  <option value="1.0">소켓 두께 1.0 mm</option>
+                  <option value="1.6">브라켓 두께 1.6 mm</option>
                 </select>
               </div>
-            )}
 
-            {/* 규격 선택 드롭다운 콤보박스 (그라스울 1000x1400 / 세라믹울 600x5000) */}
-            <div className="flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-xl border border-blue-300 text-xs">
-              <span className="font-bold text-blue-900">📐 치수규격:</span>
-              <select className="bg-white border border-blue-300 font-bold rounded px-1 py-0.5 text-xs text-blue-900">
-                <option value="1000x1400">그라스울 1000 × 1400 mm</option>
-                <option value="600x5000">세라믹울 600 × 5000 mm</option>
-                <option value="600x3000">세라믹울 600 × 3000 mm</option>
-                <option value="150x5000">세라믹울 150 × 5000 mm</option>
-              </select>
-              <select className="bg-white border border-blue-300 font-bold rounded px-1 py-0.5 text-xs text-blue-900">
-                <option value="25">두께 25 mm</option>
-                <option value="38">두께 38 mm</option>
-                <option value="50">두께 50 mm</option>
-              </select>
+              <button
+                onClick={() => {
+                  alert('✅ 편집/수기 작성 데이터가 보존되었습니다!\n(확인을 누르면 A4 성적서 인쇄 창이 바로 실행됩니다)');
+                  handlePrint();
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-lg text-xs shadow-sm transition-all"
+              >
+                <Printer className="h-4 w-4" /> 💾 저장 & A4 인쇄
+              </button>
             </div>
-
-            <button
-              onClick={() => {
-                alert('✅ 성적서 수정 및 수기 입력 데이터가 보존되었습니다!\n(확인을 누르면 A4 성적서 인쇄 창이 생성됩니다)');
-                handlePrint();
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs shadow transition-all"
-            >
-              <Printer className="h-4 w-4" /> 💾 저장 & A4 인쇄
-            </button>
-            <button
-              onClick={handlePrint}
-              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow transition-all"
-            >
-              <Printer className="h-4 w-4" />
-              {isBlankForm ? '빈 양식지 인쇄' : 'A4 인쇄'}
-            </button>
-            <button
-              onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
-            >
-              <X className="h-5 w-5" />
-            </button>
           </div>
         </div>
+
 
 
         {/* ========================================================================= */}
@@ -286,6 +300,16 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                   <td className="border border-slate-900 font-mono px-2.5 py-1.5">{isBlankForm ? '' : (data.receivedDate || new Date().toISOString().slice(0, 10))}</td>
                 </tr>
                 <tr>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5 text-blue-950">입고 규격</td>
+                  <td className="border border-slate-900 font-bold px-2.5 py-1.5 text-emerald-900 font-mono" colSpan={5}>
+                    {data.itemName?.includes('그라스울') ? '1000 × 1400 mm (두께 25mm / 50mm 지정)' :
+                     data.itemName?.includes('세라믹울') ? '600 × 5000 mm (두께 25mm 지정)' :
+                     data.itemName?.includes('소켓') ? '소켓 두께 1.0mm 지정 (가로/세로길이 실측 기재)' :
+                     data.itemName?.includes('브라켓') ? '브라켓 두께 1.6mm 지정 (가로/세로길이 실측 기재)' :
+                     '도면 지정 표준 규격 충족 (사규 C-701 및 품질관리서)'}
+                  </td>
+                </tr>
+                <tr>
                   <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5">입 고 처</td>
                   <td className="border border-slate-900 px-2.5 py-1.5">{isBlankForm ? '' : (data.supplierName || '공급업체')}</td>
                   <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5">제조처 로트번호</td>
@@ -300,6 +324,7 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                   <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5">로트 수량</td>
                   <td className="border border-slate-900 font-bold px-2.5 py-1.5" colSpan={3}>{isBlankForm ? '' : (data.qty ? `${data.qty} ${data.unit || '개'}` : '-')}</td>
                 </tr>
+
               </tbody>
             </table>
 
