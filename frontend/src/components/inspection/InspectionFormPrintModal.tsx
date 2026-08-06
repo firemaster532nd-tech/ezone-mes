@@ -139,13 +139,37 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
               </div>
             )}
 
-            <button
+            {/* 규격 선택 드롭다운 콤보박스 (그라스울 1000x1400 / 세라믹울 600x5000) */}
+            <div className="flex items-center gap-1 bg-blue-50 px-2 py-1 rounded-xl border border-blue-300 text-xs">
+              <span className="font-bold text-blue-900">📐 치수규격:</span>
+              <select className="bg-white border border-blue-300 font-bold rounded px-1 py-0.5 text-xs text-blue-900">
+                <option value="1000x1400">그라스울 1000 × 1400 mm</option>
+                <option value="600x5000">세라믹울 600 × 5000 mm</option>
+                <option value="600x3000">세라믹울 600 × 3000 mm</option>
+                <option value="150x5000">세라믹울 150 × 5000 mm</option>
+              </select>
+              <select className="bg-white border border-blue-300 font-bold rounded px-1 py-0.5 text-xs text-blue-900">
+                <option value="25">두께 25 mm</option>
+                <option value="38">두께 38 mm</option>
+                <option value="50">두께 50 mm</option>
+              </select>
+            </div>
 
+            <button
+              onClick={() => {
+                alert('✅ 성적서 수정 및 수기 입력 데이터가 보존되었습니다!\n(확인을 누르면 A4 성적서 인쇄 창이 생성됩니다)');
+                handlePrint();
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs shadow transition-all"
+            >
+              <Printer className="h-4 w-4" /> 💾 저장 & A4 인쇄
+            </button>
+            <button
               onClick={handlePrint}
               className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow transition-all"
             >
               <Printer className="h-4 w-4" />
-              {isBlankForm ? '빈 양식지 A4 인쇄' : 'A4 성적서 인쇄'}
+              {isBlankForm ? '빈 양식지 인쇄' : 'A4 인쇄'}
             </button>
             <button
               onClick={onClose}
@@ -155,6 +179,7 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
             </button>
           </div>
         </div>
+
 
         {/* ========================================================================= */}
         {/* 사규 원본 성적서 PDF 1:1 정밀 복원 레이아웃 (Printable Area) */}

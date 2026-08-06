@@ -47,7 +47,14 @@ const TAB_INFO: Record<SubTab, {
     maxVal: 100.0,
     step: 0.1,
     inspector: '김정용',
-    sizes: ['GWR 24K 50T', 'GWR 32K 50T', 'GWR 48K 50T'],
+    sizes: [
+      'GWR 48K 25T 1000W 1400L (그라스울 롤 표준)',
+      'GWR 64K 25T 1000W 1400L',
+      'GWR 48K 50T 1000W 1400L',
+      'GWR 64K 50T 1000W 1400L',
+      'GWR 24K 50T 1000W 2000L',
+      'GWR 32K 50T 1000W 2000L'
+    ],
   },
   '그라스울-보드': {
     formCode: 'D127-1',
@@ -59,7 +66,13 @@ const TAB_INFO: Record<SubTab, {
     maxVal: 100.0,
     step: 0.1,
     inspector: '김정용',
-    sizes: ['GWB 32K 50T', 'GWB 48K 50T', 'GWB 64K 50T'],
+    sizes: [
+      'GWB 48K 25T 1000W 1400L (그라스울 보드 표준)',
+      'GWB 64K 25T 1000W 1400L',
+      'GWB 48K 50T 1000W 1400L',
+      'GWB 64K 50T 1000W 1400L',
+      'GWB 64K 38T 600W 1200L'
+    ],
   },
   '실란트': {
     formCode: 'D125-1',
