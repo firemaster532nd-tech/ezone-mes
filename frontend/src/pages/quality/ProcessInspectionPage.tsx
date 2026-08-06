@@ -776,10 +776,38 @@ function CreateProcessInspectionModal({
     const hasAnyInput = activeMeasurements.some((m) => (m.n1 && m.n1.trim() !== '') || (m.n2 && m.n2.trim() !== '') || (m.n3 && m.n3.trim() !== ''));
 
     if (!hasAnyInput) {
-      return alert('⚠️ 검사 실측치(n1, n2, n3)를 최소 1개 이상 입력하셔야 검사등록이 가능합니다.\n(아무것도 입력하지 않은 상태에서는 등록할 수 없습니다. 수동 작성이 필요한 경우 모달 하단의 [📄 빈 수동 서식 양식지 인쇄] 버튼을 이용해 주세요.)');
+      return alert('⚠️ 검사 실측치(n1, n2, n3)를 최소 1개 이상 입력하셔야 검사등록이 가능합니다.\n(아무것도 입력하지 않은 상태에서는 등록할 수 없습니다.)');
+    }
+
+    // 🛡️ 사규 & 인정서 기준점 어긋남 strict 차단 검증
+    for (const m of activeMeasurements) {
+      const stdVal = parseFloat(String(m.cert_standard));
+      const isNumericStandard = !isNaN(stdVal);
+      const checkValues = [m.n1, m.n2, m.n3].filter((val) => val && String(val).trim() !== '');
+
+      for (const val of checkValues) {
+        const strVal = String(val).trim();
+        if (strVal === '0' || strVal === '불량' || strVal === 'NG') {
+          return alert(`🛑 [저장 차단] ${m.quality_item} - ${m.check_item} 항목이 불량(NG)입니다.\n(불량 측정치가 포함되어 검사 등록을 진행할 수 없습니다. 사규 C-701 제7조 준수)`);
+        }
+
+        if (isNumericStandard) {
+          const numVal = parseFloat(strVal);
+          if (!isNaN(numVal)) {
+            const tolerance = m.check_item.includes('두께') ? 0.5 : 1.0;
+            const minAllowed = stdVal - tolerance;
+            const maxAllowed = stdVal + tolerance;
+
+            if (numVal < minAllowed || numVal > maxAllowed) {
+              return alert(`🛑 [저장 차단] ${m.quality_item} (${m.check_item})\n실측치 [${numVal}]가 사규/인정서 기준치 [${stdVal} ± ${tolerance}] 허용 범위를 벗어났습니다!\n(사규 및 인정서 기준점이 어긋나면 진행이 차단됩니다)`);
+            }
+          }
+        }
+      }
     }
 
     setSaving(true);
+
     try {
       const parseValue = (val: any) => {
         if (!val || val === '양호' || val === '적합' || val === 'OK') return 1;
