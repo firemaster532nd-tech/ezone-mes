@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useInspectors } from '@/hooks/useInspectors';
 import { api } from '@/lib/api';
+
 import { toast } from 'sonner';
 import { Printer } from 'lucide-react';
 import { GodexLabelPrinter } from '@/components/label/GodexLabelPrinter';
@@ -58,7 +59,9 @@ const SEL = 'w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 te
 const LBL = 'block text-xs font-semibold text-slate-400 mb-1';
 
 export function FnTechInspectionPage() {
+  const { inspectors } = useInspectors();
   const [tab, setTab] = useState<FnTab>('일체형슬리브');
+
   const [selectedSize, setSelectedSize] = useState('');
   const [showLabelPrinter, setShowLabelPrinter] = useState(false);
   const [sleeveDiam, setSleeveDiam] = useState<number>(100);
@@ -78,6 +81,22 @@ export function FnTechInspectionPage() {
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [printModalData, setPrintModalData] = useState<any>(null);
+  const [printLabelData, setPrintLabelData] = useState<any>(null);
+
+  const handleOpenLabelPrinter = (r: any) => {
+    setPrintLabelData({
+      lot_number: r.lot_number || lotNumber,
+      item_name: r.item_name || tab,
+      category: tab,
+      qty_current: r.qty || qty || 1,
+      unit: '개',
+      received_date: String(r.inspected_at || new Date().toISOString()).slice(0, 10),
+      location: r.location || location,
+      location_name: r.location || location,
+    });
+    setShowLabelPrinter(true);
+  };
+
 
   const handleOpenPrintModal = (r: any) => {
     const isPlate = tab === '보호철판';
@@ -411,10 +430,11 @@ export function FnTechInspectionPage() {
             <div>
               <label className={LBL}>검사 담당자 (작성자 선택)</label>
               <select className={SEL} value={inspector} onChange={e => setInspector(e.target.value)}>
-                {['김정용 책임', '최진영 책임', '임병용 파트장', '이동민 파트장', '김봉민 책임', '생산 작업자'].map(name => (
+                {inspectors.map(name => (
                   <option key={name} value={name}>{name}</option>
                 ))}
               </select>
+
             </div>
 
             <div>
@@ -525,11 +545,18 @@ export function FnTechInspectionPage() {
                           onClick={() => handleOpenPrintModal(r)}
                           className="px-2 py-0.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[10px] rounded flex items-center gap-1 shadow-sm"
                         >
-                          <Printer className="h-3 w-3" /> 인쇄
+                          <Printer className="h-3 w-3" /> 성적서
+                        </button>
+                        <button
+                          onClick={() => handleOpenLabelPrinter(r)}
+                          className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] rounded flex items-center gap-1 shadow-sm"
+                        >
+                          <Printer className="h-3 w-3" /> 🏷️ 라벨
                         </button>
                       </div>
                     </td>
                   </tr>
+
                 ))}
               </tbody>
             </table>
@@ -560,6 +587,22 @@ export function FnTechInspectionPage() {
           </div>
         </div>
       )}
+
+      {/* Godex QZ Tray 열전사 로트 라벨 출력 모달 */}
+      {showLabelPrinter && printLabelData && (
+        <GodexLabelPrinter
+          labelData={printLabelData}
+          onClose={() => setShowLabelPrinter(false)}
+        />
+      )}
+
+      {/* 사규 표준성적서 인쇄 모달 */}
+      <InspectionFormPrintModal
+        isOpen={!!printModalData}
+        onClose={() => setPrintModalData(null)}
+        data={printModalData}
+      />
     </div>
   );
 }
+

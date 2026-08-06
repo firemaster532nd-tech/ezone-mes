@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useInspectors } from '@/hooks/useInspectors';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -420,11 +421,13 @@ function InspectionDetailModal({ inspId, onClose }: { inspId: number; onClose: (
 // 중간검사 생성 모달
 function CreateProcessInspectionModal({
   onClose,
-  onSaved,
+  onSuccess,
 }: {
+
   onClose: () => void;
-  onSaved: (judgeResult?: string) => void;
+  onSuccess: () => void;
 }) {
+  const { inspectors } = useInspectors();
   const [workOrders, setWorkOrders] = useState<WorkOrderOption[]>([]);
   const [woId, setWoId] = useState('');
   const [formCode, setFormCode] = useState('');
@@ -500,26 +503,38 @@ function CreateProcessInspectionModal({
     );
   };
 
-  // 작업지시 선택 시 자동 양식 추천
+  // 작업지시/발주서 선택 시 자동 양식 및 인정구조 스펙 연동
   const handleWoChange = async (value: string) => {
     setWoId(value);
     if (!value) return;
     try {
       const res = await api.get<{ data: any }>(`/process-inspections/for-wo/${value}`);
-      if (res.data.form_codes.length > 0) {
-        await handleFormCodeChange(res.data.form_codes[0]);
+      const data = res.data;
+      if (data) {
+        if (data.form_codes && data.form_codes.length > 0) {
+          await handleFormCodeChange(data.form_codes[0]);
+        }
+        if (data.cert_id) {
+          setSelectedCertId(String(data.cert_id));
+        }
+        if (data.opening_w_mm) setSpecWidth(String(data.opening_w_mm));
+        if (data.opening_h_mm) setSpecHeight(String(data.opening_h_mm));
+        if (data.qty_ordered) setSerialCount(String(data.qty_ordered));
+
+        toast.success(`📋 발주서/작업지시서 [${data.wo_no || value}] 정보가 연동되었습니다! (인정구조: ${data.structure_code || 'HTG-064'})`);
       }
-      // 인정구조 자동 선택
-      const wo = workOrders.find((w) => String(w.wo_id) === value);
+    } catch {
+      // fallback search in local workOrders array
+      const wo = workOrders.find((w) => String(w.wo_id) === value || w.wo_no === value);
       if (wo?.cert_id) {
         setSelectedCertId(String(wo.cert_id));
-        // 인정구조 규격 자동 채움
         const cert = certOptions.find((c) => c.cert_id === wo.cert_id);
         if (cert?.opening_w_mm) setSpecWidth(String(cert.opening_w_mm));
         if (cert?.opening_h_mm) setSpecHeight(String(cert.opening_h_mm));
       }
-    } catch { /* ignore */ }
+    }
   };
+
 
   // 기존 구조 LOT 조회
   const handleSearchLots = async () => {
@@ -699,9 +714,10 @@ function CreateProcessInspectionModal({
           <div>
             <label className="block text-xs font-bold text-gray-700 mb-1">검사 담당자 (작성자)</label>
             <select value={inspector} onChange={(e) => setInspector(e.target.value)} className="w-full border rounded px-3 py-2 text-shop-sm font-bold">
-              {INSPECTOR_LIST.map(name => (
+              {inspectors.map(name => (
                 <option key={name} value={name}>{name}</option>
               ))}
+
             </select>
           </div>
         </div>

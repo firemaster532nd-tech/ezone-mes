@@ -41,12 +41,14 @@ interface InspectionFormPrintModalProps {
   } | null;
 }
 
-const INSPECTOR_LIST = ['김정용 책임', '최진영 책임', '임병용 파트장', '이동민 파트장', '김봉민 책임', '생산 작업자'];
+import { useInspectors } from '@/hooks/useInspectors';
 
 export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFormPrintModalProps) {
+  const { inspectors } = useInspectors();
   const [selectedInspector, setSelectedInspector] = useState<string>('김정용 책임');
 
   if (!isOpen || !data) return null;
+
 
   const isPass = data.overallResult === 'PASS' || data.overallResult === '합격';
   const displayInspector = data.inspector || selectedInspector;
@@ -79,9 +81,10 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                 onChange={(e) => setSelectedInspector(e.target.value)}
                 className="bg-white border border-slate-300 text-xs font-bold rounded-lg px-2 py-1 outline-none text-slate-800"
               >
-                {INSPECTOR_LIST.map((name) => (
+                {inspectors.map((name) => (
                   <option key={name} value={name}>{name}</option>
                 ))}
+
               </select>
             </div>
 

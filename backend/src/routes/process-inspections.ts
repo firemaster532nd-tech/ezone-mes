@@ -221,19 +221,46 @@ export async function processInspectionRoutes(app: FastifyInstance) {
     return { data: template };
   });
 
-  // GET /api/process-inspections/for-wo/:woId - 작업지시에 적합한 양식 자동 결정
+  // GET /api/process-inspections/for-wo/:woId - 작업지시/발주서에 적합한 양식 및 인정구조 스펙 자동 연동
   app.get('/api/process-inspections/for-wo/:woId', async (request, reply) => {
     const { woId } = request.params as { woId: string };
 
+    const isNum = !isNaN(parseInt(woId, 10));
     const woResult = await pool.query(
-      `SELECT w.*, c.product_group, c.install_position, c.structure_code
+      `SELECT w.*, c.product_group, c.install_position, c.structure_code, c.structure_name, c.opening_w_mm, c.opening_h_mm
        FROM work_order w
        LEFT JOIN certification_master c ON c.cert_id = w.cert_id
-       WHERE w.wo_id = $1`,
-      [parseInt(woId, 10)]
+       WHERE ${isNum ? 'w.wo_id = $1 OR w.wo_no = $2' : 'w.wo_no = $1'}`,
+      isNum ? [parseInt(woId, 10), woId] : [woId]
     );
 
     if (woResult.rows.length === 0) {
+      // 발주서 (po_id) 인 경우도 자동 탐색
+      const poResult = await pool.query(
+        `SELECT p.*, c.product_group, c.install_position, c.structure_code, c.structure_name
+         FROM purchase_order p
+         LEFT JOIN certification_master c ON c.cert_id = p.cert_id
+         WHERE ${isNum ? 'p.po_id = $1 OR p.po_no = $2' : 'p.po_no = $1'}`,
+        isNum ? [parseInt(woId, 10), woId] : [woId]
+      );
+
+      if (poResult.rows.length > 0) {
+        const po = poResult.rows[0];
+        const formCodes = getFormCodesForStructure(po.product_group || 'MP', po.install_position || '수직벽체', 'ASM');
+        return {
+          data: {
+            wo_id: po.po_id,
+            wo_no: po.po_no,
+            cert_id: po.cert_id,
+            structure_code: po.structure_code || 'HTG-064',
+            structure_name: po.structure_name || '내화채움구조',
+            form_codes: formCodes,
+            templates: formCodes.map(code => INSPECTION_TEMPLATES.find(t => t.form_code === code)).filter(Boolean),
+            cert_standards: {}
+          }
+        };
+      }
+
       return reply.status(404).send({ error: 'Not Found' });
     }
 
@@ -241,7 +268,7 @@ export async function processInspectionRoutes(app: FastifyInstance) {
     const formCodes = getFormCodesForStructure(
       wo.product_group || 'MP',
       wo.install_position || '수직벽체',
-      wo.process_code
+      wo.process_code || 'ASM'
     );
 
     const templates = formCodes
@@ -263,16 +290,20 @@ export async function processInspectionRoutes(app: FastifyInstance) {
     return {
       data: {
         wo_id: wo.wo_id,
-        wo_number: wo.wo_number,
-        process_code: wo.process_code,
+        wo_no: wo.wo_no,
+        cert_id: wo.cert_id,
         structure_code: wo.structure_code,
-        product_group: wo.product_group,
+        structure_name: wo.structure_name,
+        opening_w_mm: wo.opening_w_mm,
+        opening_h_mm: wo.opening_h_mm,
+        qty_ordered: wo.qty_ordered || wo.qty,
         form_codes: formCodes,
         templates,
         cert_standards: certStandards,
       },
     };
   });
+
 
   // POST /api/process-inspections - 중간검사 생성 (C-701 양식 기반)
   app.post('/api/process-inspections', async (request, reply) => {

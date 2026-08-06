@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useInspectors } from '@/hooks/useInspectors';
 import { api } from '@/lib/api';
+
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Plus, Printer } from 'lucide-react';
 import { GodexLabelPrinter } from '@/components/label/GodexLabelPrinter';
@@ -93,7 +94,9 @@ const LOCATION_LABEL: Record<string,string> = {
 };
 
 export function SubMaterialInspectionPage() {
+  const { inspectors } = useInspectors();
   const [tab, setTab] = useState<SubTab>('세라믹울');
+
   const [history, setHistory] = useState<any[]>([]);
   const [equipment, setEquipment] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -479,10 +482,11 @@ export function SubMaterialInspectionPage() {
                   className="w-full border rounded-lg px-3 py-2 text-sm font-bold bg-white focus:ring-2 focus:ring-emerald-500 outline-none"
                   required
                 >
-                  {['김정용 책임', '최진영 책임', '임병용 파트장', '이동민 파트장', '김봉민 책임', '생산 작업자'].map(name => (
+                  {inspectors.map(name => (
                     <option key={name} value={name}>{name}</option>
                   ))}
                 </select>
+
               </div>
 
 

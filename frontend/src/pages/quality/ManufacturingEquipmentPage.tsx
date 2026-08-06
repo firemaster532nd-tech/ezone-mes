@@ -1,4 +1,6 @@
+import { useInspectors } from '@/hooks/useInspectors';
 import { useEffect, useState } from 'react';
+
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -446,8 +448,11 @@ function EquipmentChecklistPrintModal({
   equipment: ManufacturingEquipment;
   onClose: () => void;
 }) {
+  const { inspectors } = useInspectors();
   const [checkMonth, setCheckMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [inspector, setInspector] = useState('김정용 책임');
+
+
 
 
   const handlePrint = () => {
@@ -487,9 +492,10 @@ function EquipmentChecklistPrintModal({
                 onChange={(e) => setInspector(e.target.value)}
                 className="bg-slate-800 text-white text-xs font-bold rounded px-1.5 py-0.5 outline-none border border-slate-600"
               >
-                {['김정용 책임', '최진영 책임', '임병용 파트장', '이동민 파트장', '김봉민 책임', '생산 작업자'].map(name => (
+                {inspectors.map(name => (
                   <option key={name} value={name}>{name}</option>
                 ))}
+
               </select>
             </div>
             <input

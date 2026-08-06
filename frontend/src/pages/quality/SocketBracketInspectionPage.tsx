@@ -1,4 +1,6 @@
+import { useInspectors } from '@/hooks/useInspectors';
 import React, { useState, useEffect } from 'react';
+
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ClipboardCheck, Search, ChevronRight, CheckCircle2, XCircle, Plus, RefreshCw, FileText, Printer } from 'lucide-react';
@@ -42,9 +44,11 @@ export function SocketBracketInspectionPage() {
   const [history, setHistory] = useState<any[]>([]);
   const [printLabelData, setPrintLabelData] = useState<any>(null);
   
+  const { inspectors } = useInspectors();
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [itemsToInspect, setItemsToInspect] = useState<InspectItem[]>([]);
   const [inspector, setInspector] = useState('최진영');
+
   const [availableJLots, setAvailableJLots] = useState<any[]>([]);
 
   useEffect(() => {
@@ -659,7 +663,24 @@ export function SocketBracketInspectionPage() {
               </div>
             )}
 
+            <div className="mt-6 p-4 bg-slate-800 rounded-xl border border-slate-700 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-slate-300">✍️ 검사 담당자 (작성자 선택):</span>
+                <select
+                  value={inspector}
+                  onChange={e => setInspector(e.target.value)}
+                  className="bg-slate-900 border border-slate-600 text-white font-bold text-sm rounded-lg px-3 py-1.5 outline-none focus:border-emerald-500"
+                >
+                  {inspectors.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+              <span className="text-xs text-slate-400">※ 선택한 이름이 사규 성적서 서식 및 검사 기록에 기입됩니다.</span>
+            </div>
+
             <div className="mt-8 flex justify-between items-center border-t border-slate-700 pt-6">
+
               <button
                 onClick={() => setStep(1)}
                 className="px-6 py-2.5 text-slate-400 hover:text-white transition-colors"

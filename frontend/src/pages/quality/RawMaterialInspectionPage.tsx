@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useInspectors } from '@/hooks/useInspectors';
+
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Plus, Printer } from 'lucide-react';
@@ -16,7 +17,9 @@ export function RawMaterialInspectionPage() {
   // 폼 상태 (D101~D104 원재료 전용)
   const [selectedCriteria, setSelectedCriteria] = useState('');
   const [supplierLot, setSupplierLot] = useState('');
+  const { inspectors } = useInspectors();
   const [qty, setQty] = useState<number>(300);
+
   const [inspector, setInspector] = useState('김정용');
   const [n1, setN1] = useState<number>(300);
   const [n2, setN2] = useState<number>(300);
@@ -280,10 +283,11 @@ export function RawMaterialInspectionPage() {
                   className="w-full border rounded-lg px-3 py-2 text-sm font-bold bg-white"
                   required
                 >
-                  {['김정용 책임', '최진영 책임', '임병용 파트장', '이동민 파트장', '김봉민 책임', '생산 작업자'].map(name => (
+                  {inspectors.map(name => (
                     <option key={name} value={name}>{name}</option>
                   ))}
                 </select>
+
               </div>
 
 
