@@ -1,6 +1,7 @@
-import { FastifyInstance } from 'fastify';
-import { pool } from '../index.js';
-import { requireAuth } from '../middleware/auth.js';
+import type { FastifyInstance } from 'fastify';
+import { pool } from '../db/pool.js';
+import { requireAuth } from '../lib/auth-plugin.js';
+
 
 export async function certifiedReportsRoutes(app: FastifyInstance) {
   // 1. 공인성적서 전체 목록 및 3개월 전 만료 경고 상태 조회
