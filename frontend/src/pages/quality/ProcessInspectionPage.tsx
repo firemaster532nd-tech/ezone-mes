@@ -354,8 +354,29 @@ export function ProcessInspectionPage() {
               setTimeout(() => setToast(null), 3000);
             }
           }}
+          onOpenBlankPrint={(code: string) => {
+            setShowCreate(false);
+            setPrintModalData({
+              formCode: code.startsWith('EZC') ? code : `EZC-C-701-${code}`,
+              formTitle: `${code} 중간공정 수동 검사성적서`,
+              categoryName: '자체 생산 공정 수동 수기용 서식',
+              itemName: 'EZ-덕트내화채움구조 (공정검사)',
+              supplierName: '(주)이지원 생산공장',
+              supplierLot: '',
+              lotNumber: '',
+              receivedDate: new Date().toISOString().slice(0, 10),
+              qty: 0,
+              unit: 'LOT',
+              inspector: '',
+              n1: '', n2: '', n3: '',
+              items: [],
+              overallResult: 'PASS',
+              isBlankForm: true
+            });
+          }}
         />
       )}
+
 
 
       {detailTarget && (
@@ -467,12 +488,14 @@ function InspectionDetailModal({ inspId, onClose }: { inspId: number; onClose: (
 
 // 중간검사 생성 모달
 function CreateProcessInspectionModal({
-  onClose,
-  onSuccess,
-}: {
 
+  onClose,
+  onSaved,
+  onOpenBlankPrint,
+}: {
   onClose: () => void;
-  onSuccess: () => void;
+  onSaved: (judgeResult?: string, record?: any) => void;
+  onOpenBlankPrint: (formCode: string) => void;
 }) {
   const { inspectors } = useInspectors();
   const [workOrders, setWorkOrders] = useState<WorkOrderOption[]>([]);
@@ -745,7 +768,17 @@ function CreateProcessInspectionModal({
   const [autoJudgeResult, setAutoJudgeResult] = useState<string | null>(null);
 
   const handleSubmit = async () => {
-    if (!woId || !formCode) return alert('작업지시와 양식을 선택해주세요.');
+    if (!woId) return alert('⚠️ 발주서 / 작업지시서를 선택해 주세요.');
+    if (!formCode) return alert('⚠️ EZC-C-701 검사 양식코드를 선택해 주세요.');
+
+    // 미입력 차단: n1, n2, n3 중 최소 1개 이상의 실측치가 입력되었는지 확인
+    const activeMeasurements = measurements.filter((m) => m.is_applicable !== false);
+    const hasAnyInput = activeMeasurements.some((m) => (m.n1 && m.n1.trim() !== '') || (m.n2 && m.n2.trim() !== '') || (m.n3 && m.n3.trim() !== ''));
+
+    if (!hasAnyInput) {
+      return alert('⚠️ 검사 실측치(n1, n2, n3)를 최소 1개 이상 입력하셔야 검사등록이 가능합니다.\n(아무것도 입력하지 않은 상태에서는 등록할 수 없습니다. 수동 작성이 필요한 경우 모달 하단의 [📄 빈 수동 서식 양식지 인쇄] 버튼을 이용해 주세요.)');
+    }
+
     setSaving(true);
     try {
       const parseValue = (val: any) => {
@@ -754,6 +787,7 @@ function CreateProcessInspectionModal({
         const num = parseFloat(String(val));
         return isNaN(num) ? 1 : num;
       };
+
 
       const res = await api.post<{ data: any }>('/process-inspections', {
         wo_id: isNaN(parseInt(woId)) ? 1 : parseInt(woId),
@@ -1218,13 +1252,48 @@ function CreateProcessInspectionModal({
         )}
 
 
-        <div className="flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 border rounded text-shop-sm">취소</button>
-          <button onClick={handleSubmit} disabled={saving || !formCode}
-            className="px-4 py-2 bg-process-mix text-white rounded text-shop-sm font-medium disabled:opacity-50">
-            {saving ? '저장 중...' : '검사 등록'}
+        <div className="flex items-center justify-between pt-4 border-t mt-4">
+          <button
+            type="button"
+            onClick={() => onOpenBlankPrint(formCode || 'EZC-C-701-G01')}
+            className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-extrabold rounded-xl text-xs shadow-sm border border-slate-300 transition-all"
+          >
+            <Printer size={14} className="text-slate-600" /> 📄 빈 수동 서식 양식지 인쇄 (수동 수기용)
           </button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="px-4 py-2 border rounded-xl text-shop-sm font-bold text-gray-600 hover:bg-gray-50">취소</button>
+            <button
+              type="button"
+              onClick={() => {
+                const currentRecord = {
+                  insp_id: Date.now(),
+                  form_code: formCode || 'EZC-C-701-G01',
+                  wo_id: isNaN(parseInt(woId)) ? 1 : parseInt(woId),
+                  wo_number: selectedWo?.wo_number || `WO-${woId}`,
+                  process_code: selectedWo?.process_code || 'CUT',
+                  structure_code: selectedWo?.structure_code || 'HTG-064',
+                  lot_number: selectedStructureLot?.lot_number || 'LOT-PREVIEW',
+                  base_lot: selectedStructureLot?.base_lot || '-',
+                  serial_start: inspSerialStart ? parseInt(inspSerialStart) : 1,
+                  serial_end: inspSerialEnd ? parseInt(inspSerialEnd) : 10,
+                  result: 'PASS',
+                  inspector: inspector || '김정용 책임',
+                  inspected_at: new Date().toISOString(),
+                  remarks: null
+                };
+                onSaved('PASS', currentRecord);
+              }}
+              className="flex items-center gap-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-shop-sm font-extrabold shadow transition-all"
+            >
+              <Printer size={14} /> 🖨️ 성적서 미리보기 인쇄
+            </button>
+            <button onClick={handleSubmit} disabled={saving || !formCode}
+              className="px-5 py-2 bg-process-mix text-white rounded-xl text-shop-sm font-extrabold disabled:opacity-50 shadow transition-all">
+              {saving ? '저장 중...' : '💾 검사 등록'}
+            </button>
+          </div>
         </div>
+
       </div>
     </div>
   );
