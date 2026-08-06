@@ -143,9 +143,10 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
         <div>
           <style>{`
             @media print {
+
               @page {
                 size: A4 portrait;
-                margin: 5mm 8mm;
+                margin: 4mm 6mm;
               }
               body * {
                 visibility: hidden !important;
@@ -158,11 +159,14 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                 left: 0 !important;
                 top: 0 !important;
                 width: 100% !important;
+                max-height: 285mm !important;
                 margin: 0 !important;
-                padding: 10px !important;
+                padding: 10px 14px !important;
                 border: 2px solid #000000 !important;
                 background: #ffffff !important;
                 box-sizing: border-box !important;
+                page-break-inside: avoid !important;
+                overflow: hidden !important;
               }
               .print-hidden-toolbar {
                 display: none !important;
@@ -170,44 +174,42 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
             }
           `}</style>
 
-
-          <div id="printable-form" className="border-2 border-slate-900 p-6 bg-white text-slate-900 text-xs font-sans">
-
+          <div id="printable-form" className="border-2 border-slate-900 p-4 print:p-2 bg-white text-slate-900 text-xs font-sans">
             
             {/* 서식 헤더: 코드명 | (주)이지원 | A4 규격 */}
-            <div className="flex justify-between items-center border-b-2 border-slate-900 pb-1.5 mb-3">
+            <div className="flex justify-between items-center border-b-2 border-slate-900 pb-1 mb-2">
               <span className="font-mono text-xs font-extrabold text-slate-800">{data.formCode || 'EZC-D-101-1'}</span>
-              <span className="font-extrabold text-lg tracking-widest text-slate-900">(주) 이 지 원</span>
+              <span className="font-extrabold text-base tracking-widest text-slate-900">(주) 이 지 원</span>
               <span className="text-[10px] text-slate-500 font-mono">A4 (210×297)㎜</span>
             </div>
 
             {/* 타이틀 및 3단 결재란 (작성자: 선택한 성명, 검토/승인: 완전히 비어있는 빈칸) */}
-            <div className="grid grid-cols-12 gap-2 mb-4 items-center">
+            <div className="grid grid-cols-12 gap-2 mb-2 items-center">
               <div className="col-span-7">
-                <h1 className="text-xl font-extrabold tracking-tight text-slate-900 underline decoration-2 underline-offset-4">
+                <h1 className="text-lg font-extrabold tracking-tight text-slate-900 underline decoration-2 underline-offset-4">
                   {data.formTitle || '원자재 인수검사 성적서'}
                 </h1>
               </div>
 
               {/* 결재란 (작성자: 선택, 검토/승인: 수동 도장용 빈칸) */}
               <div className="col-span-5 flex justify-end">
-                <table className="border-collapse border-2 border-slate-900 text-center text-[11px]">
+                <table className="border-collapse border-2 border-slate-900 text-center text-[10px]">
                   <tbody>
                     <tr>
-                      <td rowSpan={2} className="border border-slate-900 bg-slate-100 font-bold px-1.5 py-1 w-7 text-center">결<br/>재</td>
-                      <td className="border border-slate-900 bg-slate-100 font-bold px-3 py-0.5 w-20">작 성</td>
-                      <td className="border border-slate-900 bg-slate-100 font-bold px-3 py-0.5 w-20">검 토</td>
-                      <td className="border border-slate-900 bg-slate-100 font-bold px-3 py-0.5 w-20">승 인</td>
+                      <td rowSpan={2} className="border border-slate-900 bg-slate-100 font-bold px-1 py-0.5 w-6 text-center">결<br/>재</td>
+                      <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-0.5 w-16">작 성</td>
+                      <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-0.5 w-16">검 토</td>
+                      <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-0.5 w-16">승 인</td>
                     </tr>
-                    <tr className="h-12">
+                    <tr className="h-9">
                       {/* 작성자: 드롭다운 선택된 성명 기입 */}
                       <td className="border border-slate-900 font-extrabold align-middle text-slate-900 px-1">
                         {displayInspector}
                       </td>
                       {/* 검토: 수동 서명/직인을 위한 완벽한 빈칸 */}
-                      <td className="border border-slate-900 w-20 bg-white"></td>
+                      <td className="border border-slate-900 w-16 bg-white"></td>
                       {/* 승인: 수동 서명/직인을 위한 완벽한 빈칸 */}
-                      <td className="border border-slate-900 w-20 bg-white"></td>
+                      <td className="border border-slate-900 w-16 bg-white"></td>
                     </tr>
                   </tbody>
                 </table>
@@ -215,39 +217,40 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
             </div>
 
             {/* 원본 사규 기본 정보 표 (8구획 표 구조) */}
-            <table className="w-full border-collapse border-2 border-slate-900 mb-4 text-[11px]">
+            <table className="w-full border-collapse border-2 border-slate-900 mb-2 text-[10px]">
               <tbody>
                 <tr>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5 w-24">품    명</td>
-                  <td className="border border-slate-900 font-extrabold px-3 py-1.5 text-blue-900">{data.itemName}</td>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5 w-24">입고일자</td>
-                  <td className="border border-slate-900 font-mono px-3 py-1.5">{isBlankForm ? '' : (data.receivedDate || new Date().toISOString().slice(0, 10))}</td>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5 w-24">검사일자</td>
-                  <td className="border border-slate-900 font-mono px-3 py-1.5">{isBlankForm ? '' : (data.receivedDate || new Date().toISOString().slice(0, 10))}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1 w-20">품    명</td>
+                  <td className="border border-slate-900 font-extrabold px-2 py-1 text-blue-900">{data.itemName}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1 w-20">입고일자</td>
+                  <td className="border border-slate-900 font-mono px-2 py-1">{isBlankForm ? '' : (data.receivedDate || new Date().toISOString().slice(0, 10))}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1 w-20">검사일자</td>
+                  <td className="border border-slate-900 font-mono px-2 py-1">{isBlankForm ? '' : (data.receivedDate || new Date().toISOString().slice(0, 10))}</td>
                 </tr>
                 <tr>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5">입 고 처</td>
-                  <td className="border border-slate-900 px-3 py-1.5">{isBlankForm ? '' : (data.supplierName || '공급업체')}</td>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5">입고처 로트번호</td>
-                  <td className="border border-slate-900 font-mono px-3 py-1.5">{isBlankForm ? '' : (data.supplierLot || '-')}</td>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5">검 사 자</td>
-                  <td className="border border-slate-900 font-bold px-3 py-1.5">{isBlankForm ? '' : displayInspector}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1">입 고 처</td>
+                  <td className="border border-slate-900 px-2 py-1">{isBlankForm ? '' : (data.supplierName || '공급업체')}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1">입고처 로트번호</td>
+                  <td className="border border-slate-900 font-mono px-2 py-1">{isBlankForm ? '' : (data.supplierLot || '-')}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1">검 사 자</td>
+                  <td className="border border-slate-900 font-bold px-2 py-1">{isBlankForm ? '' : displayInspector}</td>
                 </tr>
                 <tr>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5">인수검사 로트번호</td>
-                  <td className="border border-slate-900 font-mono font-extrabold px-3 py-1.5 text-blue-900">{isBlankForm ? '' : (data.lotNumber || '-')}</td>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1.5">로트 수량</td>
-                  <td className="border border-slate-900 font-bold px-3 py-1.5" colSpan={3}>{isBlankForm ? '' : (data.qty ? `${data.qty} ${data.unit || '개'}` : '-')}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1">인수검사 로트번호</td>
+                  <td className="border border-slate-900 font-mono font-extrabold px-2 py-1 text-blue-900">{isBlankForm ? '' : (data.lotNumber || '-')}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1">로트 수량</td>
+                  <td className="border border-slate-900 font-bold px-2 py-1" colSpan={3}>{isBlankForm ? '' : (data.qty ? `${data.qty} ${data.unit || '개'}` : '-')}</td>
                 </tr>
               </tbody>
             </table>
 
             {/* 원본 사규 검사항목 3원화 성적치 표 (매로트 겉모양 / 제조사성적서 / 공인기관의뢰) */}
-            <div className="mb-4">
-              <h4 className="font-bold text-xs mb-1.5 text-slate-900">■ 검사항목 및 성적치 (측정 실측치 n1, n2, n3)</h4>
+            <div className="mb-2">
+              <h4 className="font-bold text-[11px] mb-1 text-slate-900">■ 검사항목 및 성적치 (측정 실측치 n1, n2, n3)</h4>
               <table className="w-full border-collapse border-2 border-slate-900 text-center text-[10px]">
                 <thead>
                   <tr className="bg-slate-100 font-bold border-b-2 border-slate-900">
+
                     <th className="border border-slate-900 py-1 px-1 w-24">검사항목</th>
                     <th className="border border-slate-900 py-1 px-1">기준 및 허용차</th>
                     <th className="border border-slate-900 py-1 px-1 w-16">검사방법</th>
