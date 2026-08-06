@@ -7,6 +7,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Plus, FileText, MoreHorizontal, Trash2, Printer, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AttachmentSection } from '@/components/shared/AttachmentSection';
+import { InspectionFormPrintModal } from '@/components/inspection/InspectionFormPrintModal';
 
 interface ProcessInspection {
   insp_id: number;
@@ -106,6 +107,27 @@ export function ProcessInspectionPage() {
   const [menuOpen, setMenuOpen] = useState<number | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
   const [toast, setToast] = useState<{ message: string; type: 'PASS' | 'FAIL' } | null>(null);
+  const [printModalData, setPrintModalData] = useState<any>(null);
+
+  const handleOpenPrintModal = (row: ProcessInspection) => {
+    setPrintModalData({
+      formCode: row.form_code ? `EZC-C-701-${row.form_code}` : 'EZC-C-701-G01',
+      formTitle: '중간공정 검사 성적서',
+      itemName: `${row.structure_code || 'EZ-덕트내화채움구조'} (${row.process_code || '공정'})`,
+      supplierName: '자체 생산 공정',
+      supplierLot: row.base_lot || '-',
+      lotNumber: row.lot_number || '-',
+      receivedDate: row.inspected_at?.slice(0, 10),
+      qty: 1,
+      unit: 'LOT',
+      inspector: row.inspector || '김정용',
+      n1: '양호',
+      n2: '양호',
+      n3: '양호',
+      overallResult: row.result === 'PASS' ? 'PASS' : 'FAIL',
+      certInfo: 'EZC-C-701 공정별 검사기준 (재단 치수 / 조립 겉모양 기준 100% 충족)'
+    });
+  };
 
   const fetchData = () => {
     const params = filter ? `?form_code=${filter}` : '';
@@ -200,19 +222,28 @@ export function ProcessInspectionPage() {
                     {insp.inspected_at ? new Date(insp.inspected_at).toLocaleString('ko-KR') : '-'}
                   </td>
                   <td className="px-3 py-3 text-center">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (menuOpen === insp.insp_id) { setMenuOpen(null); return; }
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-                        setMenuOpen(insp.insp_id);
-                      }}
-                      className="p-1 rounded hover:bg-gray-200"
-                    >
-                      <MoreHorizontal size={16} className="text-gray-500" />
-                    </button>
+                    <div className="flex items-center justify-center gap-1">
+                      <button
+                        onClick={() => handleOpenPrintModal(insp)}
+                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-[11px] font-bold flex items-center gap-1 shadow-sm"
+                      >
+                        <Printer size={12} /> 인쇄
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (menuOpen === insp.insp_id) { setMenuOpen(null); return; }
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+                          setMenuOpen(insp.insp_id);
+                        }}
+                        className="p-1 rounded hover:bg-gray-200"
+                      >
+                        <MoreHorizontal size={16} className="text-gray-500" />
+                      </button>
+                    </div>
                   </td>
+
                 </tr>
               ))
             )}
@@ -282,9 +313,17 @@ export function ProcessInspectionPage() {
           onClose={() => setDetailTarget(null)}
         />
       )}
+
+      {/* 사규 성적서 인쇄 모달 */}
+      <InspectionFormPrintModal
+        isOpen={!!printModalData}
+        onClose={() => setPrintModalData(null)}
+        data={printModalData}
+      />
     </div>
   );
 }
+
 
 // 검사 상세 모달
 function InspectionDetailModal({ inspId, onClose }: { inspId: number; onClose: () => void }) {

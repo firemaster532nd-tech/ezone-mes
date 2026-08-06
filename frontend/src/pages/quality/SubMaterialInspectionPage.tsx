@@ -3,6 +3,7 @@ import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { Plus, Printer } from 'lucide-react';
 import { GodexLabelPrinter } from '@/components/label/GodexLabelPrinter';
+import { InspectionFormPrintModal } from '@/components/inspection/InspectionFormPrintModal';
 
 // ─── 탭 타입 (D122/D124/D125/D127 성적서 기준) ────────────────────────────
 type SubTab = '세라믹울' | '그라스울-롤' | '그라스울-보드' | '실란트';
@@ -112,10 +113,31 @@ export function SubMaterialInspectionPage() {
   const [notes, setNotes] = useState('');
   const [showLabelPrinter, setShowLabelPrinter] = useState(false);
 
-  const info = TAB_INFO[tab];
+  const [printModalData, setPrintModalData] = useState<any>(null);
 
-  // 탭 변경 시 초기화 + LOT 자동채번
+  const handleOpenPrintModal = (row: any) => {
+    setPrintModalData({
+      formCode: info.formCode,
+      formTitle: `${tab} 인수검사 성적서`,
+      itemName: `${row.category || tab} ${row.spec || ''}`,
+      supplierName: row.supplier_name || '공급업체',
+      supplierLot: row.supplier_lot || '-',
+      lotNumber: row.lot_number || '-',
+      receivedDate: row.received_date || new Date().toISOString().slice(0, 10),
+      qty: row.qty_current,
+      unit: info.unit,
+      inspector: '김정용',
+      n1: row.n1 || '-',
+      n2: row.n2 || '-',
+      n3: row.n3 || '-',
+      overallResult: 'PASS',
+      certInfo: 'KTR / FITI / KCL 공인성적서 연동 (1년 주기 유효기간 적용)'
+    });
+  };
+
+
   useEffect(() => {
+
     setSelectedSpec('');
     setN1(''); setN2(''); setN3('');
     setSupplierLot(''); setQty(''); setNotes('');
@@ -164,6 +186,11 @@ export function SubMaterialInspectionPage() {
     if (!selectedSpec) { alert('규격을 선택해 주세요.'); return; }
     if (!qty) { alert('수량을 입력해 주세요.'); return; }
     if (!lotNumber) { alert('LOT 번호가 없습니다.'); return; }
+
+    if (result === 'FAIL') {
+      alert(`⚠️ [사규/공인 검사기준 미달 차단] 측정 실측치 (n1: ${n1}, n2: ${n2}, n3: ${n3})가 검사 기준치 (${info.minVal} ~ ${info.maxVal} ${info.measureUnit}) 미달이므로 저장이 강제 차단되었습니다!`);
+      return;
+    }
 
     try {
       // 검사 성적서 등록
@@ -440,6 +467,15 @@ export function SubMaterialInspectionPage() {
           onClose={() => setShowLabelPrinter(false)}
         />
       )}
+
+      {/* 사규 성적서 인쇄 모달 */}
+      <InspectionFormPrintModal
+        isOpen={!!printModalData}
+        onClose={() => setPrintModalData(null)}
+        data={printModalData}
+      />
     </div>
   );
 }
+
+export default SubMaterialInspectionPage;

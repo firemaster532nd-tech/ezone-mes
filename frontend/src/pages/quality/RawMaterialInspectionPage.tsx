@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
-import { FlaskConical, Plus, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Plus, Printer } from 'lucide-react';
+import { InspectionFormPrintModal } from '@/components/inspection/InspectionFormPrintModal';
 
 export function RawMaterialInspectionPage() {
   const [inspections, setInspections] = useState<any[]>([]);
   const [criteria, setCriteria] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
+
+  // 성적서 인쇄 모달 상태
+  const [printModalData, setPrintModalData] = useState<any>(null);
 
   // 폼 상태 (D101~D104 원재료 전용)
   const [selectedCriteria, setSelectedCriteria] = useState('');
@@ -45,6 +49,20 @@ export function RawMaterialInspectionPage() {
     const crit = criteria.find(c => String(c.criteria_id) === selectedCriteria);
     if (!crit) { alert('원재료 검사 항목을 선택해 주세요.'); return; }
 
+    // 기준점 검증 (Strict Validation)
+    const minVal = crit.min_value !== null && crit.min_value !== undefined ? Number(crit.min_value) : null;
+    const maxVal = crit.max_value !== null && crit.max_value !== undefined ? Number(crit.max_value) : null;
+    const avg = (n1 + n2 + n3) / 3;
+
+    if (minVal !== null && (n1 < minVal || n2 < minVal || n3 < minVal || avg < minVal)) {
+      alert(`⚠️ [검사기준 미달 차단] 측정 실측치 (n1: ${n1}, n2: ${n2}, n3: ${n3}, 평균: ${avg.toFixed(1)})가 사규/공인 최소 기준치 (${minVal}${crit.unit || ''}) 미달이므로 등록이 거부되었습니다!`);
+      return;
+    }
+    if (maxVal !== null && (n1 > maxVal || n2 > maxVal || n3 > maxVal || avg > maxVal)) {
+      alert(`⚠️ [검사기준 초과 차단] 측정 실측치가 사규/공인 최대 기준치 (${maxVal}${crit.unit || ''})를 초과하므로 등록이 거부되었습니다!`);
+      return;
+    }
+
     try {
       await api.post('/inspections', {
         insp_type: 'INCOMING',
@@ -63,16 +81,36 @@ export function RawMaterialInspectionPage() {
       alert(`원재료 인수검사가 등록되었으며 합격 시 사규 LOT 채번 후 [${targetLocation} 랙 셀]로 즉시 자동 적재됩니다!`);
       setShowModal(false);
       fetchData();
-    } catch {
-      alert('원재료 인수검사 등록 중 오류가 발생했습니다.');
+    } catch (err: any) {
+      alert(err.response?.data?.error || '원재료 인수검사 등록 중 오류가 발생했습니다.');
     }
+  };
+
+  const handleOpenPrintModal = (row: any) => {
+    setPrintModalData({
+      formCode: 'EZC-D-101-1',
+      formTitle: '원자재 인수검사 성적서',
+      itemName: row.item_name,
+      supplierName: row.supplier_name || '공급업체',
+      supplierLot: row.supplier_lot || '-',
+      lotNumber: row.lot_number || '-',
+      receivedDate: row.inspected_at?.slice(0, 10),
+      qty: row.qty,
+      unit: 'kg',
+      inspector: row.inspector || '김정용',
+      n1: row.n1,
+      n2: row.n2,
+      n3: row.n3,
+      overallResult: row.overall_result,
+      certInfo: 'KOPTRI / FITI 공인성적서 (UL94-V2 적합, 밀도 0.88 g/㎤, MI 2.8)'
+    });
   };
 
   return (
     <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
       <PageHeader 
         title="🧪 원재료 인수검사 (D101~D104)" 
-        description="차열시트 배합원료 파우더 (D101 난연컴파운드, D102 팽창흑연, D103 EVA, D104 EP100) 인수검사 및 재고 승인"
+        description="차열시트 배합원료 파우더 (D101 난연컴파운드, D102 팽창흑연, D103 EVA, D104 EP100) 인수검사 및 사규 성적서 발행"
       >
         <button
           onClick={() => setShowModal(true)}
@@ -117,13 +155,14 @@ export function RawMaterialInspectionPage() {
               <th className="px-4 py-3 text-right">입고 수량</th>
               <th className="px-4 py-3 text-center">판정</th>
               <th className="px-4 py-3">담당자</th>
+              <th className="px-4 py-3 text-center">사규 성적서 인쇄</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {loading ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">데이터 로딩 중...</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">데이터 로딩 중...</td></tr>
             ) : inspections.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400">등록된 원재료 인수검사 내역이 없습니다.</td></tr>
+              <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-400">등록된 원재료 인수검사 내역이 없습니다.</td></tr>
             ) : inspections.map(row => (
               <tr key={row.insp_id} className="hover:bg-slate-50/60 transition-colors">
                 <td className="px-4 py-3 font-mono text-xs text-slate-500">{row.inspected_at?.slice(0, 10)}</td>
@@ -135,10 +174,19 @@ export function RawMaterialInspectionPage() {
                   <span className={`px-2 py-0.5 rounded text-xs font-bold ${
                     row.overall_result === 'PASS' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                   }`}>
-                    {row.overall_result === 'PASS' ? 'PASS (합격/재고승인)' : 'FAIL (불합격)'}
+                    {row.overall_result === 'PASS' ? 'PASS (합격)' : 'FAIL (불합격)'}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-slate-600">{row.inspector}</td>
+                <td className="px-4 py-3 text-center">
+                  <button
+                    onClick={() => handleOpenPrintModal(row)}
+                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-white rounded text-xs font-bold flex items-center gap-1 mx-auto shadow-sm"
+                  >
+                    <Printer className="h-3 w-3" />
+                    성적서 인쇄
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -248,20 +296,18 @@ export function RawMaterialInspectionPage() {
 
             <div className="flex justify-end gap-2 pt-3 border-t">
               <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-slate-50">취소</button>
-
               <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">검사 등록 및 재고 승인</button>
-
             </div>
-
           </form>
-
         </div>
-
       )}
 
+      {/* 사규 성적서 인쇄 모달 */}
+      <InspectionFormPrintModal
+        isOpen={!!printModalData}
+        onClose={() => setPrintModalData(null)}
+        data={printModalData}
+      />
     </div>
-
   );
-
 }
-

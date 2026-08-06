@@ -37,6 +37,7 @@ import { LossReportPage } from '@/pages/reports/LossReportPage';
 import { InventoryClosingPage } from '@/pages/inventory/InventoryClosingPage';
 import { ComplianceChecklistPage } from '@/pages/quality/ComplianceChecklistPage';
 import { InspectionEquipmentPage } from '@/pages/quality/InspectionEquipmentPage';
+import { CertifiedReportsPage } from '@/pages/quality/CertifiedReportsPage';
 import { ManufacturingEquipmentPage } from '@/pages/quality/ManufacturingEquipmentPage';
 import InitialInventoryPage from '@/pages/inventory/InitialInventoryPage';
 import { InventoryImportPage } from '@/pages/inventory/InventoryImportPage';
@@ -203,6 +204,7 @@ export const router = createBrowserRouter([
       { path: 'quality/incoming/non-certified', element: <NonCertifiedInspectionPage /> },
       { path: 'quality/equipment/inspection', element: <InspectionEquipmentPage /> },
       { path: 'quality/equipment/manufacturing', element: <ManufacturingEquipmentPage /> },
+      { path: 'quality/certified-reports', element: <CertifiedReportsPage /> },
       // 수주/발주
       { path: 'orders', element: <OrderBomPage /> },
       { path: 'orders/purchase-requests', element: <PurchaseRequestPage /> },

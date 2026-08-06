@@ -3,6 +3,7 @@ import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
 import { ClipboardCheck, Search, ChevronRight, CheckCircle2, XCircle, Plus, RefreshCw, FileText, Printer } from 'lucide-react';
 import { GodexLabelPrinter } from '@/components/label/GodexLabelPrinter';
+import { InspectionFormPrintModal } from '@/components/inspection/InspectionFormPrintModal';
 
 interface OrderItem {
   item_name: string;
@@ -229,11 +230,20 @@ export function SocketBracketInspectionPage() {
     return pass ? 'PASS' : 'FAIL';
   };
 
+  const [printModalData, setPrintModalData] = useState<any>(null);
+
+
   const submitAll = async () => {
     // Validate
     const invalid = itemsToInspect.find(i => !i.item_name || !i.lotNumber || i.qty <= 0);
     if (invalid) {
       alert('품목명, LOT 번호, 수량을 모두 정확히 입력해 주세요.');
+      return;
+    }
+
+    const failedItem = itemsToInspect.find(i => i.result === 'FAIL');
+    if (failedItem) {
+      alert(`⚠️ [사규/공인 검사기준 미달 차단] 품목 [${failedItem.item_name}]의 측정치(두께 1.6mm 미만 또는 높이 200mm 미만)가 기준 미달이므로 저장이 강제 차단되었습니다!`);
       return;
     }
 
@@ -675,11 +685,20 @@ export function SocketBracketInspectionPage() {
       {/* 라벨 미리 출력 모달 */}
       {printLabelData && (
         <GodexLabelPrinter
-          labelData={printLabelData}
+          isOpen={!!printLabelData}
           onClose={() => setPrintLabelData(null)}
+          data={printLabelData}
         />
       )}
+
+      {/* 사규 성적서 인쇄 모달 */}
+      <InspectionFormPrintModal
+        isOpen={!!printModalData}
+        onClose={() => setPrintModalData(null)}
+        data={printModalData}
+      />
     </div>
   );
 }
 
+export default SocketBracketInspectionPage;

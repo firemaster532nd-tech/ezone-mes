@@ -63,6 +63,7 @@ import { returnRoutes } from './routes/returns.js';
 import { socketIncomingRoutes } from './routes/socket-incoming.js';
 import { announcementRoutes, ensureAnnouncementTables } from './routes/announcements.js';
 import { superadminRoutes } from './routes/superadmin.js';
+import { certifiedReportsRoutes } from './routes/certified-reports.js';
 import { materialLotsRoutes } from './routes/material-lots.js';
 import { lotLineageRoutes } from './routes/lot-lineage.js';
 import googleSheetsSyncRoutes from './routes/google-sheets-sync.js';
@@ -98,6 +99,7 @@ export const initApp = async () => {
   await app.register(lotRoutes);
   await app.register(inventoryRoutes);
   await app.register(inspectionRoutes);
+  await app.register(certifiedReportsRoutes);
   await app.register(selfInspectionRoutes);
   await app.register(webmailRoutes);
   await app.register(accountingFullRoutes);
