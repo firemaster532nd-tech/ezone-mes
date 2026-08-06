@@ -146,12 +146,13 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
             @media print {
               @page {
                 size: A4 portrait;
-                margin: 4mm 6mm;
+                margin: 0;
               }
               html, body {
                 margin: 0 !important;
                 padding: 0 !important;
-                height: 100% !important;
+                width: 210mm !important;
+                height: 297mm !important;
                 overflow: hidden !important;
                 background: #ffffff !important;
               }
@@ -163,24 +164,26 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
               }
               #printable-form {
                 position: fixed !important;
-                left: 4mm !important;
-                top: 4mm !important;
-                width: calc(100% - 8mm) !important;
-                max-height: 285mm !important;
+                left: 5mm !important;
+                top: 5mm !important;
+                width: 200mm !important;
+                height: 287mm !important;
                 margin: 0 !important;
-                padding: 10px 14px !important;
+                padding: 16px 20px !important;
                 border: 2px solid #000000 !important;
                 background: #ffffff !important;
                 box-sizing: border-box !important;
                 z-index: 9999999 !important;
-                page-break-inside: avoid !important;
-                overflow: hidden !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: space-between !important;
               }
               .print-hidden-toolbar {
                 display: none !important;
               }
             }
           `}</style>
+
 
           <div id="printable-form" className="border-2 border-slate-900 p-4 print:p-2 bg-white text-slate-900 text-xs font-sans">
 
@@ -254,8 +257,9 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
             </table>
 
             {/* 원본 사규 검사항목 3원화 성적치 표 (매로트 겉모양 / 제조사성적서 / 공인기관의뢰) */}
-            <div className="mb-2">
+            <div className="mb-2 flex-1 flex flex-col justify-center">
               <h4 className="font-bold text-[11px] mb-1 text-slate-900">■ 검사항목 및 성적치 (측정 실측치 n1, n2, n3)</h4>
+
               <table className="w-full border-collapse border-2 border-slate-900 text-center text-[10px]">
                 <thead>
                   <tr className="bg-slate-100 font-bold border-b-2 border-slate-900">
