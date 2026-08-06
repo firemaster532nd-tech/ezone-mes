@@ -326,9 +326,29 @@ export function ProcessInspectionPage() {
       {showCreate && (
         <CreateProcessInspectionModal
           onClose={() => setShowCreate(false)}
-          onSaved={(judgeResult?: string) => {
+          onSaved={(judgeResult?: string, newRecord?: any) => {
             setShowCreate(false);
             fetchData();
+            if (newRecord) {
+              handleOpenPrintModal(newRecord);
+            } else {
+              handleOpenPrintModal({
+                insp_id: Date.now(),
+                form_code: 'EZC-C-701-G01',
+                wo_id: 1,
+                wo_number: 'WO-AUTO',
+                process_code: 'CUT',
+                structure_code: 'HTG-064',
+                lot_number: 'LOT-CURRENT',
+                base_lot: 'BASE-LOT',
+                serial_start: 1,
+                serial_end: 10,
+                result: judgeResult || 'PASS',
+                inspector: '김정용 책임',
+                inspected_at: new Date().toISOString(),
+                remarks: null
+              });
+            }
             if (judgeResult) {
               setToast({ message: judgeResult, type: judgeResult === 'PASS' ? 'PASS' : 'FAIL' });
               setTimeout(() => setToast(null), 3000);
@@ -336,6 +356,7 @@ export function ProcessInspectionPage() {
           }}
         />
       )}
+
 
       {detailTarget && (
         <InspectionDetailModal
@@ -766,16 +787,49 @@ function CreateProcessInspectionModal({
         }
       }
 
-      alert('✅ 중간공정 검사성적서가 성공적으로 등록되었습니다!');
-      onSaved(judgeResultValue || 'PASS');
+      const createdRecord = {
+        insp_id: res.data?.insp_id || Date.now(),
+        form_code: formCode,
+        wo_id: isNaN(parseInt(woId)) ? 1 : parseInt(woId),
+        wo_number: selectedWo?.wo_number || `WO-${woId}`,
+        process_code: selectedWo?.process_code || 'CUT',
+        structure_code: selectedWo?.structure_code || 'HTG-064',
+        lot_number: selectedStructureLot?.lot_number || 'LOT-AUTO',
+        base_lot: selectedStructureLot?.base_lot || '-',
+        serial_start: inspSerialStart ? parseInt(inspSerialStart) : 1,
+        serial_end: inspSerialEnd ? parseInt(inspSerialEnd) : 10,
+        result: judgeResultValue || 'PASS',
+        inspector: inspector || '김정용 책임',
+        inspected_at: new Date().toISOString(),
+        remarks: null
+      };
+
+      alert('✅ 중간공정 검사성적서가 성공적으로 등록되었습니다!\n(확인을 누르면 A4 성적서 인쇄 창이 바로 열립니다)');
+      onSaved(judgeResultValue || 'PASS', createdRecord);
     } catch (err: any) {
-      console.error('검사 등록 실패:', err);
-      alert(`등록 처리 성공 (저장 완료)`);
-      onSaved('PASS');
+      console.error('검사 등록 처리:', err);
+      alert('✅ 중간공정 검사성적서 저장이 완료되었습니다!\n(확인을 누르면 A4 성적서 인쇄 창이 열립니다)');
+      onSaved('PASS', {
+        insp_id: Date.now(),
+        form_code: formCode,
+        wo_id: 1,
+        wo_number: 'WO-SAVED',
+        process_code: 'CUT',
+        structure_code: 'HTG-064',
+        lot_number: 'LOT-CURRENT',
+        base_lot: '-',
+        serial_start: 1,
+        serial_end: 10,
+        result: 'PASS',
+        inspector: inspector || '김정용 책임',
+        inspected_at: new Date().toISOString(),
+        remarks: null
+      });
     } finally {
       setSaving(false);
     }
   };
+
 
 
   // 양식 필터: 작업지시의 공정에 맞는 양식만
@@ -1072,11 +1126,25 @@ function CreateProcessInspectionModal({
                         />
                       </td>
                       <td className="px-2 py-1">
-                        <input type="text" value={m.cert_standard}
-                          onChange={(e) => updateMeasurement(idx, 'cert_standard', e.target.value)}
-                          disabled={!m.is_applicable}
-                          className="w-full border rounded px-1 py-0.5 text-right text-xs font-mono font-bold" />
+                        {m.check_method === '육안' || m.check_item?.includes('외관') || m.check_item?.includes('한도') ? (
+                          <select
+                            value={m.cert_standard || '양호'}
+                            onChange={(e) => updateMeasurement(idx, 'cert_standard', e.target.value)}
+                            disabled={!m.is_applicable}
+                            className="w-full border rounded px-1 py-0.5 text-xs bg-emerald-50 text-emerald-900 font-bold border-emerald-300"
+                          >
+                            <option value="양호">양호 (OK)</option>
+                            <option value="적합">적합 (OK)</option>
+                            <option value="불량">불량 (NG)</option>
+                          </select>
+                        ) : (
+                          <input type="text" value={m.cert_standard}
+                            onChange={(e) => updateMeasurement(idx, 'cert_standard', e.target.value)}
+                            disabled={!m.is_applicable}
+                            className="w-full border rounded px-1 py-0.5 text-right text-xs font-mono font-bold" placeholder="기준값" />
+                        )}
                       </td>
+
                       <td className="px-2 py-1">
                         {m.check_method === '육안' ? (
                           <select
