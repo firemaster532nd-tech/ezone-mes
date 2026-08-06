@@ -98,6 +98,9 @@ const resultLabel: Record<string, string> = {
   PASS: '합격', FAIL: '불합격', PENDING: '대기',
 };
 
+const INSPECTOR_LIST = ['김정용 책임', '최진영 책임', '임병용 파트장', '이동민 파트장', '김봉민 책임', '생산 작업자'];
+
+
 export function ProcessInspectionPage() {
   const navigate = useNavigate();
   const [data, setData] = useState<ProcessInspection[]>([]);
@@ -650,36 +653,59 @@ function CreateProcessInspectionModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div className="bg-white rounded-card shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-shop-lg font-bold mb-4">중간검사 등록 (C-701)</h2>
+        <div className="flex justify-between items-center mb-4 border-b pb-3">
+          <h2 className="text-shop-lg font-extrabold text-slate-900 flex items-center gap-2">
+            📋 중간검사 성적서 신규 등록 (EZC-C-701)
+          </h2>
+          <span className="text-xs bg-blue-100 text-blue-800 font-bold px-2.5 py-1 rounded-lg">
+            발주서 / 작업지시 자동 불러오기 연동
+          </span>
+        </div>
 
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">작업지시</label>
-            <select value={woId} onChange={(e) => handleWoChange(e.target.value)} className="w-full border rounded px-3 py-2 text-shop-sm">
-              <option value="">선택</option>
-              {workOrders.map((wo) => (
-                <option key={wo.wo_id} value={wo.wo_id}>
-                  {wo.wo_number} ({wo.process_code}) {wo.structure_code ? `- ${wo.structure_code}` : ''}
-                </option>
-              ))}
-            </select>
+        {/* 발주서 / 작업지시 선택 불러오기 배너 */}
+        <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl mb-4 space-y-1">
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-extrabold text-blue-900 flex items-center gap-1">
+              <span>📋 발주서 / 작업지시서 불러오기 (클릭 시 구조코드 및 검사양식 자동채움)</span>
+            </label>
+            <span className="text-[11px] text-blue-700 font-bold">등록된 작업지시: {workOrders.length}건</span>
           </div>
+          <select
+            value={woId}
+            onChange={(e) => handleWoChange(e.target.value)}
+            className="w-full bg-white border-2 border-blue-400 font-bold rounded-lg px-3 py-2 text-shop-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">-- 발주서 / 작업지시서를 선택해 주세요 (WO 번호, 구조체, 공정) --</option>
+            {workOrders.map((wo) => (
+              <option key={wo.wo_id} value={wo.wo_id}>
+                WO [{wo.wo_number}] | 공정: {wo.process_code} {wo.structure_code ? `| 구조: ${wo.structure_code}` : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">양식코드</label>
-            <select value={formCode} onChange={(e) => handleFormCodeChange(e.target.value)} className="w-full border rounded px-3 py-2 text-shop-sm">
-              <option value="">선택</option>
+            <label className="block text-xs font-bold text-gray-700 mb-1">EZC-C-701 양식코드 선택</label>
+            <select value={formCode} onChange={(e) => handleFormCodeChange(e.target.value)} className="w-full border rounded px-3 py-2 text-shop-sm font-bold">
+              <option value="">-- 양식선택 --</option>
               {filteredTemplates.map((t) => (
                 <option key={t.form_code} value={t.form_code}>
-                  {t.form_code} - {t.form_name} ({t.item_count}항목)
+                  {t.form_code} - {t.form_name} ({t.item_count}개 세부항목)
                 </option>
               ))}
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">검사자</label>
-            <input value={inspector} onChange={(e) => setInspector(e.target.value)} className="w-full border rounded px-3 py-2 text-shop-sm" />
+            <label className="block text-xs font-bold text-gray-700 mb-1">검사 담당자 (작성자)</label>
+            <select value={inspector} onChange={(e) => setInspector(e.target.value)} className="w-full border rounded px-3 py-2 text-shop-sm font-bold">
+              {INSPECTOR_LIST.map(name => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
           </div>
         </div>
+
 
         {/* 구조 LOT 섹션 - 조립검사 시 표시 */}
         {showStructureLot && (
