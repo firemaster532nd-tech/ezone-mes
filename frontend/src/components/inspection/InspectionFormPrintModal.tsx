@@ -88,7 +88,8 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
     setEditQty(data.qty !== undefined ? String(data.qty) : '');
     setEditSpec('');
     setEditThickness('');
-    setEditNotes('');
+    // certInfo를 editNotes 초기값으로 설정 → 결과성적서·빈양식지 모두 비고란에 바로 표시
+    setEditNotes(data.certInfo || '');
     setOverallResult(
       data.overallResult === 'PASS' || data.overallResult === '합격' ? 'pass' :
       data.overallResult === 'FAIL' || data.overallResult === '불합격' ? 'fail' : ''
@@ -554,21 +555,15 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                   </div>
                 </div>
 
-                {/* 비고 — certInfo 우선 표시, 없으면 입력 가능 */}
+                {/* 비고 — certInfo를 editNotes 초기값으로 포함, 빈양식지·결과성적서 모두 표시 */}
                 <div className="text-[9px] text-slate-800 bg-slate-50 p-2 rounded border border-slate-400">
                   <p className="font-extrabold text-blue-900 mb-1">※ 비고 / 공인성적서 연동 정보:</p>
-                  {/* result 모드에서는 certInfo를 상단에 고정 표시한 후 추가 메모 입력 가능 */}
-                  {!isBlank && data.certInfo && (
-                    <div className="whitespace-pre-line font-mono text-emerald-900 font-bold text-[9px] mb-1 px-1 py-0.5 bg-emerald-50 border border-emerald-300 rounded">
-                      {data.certInfo}
-                    </div>
-                  )}
                   <textarea
                     value={editNotes}
                     onChange={e => setEditNotes(e.target.value)}
-                    placeholder="추가 비고 내용 입력 (비워두기 가능)"
-                    rows={isBlank ? 3 : 2}
-                    className="w-full text-[9px] font-mono text-slate-700 bg-transparent border-0 focus:outline-none resize-none"
+                    placeholder="공인성적서 번호, LOT 정보 등 입력 (비워두기 가능)"
+                    rows={4}
+                    className="w-full text-[9px] font-mono text-slate-900 bg-transparent border-0 focus:outline-none resize-none leading-relaxed"
                   />
                 </div>
               </div>
