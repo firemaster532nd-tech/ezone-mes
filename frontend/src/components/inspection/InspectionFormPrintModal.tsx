@@ -147,39 +147,16 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                 size: A4 portrait;
                 margin: 5mm 8mm;
               }
-              html, body {
-                background: #ffffff !important;
-                color: #000000 !important;
-                width: 100% !important;
-                height: auto !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                overflow: visible !important;
+              body * {
+                visibility: hidden !important;
               }
-              .print-modal-overlay {
-                position: static !important;
-                background: transparent !important;
-                padding: 0 !important;
-                margin: 0 !important;
-                overflow: visible !important;
-                display: block !important;
-              }
-              .print-modal-box {
-                position: static !important;
-                box-shadow: none !important;
-                border: none !important;
-                max-width: 100% !important;
-                width: 100% !important;
-                padding: 0 !important;
-                margin: 0 !important;
-                background: #ffffff !important;
-              }
-              .print-hidden-toolbar {
-                display: none !important;
+              #printable-form, #printable-form * {
+                visibility: visible !important;
               }
               #printable-form {
-                display: block !important;
-                visibility: visible !important;
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
                 width: 100% !important;
                 margin: 0 !important;
                 padding: 10px !important;
@@ -187,8 +164,12 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                 background: #ffffff !important;
                 box-sizing: border-box !important;
               }
+              .print-hidden-toolbar {
+                display: none !important;
+              }
             }
           `}</style>
+
 
           <div id="printable-form" className="border-2 border-slate-900 p-6 bg-white text-slate-900 text-xs font-sans">
 
