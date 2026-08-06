@@ -63,6 +63,7 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
   const displayInspector = isBlankForm ? '' : (selectedInspector || data.inspector || '김정용 책임');
 
   const handlePrint = () => {
+    window.scrollTo(0, 0);
     window.print();
   };
 
@@ -143,10 +144,16 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
         <div>
           <style>{`
             @media print {
-
               @page {
                 size: A4 portrait;
                 margin: 4mm 6mm;
+              }
+              html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                height: 100% !important;
+                overflow: hidden !important;
+                background: #ffffff !important;
               }
               body * {
                 visibility: hidden !important;
@@ -155,16 +162,17 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                 visibility: visible !important;
               }
               #printable-form {
-                position: absolute !important;
-                left: 0 !important;
-                top: 0 !important;
-                width: 100% !important;
+                position: fixed !important;
+                left: 4mm !important;
+                top: 4mm !important;
+                width: calc(100% - 8mm) !important;
                 max-height: 285mm !important;
                 margin: 0 !important;
                 padding: 10px 14px !important;
                 border: 2px solid #000000 !important;
                 background: #ffffff !important;
                 box-sizing: border-box !important;
+                z-index: 9999999 !important;
                 page-break-inside: avoid !important;
                 overflow: hidden !important;
               }
@@ -175,6 +183,7 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
           `}</style>
 
           <div id="printable-form" className="border-2 border-slate-900 p-4 print:p-2 bg-white text-slate-900 text-xs font-sans">
+
             
             {/* 서식 헤더: 코드명 | (주)이지원 | A4 규격 */}
             <div className="flex justify-between items-center border-b-2 border-slate-900 pb-1 mb-2">
