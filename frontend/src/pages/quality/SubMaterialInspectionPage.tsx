@@ -115,7 +115,10 @@ export function SubMaterialInspectionPage() {
 
   const [printModalData, setPrintModalData] = useState<any>(null);
 
+  const info = TAB_INFO[tab];
+
   const handleOpenPrintModal = (row: any) => {
+
     setPrintModalData({
       formCode: info.formCode,
       formTitle: `${tab} 인수검사 성적서`,
