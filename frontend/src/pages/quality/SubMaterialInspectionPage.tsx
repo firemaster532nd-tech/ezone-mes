@@ -307,9 +307,6 @@ export function SubMaterialInspectionPage() {
 
 
 
-  };
-
-
   const handleOpenPrintBlankForm = () => {
     const isCeramic96 = tab === '세라믹울 96K';
     const isCeramic120 = tab === '세라믹울 120K';
