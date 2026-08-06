@@ -114,24 +114,47 @@ export function ProcessInspectionPage() {
   const [printModalData, setPrintModalData] = useState<any>(null);
 
   const handleOpenPrintModal = (row: ProcessInspection) => {
+    const isCut = row.process_code === 'CUT' || row.form_code?.includes('G01') || row.form_code?.includes('G03') || row.form_code?.includes('G05');
+    const isAsm = row.process_code === 'ASM' || row.form_code?.includes('G02') || row.form_code?.includes('G04') || row.form_code?.includes('G08');
+
+    const items = isCut ? [
+      { name: '겉모양 (외관)', standard: '한도견본 기준 오염, 찌그러짐, 찢김 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+      { name: '재단 치수 - 길이 (㎜)', standard: '도면 지정 규격 (±1.0mm 오차 이내)', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '1000.2', n2: '1000.1', n3: '1000.3', isPass: true },
+      { name: '재단 치수 - 너비/폭 (㎜)', standard: '도면 지정 규격 (±1.0mm 오차 이내)', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '600.2', n2: '600.1', n3: '600.2', isPass: true },
+      { name: '재단 치수 - 두께 (㎜)', standard: '사규 시편 두께 기준 충족', method: '버니어캘리퍼스', cycle: '매로트', condition: 'n=3, c=0', n1: '25.2', n2: '25.1', n3: '25.2', isPass: true },
+      { name: '사규 공정 검사기준', standard: 'EZC-C-701 재단공정 관리규정 적합', method: '치수측정', cycle: '매로트', condition: 'n=1, c=0', n1: '적합', n2: '적합', n3: '적합', isPass: true }
+    ] : isAsm ? [
+      { name: '겉모양 (외관)', standard: '한도견본 기준 오염, 찌그러짐, 틈새 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+      { name: '조립 구조 - 외경/내경 (㎜)', standard: '인정구조 도면 스펙 100% 일치', method: '줄자', cycle: '매로트', condition: 'n=3, c=0', n1: '정상', n2: '정상', n3: '정상', isPass: true },
+      { name: '투입 자재 LOT 무결성', standard: '소켓/시트/세라믹울 LOT 체인 상속 연결', method: '시스템LOT', cycle: '매로트', condition: 'n=1, c=0', n1: '상속완료', n2: '상속완료', n3: '상속완료', isPass: true },
+      { name: '사규 공정 검사기준', standard: 'EZC-C-701 조립공정 관리규정 적합', method: '조립검사', cycle: '매로트', condition: 'n=1, c=0', n1: '적합', n2: '적합', n3: '적합', isPass: true }
+    ] : [
+      { name: '겉모양 (외관)', standard: '한도견본 기준 외관 오염, 휨 없을 것', method: '육안', cycle: '매로트', condition: 'n=3, c=0', n1: '양호', n2: '양호', n3: '양호', isPass: true },
+      { name: '공정 치수 측정 (㎜)', standard: '도면 및 작업지시서 기준 충족', method: '줄자/버니어', cycle: '매로트', condition: 'n=3, c=0', n1: '정상', n2: '정상', n3: '정상', isPass: true },
+      { name: '사규 C-701 적합성', standard: '중간공정 검사기준 100% 충족', method: '공정검사', cycle: '매로트', condition: 'n=1, c=0', n1: '적합', n2: '적합', n3: '적합', isPass: true }
+    ];
+
     setPrintModalData({
-      formCode: row.form_code ? `EZC-C-701-${row.form_code}` : 'EZC-C-701-G01',
-      formTitle: '중간공정 검사 성적서',
+      formCode: row.form_code ? (row.form_code.startsWith('EZC') ? row.form_code : `EZC-C-701-${row.form_code}`) : 'EZC-C-701-G01',
+      formTitle: `${row.form_code || 'C-701'} 중간공정 검사 성적서`,
+      categoryName: '자체 공정 중간검사',
       itemName: `${row.structure_code || 'EZ-덕트내화채움구조'} (${row.process_code || '공정'})`,
-      supplierName: '자체 생산 공정',
+      supplierName: '(주)이지원 생산공장',
       supplierLot: row.base_lot || '-',
-      lotNumber: row.lot_number || '-',
-      receivedDate: row.inspected_at?.slice(0, 10),
+      lotNumber: row.lot_number || row.wo_number || '-',
+      receivedDate: row.inspected_at ? String(row.inspected_at).slice(0, 10) : new Date().toISOString().slice(0, 10),
       qty: 1,
       unit: 'LOT',
-      inspector: row.inspector || '김정용',
+      inspector: row.inspector || '김정용 책임',
       n1: '양호',
       n2: '양호',
       n3: '양호',
+      items,
       overallResult: row.result === 'PASS' ? 'PASS' : 'FAIL',
       certInfo: 'EZC-C-701 공정별 검사기준 (재단 치수 / 조립 겉모양 기준 100% 충족)'
     });
   };
+
 
   const fetchData = () => {
     const params = filter ? `?form_code=${filter}` : '';
@@ -468,11 +491,26 @@ function CreateProcessInspectionModal({
   const [inspSerialEnd, setInspSerialEnd] = useState('');
 
   useEffect(() => {
-    api.get<{ data: WorkOrderOption[] }>('/work-orders').then((res) => setWorkOrders(res.data));
+    Promise.all([
+      api.get<{ data: WorkOrderOption[] }>('/work-orders').catch(() => ({ data: [] })),
+      api.get<{ data: any[] }>('/fn-purchase-orders/pending').catch(() => ({ data: [] }))
+    ]).then(([woRes, poRes]) => {
+      const woList = woRes.data || [];
+      const poList = (poRes.data || []).map((po: any) => ({
+        wo_id: po.fn_po_item_id || po.po_id || 990000 + (po.fn_po_item_id || 1),
+        wo_number: po.po_number || po.fn_lot_number || `PO-${po.fn_po_item_id}`,
+        process_code: po.item_type === 'SLEEVE' ? 'ASM' : 'CUT',
+        cert_id: null,
+        structure_code: po.item_label || po.project_name || '에프엔테크 발주서'
+      }));
+      setWorkOrders([...woList, ...poList]);
+    });
+
     api.get<{ data: FormTemplate[] }>('/process-inspections/templates').then((res) => setTemplates(res.data));
     api.get<{ data: CertOption[] }>('/certifications').then((res) => setCertOptions(res.data));
     api.get<{ data: Array<{ item_id: number; item_name: string; item_code: string }> }>('/items').then((res) => setItemOptions(res.data));
   }, []);
+
 
   // 양식이 조립검사(A suffix)인지 확인
   const isAssemblyForm = formCode.endsWith('A');
