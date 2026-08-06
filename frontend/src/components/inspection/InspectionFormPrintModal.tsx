@@ -145,38 +145,21 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
           <style>{`
             @media print {
               @page {
-                size: A4 portrait;
-                margin: 0;
-              }
-              html, body {
-                margin: 0 !important;
-                padding: 0 !important;
-                width: 210mm !important;
-                height: 297mm !important;
-                overflow: hidden !important;
-                background: #ffffff !important;
-              }
-              body * {
-                visibility: hidden !important;
-              }
-              #printable-form, #printable-form * {
-                visibility: visible !important;
-              }
-              #printable-form {
+                size: A4 portr              #printable-form {
                 position: fixed !important;
                 left: 5mm !important;
                 top: 5mm !important;
                 width: 200mm !important;
                 height: 287mm !important;
                 margin: 0 !important;
-                padding: 16px 20px !important;
+                padding: 14px 18px !important;
                 border: 2px solid #000000 !important;
                 background: #ffffff !important;
                 box-sizing: border-box !important;
                 z-index: 9999999 !important;
                 display: flex !important;
                 flex-direction: column !important;
-                justify-content: space-between !important;
+                justify-content: flex-start !important;
               }
               .print-hidden-toolbar {
                 display: none !important;
@@ -184,36 +167,34 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
             }
           `}</style>
 
-
-          <div id="printable-form" className="border-2 border-slate-900 p-4 print:p-2 bg-white text-slate-900 text-xs font-sans">
-
+          <div id="printable-form" className="border-2 border-slate-900 p-4 print:p-2 bg-white text-slate-900 text-xs font-sans space-y-2">
             
             {/* 서식 헤더: 코드명 | (주)이지원 | A4 규격 */}
-            <div className="flex justify-between items-center border-b-2 border-slate-900 pb-1 mb-2">
+            <div className="flex justify-between items-center border-b-2 border-slate-900 pb-1 mb-1">
               <span className="font-mono text-xs font-extrabold text-slate-800">{data.formCode || 'EZC-D-101-1'}</span>
               <span className="font-extrabold text-base tracking-widest text-slate-900">(주) 이 지 원</span>
               <span className="text-[10px] text-slate-500 font-mono">A4 (210×297)㎜</span>
             </div>
 
             {/* 타이틀 및 3단 결재란 (작성자: 선택한 성명, 검토/승인: 완전히 비어있는 빈칸) */}
-            <div className="grid grid-cols-12 gap-2 mb-2 items-center">
+            <div className="grid grid-cols-12 gap-2 mb-1 items-center">
               <div className="col-span-7">
-                <h1 className="text-lg font-extrabold tracking-tight text-slate-900 underline decoration-2 underline-offset-4">
+                <h1 className="text-xl font-extrabold tracking-tight text-slate-900 underline decoration-2 underline-offset-4">
                   {data.formTitle || '원자재 인수검사 성적서'}
                 </h1>
               </div>
 
               {/* 결재란 (작성자: 선택, 검토/승인: 수동 도장용 빈칸) */}
               <div className="col-span-5 flex justify-end">
-                <table className="border-collapse border-2 border-slate-900 text-center text-[10px]">
+                <table className="border-collapse border-2 border-slate-900 text-center text-[10.5px]">
                   <tbody>
                     <tr>
-                      <td rowSpan={2} className="border border-slate-900 bg-slate-100 font-bold px-1 py-0.5 w-6 text-center">결<br/>재</td>
+                      <td rowSpan={2} className="border border-slate-900 bg-slate-100 font-bold px-1.5 py-0.5 w-6 text-center">결<br/>재</td>
                       <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-0.5 w-16">작 성</td>
                       <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-0.5 w-16">검 토</td>
                       <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-0.5 w-16">승 인</td>
                     </tr>
-                    <tr className="h-9">
+                    <tr className="h-11 print:h-10">
                       {/* 작성자: 드롭다운 선택된 성명 기입 */}
                       <td className="border border-slate-900 font-extrabold align-middle text-slate-900 px-1">
                         {displayInspector}
@@ -229,56 +210,55 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
             </div>
 
             {/* 원본 사규 기본 정보 표 (8구획 표 구조) */}
-            <table className="w-full border-collapse border-2 border-slate-900 mb-2 text-[10px]">
+            <table className="w-full border-collapse border-2 border-slate-900 mb-1 text-[10.5px]">
               <tbody>
                 <tr>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1 w-20">품    명</td>
-                  <td className="border border-slate-900 font-extrabold px-2 py-1 text-blue-900">{data.itemName}</td>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1 w-20">입고일자</td>
-                  <td className="border border-slate-900 font-mono px-2 py-1">{isBlankForm ? '' : (data.receivedDate || new Date().toISOString().slice(0, 10))}</td>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1 w-20">검사일자</td>
-                  <td className="border border-slate-900 font-mono px-2 py-1">{isBlankForm ? '' : (data.receivedDate || new Date().toISOString().slice(0, 10))}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5 w-24">품    명</td>
+                  <td className="border border-slate-900 font-extrabold px-2.5 py-1.5 text-blue-900">{data.itemName}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5 w-24">입고일자</td>
+                  <td className="border border-slate-900 font-mono px-2.5 py-1.5">{isBlankForm ? '' : (data.receivedDate || new Date().toISOString().slice(0, 10))}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5 w-24">검사일자</td>
+                  <td className="border border-slate-900 font-mono px-2.5 py-1.5">{isBlankForm ? '' : (data.receivedDate || new Date().toISOString().slice(0, 10))}</td>
                 </tr>
                 <tr>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1">입 고 처</td>
-                  <td className="border border-slate-900 px-2 py-1">{isBlankForm ? '' : (data.supplierName || '공급업체')}</td>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1">입고처 로트번호</td>
-                  <td className="border border-slate-900 font-mono px-2 py-1">{isBlankForm ? '' : (data.supplierLot || '-')}</td>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1">검 사 자</td>
-                  <td className="border border-slate-900 font-bold px-2 py-1">{isBlankForm ? '' : displayInspector}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5">입 고 처</td>
+                  <td className="border border-slate-900 px-2.5 py-1.5">{isBlankForm ? '' : (data.supplierName || '공급업체')}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5">입고처 로트번호</td>
+                  <td className="border border-slate-900 font-mono px-2.5 py-1.5">{isBlankForm ? '' : (data.supplierLot || '-')}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5">검 사 자</td>
+                  <td className="border border-slate-900 font-bold px-2.5 py-1.5">{isBlankForm ? '' : displayInspector}</td>
                 </tr>
                 <tr>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1">인수검사 로트번호</td>
-                  <td className="border border-slate-900 font-mono font-extrabold px-2 py-1 text-blue-900">{isBlankForm ? '' : (data.lotNumber || '-')}</td>
-                  <td className="border border-slate-900 bg-slate-100 font-bold px-2 py-1">로트 수량</td>
-                  <td className="border border-slate-900 font-bold px-2 py-1" colSpan={3}>{isBlankForm ? '' : (data.qty ? `${data.qty} ${data.unit || '개'}` : '-')}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5">인수검사 로트번호</td>
+                  <td className="border border-slate-900 font-mono font-extrabold px-2.5 py-1.5 text-blue-900">{isBlankForm ? '' : (data.lotNumber || '-')}</td>
+                  <td className="border border-slate-900 bg-slate-100 font-bold px-2.5 py-1.5">로트 수량</td>
+                  <td className="border border-slate-900 font-bold px-2.5 py-1.5" colSpan={3}>{isBlankForm ? '' : (data.qty ? `${data.qty} ${data.unit || '개'}` : '-')}</td>
                 </tr>
               </tbody>
             </table>
 
             {/* 원본 사규 검사항목 3원화 성적치 표 (매로트 겉모양 / 제조사성적서 / 공인기관의뢰) */}
-            <div className="mb-2 flex-1 flex flex-col justify-center">
-              <h4 className="font-bold text-[11px] mb-1 text-slate-900">■ 검사항목 및 성적치 (측정 실측치 n1, n2, n3)</h4>
+            <div className="mb-1">
+              <h4 className="font-bold text-xs mb-1 text-slate-900">■ 검사항목 및 성적치 (측정 실측치 n1, n2, n3)</h4>
 
-              <table className="w-full border-collapse border-2 border-slate-900 text-center text-[10px]">
+              <table className="w-full border-collapse border-2 border-slate-900 text-center text-[10.5px]">
                 <thead>
                   <tr className="bg-slate-100 font-bold border-b-2 border-slate-900">
-
-                    <th className="border border-slate-900 py-1 px-1 w-24">검사항목</th>
-                    <th className="border border-slate-900 py-1 px-1">기준 및 허용차</th>
-                    <th className="border border-slate-900 py-1 px-1 w-16">검사방법</th>
-                    <th className="border border-slate-900 py-1 px-1 w-14">검사주기</th>
-                    <th className="border border-slate-900 py-1 px-1 w-14">검사조건</th>
-                    <th className="border border-slate-900 py-1 px-1 w-10">n1</th>
-                    <th className="border border-slate-900 py-1 px-1 w-10">n2</th>
-                    <th className="border border-slate-900 py-1 px-1 w-10">n3</th>
-                    <th className="border border-slate-900 py-1 px-1 w-20">검사 결과</th>
+                    <th className="border border-slate-900 py-1.5 px-1 w-24">검사항목</th>
+                    <th className="border border-slate-900 py-1.5 px-1">기준 및 허용차</th>
+                    <th className="border border-slate-900 py-1.5 px-1 w-16">검사방법</th>
+                    <th className="border border-slate-900 py-1.5 px-1 w-14">검사주기</th>
+                    <th className="border border-slate-900 py-1.5 px-1 w-14">검사조건</th>
+                    <th className="border border-slate-900 py-1.5 px-1 w-10">n1</th>
+                    <th className="border border-slate-900 py-1.5 px-1 w-10">n2</th>
+                    <th className="border border-slate-900 py-1.5 px-1 w-10">n3</th>
+                    <th className="border border-slate-900 py-1.5 px-1 w-20">검사 결과</th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.items && data.items.length > 0 ? (
                     data.items.map((it, idx) => (
-                      <tr key={idx} className="h-7">
+                      <tr key={idx} className="h-11 print:h-10">
                         <td className="border border-slate-900 font-bold bg-slate-50">{it.name}</td>
                         <td className="border border-slate-900 text-left px-2 font-mono font-medium">{it.standard}</td>
                         <td className="border border-slate-900">{it.method || '실측'}</td>
@@ -292,13 +272,12 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                         </td>
                       </tr>
                     ))
-
                   ) : (
                     <>
                       {/* 1) 겉모양 / 육안 실측 */}
-                      <tr className="h-7">
+                      <tr className="h-10 print:h-9">
                         <td className="border border-slate-900 font-bold bg-slate-50" rowSpan={3}>겉모양 (외관)</td>
-                        <td className="border border-slate-900 text-left px-2">외 관: 한도견본 기준 오염, 찌그러짐 파손 없음</td>
+                        <td className="border border-slate-900 text-left px-2 py-1.5">외 관: 한도견본 기준 오염, 찌그러짐 파손 없음</td>
                         <td className="border border-slate-900">육안</td>
                         <td className="border border-slate-900" rowSpan={3}>매로트</td>
                         <td className="border border-slate-900" rowSpan={3}>n=3, c=0</td>
@@ -309,8 +288,8 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                           {isBlankForm ? '□ 적합 □ 부적합' : '☑ 적합 □ 부적합'}
                         </td>
                       </tr>
-                      <tr className="h-7">
-                        <td className="border border-slate-900 text-left px-2">성 상: 고체 / 가루 / 펠렛 정상</td>
+                      <tr className="h-10 print:h-9">
+                        <td className="border border-slate-900 text-left px-2 py-1.5">성 상: 고체 / 가루 / 펠렛 정상</td>
                         <td className="border border-slate-900">육안</td>
                         <td className="border border-slate-900 font-mono">{isBlankForm ? '' : '정상'}</td>
                         <td className="border border-slate-900 font-mono">{isBlankForm ? '' : '정상'}</td>
@@ -319,8 +298,8 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                           {isBlankForm ? '□ 적합 □ 부적합' : '☑ 적합 □ 부적합'}
                         </td>
                       </tr>
-                      <tr className="h-7">
-                        <td className="border border-slate-900 text-left px-2">냄 새: 무취 / 자극취 없음</td>
+                      <tr className="h-10 print:h-9">
+                        <td className="border border-slate-900 text-left px-2 py-1.5">냄 새: 무취 / 자극취 없음</td>
                         <td className="border border-slate-900">육안</td>
                         <td className="border border-slate-900 font-mono">{isBlankForm ? '' : '무취'}</td>
                         <td className="border border-slate-900 font-mono">{isBlankForm ? '' : '무취'}</td>
@@ -331,9 +310,9 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                       </tr>
 
                       {/* 2) 제조사 시험 성적서 확인 */}
-                      <tr className="h-8">
+                      <tr className="h-11 print:h-10">
                         <td className="border border-slate-900 font-bold bg-slate-50">제조사 성적서</td>
-                        <td className="border border-slate-900 text-left px-2 font-mono">밀도, 수분율, 점도 제조처 성적서 시험치 확인</td>
+                        <td className="border border-slate-900 text-left px-2 py-1.5 font-mono">밀도, 수분율, 점도 제조처 성적서 시험치 확인</td>
                         <td className="border border-slate-900">성적서확인</td>
                         <td className="border border-slate-900">1회/입고</td>
                         <td className="border border-slate-900">n=1, c=0</td>
@@ -346,9 +325,9 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                       </tr>
 
                       {/* 3) 공인기관 의뢰 (1회/년) 1년 주기 유효성 */}
-                      <tr className="h-9 bg-blue-50/30">
-                        <td className="border border-slate-900 font-bold text-blue-900">공인기관 의뢰<br/>(1회 / 년)</td>
-                        <td className="border border-slate-900 text-left px-2 font-mono text-blue-950 font-bold">
+                      <tr className="h-12 print:h-11 bg-blue-50/30">
+                        <td className="border border-slate-900 font-bold text-blue-900 py-1.5">공인기관 의뢰<br/>(1회 / 년)</td>
+                        <td className="border border-slate-900 text-left px-2 py-1.5 font-mono text-blue-950 font-bold">
                           숏함유율 ≤25% | 가열선수축율 ≤4% | MI, 밀도, 인장강도 공인성적서 기준 충족
                         </td>
                         <td className="border border-slate-900 font-bold">공인성적서</td>
@@ -368,6 +347,7 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
             </div>
 
             {/* 하단 판정 및 공인성적서 연동 정보 (비고 란) */}
+
             <div className="grid grid-cols-12 gap-3 border-2 border-slate-900 p-3 mb-2">
               <div className="col-span-8 flex flex-col justify-between">
                 <div className="flex items-center gap-4">
