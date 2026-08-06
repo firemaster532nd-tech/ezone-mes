@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Printer, X } from 'lucide-react';
+
 
 interface InspectionFormPrintModalProps {
   isOpen: boolean;
