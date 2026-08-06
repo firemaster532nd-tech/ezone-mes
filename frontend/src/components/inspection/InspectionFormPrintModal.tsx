@@ -145,7 +145,31 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
           <style>{`
             @media print {
               @page {
-                size: A4 portr              #printable-form {
+                size: A4 portrait;
+                margin: 0;
+              }
+              html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 210mm !important;
+                height: 297mm !important;
+                overflow: hidden !important;
+                background: #ffffff !important;
+              }
+              body * {
+                visibility: hidden !important;
+              }
+              .print-hidden-toolbar,
+              .print-hidden-toolbar * {
+                display: none !important;
+                visibility: hidden !important;
+                height: 0 !important;
+              }
+              #printable-form,
+              #printable-form * {
+                visibility: visible !important;
+              }
+              #printable-form {
                 position: fixed !important;
                 left: 5mm !important;
                 top: 5mm !important;
@@ -156,16 +180,14 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                 border: 2px solid #000000 !important;
                 background: #ffffff !important;
                 box-sizing: border-box !important;
-                z-index: 9999999 !important;
+                z-index: 99999999 !important;
                 display: flex !important;
                 flex-direction: column !important;
                 justify-content: flex-start !important;
               }
-              .print-hidden-toolbar {
-                display: none !important;
-              }
             }
           `}</style>
+
 
           <div id="printable-form" className="border-2 border-slate-900 p-4 print:p-2 bg-white text-slate-900 text-xs font-sans space-y-2">
             
