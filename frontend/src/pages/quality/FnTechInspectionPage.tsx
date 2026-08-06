@@ -333,31 +333,32 @@ export function FnTechInspectionPage() {
           <p className="text-sm font-bold text-slate-300">▼ 입고 정보</p>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="col-span-2 grid grid-cols-2 gap-2">
+            <div className="col-span-2 grid grid-cols-2 gap-2 bg-slate-900/60 p-3 rounded-xl border border-slate-700">
               <div>
                 <label className={LBL}>파이 규격 (50/75/100) *</label>
                 <select className={SEL} value={sleeveDiam} onChange={e => setSleeveDiam(Number(e.target.value))}>
-                  <option value={50}>50파이</option>
-                  <option value={75}>75파이</option>
-                  <option value={100}>100파이 (높이 선택 가능)</option>
+                  <option value={50}>50파이 (기본형)</option>
+                  <option value={75}>75파이 (기본형)</option>
+                  <option value={100}>100파이 (높이선택 150H~260H)</option>
                 </select>
               </div>
 
               {sleeveDiam === 100 ? (
                 <div>
-                  <label className={LBL}>100파이 전용 높이 (H) *</label>
+                  <label className={LBL}>100파이 입출고재고 높이 (H) *</label>
                   <select className={SEL} value={sleeveHeight} onChange={e => setSleeveHeight(e.target.value)}>
                     {SLEEVE_HEIGHTS_100.map(h => (
-                      <option key={h} value={h}>{h}</option>
+                      <option key={h} value={h}>100({h})</option>
                     ))}
                   </select>
                 </div>
               ) : (
-                <div className="flex items-center pt-5 text-xs font-bold text-slate-400">
-                  ※ {sleeveDiam}파이는 단일 기본 높이가 적용됩니다.
+                <div className="flex items-center pt-5 text-xs font-bold text-emerald-400">
+                  ✔ {sleeveDiam}파이는 엑셀 재고목록 단일 기본형 적용
                 </div>
               )}
             </div>
+
 
             <div>
               <label className={LBL}>LOT 번호 (자동채번) *</label>
