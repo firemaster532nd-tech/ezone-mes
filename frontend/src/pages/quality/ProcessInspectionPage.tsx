@@ -158,10 +158,13 @@ export function ProcessInspectionPage() {
 
   const fetchData = () => {
     const params = filter ? `?form_code=${filter}` : '';
-    api.get<{ data: ProcessInspection[] }>(`/process-inspections${params}`).then((res) => setData(res.data));
+    api.get<{ data: ProcessInspection[] }>(`/process-inspections${params}`)
+      .then((res) => setData(res.data || []))
+      .catch(() => setData([]));
   };
 
   useEffect(() => { fetchData(); }, [filter]);
+
 
   const handleDelete = async (insp: ProcessInspection) => {
     if (!confirm(`검사를 삭제하시겠습니까?`)) return;
@@ -554,12 +557,13 @@ function CreateProcessInspectionModal({
     } catch {
       // 404 fallback: 기본 사규 항목 세팅
       const fallbackItems = [
-        { item_no: 1, quality_item: '치수 검사', check_item: '재단/조립 길이 (mm)', check_method: '줄자', cert_standard: '', default_applicable: true, n1: '', n2: '', n3: '' },
-        { item_no: 2, quality_item: '치수 검사', check_item: '재단/조립 너비/폭 (mm)', check_method: '줄자', cert_standard: '', default_applicable: true, n1: '', n2: '', n3: '' },
-        { item_no: 3, quality_item: '외관 검사', check_item: '한도견본 오염, 휨, 틈새 없을 것', check_method: '육안', cert_standard: '', default_applicable: true, n1: '양호', n2: '양호', n3: '양호' },
+        { item_no: 1, quality_item: '치수 검사', check_item: '재단/조립 길이 (mm)', check_method: '줄자', cert_standard: '', is_applicable: true, n1: '', n2: '', n3: '' },
+        { item_no: 2, quality_item: '치수 검사', check_item: '재단/조립 너비/폭 (mm)', check_method: '줄자', cert_standard: '', is_applicable: true, n1: '', n2: '', n3: '' },
+        { item_no: 3, quality_item: '외관 검사', check_item: '한도견본 오염, 휨, 틈새 없을 것', check_method: '육안', cert_standard: '', is_applicable: true, n1: '1', n2: '1', n3: '1' },
       ];
       setTemplate({ form_code: code, form_name: `C-701 ${code} 공정 검사`, items: fallbackItems });
       setMeasurements(fallbackItems);
+
     }
   };
 
