@@ -144,15 +144,22 @@ export function FnTechInspectionPage() {
     return d === 100 ? `${d}파이 ${h}` : `${d}파이`;
   };
 
+  const [labelCopies, setLabelCopies] = useState<number>(1);
+
   const handleOpenLabelPrinter = (r: any) => {
     const itemName = getFullItemName(r);
     const specText = getSpecText(r);
+    const itemQty = Number(r.qty || qty || 1);
+    // 기본 팔레트당 수량(예: 100개당 1장) 기준 초기 출력 장수 계산
+    const suggestedCopies = Math.max(1, Math.ceil(itemQty / 100));
+    setLabelCopies(suggestedCopies);
+
     setPrintLabelData({
       lot_number: r.lot_number || lotNumber,
       item_name: itemName,
       category: tab,
       thickness: specText, // 라벨 규격 란에 파이 + 높이 명확히 표출
-      qty_current: r.qty || qty || 1,
+      qty_current: itemQty,
       unit: '개',
       received_date: String(r.inspected_at || new Date().toISOString()).slice(0, 10),
       location: r.location || location,
@@ -723,6 +730,7 @@ export function FnTechInspectionPage() {
       {showLabelPrinter && printLabelData && (
         <GodexLabelPrinter
           labelData={printLabelData}
+          copies={labelCopies}
           onClose={() => setShowLabelPrinter(false)}
         />
       )}

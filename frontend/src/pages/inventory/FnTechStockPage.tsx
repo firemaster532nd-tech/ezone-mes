@@ -362,7 +362,11 @@ function DailyProductionTab() {
         <div className="flex items-center gap-3">
           <Calendar className="h-5 w-5 text-blue-500" />
           <span className="font-semibold text-gray-700">일일 생산량 기록표</span>
-          <div className="flex gap-1.5 ml-4">
+          <div className="flex gap-1.5 ml-4 flex-wrap">
+            <a href="/production/fn-assembly"
+              className="px-3 py-1.5 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-500 text-slate-950 transition flex items-center gap-1 shadow-sm">
+              🏗️ 사규 C302 완제품 조립 & 계보 역추적
+            </a>
             <button onClick={() => setProdType('SEMI')}
               className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition ${
                 prodType==='SEMI' ? 'bg-purple-600 text-white border-purple-600' : 'bg-gray-50 text-gray-600 border-gray-300 hover:bg-gray-100'

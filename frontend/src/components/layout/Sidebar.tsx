@@ -99,6 +99,7 @@ export const shopTopGroups: TopNavGroup[] = [
       { label: '구조체 작업지시', path: '/production/struct-work-orders' },
       { label: '부자재별 작업지시', path: '/production/sub-work-orders' },
       { label: '에프엔테크 작업지시', path: '/production/fn-work-orders' },
+      { label: '🏗️ 에프엔테크 완제품 조립', path: '/production/fn-assembly' },
     ],
   },
   {

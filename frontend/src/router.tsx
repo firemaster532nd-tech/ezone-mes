@@ -57,6 +57,7 @@ import { ProjectWorkOrderPage } from '@/pages/production/ProjectWorkOrderPage';
 import { ProjectLotMatrixPage } from '@/pages/quality/ProjectLotMatrixPage';
 import PurchaseOrdersPage from '@/pages/sales/PurchaseOrdersPage';
 import { SocketWorkOrderPage } from '@/pages/production/SocketWorkOrderPage';
+import { FnAssemblyPage } from '@/pages/production/FnAssemblyPage';
 import { EcountSyncPage } from '@/pages/settings/EcountSyncPage';
 import SocketStockPage from '@/pages/inventory/SocketStockPage';
 import { StructWorkOrderPage } from '@/pages/production/StructWorkOrderPage';
@@ -171,6 +172,7 @@ export const router = createBrowserRouter([
       { path: 'production/struct-work-orders',   element: <StructWorkOrderPage /> },
       { path: 'production/sub-work-orders',       element: <SubWorkOrderPage /> },
       { path: 'production/fn-work-orders',        element: <FnWorkOrderPage /> },
+      { path: 'production/fn-assembly',           element: <FnAssemblyPage /> },
       { path: 'production/assembly-log',          element: <AssemblyLogPage /> },
       { path: 'production/cutting-log', font: 'mono', element: <CuttingLogPage /> },
       { path: 'production/mix-log',               element: <MixLogPage /> },

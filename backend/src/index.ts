@@ -65,6 +65,7 @@ import { announcementRoutes, ensureAnnouncementTables } from './routes/announcem
 import { superadminRoutes } from './routes/superadmin.js';
 import { certifiedReportsRoutes } from './routes/certified-reports.js';
 import { materialLotsRoutes } from './routes/material-lots.js';
+import { fnAssemblyRoutes } from './routes/fn-assembly.js';
 import { lotLineageRoutes } from './routes/lot-lineage.js';
 import googleSheetsSyncRoutes from './routes/google-sheets-sync.js';
 import assemblyLogRoutes from './routes/assembly-logs.js';
@@ -155,6 +156,7 @@ export const initApp = async () => {
   await app.register(announcementRoutes);
   await app.register(superadminRoutes);
   await app.register(materialLotsRoutes);
+  await app.register(fnAssemblyRoutes);
   await app.register(lotLineageRoutes);
   await app.register(googleSheetsSyncRoutes);
   await app.register(assemblyLogRoutes);
