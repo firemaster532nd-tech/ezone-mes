@@ -4,7 +4,7 @@ import { api } from '@/lib/api';
 import { buildPrintModalData } from '@/lib/buildPrintModalData';
 
 import { PageHeader } from '@/components/shared/PageHeader';
-import { Plus, Printer, PlayCircle } from 'lucide-react';
+import { Plus, Printer, PlayCircle, Search } from 'lucide-react';
 import { GodexLabelPrinter } from '@/components/label/GodexLabelPrinter';
 import { InspectionFormPrintModal } from '@/components/inspection/InspectionFormPrintModal';
 import { InspectionExecutionModal } from '@/components/inspection/InspectionExecutionModal';

@@ -461,11 +461,11 @@ export function SocketBracketInspectionPage() {
             ) : (
               <div className="space-y-4">
                 <div className="grid gap-3">
-                  {orders.map(order => {
+                  {orders.map((order, idx) => {
                     const items = typeof order.items_json === 'string' ? JSON.parse(order.items_json) : (order.items_json || []);
                     return (
                       <div 
-                        key={order.order_id || order.order_no}
+                        key={order.order_id || order.order_no || `order-key-${idx}`}
                         onClick={() => handleOrderSelect(order)}
                         className="group flex items-center justify-between p-4 bg-slate-900/50 hover:bg-slate-700 border border-slate-700 hover:border-emerald-500 rounded-xl cursor-pointer transition-all"
                       >
