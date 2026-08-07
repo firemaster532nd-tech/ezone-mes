@@ -6,6 +6,7 @@ import { printHtmlViaQzTray } from '@/lib/qzTrayPrinter';
 interface LabelData {
   lot_number: string;
   item_name?: string;
+  spec?: string;
   category?: string;
   density?: number | string;
   thickness?: number | string;
@@ -27,18 +28,27 @@ interface GodexLabelPrinterProps {
 
 // ZPL removed, moved to HTML pixel method.
 
+function extractSpecText(data: LabelData): string {
+  if (data.spec && data.spec.trim() !== '') return data.spec;
+  if (typeof data.thickness === 'string' && data.thickness.trim() !== '' && data.thickness !== '규격 미기재') return data.thickness;
+  
+  const parts = [
+    data.thickness && typeof data.thickness === 'number' ? `${data.thickness}T` : '',
+    data.density ? `${data.density}K` : '',
+    data.width_mm ? `${data.width_mm}W` : '',
+    data.length_mm ? `${data.length_mm}L` : '',
+  ].filter(Boolean);
+
+  if (parts.length > 0) return parts.join(' ');
+  return data.item_name || '100파이 210H';
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 라벨 미리보기 컴포넌트 (80×60mm 사규 표준 라벨 템플릿 100% 일치 시뮬레이션)
 // ─────────────────────────────────────────────────────────────────────────────
 function LabelPreview({ data }: { data: LabelData }) {
   const [qrUrl, setQrUrl] = useState<string>('');
-
-  const pipeSpecText = [
-    data.thickness ? (typeof data.thickness === 'number' ? `${data.thickness}T` : String(data.thickness)) : '',
-    data.density ? `${data.density}K` : '',
-    data.width_mm ? `${data.width_mm}W` : '',
-    data.length_mm ? `${data.length_mm}L` : '',
-  ].filter(Boolean).join(' ') || data.thickness?.toString() || data.item_name || '100파이 210H';
+  const pipeSpecText = extractSpecText(data);
 
   const lotNo = data.lot_number || '260203CW007';
   const itemName = data.item_name || '일체형슬리브 100파이';
@@ -161,12 +171,7 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
     setPrinting(true);
     setPrintResult(null);
     try {
-      const specText = [
-        labelData.thickness ? (typeof labelData.thickness === 'number' ? `${labelData.thickness}T` : String(labelData.thickness)) : '',
-        labelData.density ? `${labelData.density}K` : '',
-        labelData.width_mm ? `${labelData.width_mm}W` : '',
-        labelData.length_mm ? `${labelData.length_mm}L` : '',
-      ].filter(Boolean).join(' ') || labelData.thickness?.toString() || '규격 미기재';
+      const specText = extractSpecText(labelData);
 
       const count = copies > 0 ? copies : Math.max(1, Number(labelData.qty_current || 1));
       
@@ -230,12 +235,7 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
   const handleBrowserPrint = async () => {
     const win = window.open('', '_blank', 'width=450,height=380');
     if (!win) return;
-    const specText = [
-      labelData.thickness ? (typeof labelData.thickness === 'number' ? `${labelData.thickness}T` : String(labelData.thickness)) : '',
-      labelData.density ? `${labelData.density}K` : '',
-      labelData.width_mm ? `${labelData.width_mm}W` : '',
-      labelData.length_mm ? `${labelData.length_mm}L` : '',
-    ].filter(Boolean).join(' ') || labelData.thickness?.toString() || '규격 미기재';
+    const specText = extractSpecText(labelData);
 
     const count = copies > 0 ? copies : Math.max(1, Number(labelData.qty_current || 1));
     const labelHtml = await generateSerializedLotLabelBatchHtml(

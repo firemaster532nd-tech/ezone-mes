@@ -157,8 +157,9 @@ export function FnTechInspectionPage() {
     setPrintLabelData({
       lot_number: r.lot_number || lotNumber,
       item_name: itemName,
+      spec: specText,
       category: tab,
-      thickness: specText, // 라벨 규격 란에 파이 + 높이 명확히 표출
+      thickness: specText,
       qty_current: itemQty,
       unit: '개',
       received_date: String(r.inspected_at || new Date().toISOString()).slice(0, 10),
