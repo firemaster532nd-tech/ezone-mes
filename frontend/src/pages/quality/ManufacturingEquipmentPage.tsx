@@ -639,6 +639,312 @@ function EquipmentChecklistPrintModal({
   const yearText = checkMonth ? checkMonth.slice(0, 4) : new Date().getFullYear().toString();
   const monthText = checkMonth ? checkMonth.slice(5, 7) : String(new Date().getMonth() + 1).padStart(2, '0');
 
+  // 사규 EZC M-101-6 PDF 11페이지 세트 매칭 (클릭한 설비가 포함된 A4 1페이지 전체 연동 설비 세트 반환)
+  const getEquipmentPageSet = () => {
+    const manageNo = (equipment.manage_no || '').toUpperCase().trim();
+    const name = (equipment.equipment_name || '').toUpperCase().trim();
+
+    // PAGE 8: 120Φ 싱글 압출기, 65Φ 코니칼 압출기 세트 B (온조기 M-23-4, Chiller M-23-5, Twin Conical M-24)
+    if (manageNo.includes('M-23-4') || manageNo.includes('M-23-5') || manageNo.includes('M-24')) {
+      return {
+        headerTitle: '(120Φ 싱글 압출기, 65Φ 코니칼 압출기)',
+        sections: [
+          {
+            name: '온 조 기',
+            manageNo: 'EZC M-23-4',
+            serialNo: '3TM00004946',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을것', cycle: '주 1회' },
+              { part: '조작판넬', item: '작동상태: 작동이 원활할 것', cycle: '주 1회' },
+              { part: '회 전 부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+              { part: '열매체유', item: '유량: 유량표시기 적정량 이하로 내려가지 않을 것', cycle: '주 1회' },
+            ]
+          },
+          {
+            name: 'Chiller (냉각기)',
+            manageNo: 'EZC M-23-5',
+            serialNo: '2CA00002025',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을것', cycle: '주 1회' },
+              { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호할 것', cycle: '주 1회' },
+              { part: '모    터', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+              { part: '냉 각 수', item: '냉각수의 오염으로 인한 오수 발생 유무', cycle: '월 1회' },
+            ]
+          },
+          {
+            name: 'Twin Conical Extruder',
+            manageNo: 'EZC M-24',
+            serialNo: 'SZL65',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을것', cycle: '주 1회' },
+              { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호할 것', cycle: '주 1회' },
+              { part: '모    터', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+              { part: '윤 활 유', item: '유량: 유량표시기 적정량 이하로 내려가지 않을 것', cycle: '주 1회' },
+              { part: '회 전 부', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+            ]
+          }
+        ]
+      };
+    }
+
+    // PAGE 7: 120Φ 싱글 압출기 세트 A (120Φ Extruder M-23-1, 온조기 M-23-2, 온조기 M-23-3)
+    if (manageNo.includes('M-23-1') || manageNo.includes('M-23-2') || manageNo.includes('M-23-3') || (name.includes('120') && name.includes('압출'))) {
+      return {
+        headerTitle: '(120Φ 싱글 압출기)',
+        sections: [
+          {
+            name: '120Φ Single Extruder',
+            manageNo: 'EZC M-23-1',
+            serialNo: '0802',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을것', cycle: '주 1회' },
+              { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호할 것', cycle: '주 1회' },
+              { part: '모    터', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+              { part: '윤 활 유', item: '유량: 유량표시기 적정량 이하로 내려가지 않을 것', cycle: '주 1회' },
+              { part: '회 전 부', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+            ]
+          },
+          {
+            name: '온 조 기 (1호기)',
+            manageNo: 'EZC M-23-2',
+            serialNo: '3TM00004944',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을것', cycle: '주 1회' },
+              { part: '조작판넬', item: '작동상태: 작동이 원활할 것', cycle: '주 1회' },
+              { part: '회 전 부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+              { part: '열매체유', item: '유량: 유량표시기 적정량 이하로 내려가지 않을 것', cycle: '주 1회' },
+            ]
+          },
+          {
+            name: '온 조 기 (2호기)',
+            manageNo: 'EZC M-23-3',
+            serialNo: '3TM00004945',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을것', cycle: '주 1회' },
+              { part: '조작판넬', item: '작동상태: 작동이 원활할 것', cycle: '주 1회' },
+              { part: '회 전 부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+              { part: '열매체유', item: '유량: 유량표시기 적정량 이하로 내려가지 않을 것', cycle: '주 1회' },
+            ]
+          }
+        ]
+      };
+    }
+
+    // PAGE 6: 65Φ 코니칼 압출기 세트 A (Twin Conical M-21-1, Chiller M-21-2, 온조기 M-21-3)
+    if (manageNo.includes('M-21-1') || manageNo.includes('M-21-2') || manageNo.includes('M-21-3') || (name.includes('65') && name.includes('코니칼'))) {
+      return {
+        headerTitle: '(65Φ 코니칼 압출기)',
+        sections: [
+          {
+            name: 'Twin Conical Extruder',
+            manageNo: 'EZC M-21-1',
+            serialNo: 'SZL65',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을것', cycle: '주 1회' },
+              { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호할 것', cycle: '주 1회' },
+              { part: '모    터', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+              { part: '윤 활 유', item: '유량: 유량표시기 적정량 이하로 내려가지 않을 것', cycle: '주 1회' },
+              { part: '회 전 부', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+            ]
+          },
+          {
+            name: 'Chiller (냉각기)',
+            manageNo: 'EZC M-21-2',
+            serialNo: '86-577-86123662',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을것', cycle: '주 1회' },
+              { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호할 것', cycle: '주 1회' },
+              { part: '모    터', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+              { part: '냉 각 수', item: '냉각수의 오염으로 인한 오수 발생 유무', cycle: '주 1회' },
+              { part: '냉매가스', item: '가스게이지 설정 값 확인', cycle: '주 1회' },
+            ]
+          },
+          {
+            name: '온 조 기',
+            manageNo: 'EZC M-21-3',
+            serialNo: '20210527',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을것', cycle: '주 1회' },
+              { part: '조작판넬', item: '작동상태: 작동이 원활할 것', cycle: '주 1회' },
+              { part: '열매체유', item: '유량: 유량표시기 적정량 이하로 내려가지 않을 것', cycle: '주 1회' },
+            ]
+          }
+        ]
+      };
+    }
+
+    // PAGE 9: 시트 재단기 & 핫프레스 세트 (시트 재단기 M-31, 핫프레스 M-41)
+    if (manageNo.includes('M-31') || manageNo.includes('M-41') || name.includes('재단') || name.includes('커팅') || name.includes('프레스') || name.includes('PRESS')) {
+      return {
+        headerTitle: '(시트 재단기, 핫프레스)',
+        sections: [
+          {
+            name: '시트 재단기(커팅머신)',
+            manageNo: 'EZC M-31',
+            serialNo: '13913232125',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을것', cycle: '주 1회' },
+              { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호할 것', cycle: '주 1회' },
+              { part: '회 전 부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+              { part: '회 전 부', item: '회전축에 윤활유(WD-40) 를 발라 마모가 없도록 할 것', cycle: '주 1회' },
+            ]
+          },
+          {
+            name: '핫프레스',
+            manageNo: 'EZC M-41',
+            serialNo: 'WFSEN262303079',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을것', cycle: '주 1회' },
+              { part: '조작판넬', item: '작동상태: 작동이 원활할 것', cycle: '주 1회' },
+              { part: '모    터', item: '작동상태: 상하 작동이 원활할 것', cycle: '월 1회' },
+              { part: '모    터', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+              { part: '열매체유', item: '주입상태: 적정 수준 이상으로 유지할 것', cycle: '주 1회' },
+            ]
+          }
+        ]
+      };
+    }
+
+    // PAGE 10: Air 컴프레샤 세트 (M-51 AC101, M-52 AC102, M-53 200CU)
+    if (manageNo.includes('M-51') || manageNo.includes('M-52') || manageNo.includes('M-53') || name.includes('컴프') || name.includes('COMP')) {
+      return {
+        headerTitle: '(Air 컴프레샤)',
+        sections: [
+          {
+            name: 'Air 컴프레샤 1호기',
+            manageNo: 'EZC M-51',
+            serialNo: 'AC101',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+              { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호 할 것', cycle: '주 1회' },
+              { part: '배    관', item: '누출상태: 에어의 누출이 없을 것', cycle: '월 1회' },
+              { part: '기어회전부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+            ]
+          },
+          {
+            name: 'Air 컴프레샤 2호기',
+            manageNo: 'EZC M-52',
+            serialNo: 'AC102',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+              { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호 할 것', cycle: '주 1회' },
+              { part: '배    관', item: '누출상태: 에어의 누출이 없을 것', cycle: '월 1회' },
+              { part: '기어회전부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+            ]
+          },
+          {
+            name: 'Air 컴프레샤 3호기',
+            manageNo: 'EZC M-53',
+            serialNo: '200CU',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+              { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호 할 것', cycle: '주 1회' },
+              { part: '배    관', item: '누출상태: 에어의 누출이 없을 것', cycle: '월 1회' },
+              { part: '기어회전부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+            ]
+          }
+        ]
+      };
+    }
+
+    // PAGE 11: 집진기 세트 (M-54 HP3002, M-55 HP3001)
+    if (manageNo.includes('M-54') || manageNo.includes('M-55') || name.includes('집진')) {
+      return {
+        headerTitle: '(집진기)',
+        sections: [
+          {
+            name: '집진기 1호기',
+            manageNo: 'EZC M-54',
+            serialNo: 'HP3002',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을것', cycle: '주 1회' },
+              { part: '조작판넬', item: '작동상태: 작동이 원활할 것', cycle: '주 1회' },
+              { part: '회 전 부', item: '벨트상태: 회전벨트 결합 위치 및 갈라짐이 없을것', cycle: '월 1회' },
+              { part: '회 전 부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+            ]
+          },
+          {
+            name: '집진기 2호기',
+            manageNo: 'EZC M-55',
+            serialNo: 'HP3001',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을것', cycle: '주 1회' },
+              { part: '조작판넬', item: '작동상태: 작동이 원활할 것', cycle: '주 1회' },
+              { part: '회 전 부', item: '벨트상태: 회전벨트 결합 위치 및 갈라짐이 없을것', cycle: '월 1회' },
+              { part: '회 전 부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+            ]
+          }
+        ]
+      };
+    }
+
+    // PAGE 4/5: Paddle Mixer / High Speed / Cooling Mixer 세트
+    if (manageNo.includes('M-09') || manageNo.includes('M-08') || name.includes('PADDLE') || name.includes('SPEED') || name.includes('COOLING')) {
+      return {
+        headerTitle: '(HIGH SPEED MIXER, COOLING MIXER)',
+        sections: [
+          {
+            name: 'HIGH SPEED MIXER',
+            manageNo: 'EZC M-08-1',
+            serialNo: '140000761020001',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+              { part: '조작판넬', item: '작동상태: 작동이 원활할 것', cycle: '주 1회' },
+              { part: '모    터', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+              { part: '이송배관', item: '배관막힘: 배관부 막힘이 없을 것', cycle: '주 1회' },
+              { part: '회 전 부', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+            ]
+          },
+          {
+            name: 'COOLING MIXER',
+            manageNo: 'EZC M-08-2',
+            serialNo: '140000761020001',
+            items: [
+              { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+              { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+              { part: '조작판넬', item: '작동상태: 작동이 원활할 것', cycle: '주 1회' },
+              { part: '모    터', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+              { part: '이송배관', item: '배관막힘: 배관부 막힘이 없을 것', cycle: '주 1회' },
+              { part: '회 전 부', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+            ]
+          }
+        ]
+      };
+    }
+
+    // 디폴트 단일 설비 세트
+    return {
+      headerTitle: `(${equipment.equipment_name})`,
+      sections: [
+        {
+          name: equipment.equipment_name,
+          manageNo: equipment.manage_no || 'EZC M-00',
+          serialNo: equipment.serial_no || '-',
+          items: specData.items
+        }
+      ]
+    };
+  };
+
+  const pageSet = getEquipmentPageSet();
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 overflow-y-auto backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col border border-slate-200" onClick={e => e.stopPropagation()}>
@@ -647,8 +953,8 @@ function EquipmentChecklistPrintModal({
           <div className="flex items-center gap-3">
             <Printer className="h-5 w-5 text-amber-400" />
             <div>
-              <h3 className="font-bold text-sm text-amber-300">📋 사규 EZC M-101-6 제조 점검체크시트</h3>
-              <p className="text-[11px] text-slate-300">설비별 맞춤 점검항목 A4 인쇄 표준양식 ({specData.groupName})</p>
+              <h3 className="font-bold text-sm text-amber-300">📋 사규 EZC M-101-6 제조 점검체크시트 원본</h3>
+              <p className="text-[11px] text-slate-300">A4 수직 1 Page 실물 세트 양식 {pageSet.headerTitle}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -683,11 +989,11 @@ function EquipmentChecklistPrintModal({
           </div>
         </div>
 
-        {/* 🖨️ 실제 인쇄되는 A4 표준 제조설비 점검표 서식 (사규 EZC M-101-6 100% 동일) */}
+        {/* 🖨️ 실제 인쇄되는 A4 표준 제조설비 점검표 원본 서식 (EZC M-101-6 100% 동일) */}
         <div className="p-6 overflow-y-auto flex-1 bg-white print:p-0 print:overflow-visible text-slate-900">
           <style>{`
             @media print {
-              @page { size: A4 portrait; margin: 8mm; }
+              @page { size: A4 portrait; margin: 6mm; }
               body * { visibility: hidden; }
               #printable-equipment-sheet, #printable-equipment-sheet * { visibility: visible; }
               #printable-equipment-sheet {
@@ -705,109 +1011,117 @@ function EquipmentChecklistPrintModal({
             }
           `}</style>
 
-          <div id="printable-equipment-sheet" className="border-2 border-slate-900 p-5 bg-white text-slate-900 text-xs font-sans space-y-3">
-            {/* 상단 타이틀 & 3단 결재란 */}
-            <div className="flex justify-between items-start border-b-2 border-slate-900 pb-2">
-              <div className="space-y-1">
-                <h1 className="text-xl font-black tracking-tight text-slate-900 flex items-center gap-2">
+          <div id="printable-equipment-sheet" className="border-2 border-slate-900 p-4 bg-white text-slate-900 text-xs font-sans space-y-2.5">
+            {/* 1. 최상단 타이틀 & 3단 결재란 (사규 PDF 동일) */}
+            <div className="flex justify-between items-start border-b-2 border-slate-900 pb-1.5">
+              <div className="space-y-0.5">
+                <h1 className="text-lg font-black tracking-tight text-slate-900 flex items-center gap-2">
                   제조설비 점검체크 시트
-                  <span className="text-xs font-bold text-slate-600 font-mono">({specData.groupName})</span>
+                  <span className="text-xs font-bold text-slate-700 font-mono">{pageSet.headerTitle}</span>
                 </h1>
-                <p className="text-xs font-bold text-slate-700 font-mono">
+                <p className="text-xs font-bold text-slate-800 font-mono">
                   점검년도 : <span className="underline decoration-2 font-black">{yearText}</span> 년
                 </p>
               </div>
 
-              {/* 3단 결재란 (작성자: 선택한 성명, 검토/승인: 서명란) */}
+              {/* 3단 결재란 (작성자: 선택한 성명, 검토/승인: 수동 서명란) */}
               <table className="border-collapse border-2 border-slate-900 text-center text-[10px] ml-auto">
                 <tbody>
                   <tr>
-                    <td rowSpan={2} className="bg-slate-100 font-bold border border-slate-900 px-1.5 py-1 w-6 text-center">결<br/>재</td>
-                    <td className="w-16 border border-slate-900 bg-slate-100 font-bold py-0.5">작 성</td>
-                    <td className="w-16 border border-slate-900 bg-slate-100 font-bold py-0.5">검 토</td>
-                    <td className="w-16 border border-slate-900 bg-slate-100 font-bold py-0.5">승 인</td>
+                    <td rowSpan={2} className="bg-slate-100 font-bold border border-slate-900 px-1 py-0.5 w-5 text-center leading-tight">결<br/>재</td>
+                    <td className="w-14 border border-slate-900 bg-slate-100 font-bold py-0.5">작 성</td>
+                    <td className="w-14 border border-slate-900 bg-slate-100 font-bold py-0.5">검 토</td>
+                    <td className="w-14 border border-slate-900 bg-slate-100 font-bold py-0.5">승 인</td>
                   </tr>
-                  <tr className="h-10">
-                    <td className="border border-slate-900 font-extrabold align-middle text-slate-900 px-1 text-center">{inspector}</td>
-                    <td className="border border-slate-900 w-16 bg-white"></td>
-                    <td className="border border-slate-900 w-16 bg-white"></td>
+                  <tr className="h-8">
+                    <td className="border border-slate-900 font-extrabold align-middle text-slate-900 px-1 text-center text-[10px]">{inspector}</td>
+                    <td className="border border-slate-900 w-14 bg-white"></td>
+                    <td className="border border-slate-900 w-14 bg-white"></td>
                   </tr>
                 </tbody>
               </table>
             </div>
 
-            {/* 설비 정보 라인 */}
-            <table className="w-full text-xs border-collapse border-2 border-slate-900">
-              <tbody>
-                <tr className="h-8">
-                  <td className="bg-slate-100 font-bold p-1.5 w-20 border border-slate-900 text-center">설 비 명</td>
-                  <td className="p-1.5 border border-slate-900 font-black text-slate-900 w-52">{equipment.equipment_name}</td>
-                  <td className="bg-slate-100 font-bold p-1.5 w-20 border border-slate-900 text-center">관리번호</td>
-                  <td className="p-1.5 border border-slate-900 font-mono font-extrabold text-blue-900 w-36">{equipment.manage_no}</td>
-                  <td className="bg-slate-100 font-bold p-1.5 w-20 border border-slate-900 text-center">기기번호</td>
-                  <td className="p-1.5 border border-slate-900 font-mono font-bold text-slate-900">{equipment.serial_no || '-'}</td>
-                </tr>
-              </tbody>
-            </table>
+            {/* 2. 각 연동 설비별 블록 표 (사규 PDF 수록 순서 100% 동일) */}
+            {pageSet.sections.map((sec, secIdx) => (
+              <div key={secIdx} className="space-y-1">
+                {/* 설비 헤더 라인 */}
+                <table className="w-full text-[11px] border-collapse border-2 border-slate-900">
+                  <tbody>
+                    <tr className="h-6">
+                      <td className="bg-slate-100 font-bold p-1 w-16 border border-slate-900 text-center">설 비 명</td>
+                      <td className="p-1 border border-slate-900 font-black text-slate-900 w-44 text-[10.5px]">{sec.name}</td>
+                      <td className="bg-slate-100 font-bold p-1 w-16 border border-slate-900 text-center">관리번호</td>
+                      <td className="p-1 border border-slate-900 font-mono font-black text-blue-900 w-32">{sec.manageNo}</td>
+                      <td className="bg-slate-100 font-bold p-1 w-16 border border-slate-900 text-center">기기번호</td>
+                      <td className="p-1 border border-slate-900 font-mono font-bold text-slate-900 text-[10px]">{sec.serialNo}</td>
+                    </tr>
+                  </tbody>
+                </table>
 
-            {/* 메인 점검 항목 테이블 (사규 EZC M-101-6 100% 동일) */}
-            <table className="w-full text-[11px] border-collapse border-2 border-slate-900 text-left">
-              <thead>
-                <tr className="bg-slate-100 border-b-2 border-slate-900 text-center font-bold">
-                  <th className="p-2 border border-slate-900 w-24">점검개소</th>
-                  <th className="p-2 border border-slate-900">점검항목 및 합격기준</th>
-                  <th className="p-2 border border-slate-900 w-20">점검주기</th>
-                  <th className="p-1 border border-slate-900 w-36 text-center">
-                    <div>{yearText} 년 {monthText} 월</div>
-                    <div className="grid grid-cols-5 border-t border-slate-900 mt-1 pt-0.5 text-[10px]">
-                      <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
-                    </div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {specData.items.map((it, idx) => (
-                  <tr key={idx} className="h-9">
-                    <td className="p-2 border border-slate-900 text-center font-bold bg-slate-50/50">{it.part}</td>
-                    <td className="p-2 border border-slate-900 font-medium text-slate-900">{it.item}</td>
-                    <td className="p-2 border border-slate-900 text-center font-bold text-slate-700">{it.cycle}</td>
-                    <td className="p-0 border border-slate-900 text-center">
-                      <div className="grid grid-cols-5 h-full items-center divide-x divide-slate-900 text-[10px] font-mono">
-                        <span className="h-full flex items-center justify-center"></span>
-                        <span className="h-full flex items-center justify-center"></span>
-                        <span className="h-full flex items-center justify-center"></span>
-                        <span className="h-full flex items-center justify-center"></span>
-                        <span className="h-full flex items-center justify-center"></span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* 하단 점검자 및 안내사항 (사규 EZC M-101-6 복원) */}
-            <div className="border-2 border-slate-900 p-2.5 text-[10.5px] leading-relaxed space-y-1 bg-slate-50/30">
-              <div className="flex justify-between items-center font-bold text-slate-900 border-b border-slate-300 pb-1">
-                <span>점  검  자 : <strong className="text-blue-900 font-black">{inspector}</strong> (설비관리담당자)</span>
-                <span className="text-[10px] text-slate-600 font-mono">점검방법 (양호: ✔, 불량: × 로 표기함)</span>
+                {/* 메인 점검 항목 및 5개 체크 칸 */}
+                <table className="w-full text-[10px] border-collapse border-2 border-slate-900 text-left">
+                  <thead>
+                    <tr className="bg-slate-100 border-b-2 border-slate-900 text-center font-bold">
+                      <th className="p-1 border border-slate-900 w-20">점검개소</th>
+                      <th className="p-1 border border-slate-900">점검항목 및 합격기준</th>
+                      <th className="p-1 border border-slate-900 w-16">점검주기</th>
+                      <th className="p-0.5 border border-slate-900 w-32 text-center">
+                        <div className="font-bold">{yearText} 년   {monthText} 월</div>
+                        <div className="grid grid-cols-5 border-t border-slate-900 mt-0.5 pt-0.5 text-[9px] font-mono">
+                          <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sec.items.map((it, idx) => (
+                      <tr key={idx} className="h-6">
+                        <td className="p-1 border border-slate-900 text-center font-bold bg-slate-50/30 text-[9.5px]">{it.part}</td>
+                        <td className="p-1 border border-slate-900 font-medium text-slate-900 text-[9.5px]">{it.item}</td>
+                        <td className="p-1 border border-slate-900 text-center font-bold text-slate-700 text-[9.5px]">{it.cycle}</td>
+                        <td className="p-0 border border-slate-900 text-center">
+                          <div className="grid grid-cols-5 h-full items-center divide-x divide-slate-900 text-[9px] font-mono">
+                            <span className="h-full flex items-center justify-center"></span>
+                            <span className="h-full flex items-center justify-center"></span>
+                            <span className="h-full flex items-center justify-center"></span>
+                            <span className="h-full flex items-center justify-center"></span>
+                            <span className="h-full flex items-center justify-center"></span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-700 pt-1">
-                <div>
-                  <p className="font-bold text-slate-900">※ 특기사항</p>
-                  <p>∙ 이상발생 시 품질관리부서장에게 보고 후 조치를 받는다.</p>
-                </div>
-                <div>
+            ))}
+
+            {/* 3. 하단 점검자, 특기사항, 비고사항 박스 (사규 PDF 100% 동일 복원) */}
+            <div className="border-2 border-slate-900 p-2 text-[9.5px] leading-tight grid grid-cols-12 gap-2 bg-slate-50/30">
+              <div className="col-span-7 space-y-1">
+                <p className="font-bold text-slate-900">
+                  점  검  자 : <strong className="text-blue-900 font-black">{inspector}</strong> (설비관리담당자)
+                </p>
+                <div className="text-slate-700 space-y-0.5">
                   <p className="font-bold text-slate-900">※ 점검일자</p>
-                  <p>∙ 주간점검 : 매주 수요일 / 월간점검 : 매월 마지막 수요일</p>
+                  <p className="pl-2">주간점검 : 매주 수요일</p>
+                  <p className="pl-2">월간점검 : 매월 마지막 수요일</p>
                 </div>
+                <p className="font-bold text-slate-900">※ 비고사항</p>
+              </div>
+
+              <div className="col-span-5 border-l border-slate-400 pl-2 space-y-1 text-slate-700">
+                <p className="font-bold text-slate-900">※ 특기사항</p>
+                <p className="pl-1">∙ 이상발생시 품질관리부서장에게 보고 후 조치를 받는다.</p>
+                <p className="pl-1">∙ 점검방법 (양호:✔, 불량:×로 표기함)</p>
               </div>
             </div>
 
-            {/* 풋터 양식번호 */}
-            <div className="flex justify-between items-center text-[9.5px] font-mono text-slate-600 pt-1">
+            {/* 4. 최하단 양식 번호 풋터 (사규 EZC-M-101-6 동일) */}
+            <div className="flex justify-between items-center text-[9px] font-mono text-slate-700 pt-0.5">
               <span>EZC-M-101-6</span>
-              <span className="font-bold text-slate-900">(주) 이지원</span>
-              <span>A4 (210 × 297)</span>
+              <span className="font-bold text-slate-900 font-sans">(주) 이지원</span>
+              <span>A4(210× 297)</span>
             </div>
           </div>
         </div>
