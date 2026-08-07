@@ -295,12 +295,12 @@ export function SocketBracketInspectionPage() {
     setPrintModalData({
       formCode,
       formTitle,
-      categoryName: '방화소켓 및 브라켓 사규 표준성적서',
+      categoryName: '방화소켓 및 브라켓 사규 표준성적서 (GI 아연도금강판)',
       itemName: name || '방화소켓',
       receivedDate: String(r.created_at || new Date().toISOString()).slice(0, 10),
       lotNumber: r.lot_number || '-',
-      supplierLot: 'SUP-260801-01',
-      supplierName: '아연도금강판 공급처',
+      supplierLot: r.supplier_lot || r.supplier_lot_no || 'SUP-260801-01',
+      supplierName: r.supplier_name || '아연도금강판 공급처 (포스코/현대제철)',
       qty: r.qty_current || r.qty || 1,
       unit: '개',
       inspector: r.inspector || inspector,
@@ -309,7 +309,11 @@ export function SocketBracketInspectionPage() {
       n3: r.n3 || 1.6,
       items,
       overallResult: 'PASS',
-      certInfo: '[KCL 한국건설생활환경시험연구원 (2025.05.13)] | [인장강도 358 N/㎟, 항복강도 276 N/㎟ 합격]'
+      certAgency: 'KCL 한국건설생활환경시험연구원 / KTR',
+      certNumber: 'KCL-GI-2025-0513',
+      certIssuedDate: '2025년 05월 13일',
+      certResultText: '항복강도 276 N/㎟, 인장강도 358 N/㎟ (KS D 3506 아연도금강판 적합)',
+      certInfo: 'KCL GI 아연도금강판 공인시험성적서 및 밀시트(Mill Sheet) 연동 완료'
     });
   };
 

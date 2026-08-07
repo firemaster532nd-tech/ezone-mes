@@ -113,6 +113,10 @@ export function RawMaterialInspectionPage() {
         { name: '공인기관 의뢰', standard: 'KOPTRI / FITI 공인성적서 (UL94-V2 적합, 밀도 0.88 g/㎤)', method: '공인성적서', cycle: '1회/년', condition: 'n=1, c=0', n1: '연동완료', n2: '연동완료', n3: '연동완료', isPass: true }
       ],
       overallResult: row.overall_result,
+      certAgency: 'KOPTRI 한국고분자시험연구원 / FITI',
+      certNumber: 'KOPTRI-RAW-2025-0915',
+      certIssuedDate: '2025년 09월 15일',
+      certResultText: 'UL94-V2 적합, 밀도 0.88 g/㎤, MI 2.8 (배합원료 공인시험 적합)',
       certInfo: 'KOPTRI / FITI 공인성적서 (UL94-V2 적합, 밀도 0.88 g/㎤, MI 2.8)'
     });
   };

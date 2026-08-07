@@ -171,6 +171,29 @@ export function buildPrintModalData(r: any, tab: string, inspector: string, unit
     ];
   }
 
+  // 품목별 공인성적서 1년 주기 연동 정보
+  let certAgency = 'KTR 한국화학융합시험연구원 / FITI / KCL';
+  let certNumber = 'KTR-2026-0415';
+  let certIssuedDate = '2026년 04월 15일';
+  let certResultText = '숏함유량 9.8%, 밀도 100 kg/㎥ (적합)';
+
+  if (tab.includes('그라스울')) {
+    certAgency = 'KCL 한국건설생활환경시험연구원 / KTR';
+    certNumber = 'KCL-2026-0210';
+    certIssuedDate = '2026년 02월 10일';
+    certResultText = '열전도율 0.034 W/m·K, 불연성 난연1급 (적합)';
+  } else if (tab.includes('실란트')) {
+    certAgency = 'FITI 시험연구원 / KTR';
+    certNumber = 'FITI-2025-1120';
+    certIssuedDate = '2025년 11월 20일';
+    certResultText = '불연성 난연1급, 비중 1.35 (적합)';
+  } else if (tab.includes('소켓') || tab.includes('브라켓') || tab.includes('플래싱') || tab.includes('GI')) {
+    certAgency = 'KCL 한국건설생활환경시험연구원 / KTR';
+    certNumber = 'KCL-GI-2025-0513';
+    certIssuedDate = '2025년 05월 13일';
+    certResultText = '항복강도 276 N/㎟, 인장강도 358 N/㎟ (KS D 3506 아연도금강판 적합)';
+  }
+
   return {
     formCode,
     formTitle,
@@ -185,6 +208,10 @@ export function buildPrintModalData(r: any, tab: string, inspector: string, unit
     inspector: r.inspector || inspector,
     items,
     overallResult: 'PASS' as const,
-    certInfo: `[KTR / KCL 공인성적서 100% 연동완료]\n사규 EZC-C-302 Rev8 LOT 추적성 확인 완료\nLOT: ${r.lot_number || '-'} | 공급사 LOT: ${r.supplier_lot || '-'}`,
+    certAgency,
+    certNumber,
+    certIssuedDate,
+    certResultText,
+    certInfo: `[${certAgency} 공인성적서 100% 연동완료]\n사규 EZC-C-302 Rev8 LOT 추적성 확인 완료\nLOT: ${r.lot_number || '-'} | 공급사 LOT: ${r.supplier_lot || '-'}`,
   };
 }

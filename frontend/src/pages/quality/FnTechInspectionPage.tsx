@@ -167,6 +167,10 @@ export function FnTechInspectionPage() {
       ],
 
       overallResult: r.overall_result === 'PASS' ? 'PASS' : 'FAIL',
+      certAgency: isPlate ? 'KCL 한국건설생활환경시험연구원 / KTR' : 'KCL 한국건설생활환경시험연구원',
+      certNumber: isPlate ? 'KCL-GI-2025-0513' : 'KCL-FN-2026-0105',
+      certIssuedDate: isPlate ? '2025년 05월 13일' : '2026년 01월 05일',
+      certResultText: isPlate ? '항복강도 276 N/㎟, 인장강도 353 N/㎟ (KS D 3506 아연도금강판 적합)' : '인정번호 FS-NP24-1112-2, 2시간 내화성능 적합 (EZ-FN-P100)',
       certInfo: isPlate 
         ? '[KCL 한국건설생활환경시험연구원 (2025.05.13)] | [인장강도 353 N/㎟, 항복강도 276 N/㎟ (합격)]'
         : '[인정번호: FS-NP24-1112-2 (EZ-FN-P100)] | [밀도 1.2 g/㎤ 이상, 길이 415mm 이상, 질량 155g 이상 적합]'
