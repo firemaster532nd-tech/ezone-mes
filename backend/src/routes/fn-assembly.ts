@@ -7,67 +7,86 @@ import { requireAuth } from '../lib/auth-plugin.js';
  */
 export async function fnAssemblyRoutes(app: FastifyInstance) {
   // DB 마이그레이션
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS fn_finished_stock (
-      finished_id   SERIAL PRIMARY KEY,
-      finished_lot  VARCHAR(80) NOT NULL UNIQUE, -- 사규 C302: 260807-FN-100-0001
-      site_name     VARCHAR(200),                -- 현장명
-      product_name  VARCHAR(200) NOT NULL,       -- EZ-FN-P100 (100A, 75A, 50A)
-      diameter_mm   INTEGER NOT NULL DEFAULT 100,
-      spec          VARCHAR(200),
-      sleeve_lot    VARCHAR(80) NOT NULL,        -- 슬리브 LOT (260807U001)
-      sheet_lot     VARCHAR(80),                 -- 차열시트 LOT (260807-S01)
-      plate_lot     VARCHAR(80),                 -- 보호철판 LOT (260807GI001)
-      sealant_lot   VARCHAR(80),                 -- 방화실란트 LOT (260807SS001)
-      qty           NUMERIC(12,3) NOT NULL DEFAULT 0,
-      qty_current   NUMERIC(12,3) NOT NULL DEFAULT 0,
-      unit          VARCHAR(20) DEFAULT 'EA',
-      location      VARCHAR(50) DEFAULT '1공장 완제품창고',
-      status        VARCHAR(20) DEFAULT 'AVAILABLE', -- AVAILABLE, SHIPPED, RESERVED
-      assembled_by  VARCHAR(100),
-      assembled_at  TIMESTAMPTZ DEFAULT NOW(),
-      notes         TEXT
-    );
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS fn_finished_stock (
+        finished_id   SERIAL PRIMARY KEY,
+        finished_lot  VARCHAR(80) UNIQUE,
+        site_name     VARCHAR(200),
+        product_name  VARCHAR(200),
+        diameter_mm   INTEGER DEFAULT 100,
+        spec          VARCHAR(200),
+        sleeve_lot    VARCHAR(80),
+        sheet_lot     VARCHAR(80),
+        plate_lot     VARCHAR(80),
+        sealant_lot   VARCHAR(80),
+        qty           NUMERIC(12,3) DEFAULT 0,
+        qty_current   NUMERIC(12,3) DEFAULT 0,
+        unit          VARCHAR(20) DEFAULT 'EA',
+        location      VARCHAR(50) DEFAULT '1공장 완제품창고',
+        status        VARCHAR(20) DEFAULT 'AVAILABLE',
+        assembled_by  VARCHAR(100),
+        assembled_at  TIMESTAMPTZ DEFAULT NOW(),
+        notes         TEXT
+      );
 
-    CREATE INDEX IF NOT EXISTS idx_fn_finished_lot ON fn_finished_stock(finished_lot);
-    CREATE INDEX IF NOT EXISTS idx_fn_finished_site ON fn_finished_stock(site_name);
+      ALTER TABLE fn_finished_stock ADD COLUMN IF NOT EXISTS finished_lot VARCHAR(80);
+      ALTER TABLE fn_finished_stock ADD COLUMN IF NOT EXISTS site_name VARCHAR(200);
+      ALTER TABLE fn_finished_stock ADD COLUMN IF NOT EXISTS product_name VARCHAR(200);
+      ALTER TABLE fn_finished_stock ADD COLUMN IF NOT EXISTS diameter_mm INTEGER DEFAULT 100;
+      ALTER TABLE fn_finished_stock ADD COLUMN IF NOT EXISTS spec VARCHAR(200);
+      ALTER TABLE fn_finished_stock ADD COLUMN IF NOT EXISTS sleeve_lot VARCHAR(80);
+      ALTER TABLE fn_finished_stock ADD COLUMN IF NOT EXISTS sheet_lot VARCHAR(80);
+      ALTER TABLE fn_finished_stock ADD COLUMN IF NOT EXISTS plate_lot VARCHAR(80);
+      ALTER TABLE fn_finished_stock ADD COLUMN IF NOT EXISTS qty NUMERIC(12,3) DEFAULT 0;
+      ALTER TABLE fn_finished_stock ADD COLUMN IF NOT EXISTS qty_current NUMERIC(12,3) DEFAULT 0;
 
-    CREATE TABLE IF NOT EXISTS lot_lineage (
-      lineage_id    SERIAL PRIMARY KEY,
-      parent_lot    VARCHAR(80) NOT NULL,  -- 완제품 LOT
-      child_lot     VARCHAR(80) NOT NULL,  -- 부자재 LOT (U, S, GI, SS)
-      child_cat     VARCHAR(50),           -- 자재 분류
-      qty_used      NUMERIC(12,3) DEFAULT 1,
-      created_at    TIMESTAMPTZ DEFAULT NOW()
-    );
+      CREATE INDEX IF NOT EXISTS idx_fn_finished_lot ON fn_finished_stock(finished_lot);
+      CREATE INDEX IF NOT EXISTS idx_fn_finished_site ON fn_finished_stock(site_name);
 
-    CREATE INDEX IF NOT EXISTS idx_lot_lineage_parent ON lot_lineage(parent_lot);
-    CREATE INDEX IF NOT EXISTS idx_lot_lineage_child ON lot_lineage(child_lot);
+      CREATE TABLE IF NOT EXISTS lot_lineage (
+        lineage_id    SERIAL PRIMARY KEY,
+        parent_lot    VARCHAR(80) NOT NULL,
+        child_lot     VARCHAR(80) NOT NULL,
+        child_cat     VARCHAR(50),
+        qty_used      NUMERIC(12,3) DEFAULT 1,
+        created_at    TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_lot_lineage_parent ON lot_lineage(parent_lot);
+      CREATE INDEX IF NOT EXISTS idx_lot_lineage_child ON lot_lineage(child_lot);
+    `);
 
     // 2026년 8월 엑셀 최신 재고 자동 마이그레이션 (이월/보유 수량 최신화)
-    await pool.query(`
-      INSERT INTO fn_finished_stock
-        (finished_lot, site_name, product_name, diameter_mm, spec, sleeve_lot, sheet_lot, plate_lot, qty, qty_current, unit, location, status)
-      VALUES
-        ('260720-FN-100(0001~1680)', '본사창고', 'EZ-FN-P100 (100A 210H)', 100, '210H', '260720U001', '260709-S02(486~1400)915', '260720GI001', 1680, 1680, 'EA', '1공장 완제품창고', 'AVAILABLE'),
-        ('260705-FN-75(0001~0642)', '본사창고', 'EZ-FN-P100 (75A)', 75, '몸통', '260715U002', '260623-S04(948~1050)103', '260715GI002', 642, 642, 'EA', '1공장 완제품창고', 'AVAILABLE'),
-        ('260715-FN-50(0001~0267)', '본사창고', 'EZ-FN-P100 (50A)', 50, '몸통', '260715U003', '260602-S04(511~520)10', '260715GI003', 447, 447, 'EA', '1공장 완제품창고', 'AVAILABLE')
-      ON CONFLICT (finished_lot) DO UPDATE SET qty_current = EXCLUDED.qty_current;
+    try {
+      await pool.query(`
+        INSERT INTO fn_finished_stock
+          (finished_lot, site_name, product_name, diameter_mm, spec, sleeve_lot, sheet_lot, plate_lot, qty, qty_current, unit, location, status)
+        VALUES
+          ('260720-FN-100(0001~1680)', '본사창고', 'EZ-FN-P100 (100A 210H)', 100, '210H', '260720U001', '260709-S02(486~1400)915', '260720GI001', 1680, 1680, 'EA', '1공장 완제품창고', 'AVAILABLE'),
+          ('260705-FN-75(0001~0642)', '본사창고', 'EZ-FN-P100 (75A)', 75, '몸통', '260715U002', '260623-S04(948~1050)103', '260715GI002', 642, 642, 'EA', '1공장 완제품창고', 'AVAILABLE'),
+          ('260715-FN-50(0001~0267)', '본사창고', 'EZ-FN-P100 (50A)', 50, '몸통', '260715U003', '260602-S04(511~520)10', '260715GI003', 447, 447, 'EA', '1공장 완제품창고', 'AVAILABLE')
+        ON CONFLICT (finished_lot) DO NOTHING;
+      `).catch(() => {});
 
-      INSERT INTO material_lots
-        (lot_number, category, item_name, unit, qty_current, qty_initial, location, received_date)
-      VALUES
-        ('260720U001', '슬리브', '일체형슬리브 100파이 (210H)', 'EA', 1680, 1680, 'FIELD-1F-MAT', '2026-08-01'),
-        ('260715U002', '슬리브', '일체형슬리브 75파이', 'EA', 642, 642, 'FIELD-1F-MAT', '2026-08-01'),
-        ('260715U003', '슬리브', '일체형슬리브 50파이', 'EA', 447, 447, 'FIELD-1F-MAT', '2026-08-01'),
-        ('260720GI001', '보호철판', '보호철판 100파이', 'EA', 2341, 2341, 'FIELD-1F-MAT', '2026-08-01'),
-        ('260715GI002', '보호철판', '보호철판 75파이', 'EA', 712, 712, 'FIELD-1F-MAT', '2026-08-01'),
-        ('260715GI003', '보호철판', '보호철판 50파이', 'EA', 803, 803, 'FIELD-1F-MAT', '2026-08-01'),
-        ('260715-BOLT', '부자재', '볼트,너트,와샤 세트', 'EA', 13248, 13248, 'FIELD-1F-MAT', '2026-08-01'),
-        ('260715-PLT', '부자재', '파렛트 (한국/화창)', 'EA', 8, 8, 'FIELD-1F-MAT', '2026-08-01')
-      ON CONFLICT (lot_number) WHERE (is_active = TRUE) DO UPDATE SET qty_current = EXCLUDED.qty_current;
-    `).catch(() => {});
-  `).catch(e => console.warn('[fn-assembly] DB 마이그레이션 스킵:', e?.message));
+      await pool.query(`
+        INSERT INTO material_lots
+          (lot_number, category, item_name, unit, qty_current, qty_initial, location, received_date)
+        VALUES
+          ('260720U001', '슬리브', '일체형슬리브 100파이 (210H)', 'EA', 1680, 1680, 'FIELD-1F-MAT', '2026-08-01'),
+          ('260715U002', '슬리브', '일체형슬리브 75파이', 'EA', 642, 642, 'FIELD-1F-MAT', '2026-08-01'),
+          ('260715U003', '슬리브', '일체형슬리브 50파이', 'EA', 447, 447, 'FIELD-1F-MAT', '2026-08-01'),
+          ('260720GI001', '보호철판', '보호철판 100파이', 'EA', 2341, 2341, 'FIELD-1F-MAT', '2026-08-01'),
+          ('260715GI002', '보호철판', '보호철판 75파이', 'EA', 712, 712, 'FIELD-1F-MAT', '2026-08-01'),
+          ('260715GI003', '보호철판', '보호철판 50파이', 'EA', 803, 803, 'FIELD-1F-MAT', '2026-08-01'),
+          ('260715-BOLT', '부자재', '볼트,너트,와샤 세트', 'EA', 13248, 13248, 'FIELD-1F-MAT', '2026-08-01'),
+          ('260715-PLT', '부자재', '파렛트 (한국/화창)', 'EA', 8, 8, 'FIELD-1F-MAT', '2026-08-01')
+        ON CONFLICT (lot_number) WHERE (is_active = TRUE) DO UPDATE SET qty_current = EXCLUDED.qty_current;
+      `).catch(() => {});
+    } catch { /* ignore */ }
+  } catch (e: any) {
+    console.warn('[fn-assembly] DB 마이그레이션 스킵:', e?.message);
+  }
 
   // ── GET /api/fn-assembly/next-finished-lot ──────────────────────────────
   app.get('/api/fn-assembly/next-finished-lot', { preHandler: requireAuth }, async (req) => {
