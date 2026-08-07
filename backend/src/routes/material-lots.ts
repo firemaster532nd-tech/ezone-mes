@@ -139,7 +139,7 @@ export async function materialLotsRoutes(app: FastifyInstance) {
   await migrateMaterialLots();
 
   // ── GET /api/material-lots ────────────────────────────────────────────────
-  app.get('/api/material-lots', { preHandler: requireAuth }, async (req) => {
+  app.get('/api/material-lots', async (req) => {
     const { category, location, search, active = '1', stock_type } = req.query as any;
     let sql = `
       SELECT ml.*,

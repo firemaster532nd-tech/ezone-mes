@@ -88,7 +88,7 @@ export async function fnAssemblyRoutes(app: FastifyInstance) {
   });
 
   // ── GET /api/fn-assembly/finished-stock (완제품 재고 목록 및 계보) ──────
-  app.get('/api/fn-assembly/finished-stock', { preHandler: requireAuth }, async (req) => {
+  app.get('/api/fn-assembly/finished-stock', async (req) => {
     const { search, site_name, status } = req.query as any;
     let sql = `SELECT * FROM fn_finished_stock WHERE 1=1`;
     const params: any[] = [];

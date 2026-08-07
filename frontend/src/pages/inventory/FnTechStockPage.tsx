@@ -558,12 +558,40 @@ export function FnTechStockPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [f, m] = await Promise.all([
-        api.get<{data:FinishedStock[]}>('/fn-stock/finished').catch(() => ({data: FALLBACK_FINISHED})),
-        api.get<{data:MaterialStock[]}>('/fn-stock/material').catch(() => ({data: FALLBACK_MATERIAL})),
+      const [fRes, mRes] = await Promise.all([
+        api.get<{data:any[]}>('/fn-assembly/finished-stock').catch(() => ({ data: [] })),
+        api.get<{data:any[]}>('/material-lots').catch(() => ({ data: [] })),
       ]);
-      if (f.data?.length) setFinished(f.data);
-      if (m.data?.length) setMaterial(m.data);
+
+      if (fRes.data && fRes.data.length > 0) {
+        const mappedFinished: FinishedStock[] = fRes.data.map((r: any) => ({
+          id: r.finished_id,
+          diameter_mm: r.diameter_mm || 100,
+          spec: r.spec || '210H',
+          qty: Number(r.qty_current || r.qty || 0),
+          last_finished_lot: r.finished_lot
+        }));
+        setFinished(mappedFinished);
+      } else {
+        setFinished(FALLBACK_FINISHED);
+      }
+
+      if (mRes.data && mRes.data.length > 0) {
+        const mappedMaterial: MaterialStock[] = mRes.data.map((r: any) => ({
+          id: r.lot_id,
+          item_name: r.item_name || r.category,
+          spec: r.thickness ? `${r.thickness}T` : r.item_spec || r.stock_type || '-',
+          qty: Number(r.qty_current || 0),
+          unit: r.unit || 'ea',
+          last_lot_number: r.lot_number
+        }));
+        setMaterial(mappedMaterial);
+      } else {
+        setMaterial(FALLBACK_MATERIAL);
+      }
+    } catch {
+      setFinished(FALLBACK_FINISHED);
+      setMaterial(FALLBACK_MATERIAL);
     } finally { setLoading(false); }
   }, []);
 
