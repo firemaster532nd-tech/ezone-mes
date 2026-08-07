@@ -15,29 +15,75 @@ type FnTab = '일체형슬리브' | '보호철판' | '고무패킹';
 interface Equipment { equipment_id: number; manage_no: string; equipment_name: string; capacity_spec: string; calibration_status: string; }
 
 // ─── 품목별 검사 기준 (인정서 + D128/D129/D130 성적서 기반) ────
-const SPEC_MAP: Record<FnTab, { sizes: string[]; fields: { key: string; label: string; unit: string; min: number; max: number; step: number }[] }> = {
+export interface FieldSpec {
+  label: string;
+  stdText: string;
+  unit: string;
+  min: number;
+  max: number;
+  defaultVal: string;
+}
+
+export function getSleeveFieldSpec(tab: FnTab, diam: number, fieldKey: string): FieldSpec {
+  if (tab === '일체형슬리브') {
+    if (fieldKey === 'outer_d') {
+      if (diam === 50)  return { label: '외경 (50파이)', stdText: '145 (±1.0) mm', unit: 'mm', min: 144.0, max: 146.0, defaultVal: '145.2' };
+      if (diam === 75)  return { label: '외경 (75파이)', stdText: '174 (±1.0) mm', unit: 'mm', min: 173.0, max: 175.0, defaultVal: '174.1' };
+      return { label: '외경 (100파이)', stdText: '200 (±1.0) mm', unit: 'mm', min: 199.0, max: 201.0, defaultVal: '200.2' };
+    }
+    if (fieldKey === 'inner_d') {
+      if (diam === 50)  return { label: '내경 (50파이)', stdText: '88 (±1.0) mm', unit: 'mm', min: 87.0, max: 89.0, defaultVal: '88.1' };
+      if (diam === 75)  return { label: '내경 (75파이)', stdText: '117 (±1.0) mm', unit: 'mm', min: 116.0, max: 118.0, defaultVal: '117.2' };
+      return { label: '내경 (100파이)', stdText: '141 (±1.0) mm', unit: 'mm', min: 140.0, max: 142.0, defaultVal: '141.2' };
+    }
+    if (fieldKey === 'thickness') {
+      return { label: '두께 (슬리브 몸통)', stdText: '3.5 (±0.5) mm', unit: 'mm', min: 3.0, max: 4.0, defaultVal: '3.52' };
+    }
+  } else if (tab === '보호철판') {
+    if (fieldKey === 'outer_d') {
+      if (diam === 50)  return { label: '외경 (50파이)', stdText: '135 (±1.0) mm', unit: 'mm', min: 134.0, max: 136.0, defaultVal: '135.2' };
+      if (diam === 75)  return { label: '외경 (75파이)', stdText: '165 (±1.0) mm', unit: 'mm', min: 164.0, max: 166.0, defaultVal: '165.1' };
+      return { label: '외경 (100파이)', stdText: '190 (±1.0) mm', unit: 'mm', min: 189.0, max: 191.0, defaultVal: '190.2' };
+    }
+    if (fieldKey === 'inner_d') {
+      if (diam === 50)  return { label: '내경 (50파이)', stdText: '67 (±1.0) mm', unit: 'mm', min: 66.0, max: 68.0, defaultVal: '67.1' };
+      if (diam === 75)  return { label: '내경 (75파이)', stdText: '95 (±1.0) mm', unit: 'mm', min: 94.0, max: 96.0, defaultVal: '95.2' };
+      return { label: '내경 (100파이)', stdText: '122 (±1.0) mm', unit: 'mm', min: 121.0, max: 123.0, defaultVal: '122.1' };
+    }
+    if (fieldKey === 'thickness') {
+      return { label: '두께 (GI보호철판)', stdText: '1.5mm 이상 (±0.1mm)', unit: 'mm', min: 1.4, max: 3.0, defaultVal: '1.52' };
+    }
+  }
+
+  if (fieldKey === 'outer_d') return { label: '외경 (패킹)', stdText: '주문치수 (±1.0) mm', unit: 'mm', min: 100, max: 200, defaultVal: '110.0' };
+  if (fieldKey === 'inner_d') return { label: '내경 (패킹)', stdText: '주문치수 (±1.0) mm', unit: 'mm', min: 90, max: 190, defaultVal: '100.0' };
+  return { label: '두께 (패킹)', stdText: '3.0mm 이상', unit: 'mm', min: 2.5, max: 5.0, defaultVal: '3.0' };
+}
+
+// ─── 품목별 검사 항목 가이드 ────
+const SPEC_MAP: Record<FnTab, { sizes: string[]; fields: { key: string; label: string; unit: string; step: number }[] }> = {
   '일체형슬리브': {
     sizes: ['50파이', '75파이', '100파이'],
     fields: [
-      { key: 'outer_d',    label: '외경',  unit: 'mm', min: 50,   max: 200,  step: 0.1 },
-      { key: 'inner_d',    label: '내경',  unit: 'mm', min: 40,   max: 195,  step: 0.1 },
-      { key: 'thickness',  label: '두께',  unit: 'mm', min: 3.0,  max: 5.0,  step: 0.01 },
+      { key: 'outer_d',    label: '외경',  unit: 'mm', step: 0.1 },
+      { key: 'inner_d',    label: '내경',  unit: 'mm', step: 0.1 },
+      { key: 'thickness',  label: '두께',  unit: 'mm', step: 0.01 },
     ],
   },
   '보호철판': {
     sizes: ['50파이', '75파이', '100파이'],
     fields: [
-      { key: 'outer_d',   label: '외경',  unit: 'mm', min: 100,  max: 230,  step: 0.1 },
-      { key: 'inner_d',   label: '내경',  unit: 'mm', min: 90,   max: 225,  step: 0.1 },
-      { key: 'thickness', label: '두께',  unit: 'mm', min: 1.5,  max: 3.0,  step: 0.01 },
+      { key: 'outer_d',   label: '외경',  unit: 'mm', step: 0.1 },
+      { key: 'inner_d',   label: '내경',  unit: 'mm', step: 0.1 },
+      { key: 'thickness', label: '두께',  unit: 'mm', step: 0.01 },
     ],
   },
   '고무패킹': {
     sizes: ['상부패킹', '하부패킹'],
     fields: [
-      { key: 'outer_d',   label: '외경',  unit: 'mm', min: 100,  max: 130,  step: 0.1 },
-      { key: 'inner_d',   label: '내경',  unit: 'mm', min: 100,  max: 125,  step: 0.1 },
-      { key: 'thickness', label: '두께',  unit: 'mm', min: 2.0,  max: 4.0,  step: 0.01 },
+      { key: 'outer_d',   label: '외경',  unit: 'mm', step: 0.1 },
+      { key: 'inner_d',   label: '내경',  unit: 'mm', step: 0.1 },
+      { key: 'thickness', label: '두께',  unit: 'mm', step: 0.01 },
     ],
   },
 };
@@ -263,10 +309,11 @@ export function FnTechInspectionPage() {
     const fields = spec.fields;
     let allPass = true;
     for (const f of fields) {
+      const fSpec = getSleeveFieldSpec(tab, sleeveDiam, f.key);
       for (const n of ['n1', 'n2', 'n3']) {
         const v = parseFloat(getMeasure(f.key, n));
         if (isNaN(v)) { allPass = false; break; }
-        if (v < f.min || v > f.max) { allPass = false; break; }
+        if (v < fSpec.min || v > fSpec.max) { allPass = false; break; }
       }
       if (!allPass) break;
     }
@@ -434,35 +481,66 @@ export function FnTechInspectionPage() {
             </select>
           </div>
 
-          {/* 치수 측정 */}
-          <div className="border-t border-slate-700 pt-3">
-            <p className="text-sm font-bold text-slate-300 mb-3">▼ 치수 실측 (n1 / n2 / n3)</p>
+          {/* 치수 측정 및 기준점 가이드 */}
+          <div className="border-t border-slate-700 pt-3 space-y-3">
+            <div className="bg-indigo-950/70 border border-indigo-700/80 rounded-xl p-3 space-y-1.5 shadow-inner">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-extrabold text-indigo-200 flex items-center gap-1.5">
+                  📐 [{sleeveDiam}파이] 사규 / 인정서 표준 치수 기준점 가이드
+                </span>
+                <span className="text-[10px] bg-indigo-600 text-white font-mono px-2 py-0.5 rounded font-bold">
+                  {tab} {sleeveDiam}A
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono">
+                {spec.fields.map(f => {
+                  const fs = getSleeveFieldSpec(tab, sleeveDiam, f.key);
+                  return (
+                    <div key={f.key} className="bg-slate-900/80 p-2 rounded-lg border border-indigo-900">
+                      <p className="text-[11px] font-bold text-indigo-300">{fs.label}</p>
+                      <p className="text-sm font-extrabold text-amber-300 my-0.5">{fs.stdText}</p>
+                      <p className="text-[10px] text-slate-400">({fs.min} ~ {fs.max} {fs.unit})</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <p className="text-sm font-bold text-slate-300 pt-1">▼ 치수 실측 (n1 / n2 / n3)</p>
             <div className="space-y-3">
-              {spec.fields.map(f => (
-                <div key={f.key}>
-                  <p className="text-xs text-slate-400 mb-1.5">
-                    {f.label} ({f.unit}) — 기준: {f.min}~{f.max}{f.unit}
-                  </p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {['n1','n2','n3'].map(n => {
-                      const v = parseFloat(getMeasure(f.key, n));
-                      const outOfRange = !isNaN(v) && (v < f.min || v > f.max);
-                      return (
-                        <div key={n}>
-                          <input
-                            type="number" step={f.step}
-                            className={`${INP} text-center ${outOfRange ? 'border-red-500 text-red-400' : ''}`}
-                            value={getMeasure(f.key, n)}
-                            onChange={e => setMeasure(f.key, n, e.target.value)}
-                            placeholder={n}
-                          />
-                          {outOfRange && <p className="text-[10px] text-red-400 text-center mt-0.5">⚠ 범위이탈</p>}
-                        </div>
-                      );
-                    })}
+              {spec.fields.map(f => {
+                const fs = getSleeveFieldSpec(tab, sleeveDiam, f.key);
+                return (
+                  <div key={f.key} className="bg-slate-900/40 p-3 rounded-xl border border-slate-750">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs font-bold text-slate-200">
+                        {fs.label} <span className="text-amber-400 font-mono">[{fs.stdText}]</span>
+                      </span>
+                      <span className="text-xs font-mono text-slate-400">
+                        허용 범위: <strong className="text-emerald-400">{fs.min} ~ {fs.max} {fs.unit}</strong>
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {['n1','n2','n3'].map(n => {
+                        const v = parseFloat(getMeasure(f.key, n));
+                        const outOfRange = !isNaN(v) && (v < fs.min || v > fs.max);
+                        return (
+                          <div key={n}>
+                            <input
+                              type="number" step={f.step}
+                              className={`${INP} text-center font-mono text-sm font-bold ${outOfRange ? 'border-red-500 bg-red-950/40 text-red-300' : ''}`}
+                              value={getMeasure(f.key, n)}
+                              onChange={e => setMeasure(f.key, n, e.target.value)}
+                              placeholder={`예: ${fs.defaultVal}`}
+                            />
+                            {outOfRange && <p className="text-[10px] text-red-400 text-center font-bold mt-1">⚠ 이탈 ({fs.min}~{fs.max})</p>}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
