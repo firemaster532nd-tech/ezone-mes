@@ -538,32 +538,32 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
               <div className="col-span-8 flex flex-col justify-between gap-2">
                 {/* 최종 판정 */}
                 <div className="flex items-center gap-4">
-                  <span className="font-bold text-xs text-slate-900">판    정:</span>
-                  <div className="flex items-center gap-5">
+                  <span className="font-bold text-sm text-slate-900">판    정:</span>
+                  <div className="flex items-center gap-6">
                     <span
-                      className={`cursor-pointer font-extrabold text-sm select-none ${overallResult === 'pass' ? 'text-emerald-900' : 'text-slate-400'}`}
+                      className={`cursor-pointer font-extrabold text-base select-none ${overallResult === 'pass' ? 'text-emerald-900' : 'text-slate-400'}`}
                       onClick={() => setOverallResult(overallResult === 'pass' ? '' : 'pass')}
                     >
-                      {overallResult === 'pass' ? '● 합 격 (PASS)' : '○ 합 격 (PASS)'}
+                      {overallResult === 'pass' ? '☑ 합 격 (PASS)' : '☐ 합 격 (PASS)'}
                     </span>
                     <span
-                      className={`cursor-pointer font-bold text-sm select-none ${overallResult === 'fail' ? 'text-red-900' : 'text-slate-400'}`}
+                      className={`cursor-pointer font-bold text-base select-none ${overallResult === 'fail' ? 'text-red-900' : 'text-slate-400'}`}
                       onClick={() => setOverallResult(overallResult === 'fail' ? '' : 'fail')}
                     >
-                      {overallResult === 'fail' ? '● 부적합 (FAIL)' : '○ 부적합 (FAIL)'}
+                      {overallResult === 'fail' ? '☑ 부적합 (FAIL)' : '☐ 부적합 (FAIL)'}
                     </span>
                   </div>
                 </div>
 
-                {/* 비고 — certInfo를 editNotes 초기값으로 포함, 빈양식지·결과성적서 모두 표시 */}
-                <div className="text-[9px] text-slate-800 bg-slate-50 p-2 rounded border border-slate-400">
-                  <p className="font-extrabold text-blue-900 mb-1">※ 비고 / 공인성적서 연동 정보:</p>
+                {/* 비고 — 결과성적서: data.certInfo 기본 표시, 빈양식지: 직접 입력 */}
+                <div className="text-[10px] text-slate-800 bg-slate-50 p-2 rounded border border-slate-400">
+                  <p className="font-extrabold text-blue-900 mb-1">※ 비고 / 공인성적서 연동 정보 (사규 제11조 7단계 역추적):</p>
                   <textarea
-                    value={editNotes}
+                    value={editNotes || (isBlank ? '' : (data.certInfo || ''))}
                     onChange={e => setEditNotes(e.target.value)}
-                    placeholder="공인성적서 번호, LOT 정보 등 입력 (비워두기 가능)"
-                    rows={4}
-                    className="w-full text-[9px] font-mono text-slate-900 bg-transparent border-0 focus:outline-none resize-none leading-relaxed"
+                    placeholder={`◆ 공인성적서 1년 주기 자동 연동 정보 (사규 제11조 7단계 역추적):\n- 공인시험 기관 : KTR 한국화학융합시험연구원 / FITI / KCL\n- 공인성적서 번호 : KTR-20  -\n- 성적서 발행일자 : 20  년   월   일\n- 시험결과 평가 : 숏함유량  %, 밀도   kg/㎡ (적합)`}
+                    rows={5}
+                    className="w-full text-[10px] font-mono text-slate-900 bg-transparent border-0 focus:outline-none resize-none leading-relaxed"
                   />
                 </div>
               </div>
