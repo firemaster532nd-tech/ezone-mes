@@ -11,8 +11,8 @@ export async function ensureQzTrayLoaded(): Promise<any> {
       const qz = w.qz;
       // 빈 인증서 설정 — "Remember this decision" 체크 후 반복 확인 최소화
       if (qz?.security) {
-        qz.security.setCertificatePromise((resolve2: Function) => resolve2(''));
-        qz.security.setSignaturePromise((toSign: string) => (resolve2: Function) => resolve2(''));
+        qz.security.setCertificatePromise(() => Promise.resolve(''));
+        qz.security.setSignaturePromise(() => () => Promise.resolve(''));
       }
       resolve(qz);
     };
