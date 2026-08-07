@@ -175,7 +175,6 @@ export async function generateStandardLotLabelHtml(
   receivedDate?: string,
   seqBadge?: string
 ): Promise<string> {
-  // QR 스캔 시 [LOT번호 / 제품명 / 규격 / 위치] 4가지 정보가 100% 한눈에 반환되는 구조화된 텍스트 생성
   const qrPayload = [
     `LOT: ${lotNo}`,
     `제품명: ${itemName || '-'}`,
@@ -184,33 +183,54 @@ export async function generateStandardLotLabelHtml(
     `수량: ${qtyStr} ${unit}`
   ].join('\n');
 
-  const qrDataUrl = await generateQrDataUrl(qrPayload, 150);
-  const barcodeSvg = generateCode128Svg(lotNo, 22);
+  const qrDataUrl = await generateQrDataUrl(qrPayload, 200);
+  const barcodeSvg = generateCode128Svg(lotNo, 24);
+
+  // 두께값 및 규격값 분리 파싱
+  let thicknessText = '-';
+  let specText = spec || '-';
+
+  if (spec) {
+    const tMatch = spec.match(/(\d+(?:\.\d+)?T)/i);
+    if (tMatch) {
+      thicknessText = tMatch[1];
+    }
+  }
+
+  const badgeText = seqBadge || '1/1';
+  const dateFormatted = receivedDate ? receivedDate.slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const locFormatted = location && location !== '-' ? location : 'A1-P1';
 
   return `
 <div class="label-card">
   <div class="header">
     <span class="company">(주)이지원</span>
-    <span class="title">🏷️ 원부자재 LOT 라벨</span>
-    ${seqBadge ? `<span class="seq-badge" style="background:#1d4ed8;color:#ffffff;padding:1px 5px;border-radius:3px;font-size:7.5pt;font-weight:900;letter-spacing:0.5px;">${seqBadge}</span>` : `<span class="date">${receivedDate || new Date().toISOString().slice(0, 10)}</span>`}
+    <span class="lot-badge-box">${badgeText} (입고LOT)</span>
   </div>
+  <div class="header-divider"></div>
+  
   <div class="body-row">
-    <div class="qr-box">
+    <div class="qr-col">
       <img src="${qrDataUrl}" alt="QR" class="qr-img"/>
+      <div class="barcode-box">
+        ${barcodeSvg}
+        <div class="barcode-text">${lotNo}</div>
+      </div>
     </div>
-    <div class="info-box">
-      <div class="lot-number">${lotNo}</div>
-      <div class="field"><span class="lbl">품명:</span> <span class="val item-val">${itemName}</span></div>
-      <div class="field"><span class="lbl" style="font-weight:bold;color:#b91c1c;">규격:</span> <span class="val spec-val" style="font-weight:bold;color:#0f172a;">${spec || '규격 미기재'}</span></div>
-      <div class="field"><span class="lbl">위치:</span> <span class="val loc-val">${location || '-'}</span></div>
+    <div class="info-col">
+      <div class="field"><span class="lbl">LOT</span> <span class="val lot-title">${lotNo}</span></div>
+      <div class="field"><span class="lbl">품목</span> <span class="val item-title">${itemName}</span></div>
+      <div class="field"><span class="lbl">두께</span> <span class="val thickness-val">${thicknessText}</span></div>
+      <div class="field"><span class="lbl">규격</span> <span class="val">${specText}</span></div>
+      <div class="field"><span class="lbl">순번</span> <span class="val">${badgeText}</span></div>
     </div>
   </div>
-  <div class="qty-bar">
-    <span>재고/순번:</span> <strong>${seqBadge ? `<span style="color:#1d4ed8;font-weight:900;font-size:8pt;">${seqBadge}</span> (총 ${qtyStr} ${unit})` : `${qtyStr} ${unit}`}</strong>
-  </div>
-  <div class="barcode-box">
-    ${barcodeSvg}
-    <div class="barcode-text">${lotNo}</div>
+
+  <div class="footer-divider"></div>
+  <div class="footer">
+    <span class="date-text">입고: ${dateFormatted}</span>
+    <span class="loc-text">◆◆◆◆◆◆ ${locFormatted}</span>
+    <span class="print-seq">발행: ${badgeText}</span>
   </div>
 </div>`;
 }

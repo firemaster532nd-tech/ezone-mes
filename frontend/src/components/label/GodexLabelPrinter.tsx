@@ -40,55 +40,59 @@ function LabelPreview({ data }: { data: LabelData }) {
     data.length_mm ? `${data.length_mm}L` : '',
   ].filter(Boolean).join(' ') || data.thickness?.toString() || '규격 미기재';
 
-  const lotNo = data.lot_number || '260807GI001';
-  const itemName = data.item_name || '품목명 미지정';
-  const locationText = data.location_name || data.location || '위치 미지정';
-  const qtyText = `${data.qty_current || 1} ${data.unit || 'EA'}`;
+  const lotNo = data.lot_number || '260203CW007';
+  const itemName = data.item_name || '96K 50T 400W 3600L';
+  const locationText = data.location_name || data.location || 'B1-P1';
+  const thicknessText = data.thickness ? `${data.thickness}T` : '50.00T';
 
   useEffect(() => {
-    const payload = `LOT: ${lotNo}\n제품명: ${itemName}\n규격: ${specText}\n위치: ${locationText}\n수량: ${qtyText}`;
-    generateQrDataUrl(payload, 150).then(setQrUrl);
-  }, [lotNo, itemName, specText, locationText, qtyText]);
+    const payload = `LOT: ${lotNo}\n제품명: ${itemName}\n규격: ${specText}\n위치: ${locationText}\n수량: ${data.qty_current || 1}`;
+    generateQrDataUrl(payload, 200).then(setQrUrl);
+  }, [lotNo, itemName, specText, locationText, data.qty_current]);
 
-  const barcodeSvg = generateCode128Svg(lotNo, 28);
+  const barcodeSvg = generateCode128Svg(lotNo, 22);
 
   return (
     <div
-      className="bg-white border-2 border-slate-800 rounded-lg shadow-xl mx-auto p-2 text-slate-900 font-sans"
+      className="bg-white border-2 border-slate-900 rounded-lg shadow-2xl mx-auto p-2 text-slate-900 font-sans"
       style={{ width: '320px', height: '240px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyBetween: 'space-between', position: 'relative' }}
     >
       {/* 헤더 */}
-      <div className="flex justify-between items-center border-b border-indigo-900 pb-1 text-[11px] font-bold">
-        <span className="text-red-700 font-black">(주)이지원</span>
-        <span className="text-indigo-900 font-black">🏷️ 원부자재 LOT 라벨</span>
-        <span className="text-slate-500 font-mono text-[9px]">
-          {data.received_date || new Date().toISOString().slice(0, 10)}
+      <div className="flex justify-between items-center pb-1">
+        <span className="font-extrabold text-slate-900 text-xs">(주)이지원</span>
+        <span className="border border-slate-800 rounded-full px-2 py-0.5 text-[10px] font-bold text-slate-900">
+          1/1 (입고LOT)
         </span>
       </div>
+      <div className="border-b border-slate-900 mb-1"></div>
 
-      {/* 바디 (QR + 표준정보) */}
-      <div className="flex gap-2 items-center my-1.5 flex-1">
-        <div className="w-[60px] h-[60px] flex-shrink-0 border border-slate-300 rounded overflow-hidden bg-white p-0.5">
-          {qrUrl ? <img src={qrUrl} alt="QR" className="w-full h-full object-contain" /> : <div className="w-full h-full bg-slate-100 flex items-center justify-center text-[8px]">QR...</div>}
+      {/* 중앙 본문 (좌측 대형 QR/바코드, 우측 LOT/품목/두께/규격/순번) */}
+      <div className="flex gap-2 items-start flex-1 my-0.5">
+        <div className="w-[100px] flex flex-col items-center">
+          <div className="w-[90px] h-[90px] border border-slate-300 rounded p-0.5 bg-white">
+            {qrUrl ? <img src={qrUrl} alt="QR" className="w-full h-full object-contain" /> : <div className="text-[8px] text-center pt-8">QR...</div>}
+          </div>
+          <div className="w-full mt-1 text-center overflow-hidden">
+            <div className="w-[85px] mx-auto" dangerouslySetInnerHTML={{ __html: barcodeSvg }} />
+            <div className="text-[8px] font-mono text-slate-600 tracking-tight mt-0.5">{lotNo}</div>
+          </div>
         </div>
-        <div className="flex-1 overflow-hidden space-y-0.5 font-mono text-[10px] leading-tight">
-          <div className="font-extrabold text-blue-700 text-xs truncate">{lotNo}</div>
-          <div className="truncate"><span className="text-slate-500 font-normal">품명:</span> <strong className="text-slate-900">{itemName}</strong></div>
-          <div className="truncate"><span className="text-slate-500 font-normal">규격:</span> <strong className="text-amber-700 font-extrabold">{specText}</strong></div>
-          <div className="truncate"><span className="text-slate-500 font-normal">위치:</span> <strong className="text-emerald-700 font-bold">{locationText}</strong></div>
+
+        <div className="flex-1 space-y-1 font-mono text-[10px] pt-0.5">
+          <div className="flex"><span className="w-8 text-slate-500 font-normal">LOT</span> <strong className="text-slate-900 text-xs font-black truncate">{lotNo}</strong></div>
+          <div className="flex"><span className="w-8 text-slate-500 font-normal">품목</span> <strong className="text-slate-900 text-[10px] font-bold truncate">{itemName}</strong></div>
+          <div className="flex"><span className="w-8 text-slate-500 font-normal">두께</span> <strong className="text-slate-900 font-extrabold underline">{thicknessText}</strong></div>
+          <div className="flex"><span className="w-8 text-slate-500 font-normal">규격</span> <strong className="text-slate-900 font-bold truncate">{specText}</strong></div>
+          <div className="flex"><span className="w-8 text-slate-500 font-normal">순번</span> <strong className="text-slate-900 font-bold">1 / 1</strong></div>
         </div>
       </div>
 
-      {/* 수량 수불바 */}
-      <div className="bg-slate-100 border border-slate-300 rounded px-2 py-0.5 text-[10px] font-mono flex justify-between items-center mb-1">
-        <span className="text-slate-600 font-semibold">재고수량:</span>
-        <strong className="text-blue-700 font-extrabold">{qtyText}</strong>
-      </div>
-
-      {/* 1D 바코드 */}
-      <div className="border-t border-dashed border-slate-300 pt-1 text-center">
-        <div className="w-[90%] mx-auto overflow-hidden" dangerouslySetInnerHTML={{ __html: barcodeSvg }} />
-        <div className="text-[9px] font-mono text-slate-600 tracking-wider mt-0.5">{lotNo}</div>
+      {/* 하단 점선 및 풋터 */}
+      <div className="border-t border-dashed border-slate-400 my-1"></div>
+      <div className="flex justify-between items-center text-[9px] font-mono text-slate-700">
+        <span>입고: {data.received_date ? data.received_date.slice(0, 10) : '2026-02-02'}</span>
+        <span className="font-bold">◆◆◆◆◆◆ {locationText}</span>
+        <span>발행: 1 / 1</span>
       </div>
     </div>
   );
@@ -177,24 +181,28 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
         }
         html, body { width: 80mm; height: 60mm; margin: 0; padding: 0; background: #fff; font-family: 'Malgun Gothic', sans-serif; overflow: hidden; transform: scale(0.96); transform-origin: top left; }
         * { color: black !important; border-color: black !important; background-color: transparent !important; }
-        .label-card { width: 76mm; height: 56mm; margin: 2mm auto; padding: 1.5mm 2mm; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; border: 0.4mm solid #000; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }
+        .label-card { width: 76mm; height: 56mm; margin: 2mm auto; padding: 2mm; box-sizing: border-box; display: flex; flex-direction: column; justify-content: space-between; border: 0.3mm solid #000; overflow: hidden; page-break-inside: avoid; break-inside: avoid; background: #fff; }
         .label-card:not(:last-child) { page-break-after: always; break-after: always; }
-        .label-card:last-child { page-break-after: avoid; break-after: avoid; }
-        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 0.3mm solid #000; padding-bottom: 0.5mm; font-size: 7pt; font-weight: bold; }
-        .company { color: #000; } .title { color: #000; } .date { color: #000; font-size: 6pt; }
-        .body-row { display: flex; gap: 2mm; align-items: center; flex: 1; margin-top: 0.5mm; margin-bottom: 0.5mm; overflow: hidden; }
-        .qr-box .qr-img { width: 16mm; height: 16mm; border: 0.2mm solid #000; flex-shrink: 0; }
-        .info-box { flex: 1; overflow: hidden; }
-        .lot-number { font-size: 9pt; font-weight: 900; font-family: monospace; color: #000; letter-spacing: -0.2px; white-space: nowrap; }
-        .field { font-size: 6.5pt; margin-top: 0.3mm; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .field .lbl { color: #000; }
-        .field .val { font-weight: bold; color: #000; }
-        .item-val { color: #000; }
-        .loc-val { color: #000; }
-        .qty-bar { border: 0.2mm solid #000; padding: 0.5mm 1.5mm; font-size: 7pt; margin-top: 0.5mm; display: flex; justify-content: space-between; align-items: center; }
-        .barcode-box { text-align: center; border-top: 0.2mm dashed #000; padding-top: 0.5mm; margin-top: 0.5mm; }
-        .barcode-box svg { width: 60mm; height: 8mm; margin: 0 auto; display: block; }
-        .barcode-text { font-size: 5.5pt; font-family: monospace; color: #000; letter-spacing: 0.5px; margin-top: 0.2mm; }
+        .header { display: flex; justify-content: space-between; align-items: center; font-size: 9pt; font-weight: bold; }
+        .company { font-weight: 900; font-size: 10pt; color: #000; }
+        .lot-badge-box { border: 0.3mm solid #000; border-radius: 10px; padding: 0.5mm 3mm; font-size: 7.5pt; font-weight: bold; }
+        .header-divider { border-bottom: 0.4mm solid #000; margin: 1mm 0 1.5mm 0; }
+        .body-row { display: flex; gap: 2.5mm; align-items: flex-start; flex: 1; overflow: hidden; }
+        .qr-col { width: 26mm; display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+        .qr-img { width: 25mm; height: 25mm; border: 0.2mm solid #000; }
+        .barcode-box { width: 25mm; text-align: center; margin-top: 1mm; }
+        .barcode-box svg { width: 24mm; height: 6mm; margin: 0 auto; display: block; }
+        .barcode-text { font-size: 5pt; font-family: monospace; letter-spacing: 0.2px; margin-top: 0.2mm; }
+        .info-col { flex: 1; overflow: hidden; font-family: monospace; }
+        .field { font-size: 7.5pt; margin-bottom: 0.8mm; line-height: 1.2; display: flex; white-space: nowrap; overflow: hidden; }
+        .field .lbl { width: 8mm; color: #000; flex-shrink: 0; }
+        .field .val { font-weight: bold; color: #000; overflow: hidden; text-overflow: ellipsis; }
+        .lot-title { font-size: 9.5pt; font-weight: 900; }
+        .item-title { font-size: 8.5pt; font-weight: bold; }
+        .thickness-val { text-decoration: underline; font-weight: 900; }
+        .footer-divider { border-top: 0.2mm dashed #000; margin: 1mm 0 0.8mm 0; }
+        .footer { display: flex; justify-content: space-between; align-items: center; font-size: 6.5pt; font-family: monospace; }
+        .loc-text { font-weight: bold; }
       </style></head><body>${labelHtmlContent}</body></html>
       `;
 
