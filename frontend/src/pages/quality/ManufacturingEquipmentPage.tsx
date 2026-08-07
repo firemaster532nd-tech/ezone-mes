@@ -472,52 +472,140 @@ function EquipmentChecklistPrintModal({
     { no: 10, item: '설비 주변 5S 청정 상태', standard: '원료 찌꺼기 제거, 바닥 기름때 청소 완료', cycle: '일일' },
   ];
 
+  // 설비 관리번호 및 설비명 기반 사규 EZC M-101-6 점검항목 자동 매칭
+  const getEquipmentSpecItems = () => {
+    const manageNo = (equipment.manage_no || '').toUpperCase();
+    const name = (equipment.equipment_name || '').toUpperCase();
+
+    // 1. 배합기 (EZC M-11 ~ M-16 / 믹서)
+    if (manageNo.includes('M-1') || name.includes('믹서') || name.includes('MIXER') || name.includes('배합')) {
+      return {
+        groupName: 'High Speed Mixer & Cooling Mixer (배합기)',
+        items: [
+          { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+          { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+          { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호할 것', cycle: '주 1회' },
+          { part: '회 전 부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+          { part: '벨 트 부', item: '장력상태: 벨트의 느슨함이 없을 것', cycle: '월 1회' },
+        ]
+      };
+    }
+    // 2. 압출기 & 온조기 & Chiller (EZC M-21 ~ M-24)
+    if (manageNo.includes('M-2') || name.includes('압출') || name.includes('EXTRUDER') || name.includes('온조기') || name.includes('CHILLER') || name.includes('냉각기')) {
+      return {
+        groupName: '120Φ 싱글 압출기, 65Φ 코니칼 압출기, 온조기, Chiller',
+        items: [
+          { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+          { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+          { part: '스 위 치', item: '작동상태: S/W 조작판넬의 작동상태가 원활할 것', cycle: '주 1회' },
+          { part: '회 전 부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+          { part: '열매체유 / 윤활유', item: '유량: 유량표시기 적정량 이하로 내려가지 않을 것', cycle: '주 1회' },
+          { part: '냉 각 수', item: '오수 발생 유무: 냉각수의 오염으로 인한 오수 발생이 없을 것', cycle: '월 1회' },
+        ]
+      };
+    }
+    // 3. 재단기 & 핫프레스 (EZC M-31, M-41)
+    if (manageNo.includes('M-3') || manageNo.includes('M-4') || name.includes('재단') || name.includes('커팅') || name.includes('프레스') || name.includes('PRESS')) {
+      return {
+        groupName: '시트 재단기(커팅머신), 핫프레스',
+        items: [
+          { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+          { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+          { part: '스 위 치', item: '작동상태: S/W 및 조작판넬의 작동이 원활할 것', cycle: '주 1회' },
+          { part: '회 전 부', item: '주유상태: 회전축에 윤활유(WD-40)를 발라 마모가 없을 것', cycle: '주 1회' },
+          { part: '모    터', item: '작동/소음: 상하 작동 원활 및 과도한 소음이 없을 것', cycle: '월 1회' },
+          { part: '열매체유', item: '주입상태: 적정 수준 이상으로 유지할 것', cycle: '주 1회' },
+        ]
+      };
+    }
+    // 4. Air 컴프레샤 (EZC M-51 ~ M-53)
+    if (manageNo.includes('M-51') || manageNo.includes('M-52') || manageNo.includes('M-53') || name.includes('컴프') || name.includes('COMP')) {
+      return {
+        groupName: 'Air 컴프레샤 (AC101, AC102, 200CU)',
+        items: [
+          { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+          { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+          { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호할 것', cycle: '주 1회' },
+          { part: '배    관', item: '누출상태: 에어의 누출이 없을 것', cycle: '월 1회' },
+          { part: '기어회전부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+        ]
+      };
+    }
+    // 5. 집진기 (EZC M-54, M-55)
+    if (manageNo.includes('M-54') || manageNo.includes('M-55') || name.includes('집진')) {
+      return {
+        groupName: '집진기 (HP3001, HP3002)',
+        items: [
+          { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+          { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+          { part: '조작판넬', item: '작동상태: 작동이 원활할 것', cycle: '주 1회' },
+          { part: '회 전 부', item: '벨트상태: 회전벨트 결합 위치 및 갈라짐이 없을 것', cycle: '월 1회' },
+          { part: '회 전 부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+        ]
+      };
+    }
+    // 기본 디폴트 일반 설비
+    return {
+      groupName: '일반 제조설비 점검표',
+      items: [
+        { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+        { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+        { part: '스 위 치', item: '작동상태: S/W 및 조작판넬의 작동이 원활할 것', cycle: '주 1회' },
+        { part: '회 전 부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+        { part: '안 전 장 치', item: '비상정지 및 안전덮개 상태 양호할 것', cycle: '주 1회' },
+      ]
+    };
+  };
+
+  const specData = getEquipmentSpecItems();
+  const yearText = checkMonth ? checkMonth.slice(0, 4) : new Date().getFullYear().toString();
+  const monthText = checkMonth ? checkMonth.slice(5, 7) : String(new Date().getMonth() + 1).padStart(2, '0');
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 overflow-y-auto backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col border border-slate-200" onClick={e => e.stopPropagation()}>
         {/* 상단 툴바 (인쇄 시 숨김) */}
-        <div className="px-6 py-4 border-b bg-slate-800 text-white flex justify-between items-center print:hidden rounded-t-xl">
+        <div className="px-6 py-4 border-b bg-slate-900 text-white flex justify-between items-center print:hidden rounded-t-2xl">
           <div className="flex items-center gap-3">
             <Printer className="h-5 w-5 text-amber-400" />
             <div>
-              <h3 className="font-bold text-sm">제조 설비 점검체크시트 인쇄 (EZC M-101-6)</h3>
-              <p className="text-[11px] text-slate-300">A4 수평 양식 표준 제조설비 점검표</p>
+              <h3 className="font-bold text-sm text-amber-300">📋 사규 EZC M-101-6 제조 점검체크시트</h3>
+              <p className="text-[11px] text-slate-300">설비별 맞춤 점검항목 A4 인쇄 표준양식 ({specData.groupName})</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1 bg-slate-700 px-2 py-1 rounded border border-slate-600">
-              <span className="text-[11px] font-bold text-slate-300">✍️ 작성자:</span>
+            <div className="flex items-center gap-1 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+              <span className="text-[11px] font-bold text-slate-300">점검자:</span>
               <select
                 value={inspector}
                 onChange={(e) => setInspector(e.target.value)}
-                className="bg-slate-800 text-white text-xs font-bold rounded px-1.5 py-0.5 outline-none border border-slate-600"
+                className="bg-slate-900 text-white text-xs font-bold rounded px-2 py-0.5 outline-none border border-slate-700"
               >
                 {inspectors.map(name => (
                   <option key={name} value={name}>{name}</option>
                 ))}
-
               </select>
             </div>
             <input
               type="month"
               value={checkMonth}
               onChange={(e) => setCheckMonth(e.target.value)}
-              className="px-2 py-1 text-xs rounded border border-slate-600 bg-slate-700 text-white font-mono font-bold"
+              className="px-2.5 py-1 text-xs rounded-lg border border-slate-700 bg-slate-800 text-white font-mono font-bold"
             />
 
             <button
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded text-xs shadow"
+              className="flex items-center gap-1.5 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs shadow-md transition"
             >
-              <Printer className="h-4 w-4" /> 인쇄 실행
+              <Printer className="h-4 w-4" /> 점검시트 인쇄
             </button>
-            <button onClick={onClose} className="p-1 text-slate-400 hover:text-white">
-              <X className="h-5 w-5" />
+            <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center text-lg font-bold transition">
+              ×
             </button>
           </div>
         </div>
 
-        {/* 🖨️ 실제 인쇄되는 A4 표준 제조설비 점검표 서식 */}
+        {/* 🖨️ 실제 인쇄되는 A4 표준 제조설비 점검표 서식 (사규 EZC M-101-6 100% 동일) */}
         <div className="p-6 overflow-y-auto flex-1 bg-white print:p-0 print:overflow-visible text-slate-900">
           <style>{`
             @media print {
@@ -540,23 +628,20 @@ function EquipmentChecklistPrintModal({
           `}</style>
 
           <div id="printable-equipment-sheet" className="border-2 border-slate-900 p-5 bg-white text-slate-900 text-xs font-sans space-y-3">
-            {/* 서식 헤더 & 3단 결재란 */}
-            <div className="flex justify-between items-center border-b-2 border-slate-900 pb-2">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-extrabold text-slate-800">EZC M-101-6</span>
-                  <span className="text-[10px] text-slate-500 font-mono">A4 (210×297)㎜</span>
-                </div>
-                <h1 className="text-lg font-black tracking-tight text-slate-900 mt-0.5 underline decoration-2 underline-offset-4">
-                  제 조 설 비 점 검 체 크 시 트
+            {/* 상단 타이틀 & 3단 결재란 */}
+            <div className="flex justify-between items-start border-b-2 border-slate-900 pb-2">
+              <div className="space-y-1">
+                <h1 className="text-xl font-black tracking-tight text-slate-900 flex items-center gap-2">
+                  제조설비 점검체크 시트
+                  <span className="text-xs font-bold text-slate-600 font-mono">({specData.groupName})</span>
                 </h1>
-                <p className="text-[11px] font-bold text-slate-600 mt-0.5">
-                  (주)이지원 제조설비 관리대장 및 점검표
+                <p className="text-xs font-bold text-slate-700 font-mono">
+                  점검년도 : <span className="underline decoration-2 font-black">{yearText}</span> 년
                 </p>
               </div>
 
-              {/* 3단 결재란 (작성자: 선택한 성명, 검토/승인: 수동 직인용 완벽 빈칸) */}
-              <table className="border-collapse border-2 border-slate-900 text-center text-[10px]">
+              {/* 3단 결재란 (작성자: 선택한 성명, 검토/승인: 서명란) */}
+              <table className="border-collapse border-2 border-slate-900 text-center text-[10px] ml-auto">
                 <tbody>
                   <tr>
                     <td rowSpan={2} className="bg-slate-100 font-bold border border-slate-900 px-1.5 py-1 w-6 text-center">결<br/>재</td>
@@ -565,7 +650,7 @@ function EquipmentChecklistPrintModal({
                     <td className="w-16 border border-slate-900 bg-slate-100 font-bold py-0.5">승 인</td>
                   </tr>
                   <tr className="h-10">
-                    <td className="border border-slate-900 font-extrabold align-middle text-slate-900 px-1">{inspector}</td>
+                    <td className="border border-slate-900 font-extrabold align-middle text-slate-900 px-1 text-center">{inspector}</td>
                     <td className="border border-slate-900 w-16 bg-white"></td>
                     <td className="border border-slate-900 w-16 bg-white"></td>
                   </tr>
@@ -573,82 +658,78 @@ function EquipmentChecklistPrintModal({
               </table>
             </div>
 
-            {/* 설비 및 점검 기본정보 표 (A4 한 면 피팅) */}
-            <table className="w-full text-[11px] border-collapse border-2 border-slate-900">
+            {/* 설비 정보 라인 */}
+            <table className="w-full text-xs border-collapse border-2 border-slate-900">
               <tbody>
-                <tr>
-                  <td className="bg-slate-100 font-bold p-1.5 w-24 border border-slate-900">설비 관리번호</td>
-                  <td className="p-1.5 border border-slate-900 font-mono font-extrabold text-blue-900">{equipment.manage_no}</td>
-                  <td className="bg-slate-100 font-bold p-1.5 w-24 border border-slate-900">설 비 명</td>
-                  <td className="p-1.5 border border-slate-900 font-extrabold text-slate-900">{equipment.equipment_name}</td>
-                </tr>
-                <tr>
-                  <td className="bg-slate-100 font-bold p-1.5 border border-slate-900">설치 장소</td>
-                  <td className="p-1.5 border border-slate-900 font-medium">{equipment.install_location}</td>
-                  <td className="bg-slate-100 font-bold p-1.5 border border-slate-900">점검 년월</td>
-                  <td className="p-1.5 border border-slate-900 font-mono font-bold text-slate-900">{checkMonth}</td>
-                </tr>
-                <tr>
-                  <td className="bg-slate-100 font-bold p-1.5 border border-slate-900">규격 / 동력</td>
-                  <td className="p-1.5 border border-slate-900 font-semibold">{equipment.capacity_spec || '-'}</td>
-                  <td className="bg-slate-100 font-bold p-1.5 border border-slate-900">시리얼 번호</td>
-                  <td className="p-1.5 border border-slate-900 font-mono">{equipment.serial_no || '-'}</td>
+                <tr className="h-8">
+                  <td className="bg-slate-100 font-bold p-1.5 w-20 border border-slate-900 text-center">설 비 명</td>
+                  <td className="p-1.5 border border-slate-900 font-black text-slate-900 w-52">{equipment.equipment_name}</td>
+                  <td className="bg-slate-100 font-bold p-1.5 w-20 border border-slate-900 text-center">관리번호</td>
+                  <td className="p-1.5 border border-slate-900 font-mono font-extrabold text-blue-900 w-36">{equipment.manage_no}</td>
+                  <td className="bg-slate-100 font-bold p-1.5 w-20 border border-slate-900 text-center">기기번호</td>
+                  <td className="p-1.5 border border-slate-900 font-mono font-bold text-slate-900">{equipment.serial_no || '-'}</td>
                 </tr>
               </tbody>
             </table>
 
-            {/* 점검 항목 테이블 (A4 1페이지 컴팩트 맞춤) */}
-            <div>
-              <h4 className="font-bold text-[11px] mb-1 flex items-center justify-between">
-                <span>■ 일일 / 주간 정기 점검 항목 (범례: O-양호, X-불량/조치, N/A-해당없음)</span>
-                <span className="text-[10px] text-slate-600 font-bold">점검 담당자: {inspector}</span>
-              </h4>
-
-              <table className="w-full text-[10px] border-collapse border-2 border-slate-900 text-left">
-                <thead>
-                  <tr className="bg-slate-100 border-b-2 border-slate-900 text-center font-bold">
-                    <th className="p-1 border border-slate-900 w-7">No</th>
-                    <th className="p-1 border border-slate-900 w-40">점검 항목</th>
-                    <th className="p-1 border border-slate-900">점검 기준 및 방법</th>
-                    <th className="p-1 border border-slate-900 w-10">주기</th>
-                    <th className="p-1 border border-slate-900 w-20">점검 결과</th>
-                    <th className="p-1 border border-slate-900 w-28">조치 및 특기사항</th>
+            {/* 메인 점검 항목 테이블 (사규 EZC M-101-6 100% 동일) */}
+            <table className="w-full text-[11px] border-collapse border-2 border-slate-900 text-left">
+              <thead>
+                <tr className="bg-slate-100 border-b-2 border-slate-900 text-center font-bold">
+                  <th className="p-2 border border-slate-900 w-24">점검개소</th>
+                  <th className="p-2 border border-slate-900">점검항목 및 합격기준</th>
+                  <th className="p-2 border border-slate-900 w-20">점검주기</th>
+                  <th className="p-1 border border-slate-900 w-36 text-center">
+                    <div>{yearText} 년 {monthText} 월</div>
+                    <div className="grid grid-cols-5 border-t border-slate-900 mt-1 pt-0.5 text-[10px]">
+                      <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {specData.items.map((it, idx) => (
+                  <tr key={idx} className="h-9">
+                    <td className="p-2 border border-slate-900 text-center font-bold bg-slate-50/50">{it.part}</td>
+                    <td className="p-2 border border-slate-900 font-medium text-slate-900">{it.item}</td>
+                    <td className="p-2 border border-slate-900 text-center font-bold text-slate-700">{it.cycle}</td>
+                    <td className="p-0 border border-slate-900 text-center">
+                      <div className="grid grid-cols-5 h-full items-center divide-x divide-slate-900 text-[10px] font-mono">
+                        <span className="h-full flex items-center justify-center"></span>
+                        <span className="h-full flex items-center justify-center"></span>
+                        <span className="h-full flex items-center justify-center"></span>
+                        <span className="h-full flex items-center justify-center"></span>
+                        <span className="h-full flex items-center justify-center"></span>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {CHECK_ITEMS.map((item) => (
-                    <tr key={item.no} className="h-6">
-                      <td className="p-1 border border-slate-900 text-center font-mono font-bold">{item.no}</td>
-                      <td className="p-1 border border-slate-900 font-bold text-slate-900">{item.item}</td>
-                      <td className="p-1 border border-slate-900 text-slate-800">{item.standard}</td>
-                      <td className="p-1 border border-slate-900 text-center font-semibold">{item.cycle}</td>
-                      <td className="p-1 border border-slate-900 text-center font-bold text-slate-700">
-                        [ O / X ]
-                      </td>
-                      <td className="p-1 border border-slate-900"></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
 
-            {/* 종합의견 및 직인 도장 하단 배치 (1Page 완료) */}
-            <div className="grid grid-cols-12 gap-2 border-2 border-slate-900 p-2 text-xs">
-              <div className="col-span-8 flex flex-col justify-between">
-                <p className="font-bold text-slate-900 text-[11px]">■ 종합 의견 및 특이사항 조치 내역 (점검 상태 100% 양호)</p>
-                <div className="h-10 border border-dashed border-slate-400 rounded p-1 text-[10px] text-slate-500 font-mono">
-                  ※ 무결점 설비 점검 완료 (이상 발생 시 CAR 부적합 조치 연계 기록)
+            {/* 하단 점검자 및 안내사항 (사규 EZC M-101-6 복원) */}
+            <div className="border-2 border-slate-900 p-2.5 text-[10.5px] leading-relaxed space-y-1 bg-slate-50/30">
+              <div className="flex justify-between items-center font-bold text-slate-900 border-b border-slate-300 pb-1">
+                <span>점  검  자 : <strong className="text-blue-900 font-black">{inspector}</strong> (설비관리담당자)</span>
+                <span className="text-[10px] text-slate-600 font-mono">점검방법 (양호: ✔, 불량: × 로 표기함)</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-700 pt-1">
+                <div>
+                  <p className="font-bold text-slate-900">※ 특기사항</p>
+                  <p>∙ 이상발생 시 품질관리부서장에게 보고 후 조치를 받는다.</p>
+                </div>
+                <div>
+                  <p className="font-bold text-slate-900">※ 점검일자</p>
+                  <p>∙ 주간점검 : 매주 수요일 / 월간점검 : 매월 마지막 수요일</p>
                 </div>
               </div>
-              <div className="col-span-4 flex flex-col items-center justify-center border-l-2 border-slate-400 pl-2">
-                <span className="font-extrabold text-[11px] text-slate-900 mb-0.5">(주) 이 지 원 제조관리</span>
-                <img src="/ezone_stamp.png" alt="(주)이지원 품질보증 직인" className="h-12 w-12 object-contain mix-blend-multiply" />
-              </div>
-
             </div>
 
-            <div className="text-[9px] text-slate-500 text-right font-mono">
-              (주)이지원 MES 제조설비 관리 규정 C401 (A4 1 Page 표준서식)
+            {/* 풋터 양식번호 */}
+            <div className="flex justify-between items-center text-[9.5px] font-mono text-slate-600 pt-1">
+              <span>EZC-M-101-6</span>
+              <span className="font-bold text-slate-900">(주) 이지원</span>
+              <span>A4 (210 × 297)</span>
             </div>
           </div>
         </div>
