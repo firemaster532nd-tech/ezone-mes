@@ -28,56 +28,67 @@ interface GodexLabelPrinterProps {
 // ZPL removed, moved to HTML pixel method.
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 라벨 미리보기 컴포넌트 (60×40mm 시뮬레이션)
+// 라벨 미리보기 컴포넌트 (80×60mm 사규 표준 라벨 템플릿 100% 일치 시뮬레이션)
 // ─────────────────────────────────────────────────────────────────────────────
 function LabelPreview({ data }: { data: LabelData }) {
-  const spec = [
+  const [qrUrl, setQrUrl] = useState<string>('');
+
+  const specText = [
+    data.thickness ? (typeof data.thickness === 'number' ? `${data.thickness}T` : String(data.thickness)) : '',
     data.density ? `${data.density}K` : '',
-    data.thickness ? `${data.thickness}T` : '',
     data.width_mm ? `${data.width_mm}W` : '',
     data.length_mm ? `${data.length_mm}L` : '',
-  ].filter(Boolean).join(' ');
+  ].filter(Boolean).join(' ') || data.thickness?.toString() || '규격 미기재';
 
-  const dateStr = (data.received_date || new Date().toISOString().slice(0, 10))
-    .slice(2).replace(/-/g, '.');
+  const lotNo = data.lot_number || '260807GI001';
+  const itemName = data.item_name || '품목명 미지정';
+  const locationText = data.location_name || data.location || '위치 미지정';
+  const qtyText = `${data.qty_current || 1} ${data.unit || 'EA'}`;
+
+  useEffect(() => {
+    const payload = `LOT: ${lotNo}\n제품명: ${itemName}\n규격: ${specText}\n위치: ${locationText}\n수량: ${qtyText}`;
+    generateQrDataUrl(payload, 150).then(setQrUrl);
+  }, [lotNo, itemName, specText, locationText, qtyText]);
+
+  const barcodeSvg = generateCode128Svg(lotNo, 28);
 
   return (
     <div
-      className="bg-white border-2 border-gray-800 rounded shadow-md mx-auto"
-      style={{ width: '240px', height: '160px', padding: '8px', fontFamily: 'monospace', position: 'relative' }}
+      className="bg-white border-2 border-slate-800 rounded-lg shadow-xl mx-auto p-2 text-slate-900 font-sans"
+      style={{ width: '320px', height: '240px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', justifyBetween: 'space-between', position: 'relative' }}
     >
-      <div style={{ fontSize: '9px', color: '#666', fontWeight: 'bold' }}>{data.category}</div>
-      <div style={{ fontSize: '11px', fontWeight: 'bold', marginBottom: '2px', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-        {data.item_name?.slice(0, 22) || '—'}
-      </div>
-      <div style={{ fontSize: '9px', marginBottom: '2px' }}>규격: {spec || '—'}</div>
-      <div style={{ fontSize: '9px', marginBottom: '2px' }}>수량: {data.qty_current} {data.unit || 'EA'}</div>
-      <div style={{ fontSize: '9px', marginBottom: '4px' }}>입고: {dateStr}</div>
-      <div style={{ fontSize: '9px', marginBottom: '4px', color: '#1d4ed8', fontWeight: 'bold' }}>위치: {data.location_name || data.location || '위치 미지정'}</div>
-
-      {/* 바코드 시뮬레이션 */}
-      <div style={{ display: 'flex', gap: '1px', height: '28px', marginBottom: '2px' }}>
-        {Array.from(data.lot_number || '').map((c, i) => (
-          <div
-            key={i}
-            style={{
-              width: `${(c.charCodeAt(0) % 3) + 1}px`,
-              background: '#000',
-              height: '100%',
-            }}
-          />
-        ))}
+      {/* 헤더 */}
+      <div className="flex justify-between items-center border-b border-indigo-900 pb-1 text-[11px] font-bold">
+        <span className="text-red-700 font-black">(주)이지원</span>
+        <span className="text-indigo-900 font-black">🏷️ 원부자재 LOT 라벨</span>
+        <span className="text-slate-500 font-mono text-[9px]">
+          {data.received_date || new Date().toISOString().slice(0, 10)}
+        </span>
       </div>
 
-      <div style={{ fontSize: '8px', textAlign: 'center', letterSpacing: '1px' }}>
-        {data.lot_number || '—'}
+      {/* 바디 (QR + 표준정보) */}
+      <div className="flex gap-2 items-center my-1.5 flex-1">
+        <div className="w-[60px] h-[60px] flex-shrink-0 border border-slate-300 rounded overflow-hidden bg-white p-0.5">
+          {qrUrl ? <img src={qrUrl} alt="QR" className="w-full h-full object-contain" /> : <div className="w-full h-full bg-slate-100 flex items-center justify-center text-[8px]">QR...</div>}
+        </div>
+        <div className="flex-1 overflow-hidden space-y-0.5 font-mono text-[10px] leading-tight">
+          <div className="font-extrabold text-blue-700 text-xs truncate">{lotNo}</div>
+          <div className="truncate"><span className="text-slate-500 font-normal">품명:</span> <strong className="text-slate-900">{itemName}</strong></div>
+          <div className="truncate"><span className="text-slate-500 font-normal">규격:</span> <strong className="text-amber-700 font-extrabold">{specText}</strong></div>
+          <div className="truncate"><span className="text-slate-500 font-normal">위치:</span> <strong className="text-emerald-700 font-bold">{locationText}</strong></div>
+        </div>
       </div>
 
-      <div style={{
-        position: 'absolute', bottom: '4px', right: '6px',
-        fontSize: '7px', color: '#aaa',
-      }}>
-        이지원 MES
+      {/* 수량 수불바 */}
+      <div className="bg-slate-100 border border-slate-300 rounded px-2 py-0.5 text-[10px] font-mono flex justify-between items-center mb-1">
+        <span className="text-slate-600 font-semibold">재고수량:</span>
+        <strong className="text-blue-700 font-extrabold">{qtyText}</strong>
+      </div>
+
+      {/* 1D 바코드 */}
+      <div className="border-t border-dashed border-slate-300 pt-1 text-center">
+        <div className="w-[90%] mx-auto overflow-hidden" dangerouslySetInnerHTML={{ __html: barcodeSvg }} />
+        <div className="text-[9px] font-mono text-slate-600 tracking-wider mt-0.5">{lotNo}</div>
       </div>
     </div>
   );
@@ -267,7 +278,9 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
 
       {/* 라벨 미리보기 */}
       <div className="mb-4">
-        <p className="text-xs text-gray-500 mb-2 text-center">📋 라벨 미리보기 (60mm × 40mm)</p>
+        <p className="text-xs font-bold text-gray-700 mb-2 text-center flex items-center justify-center gap-1">
+          📋 (주)이지원 사규 표준 라벨 미리보기 (80mm × 60mm)
+        </p>
         <LabelPreview data={labelData} />
       </div>
 
