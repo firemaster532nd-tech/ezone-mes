@@ -180,7 +180,7 @@ export function FnAssemblyPage() {
               </select>
             </div>
 
-            {/* 엑셀 수불대장 표준 포장 단위 안내 뱃지 */}
+            {/* 엑셀 수불대장 표준 포장 단위 & 볼트/너트 소요량 안내 뱃지 */}
             <div className="bg-slate-900/90 p-2.5 rounded-xl border border-indigo-800/60 text-xs font-mono space-y-1">
               <div className="flex justify-between text-indigo-300 font-bold">
                 <span>📦 엑셀 수불 표준 포장단위:</span>
@@ -188,7 +188,11 @@ export function FnAssemblyPage() {
                   {diam === 100 ? '12EA/BOX (240~1440EA/PLT)' : diam === 75 ? '24EA/BOX (960EA/PLT)' : '30EA/BOX (1440EA/PLT)'}
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400">
+              <div className="flex justify-between text-emerald-400 font-bold pt-0.5">
+                <span>🔩 부자재 소요량(BOM):</span>
+                <span className="text-emerald-300">제품 1개당 볼트/너트 4EA 자동차감</span>
+              </div>
+              <p className="text-[10px] text-slate-400 pt-0.5">
                 완제품 생산 LOT 예시: <strong className="text-emerald-400">260720-FN-{diam}(0001~1680)</strong>
               </p>
             </div>

@@ -176,6 +176,13 @@ export async function fnAssemblyRoutes(app: FastifyInstance) {
         );
       }
 
+      // 4. 볼트, 너트, 와셔 세트 자동 소모 차감 (제품 1개당 4개 소모)
+      const boltQtyUsed = qtyNum * 4;
+      await client.query(
+        `UPDATE material_lots SET qty_current = GREATEST(0, qty_current - $1), updated_at = NOW() WHERE (item_name ILIKE '%볼트%' OR category ILIKE '%부자재%') AND is_active = TRUE`,
+        [boltQtyUsed]
+      );
+
       await client.query('COMMIT');
       return { success: true, data: finished };
     } catch (e: any) {
