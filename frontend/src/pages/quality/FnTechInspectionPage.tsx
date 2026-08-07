@@ -403,8 +403,13 @@ export function FnTechInspectionPage() {
           </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => handleOpenLabelPrinter({ item_name: getFullItemName(), lot_number: lotNumber, qty: qty || 100 })}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-500 rounded-xl text-xs font-bold transition shadow"
+            onClick={() => handleOpenLabelPrinter({
+              item_name: getFullItemName(),
+              lot_number: lotNumber,
+              qty: qty ? Number(qty) : 100,
+              location: location || 'FIELD-1F-MAT'
+            })}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-500 rounded-xl text-xs font-bold transition shadow hover:scale-105 active:scale-95"
           >
             <Printer className="h-4 w-4 text-emerald-200" /> 🏷️ 80×60mm 라벨 선(先) 출력
           </button>
