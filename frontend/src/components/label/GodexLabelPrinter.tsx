@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Printer, Barcode, Wifi, WifiOff, AlertCircle, CheckCircle, Package } from 'lucide-react';
-import { generateStandardLotLabelHtml, generateSerializedLotLabelBatchHtml } from '@/lib/barcodeGenerator';
+import { generateStandardLotLabelHtml, generateSerializedLotLabelBatchHtml, generateQrDataUrl, generateCode128Svg } from '@/lib/barcodeGenerator';
 import { printHtmlViaQzTray } from '@/lib/qzTrayPrinter';
 
 interface LabelData {
