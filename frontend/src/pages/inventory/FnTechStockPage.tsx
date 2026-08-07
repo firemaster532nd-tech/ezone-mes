@@ -82,6 +82,10 @@ const DAILY_ITEMS = [
     diameter_mm: 50,
     spec,
   })),
+  // 소모성 부자재 (볼트, 파렛트, 패킹)
+  { item_name: '볼트,너트,와샤 세트', diameter_mm: 0, spec: '공용' },
+  { item_name: '한국/화창 파렛트', diameter_mm: 0, spec: '공용' },
+  { item_name: '상/하부 고무패킹', diameter_mm: 0, spec: '공용' },
 ];
 
 
