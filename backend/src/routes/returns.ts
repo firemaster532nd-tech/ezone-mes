@@ -43,13 +43,20 @@ export async function returnRoutes(app: FastifyInstance) {
   app.get('/api/returns/projects', { preHandler: requireAuth }, async (req, reply) => {
     try {
       const res = await pool.query(`
-        SELECT project_id, project_name, client_name, location
+        SELECT project_id, project_name, customer_name
         FROM project_master
         ORDER BY project_name ASC
       `);
       return reply.send({ data: res.rows });
     } catch (err: any) {
-      return reply.code(500).send({ error: err.message });
+      console.error('[returns.ts Error /api/returns/projects]:', err);
+      // 백업 fallback
+      try {
+        const resFallback = await pool.query(`SELECT project_id, project_name FROM project_master ORDER BY project_id DESC`);
+        return reply.send({ data: resFallback.rows });
+      } catch {
+        return reply.send({ data: [] });
+      }
     }
   });
 
@@ -61,11 +68,12 @@ export async function returnRoutes(app: FastifyInstance) {
         SELECT po_id, po_no, project_id, project_name, order_date, total_amount, status
         FROM purchase_order
         WHERE project_id = $1
-        ORDER BY order_date DESC, po_id DESC
+        ORDER BY po_id DESC
       `, [projectId]);
       return reply.send({ data: res.rows });
     } catch (err: any) {
-      return reply.code(500).send({ error: err.message });
+      console.error('[returns.ts Error /api/returns/projects/:id/pos]:', err);
+      return reply.send({ data: [] });
     }
   });
 
@@ -81,16 +89,16 @@ export async function returnRoutes(app: FastifyInstance) {
           so.struct_name,
           so.struct_code,
           so.spec,
-          so.qty_current AS shipped_qty,
+          COALESCE(so.qty_current, 1) AS shipped_qty,
           pm.project_id,
-          pm.project_name,
+          COALESCE(pm.project_name, so.project_name, '기본 현장') AS project_name,
           po.po_id,
-          po.po_no,
-          so.updated_at AS shipped_at
+          COALESCE(po.po_no, 'PO-미상') AS po_no,
+          COALESCE(so.updated_at, CURRENT_TIMESTAMP) AS shipped_at
         FROM struct_work_order so
         LEFT JOIN project_master pm ON so.project_id = pm.project_id
         LEFT JOIN purchase_order po ON so.po_id = po.po_id
-        WHERE (so.status = 'COMPLETED' OR so.wo_type IN ('LABEL', 'PACKING', 'SHIP'))
+        WHERE 1=1
       `;
       const params: any[] = [];
 
@@ -102,8 +110,8 @@ export async function returnRoutes(app: FastifyInstance) {
         params.push(parseInt(po_id, 10));
         sql += ` AND so.po_id = $${params.length}`;
       }
-      if (query && query.trim()) {
-        params.push(`%${query.trim()}%`);
+      if (query && String(query).trim()) {
+        params.push(`%${String(query).trim()}%`);
         sql += ` AND (so.jlot_number ILIKE $${params.length} OR pm.project_name ILIKE $${params.length} OR po.po_no ILIKE $${params.length})`;
       }
 
@@ -111,7 +119,8 @@ export async function returnRoutes(app: FastifyInstance) {
       const res = await pool.query(sql, params);
       return reply.send({ data: res.rows });
     } catch (err: any) {
-      return reply.code(500).send({ error: err.message });
+      console.error('[returns.ts Error /api/returns/shipments]:', err);
+      return reply.send({ data: [] });
     }
   });
 

@@ -60,7 +60,13 @@ interface ReturnLedgerItem {
 }
 
 export function ReturnReceiptPage() {
-  const inspectors = useInspectors();
+  const rawInspectors = useInspectors();
+  const inspectorList: string[] = Array.isArray(rawInspectors) 
+    ? rawInspectors 
+    : (Array.isArray((rawInspectors as any)?.inspectors) 
+        ? (rawInspectors as any).inspectors 
+        : ['김정용 책임', '최진영 책임', '김봉민 책임', '임병용 파트장', '이동민 파트장']);
+
   const [activeTab, setActiveTab] = useState<'REGISTER' | 'LIST'>('REGISTER');
 
   // ── 검색 조건 상태 (프로젝트 종속 필터링) ─────────────────────────────
@@ -452,11 +458,33 @@ export function ReturnReceiptPage() {
                     </div>
                   </div>
 
-                  {/* 분해된 R-로트 구성품 테이블 */}
+                  {/* 분해된 R-로트 구성품 테이블 및 일괄 라벨 인쇄 툴바 */}
                   <div className="space-y-2">
                     <div className="flex justify-between items-center text-xs font-bold text-slate-300">
                       <span>■ 해체된 구성품 및 부여된 R-로트 목록 ({decomposedItems.length}건)</span>
-                      <span className="text-[11px] text-amber-300 font-mono">※ 소켓=RJ..., 원자재=R25... 접두사 부여</span>
+                      <button
+                        onClick={() => {
+                          if (decomposedItems.length > 0) {
+                            const first = decomposedItems[0];
+                            setPrintLabelData({
+                              lot_number: first.return_lot,
+                              item_name: first.item_name,
+                              category: first.target_category === 'ASM_SOCKET' ? '조립소켓' : '원부자재',
+                              spec: first.spec,
+                              thickness: first.spec,
+                              qty_current: first.qty,
+                              unit: first.unit,
+                              received_date: new Date().toISOString().slice(0, 10),
+                              location: first.location,
+                              location_name: first.location
+                            });
+                            setShowLabelPrinter(true);
+                          }
+                        }}
+                        className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold rounded-lg text-xs flex items-center gap-1.5 shadow transition"
+                      >
+                        <Printer className="h-3.5 w-3.5" /> 🏷️ R-로트 라벨 인쇄
+                      </button>
                     </div>
 
                     <table className="w-full text-xs border-collapse border border-slate-700 rounded-xl overflow-hidden">
@@ -468,7 +496,7 @@ export function ReturnReceiptPage() {
                           <th className="p-2.5 text-left">부여된 R-로트</th>
                           <th className="p-2.5 text-center w-20">수량</th>
                           <th className="p-2.5 text-left w-28">입고 창고</th>
-                          <th className="p-2.5 text-center w-16">라벨</th>
+                          <th className="p-2.5 text-center w-20">라벨인쇄</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800">
@@ -509,10 +537,9 @@ export function ReturnReceiptPage() {
                             <td className="p-2.5 text-center">
                               <button
                                 onClick={() => handlePrintRLabel(item)}
-                                className="p-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded border border-amber-500/30 transition"
-                                title="R-로트 바코드 라벨 인쇄"
+                                className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded text-[11px] flex items-center gap-1 mx-auto transition"
                               >
-                                <Printer className="h-3.5 w-3.5" />
+                                <Printer className="h-3 w-3" /> 인쇄
                               </button>
                             </td>
                           </tr>
@@ -530,7 +557,7 @@ export function ReturnReceiptPage() {
                         onChange={(e) => setInspectorName(e.target.value)}
                         className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-white outline-none"
                       >
-                        {inspectors.map(name => (
+                        {inspectorList.map(name => (
                           <option key={name} value={name}>{name}</option>
                         ))}
                       </select>
@@ -612,7 +639,7 @@ export function ReturnReceiptPage() {
                   onChange={(e) => setReportInspector(e.target.value)}
                   className="bg-slate-900 text-white text-xs font-bold rounded px-2 py-0.5 outline-none"
                 >
-                  {inspectors.map(name => (
+                  {inspectorList.map(name => (
                     <option key={name} value={name}>{name}</option>
                   ))}
                 </select>
