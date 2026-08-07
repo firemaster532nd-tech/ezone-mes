@@ -472,69 +472,131 @@ function EquipmentChecklistPrintModal({
     { no: 10, item: '설비 주변 5S 청정 상태', standard: '원료 찌꺼기 제거, 바닥 기름때 청소 완료', cycle: '일일' },
   ];
 
-  // 설비 관리번호 및 설비명 기반 사규 EZC M-101-6 점검항목 자동 매칭
+  // 설비 관리번호 및 설비명 기반 사규 EZC M-101-6 점검항목 1:1 정밀 자동 매칭
   const getEquipmentSpecItems = () => {
-    const manageNo = (equipment.manage_no || '').toUpperCase();
-    const name = (equipment.equipment_name || '').toUpperCase();
+    const manageNo = (equipment.manage_no || '').toUpperCase().trim();
+    const name = (equipment.equipment_name || '').toUpperCase().trim();
 
-    // 1. 배합기 (EZC M-11 ~ M-16 / 믹서)
-    if (manageNo.includes('M-1') || name.includes('믹서') || name.includes('MIXER') || name.includes('배합')) {
+    // 1. Chiller (냉각기) - EZC M-21-2, EZC M-23-5, Chiller 등
+    if (name.includes('CHILLER') || name.includes('냉각기') || manageNo.includes('M-21-2') || manageNo.includes('M-23-5')) {
       return {
-        groupName: 'High Speed Mixer & Cooling Mixer (배합기)',
+        groupName: 'Chiller (냉각기)',
+        items: [
+          { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+          { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+          { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호할 것', cycle: '주 1회' },
+          { part: '모    터', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+          { part: '냉 각 수', item: '오수 발생 유무: 냉각수의 오염으로 인한 오수 발생이 없을 것', cycle: '주 1회' },
+          { part: '냉매가스', item: '가스게이지: 가스게이지 설정 값을 확인 할 것', cycle: '주 1회' },
+        ]
+      };
+    }
+
+    // 2. 온조기 - EZC M-21-3, EZC M-23-2, EZC M-23-3, EZC M-23-4 등
+    if (name.includes('온조기') || manageNo.includes('M-21-3') || manageNo.includes('M-23-2') || manageNo.includes('M-23-3') || manageNo.includes('M-23-4')) {
+      return {
+        groupName: '온조기',
+        items: [
+          { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+          { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+          { part: '조작판넬', item: '작동상태: 조작판넬 작동이 원활할 것', cycle: '주 1회' },
+          { part: '회 전 부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
+          { part: '열매체유', item: '유량: 유량표시기 적정량 이하로 내려가지 않을 것', cycle: '주 1회' },
+        ]
+      };
+    }
+
+    // 3. Paddle Mixer - EZC M-09
+    if (name.includes('PADDLE') || manageNo.includes('M-09')) {
+      return {
+        groupName: 'Paddle Mixer',
+        items: [
+          { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+          { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+          { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호할 것', cycle: '주 1회' },
+          { part: '패    들', item: '스케일 제거: 매주 스케일 제거하여 배합에 이상이 없을 것', cycle: '주 1회' },
+          { part: '회 전 부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '주 1회' },
+        ]
+      };
+    }
+
+    // 4. 35Φ Single Extruder - EZC M-10
+    if (name.includes('35') || manageNo.includes('M-10')) {
+      return {
+        groupName: '35Φ Single Extruder',
+        items: [
+          { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+          { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+          { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호할 것', cycle: '주 1회' },
+          { part: '모    터', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+          { part: '냉 각 수', item: '냉강수량: 적정수량 이하로 내려가지 않을 것', cycle: '주 1회' },
+          { part: '윤 활 유', item: '유량: 유량표시기 적정량 이하로 내려가지 않을 것', cycle: '주 1회' },
+        ]
+      };
+    }
+
+    // 5. 120Φ 싱글 압출기 / 65Φ 코니칼 압출기 - EZC M-21-1, EZC M-23-1, EZC M-24
+    if (name.includes('EXTRUDER') || name.includes('압출') || manageNo.includes('M-21-1') || manageNo.includes('M-23-1') || manageNo.includes('M-24')) {
+      return {
+        groupName: name.includes('120') ? '120Φ Single Extruder' : 'Twin Conical Extruder (65Φ)',
+        items: [
+          { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+          { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+          { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호할 것', cycle: '주 1회' },
+          { part: '모    터', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+          { part: '윤 활 유', item: '유량: 유량표시기 적정량 이하로 내려가지 않을 것', cycle: '주 1회' },
+          { part: '회 전 부', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+        ]
+      };
+    }
+
+    // 6. 시트 재단기(커팅머신) - EZC M-31
+    if (name.includes('재단') || name.includes('커팅') || manageNo.includes('M-31')) {
+      return {
+        groupName: '시트 재단기(커팅머신)',
         items: [
           { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
           { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
           { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호할 것', cycle: '주 1회' },
           { part: '회 전 부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
-          { part: '벨 트 부', item: '장력상태: 벨트의 느슨함이 없을 것', cycle: '월 1회' },
+          { part: '회 전 부', item: '윤활유 도포: 회전축에 윤활유(WD-40)를 발라 마모가 없도록 할 것', cycle: '주 1회' },
         ]
       };
     }
-    // 2. 압출기 & 온조기 & Chiller (EZC M-21 ~ M-24)
-    if (manageNo.includes('M-2') || name.includes('압출') || name.includes('EXTRUDER') || name.includes('온조기') || name.includes('CHILLER') || name.includes('냉각기')) {
+
+    // 7. 핫프레스 - EZC M-41
+    if (name.includes('프레스') || name.includes('PRESS') || manageNo.includes('M-41')) {
       return {
-        groupName: '120Φ 싱글 압출기, 65Φ 코니칼 압출기, 온조기, Chiller',
+        groupName: '핫프레스',
         items: [
           { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
           { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
-          { part: '스 위 치', item: '작동상태: S/W 조작판넬의 작동상태가 원활할 것', cycle: '주 1회' },
-          { part: '회 전 부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
-          { part: '열매체유 / 윤활유', item: '유량: 유량표시기 적정량 이하로 내려가지 않을 것', cycle: '주 1회' },
-          { part: '냉 각 수', item: '오수 발생 유무: 냉각수의 오염으로 인한 오수 발생이 없을 것', cycle: '월 1회' },
-        ]
-      };
-    }
-    // 3. 재단기 & 핫프레스 (EZC M-31, M-41)
-    if (manageNo.includes('M-3') || manageNo.includes('M-4') || name.includes('재단') || name.includes('커팅') || name.includes('프레스') || name.includes('PRESS')) {
-      return {
-        groupName: '시트 재단기(커팅머신), 핫프레스',
-        items: [
-          { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
-          { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
-          { part: '스 위 치', item: '작동상태: S/W 및 조작판넬의 작동이 원활할 것', cycle: '주 1회' },
-          { part: '회 전 부', item: '주유상태: 회전축에 윤활유(WD-40)를 발라 마모가 없을 것', cycle: '주 1회' },
-          { part: '모    터', item: '작동/소음: 상하 작동 원활 및 과도한 소음이 없을 것', cycle: '월 1회' },
+          { part: '조작판넬', item: '작동상태: 작동이 원활할 것', cycle: '주 1회' },
+          { part: '모    터', item: '작동상태: 상하 작동이 원활할 것', cycle: '월 1회' },
+          { part: '모    터', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
           { part: '열매체유', item: '주입상태: 적정 수준 이상으로 유지할 것', cycle: '주 1회' },
         ]
       };
     }
-    // 4. Air 컴프레샤 (EZC M-51 ~ M-53)
-    if (manageNo.includes('M-51') || manageNo.includes('M-52') || manageNo.includes('M-53') || name.includes('컴프') || name.includes('COMP')) {
+
+    // 8. Air 컴프레샤 - EZC M-51, M-52, M-53
+    if (name.includes('컴프') || name.includes('COMP') || manageNo.includes('M-51') || manageNo.includes('M-52') || manageNo.includes('M-53')) {
       return {
-        groupName: 'Air 컴프레샤 (AC101, AC102, 200CU)',
+        groupName: 'Air 컴프레샤',
         items: [
           { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
           { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
-          { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호할 것', cycle: '주 1회' },
+          { part: '스 위 치', item: '작동상태: S/W의 작동상태는 양호 할 것', cycle: '주 1회' },
           { part: '배    관', item: '누출상태: 에어의 누출이 없을 것', cycle: '월 1회' },
           { part: '기어회전부', item: '주유상태: 회전축에 충분히 주유될 것', cycle: '월 1회' },
         ]
       };
     }
-    // 5. 집진기 (EZC M-54, M-55)
-    if (manageNo.includes('M-54') || manageNo.includes('M-55') || name.includes('집진')) {
+
+    // 9. 집진기 - EZC M-54, M-55
+    if (name.includes('집진') || manageNo.includes('M-54') || manageNo.includes('M-55')) {
       return {
-        groupName: '집진기 (HP3001, HP3002)',
+        groupName: '집진기',
         items: [
           { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
           { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
@@ -544,7 +606,23 @@ function EquipmentChecklistPrintModal({
         ]
       };
     }
-    // 기본 디폴트 일반 설비
+
+    // 10. High Speed Mixer & Cooling Mixer (기타 믹서류 - EZC M-01 ~ M-08)
+    if (name.includes('MIXER') || name.includes('믹서') || manageNo.includes('M-0') || name.includes('배합')) {
+      return {
+        groupName: 'High Speed Mixer & Cooling Mixer',
+        items: [
+          { part: '몸    체', item: '청결상태: 먼지 및 이물질의 부착이 없을 것', cycle: '주 1회' },
+          { part: '전 원 부', item: '절연상태: 케이블의 마모 및 피복의 파손이 없을 것', cycle: '주 1회' },
+          { part: '조작판넬', item: '작동상태: 작동이 원활할 것', cycle: '주 1회' },
+          { part: '모    터', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+          { part: '이송배관', item: '배관막힘: 배관부 막힘이 없을 것', cycle: '주 1회' },
+          { part: '회 전 부', item: '이상소음: 과도한 소음이 없을 것', cycle: '주 1회' },
+        ]
+      };
+    }
+
+    // 디폴트 
     return {
       groupName: '일반 제조설비 점검표',
       items: [
