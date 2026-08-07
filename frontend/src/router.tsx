@@ -87,6 +87,7 @@ import { LoginLogsPage } from '@/pages/settings/LoginLogsPage';
 import InventoryLedgerPage from '@/pages/inventory/InventoryLedgerPage';
 import { SuperAdminResetPage } from '@/pages/settings/SuperAdminResetPage';
 import { MaterialStockPage } from '@/pages/inventory/MaterialStockPage';
+import MasterMaterialLedgerPage from '@/pages/inventory/MasterMaterialLedgerPage';
 import { MaterialLedgerPage } from '@/pages/inventory/MaterialLedgerPage';
 import { MaterialTransactionPage } from '@/pages/inventory/MaterialTransactionPage';
 import { InitialMaterialPage } from '@/pages/inventory/InitialMaterialPage';
