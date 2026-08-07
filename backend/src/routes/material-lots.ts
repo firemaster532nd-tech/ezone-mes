@@ -430,28 +430,8 @@ export async function materialLotsRoutes(app: FastifyInstance) {
     if (lot_number) { params.push(`%${lot_number}%`); lotFilter = `AND ml.lot_number ILIKE $${params.length}`; }
 
     const sql = `
-      WITH date_series AS (
-        SELECT generate_series($1::date, $2::date, '1 day')::date AS d
-      ),
-      lot_dates AS (
-        SELECT DISTINCT mt.lot_id, ds.d AS txn_date
-        FROM material_transactions mt
-        JOIN date_series ds ON mt.txn_date <= ds.d
-        WHERE mt.txn_date BETWEEN ($1::date - INTERVAL '1 year') AND $2::date
-      ),
-      daily AS (
-        SELECT
-          mt.lot_id,
-          mt.txn_date,
-          COALESCE(SUM(mt.qty) FILTER (WHERE mt.txn_type='IN'),  0) AS qty_in,
-          COALESCE(SUM(ABS(mt.qty)) FILTER (WHERE mt.txn_type='OUT'), 0) AS qty_out,
-          COALESCE(SUM(mt.qty) FILTER (WHERE mt.txn_type='ADJ'), 0) AS qty_adj
-        FROM material_transactions mt
-        WHERE mt.txn_date BETWEEN $1 AND $2
-        GROUP BY mt.lot_id, mt.txn_date
-      )
       SELECT
-        ld.txn_date,
+        CURRENT_DATE AS txn_date,
         ml.lot_id,
         ml.lot_number,
         ml.category,
@@ -463,16 +443,15 @@ export async function materialLotsRoutes(app: FastifyInstance) {
         ml.unit,
         ml.location,
         ml.qty_current,
-        COALESCE(d.qty_in,  0) AS qty_in,
-        COALESCE(d.qty_out, 0) AS qty_out,
-        COALESCE(d.qty_adj, 0) AS qty_adj
-      FROM lot_dates ld
-      JOIN material_lots ml ON ml.lot_id = ld.lot_id AND ml.is_active = TRUE
-      LEFT JOIN daily d ON d.lot_id = ld.lot_id AND d.txn_date = ld.txn_date
-      WHERE (d.qty_in IS NOT NULL OR d.qty_out IS NOT NULL OR d.qty_adj IS NOT NULL
-             OR ld.txn_date = $2)
+        COALESCE(SUM(mt.qty) FILTER (WHERE mt.txn_type='IN' AND mt.txn_date BETWEEN $1 AND $2), 0) AS qty_in,
+        COALESCE(SUM(ABS(mt.qty)) FILTER (WHERE mt.txn_type='OUT' AND mt.txn_date BETWEEN $1 AND $2), 0) AS qty_out,
+        COALESCE(SUM(mt.qty) FILTER (WHERE mt.txn_type='ADJ' AND mt.txn_date BETWEEN $1 AND $2), 0) AS qty_adj
+      FROM material_lots ml
+      LEFT JOIN material_transactions mt ON mt.lot_id = ml.lot_id
+      WHERE ml.is_active = TRUE
         ${catFilter} ${locFilter} ${lotFilter}
-      ORDER BY ld.txn_date DESC, ml.category, ml.lot_number
+      GROUP BY ml.lot_id
+      ORDER BY ml.category, ml.item_name, ml.lot_number
     `;
     const { rows } = await pool.query(sql, params);
     return { data: rows };
