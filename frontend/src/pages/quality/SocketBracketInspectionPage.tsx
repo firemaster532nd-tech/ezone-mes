@@ -86,13 +86,11 @@ export function SocketBracketInspectionPage() {
 
   const generateLotNumber = async (index: number) => {
     try {
-      const res = await api.get<{ lot_number: string }>('/material-lots/next-lot?abbrev=GI');
-      if (res.data?.lot_number) {
-        // Simple increment logic based on index if API only returns next 1
-        // Usually, the API might not handle bulk, so we parse and increment
-        const baseLot = res.data.lot_number;
-        const prefix = baseLot.slice(0, -3);
-        const seq = parseInt(baseLot.slice(-3)) + index;
+      const res = await api.get<any>('/material-lots/next-lot?abbrev=GI');
+      const lotStr = res.lot_number || res.data?.lot_number;
+      if (lotStr) {
+        const prefix = lotStr.slice(0, -3);
+        const seq = (parseInt(lotStr.slice(-3)) || 1) + index;
         return `${prefix}${seq.toString().padStart(3, '0')}`;
       }
     } catch {
@@ -402,14 +400,14 @@ export function SocketBracketInspectionPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => handleOpenPrintModal({ item_name: '브라켓 (품질인정 1.6T)', lot_number: 'J260807BK01', qty: 100 })}
+            onClick={() => handleOpenPrintModal({ item_name: '브라켓 (품질인정 1.6T)', lot_number: '260807GI001', qty: 100 })}
             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shadow"
           >
             <Printer className="h-4 w-4 text-amber-300" />
             📐 품질인정 브라켓 성적서 (D-121-10)
           </button>
           <button
-            onClick={() => handleOpenPrintModal({ item_name: '입상 브라켓 (1.6T)', lot_number: 'J260807BK02', qty: 100 })}
+            onClick={() => handleOpenPrintModal({ item_name: '입상 브라켓 (1.6T)', lot_number: '260807GI002', qty: 100 })}
             className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shadow"
           >
             <Printer className="h-4 w-4 text-amber-300" />
