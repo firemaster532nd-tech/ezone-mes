@@ -168,6 +168,9 @@ export function SubMaterialInspectionPage() {
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showInspectionModal, setShowInspectionModal] = useState(false);
+  const [showPOModal, setShowPOModal] = useState(false);
+  const [poList, setPoList] = useState<any[]>([]);
+  const [poLoading, setPoLoading] = useState(false);
 
   // 폼 상태 (1단계: 기본정보)
   const [selectedSpec, setSelectedSpec] = useState('');
@@ -184,6 +187,36 @@ export function SubMaterialInspectionPage() {
   const [showLabelPrinter, setShowLabelPrinter] = useState(false);
 
   const info = TAB_INFO[tab];
+
+  const fetchOrders = async () => {
+    setPoLoading(true);
+    try {
+      const res = await api.get<{ data: any[] }>('/orders');
+      setPoList(res.data || []);
+    } catch {
+      setPoList([]);
+    } finally {
+      setPoLoading(false);
+    }
+  };
+
+  const handleOpenPOModal = () => {
+    fetchOrders();
+    setShowPOModal(true);
+  };
+
+  const handleSelectPOItem = (po: any, item: any) => {
+    if (item.spec || item.item_name) {
+      const matched = info.sizes.find(s => (item.spec && item.spec.includes(s)) || (item.item_name && item.item_name.includes(s)));
+      setSelectedSpec(matched || item.spec || info.sizes[0]);
+    } else {
+      setSelectedSpec(info.sizes[0]);
+    }
+    if (item.qty) setQty(String(item.qty));
+    setSupplierLot(item.supplier_lot || po.po_number || `PO-${new Date().toISOString().slice(2,10).replace(/-/g,'')}`);
+    setShowPOModal(false);
+    setShowModal(true);
+  };
 
 
 
@@ -374,6 +407,13 @@ export function SubMaterialInspectionPage() {
         description="세라믹울(D124) · 그라스울-롤(D122) · 그라스울-보드(D127) · 실란트(D125) 인수검사 성적서 등록"
       >
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleOpenPOModal}
+            className="flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-bold transition-all shadow"
+          >
+            <Search className="h-4 w-4 text-amber-300" />
+            📋 발주서 불러오기 (자동 채번)
+          </button>
           <button
             onClick={handleOpenPrintBlankForm}
             className="flex items-center gap-2 px-3.5 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-all shadow"
@@ -642,6 +682,61 @@ export function SubMaterialInspectionPage() {
           }}
           onClose={() => setShowLabelPrinter(false)}
         />
+      )}
+
+      {/* 발주서 불러오기 모달 */}
+      {showPOModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div>
+                <h3 className="font-extrabold text-slate-800 text-base flex items-center gap-2">
+                  <Search className="h-5 w-5 text-indigo-600" />
+                  📋 발주서 선택 (부자재 규격 & 수량 자동 불러오기)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">선택 시 해당 발주서의 부자재 규격 및 수량이 자동 입력되고 사규 LOT가 채번됩니다.</p>
+              </div>
+              <button onClick={() => setShowPOModal(false)} className="p-1 text-slate-400 hover:text-slate-600 rounded">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3">
+              {poLoading ? (
+                <div className="text-center py-12 text-slate-400 font-bold">발주서 목록 로딩 중...</div>
+              ) : poList.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">등록된 발주서가 없습니다.</div>
+              ) : (
+                poList.map((po: any) => {
+                  let items = typeof po.items_json === 'string' ? JSON.parse(po.items_json) : (po.items_json || []);
+                  if (!Array.isArray(items)) items = [{ item_name: po.supplier_name, qty: po.total_amount }];
+                  return (
+                    <div key={po.po_id || po.id} className="border border-slate-200 rounded-xl p-3.5 hover:border-indigo-400 transition bg-slate-50/50 space-y-2">
+                      <div className="flex justify-between items-center border-b border-slate-200/60 pb-2">
+                        <span className="font-mono text-xs font-bold text-indigo-700">{po.po_number || `PO-${po.po_id}`}</span>
+                        <span className="text-xs text-slate-500 font-medium">{po.supplier_name || '공급처'} ({po.order_date?.slice(0,10)})</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {items.map((item: any, idx: number) => (
+                          <div key={idx} className="flex justify-between items-center bg-white p-2 rounded-lg border border-slate-150 shadow-sm hover:bg-indigo-50/40 cursor-pointer"
+                               onClick={() => handleSelectPOItem(po, item)}>
+                            <div>
+                              <span className="font-bold text-slate-800 text-xs">{item.item_name || item.spec || '부자재 품목'}</span>
+                              {item.spec && <span className="ml-2 font-mono text-[11px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{item.spec}</span>}
+                            </div>
+                            <button className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-bold transition shadow-sm">
+                              선택 적용 →
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 사규 성적서 인쇄 모달 */}

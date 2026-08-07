@@ -268,31 +268,31 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
               .print-hidden-toolbar, .print-hidden-toolbar * { display: none !important; visibility: hidden !important; height: 0 !important; }
               #printable-form, #printable-form * { visibility: visible !important; }
               #printable-form {
-                position: fixed !important; left: 5mm !important; top: 5mm !important;
-                width: 200mm !important; height: 287mm !important;
-                margin: 0 !important; padding: 10px 14px !important;
+                position: fixed !important; left: 6mm !important; top: 6mm !important;
+                width: 198mm !important; height: 285mm !important;
+                margin: 0 !important; padding: 14px 18px !important;
                 border: 2px solid #000000 !important; background: #ffffff !important;
                 box-sizing: border-box !important; z-index: 99999999 !important;
-                font-size: 8px !important;
-                display: flex !important; flex-direction: column !important;
+                font-size: 8.5px !important;
+                display: flex !important; flex-direction: column !important; justify-content: space-between !important;
               }
-              /* 인쇄 시 검사항목 표 글씨 8px, 행높이 최소화 */
+              /* 인쇄 시 검사항목 표 글씨 및 행높이 균형 피팅 */
               #printable-form table td, #printable-form table th {
-                font-size: 7.5px !important;
-                padding: 1px 2px !important;
-                line-height: 1.2 !important;
+                font-size: 8.5px !important;
+                padding: 3px 4px !important;
+                line-height: 1.35 !important;
               }
-              #printable-form table tr { height: auto !important; min-height: 0 !important; }
-              /* n1/n2/n3 열 소시 */
+              #printable-form table tr { height: auto !important; min-height: 24px !important; }
+              /* n1/n2/n3 열 서식 */
               #printable-form input {
                 border: none !important; border-bottom: 0.5px solid #999 !important;
                 background: transparent !important; outline: none !important;
-                font-size: 7.5px !important;
+                font-size: 8.5px !important;
                 -webkit-print-color-adjust: exact !important;
               }
               #printable-form select { display: none !important; }
               /* ○● 체크 항목 */
-              .std-check-label { display: flex !important; align-items: center !important; gap: 1px !important; font-size: 7px !important; }
+              .std-check-label { display: flex !important; align-items: center !important; gap: 2px !important; font-size: 8px !important; }
             }
           `}</style>
 

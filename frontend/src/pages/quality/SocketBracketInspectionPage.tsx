@@ -388,14 +388,32 @@ export function SocketBracketInspectionPage() {
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 font-sans p-4 sm:p-6 lg:p-8">
       {/* Header */}
-      <div className="mb-8 border-b border-slate-700 pb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
-          <ClipboardCheck className="h-8 w-8 text-emerald-400" />
-          소켓/브라켓 인수검사
-        </h1>
-        <p className="text-slate-400 mt-2 text-sm sm:text-base">
-          발주서를 선택하여 인수검사를 수행하고 GI LOT를 발급합니다.
-        </p>
+      <div className="mb-8 border-b border-slate-700 pb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
+            <ClipboardCheck className="h-8 w-8 text-emerald-400" />
+            소켓/브라켓 인수검사 (EZC-D-121)
+          </h1>
+          <p className="text-slate-400 mt-2 text-sm sm:text-base">
+            발주서를 선택하여 소켓·브라켓 인수검사를 수행하고 GI 사규 LOT를 채번 발급합니다.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => handleOpenPrintModal({ item_name: '브라켓 (품질인정 1.6T)', lot_number: 'J260807BK01', qty: 100 })}
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shadow"
+          >
+            <Printer className="h-4 w-4 text-amber-300" />
+            📐 품질인정 브라켓 성적서 (D-121-10)
+          </button>
+          <button
+            onClick={() => handleOpenPrintModal({ item_name: '입상 브라켓 (1.6T)', lot_number: 'J260807BK02', qty: 100 })}
+            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5 shadow"
+          >
+            <Printer className="h-4 w-4 text-amber-300" />
+            📐 입상 브라켓 성적서 (D-121-9)
+          </button>
+        </div>
       </div>
 
       {/* Step Indicator */}
