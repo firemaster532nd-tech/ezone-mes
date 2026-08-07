@@ -32,6 +32,10 @@ const GOOGLE_SHEET_NON_CERT_DATA = [
   { rack_code: 'R3', pallet_no: 2, item_name: '인정심사용_그라스울', spec: '', lot_number: '', qty: 0, notes: '구글시트 2026-07-24' },
   { rack_code: 'D3', pallet_no: 1, item_name: '미출하_소켓 및 부자재', spec: '', lot_number: '', qty: 0, notes: '송도캠퍼스_소켓 및 부자재' },
   { rack_code: 'D3', pallet_no: 2, item_name: '미출하_소켓 및 부자재', spec: '', lot_number: '', qty: 0, notes: '김앤드이_검단신도시_부자재' },
+  // 반제품 가스켓 비인정 재고
+  { rack_code: 'P1', pallet_no: 1, item_name: '(I형) 가스켓 [W125, L:1000, T:0.5]', spec: 'W125 x L1000 x T0.5', lot_number: '260212-GI-I01', qty: 314, notes: '비인정제품 전환 (수불표 314개)' },
+  { rack_code: 'P1', pallet_no: 2, item_name: '(L형) 가스켓 [W185, L:1000, T:0.5]', spec: 'W185 x L1000 x T0.5', lot_number: '260212-GI-L01', qty: 908, notes: '비인정제품 전환 (수불표 908개)' },
+  { rack_code: 'P2', pallet_no: 1, item_name: '(Z형) 가스켓 [W215, L:1000, T:0.5]', spec: 'W215 x L1000 x T0.5', lot_number: '260212-GI-Z01', qty: 2610, notes: '비인정제품 전환 (수불표 2610개)' },
 ];
 
 // 구글시트 LOT 있는 재고 데이터 (material_lots 등록용)
