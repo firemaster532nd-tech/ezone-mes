@@ -176,7 +176,8 @@ export async function materialLotsRoutes(app: FastifyInstance) {
     );
     let nextSeq = 1;
     if (rows.length > 0) {
-      const m = rows[0].lot_number.match(/(\d+)$/);
+      const pureLot = rows[0].lot_number.split('-')[0];
+      const m = pureLot.match(/(\d+)$/);
       if (m) nextSeq = parseInt(m[1]) + 1;
     }
     return { lot_number: `${yymmdd}${abbrev}${String(nextSeq).padStart(3,'0')}` };
@@ -200,6 +201,20 @@ export async function materialLotsRoutes(app: FastifyInstance) {
   app.post('/api/material-lots', { preHandler: requireAuth }, async (req) => {
     const b = req.body as any;
     const user = (req as any).user;
+
+    // 사규 C302 규격 강제: lot_number에 -A1P1 등 위치정보가 섞여있으면 Pure LOT만 추출
+    let pureLot = String(b.lot_number || '').trim();
+    let finalLoc = b.location || '본재고';
+    if (pureLot.includes('-')) {
+      const parts = pureLot.split('-');
+      if (parts.length >= 2 && /^[A-Za-z0-9]+$/i.test(parts[1])) {
+        pureLot = parts[0];
+        if (!b.location || b.location === '본재고') {
+          finalLoc = parts[1];
+        }
+      }
+    }
+
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -208,10 +223,14 @@ export async function materialLotsRoutes(app: FastifyInstance) {
           (lot_number,category,item_name,density,thickness,width_mm,length_mm,depth_mm,
            unit,qty_current,location,supplier_name,supplier_lot,received_date,notes)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+         ON CONFLICT (lot_number) WHERE (is_active = TRUE) DO UPDATE SET
+           qty_current = material_lots.qty_current + EXCLUDED.qty_current,
+           location = COALESCE(EXCLUDED.location, material_lots.location),
+           updated_at = NOW()
          RETURNING *`,
-        [b.lot_number, b.category, b.item_name, b.density, b.thickness,
+        [pureLot, b.category, b.item_name, b.density, b.thickness,
          b.width_mm, b.length_mm, b.depth_mm, b.unit || 'EA',
-         b.qty_current || 0, b.location || '본재고',
+         b.qty_current || 0, finalLoc,
          b.supplier_name, b.supplier_lot, b.received_date, b.notes]
       );
       // 기초재고 입고 트랜잭션 기록
@@ -222,7 +241,7 @@ export async function materialLotsRoutes(app: FastifyInstance) {
              source_type,operator_id,notes)
            VALUES ($1,$2,$3,$4,'IN',$5,0,$5,'MANUAL',$6,'기초재고 등록')`,
           [b.received_date || new Date().toISOString().slice(0,10),
-           lot.lot_id, lot.lot_number, lot.category, lot.qty_current,
+           lot.lot_id, pureLot, lot.category, b.qty_current,
            user?.worker_id || user?.user_id]
         );
       }

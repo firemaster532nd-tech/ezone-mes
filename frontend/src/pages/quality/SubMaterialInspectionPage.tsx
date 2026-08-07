@@ -285,6 +285,8 @@ export function SubMaterialInspectionPage() {
     }
 
     try {
+      const pureLot = String(lotNumber || '').split('-')[0].trim();
+
       // 검사 성적서 등록
       await api.post('/inspections', {
         insp_type: 'INCOMING',
@@ -294,7 +296,7 @@ export function SubMaterialInspectionPage() {
         item_category: 'SM',
         inspector,
         supplier_lot: supplierLot,
-        lot_number: lotNumber,
+        lot_number: pureLot,
         location,
         qty: parseFloat(qty),
         n1: parseFloat(n1), n2: parseFloat(n2), n3: parseFloat(n3),
@@ -308,7 +310,7 @@ export function SubMaterialInspectionPage() {
       // 합격 시 재고 LOT 등록
       if (result === 'PASS') {
         await api.post('/material-lots', {
-          lot_number: lotNumber,
+          lot_number: pureLot,
           category: tab,
           item_name: tab,
           spec: selectedSpec,

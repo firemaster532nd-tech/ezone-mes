@@ -341,9 +341,11 @@ export function SocketBracketInspectionPage() {
       for (const item of itemsToInspect) {
         if (item.result !== 'PASS') continue; // only register passed items to stock
 
+        const pureLot = String(item.lotNumber || '').split('-')[0].trim();
+
         // 1. Material Lot
         await api.post('/material-lots', {
-          lot_number: item.lotNumber,
+          lot_number: pureLot,
           category: item.category,
           item_name: item.item_name,
           unit: 'EA',
@@ -355,7 +357,7 @@ export function SocketBracketInspectionPage() {
         // 2. Inspection Record
         await api.post('/inspections', {
           insp_type: 'SOCKET_IN',
-          lot_number: item.lotNumber,
+          lot_number: pureLot,
           item_name: item.item_name,
           qty: item.qty,
           n1: item.thickness.n1 || 0,
