@@ -74,6 +74,7 @@ import ShipmentOrdersPage from '@/pages/shipment/ShipmentOrdersPage';
 import { ShipmentInputPage } from '@/pages/shipment/ShipmentInputPage';
 import ExitPassPrintPage from '@/pages/shipment/ExitPassPrintPage';
 import ReturnReceiptPage from '@/pages/shipment/ReturnReceiptPage';
+import { ReturnReceiptPage as WmsReturnReceiptPage } from '@/pages/wms/ReturnReceiptPage';
 import ReturnsPage from '@/pages/shipment/ReturnsPage';
 import ShipmentPendingPage from '@/pages/shipment/ShipmentPendingPage';
 import LocationManagementPage from '@/pages/inventory/LocationManagementPage';
@@ -245,7 +246,8 @@ export const router = createBrowserRouter([
       { path: 'shipment/statements/new', element: <StatementEditPage /> },
       { path: 'shipment/orders', element: <ShipmentOrdersPage /> },
       { path: 'shipment/input', element: <ShipmentInputPage /> },
-      { path: 'shipment/returns', element: <ReturnsPage /> },
+      { path: 'shipment/returns', element: <WmsReturnReceiptPage /> },
+      { path: 'wms/return-receipt', element: <WmsReturnReceiptPage /> },
       { path: 'shipment/pending', element: <ShipmentPendingPage /> },
       { path: 'shipment/staging', element: <ShipmentStagingPage /> },
       { path: 'shipment/ready', element: <ShipmentReadyPage /> },

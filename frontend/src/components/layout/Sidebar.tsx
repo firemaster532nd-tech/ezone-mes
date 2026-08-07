@@ -326,7 +326,7 @@ export const adminTopGroups: TopNavGroup[] = [
       { label: '출하현황', path: '/shipment/pending' },
       { label: '포장·출하 스캔', path: '/shipment/staging' },
       { label: '거래명세서 관리', path: '/shipment/statements' },
-      { label: '반품입고', path: '/shipment/returns' },
+      { label: '📦 반품 입고 & 구조체 해체 (R-LOT)', path: '/wms/return-receipt' },
       { label: '출하지시서', path: '/shipment/dispatch' },
     ],
   },
