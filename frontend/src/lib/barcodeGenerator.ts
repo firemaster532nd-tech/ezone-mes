@@ -186,15 +186,10 @@ export async function generateStandardLotLabelHtml(
   const qrDataUrl = await generateQrDataUrl(qrPayload, 200);
   const barcodeSvg = generateCode128Svg(lotNo, 24);
 
-  // 두께값 및 규격값 분리 파싱
-  let thicknessText = '-';
-  let specText = spec || '-';
-
-  if (spec) {
-    const tMatch = spec.match(/(\d+(?:\.\d+)?T)/i);
-    if (tMatch) {
-      thicknessText = tMatch[1];
-    }
+  // 파이 및 높이 규격 텍스트 추출 (예: 100파이 210H)
+  let pipeSpecText = spec || '-';
+  if (!pipeSpecText || pipeSpecText === '-') {
+    pipeSpecText = itemName;
   }
 
   const badgeText = seqBadge || '1/1';
@@ -220,8 +215,7 @@ export async function generateStandardLotLabelHtml(
     <div class="info-col">
       <div class="field"><span class="lbl">LOT</span> <span class="val lot-title">${lotNo}</span></div>
       <div class="field"><span class="lbl">품목</span> <span class="val item-title">${itemName}</span></div>
-      <div class="field"><span class="lbl">두께</span> <span class="val thickness-val">${thicknessText}</span></div>
-      <div class="field"><span class="lbl">규격</span> <span class="val">${specText}</span></div>
+      <div class="field"><span class="lbl">규격</span> <span class="val thickness-val">${pipeSpecText}</span></div>
       <div class="field"><span class="lbl">순번</span> <span class="val">${badgeText}</span></div>
     </div>
   </div>

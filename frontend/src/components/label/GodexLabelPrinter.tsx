@@ -33,22 +33,21 @@ interface GodexLabelPrinterProps {
 function LabelPreview({ data }: { data: LabelData }) {
   const [qrUrl, setQrUrl] = useState<string>('');
 
-  const specText = [
+  const pipeSpecText = [
     data.thickness ? (typeof data.thickness === 'number' ? `${data.thickness}T` : String(data.thickness)) : '',
     data.density ? `${data.density}K` : '',
     data.width_mm ? `${data.width_mm}W` : '',
     data.length_mm ? `${data.length_mm}L` : '',
-  ].filter(Boolean).join(' ') || data.thickness?.toString() || '규격 미기재';
+  ].filter(Boolean).join(' ') || data.thickness?.toString() || data.item_name || '100파이 210H';
 
   const lotNo = data.lot_number || '260203CW007';
-  const itemName = data.item_name || '96K 50T 400W 3600L';
-  const locationText = data.location_name || data.location || 'B1-P1';
-  const thicknessText = data.thickness ? `${data.thickness}T` : '50.00T';
+  const itemName = data.item_name || '일체형슬리브 100파이';
+  const locationText = data.location_name || data.location || 'FIELD-1F-MAT';
 
   useEffect(() => {
-    const payload = `LOT: ${lotNo}\n제품명: ${itemName}\n규격: ${specText}\n위치: ${locationText}\n수량: ${data.qty_current || 1}`;
+    const payload = `LOT: ${lotNo}\n제품명: ${itemName}\n규격: ${pipeSpecText}\n위치: ${locationText}\n수량: ${data.qty_current || 1}`;
     generateQrDataUrl(payload, 200).then(setQrUrl);
-  }, [lotNo, itemName, specText, locationText, data.qty_current]);
+  }, [lotNo, itemName, pipeSpecText, locationText, data.qty_current]);
 
   const barcodeSvg = generateCode128Svg(lotNo, 22);
 
@@ -66,7 +65,7 @@ function LabelPreview({ data }: { data: LabelData }) {
       </div>
       <div className="border-b border-slate-900 mb-1"></div>
 
-      {/* 중앙 본문 (좌측 대형 QR/바코드, 우측 LOT/품목/두께/규격/순번) */}
+      {/* 중앙 본문 (좌측 대형 QR/바코드, 우측 LOT/품목/규격/순번) */}
       <div className="flex gap-2 items-start flex-1 my-0.5">
         <div className="w-[100px] flex flex-col items-center">
           <div className="w-[90px] h-[90px] border border-slate-300 rounded p-0.5 bg-white">
@@ -78,11 +77,10 @@ function LabelPreview({ data }: { data: LabelData }) {
           </div>
         </div>
 
-        <div className="flex-1 space-y-1 font-mono text-[10px] pt-0.5">
+        <div className="flex-1 space-y-1.5 font-mono text-[10px] pt-1">
           <div className="flex"><span className="w-8 text-slate-500 font-normal">LOT</span> <strong className="text-slate-900 text-xs font-black truncate">{lotNo}</strong></div>
           <div className="flex"><span className="w-8 text-slate-500 font-normal">품목</span> <strong className="text-slate-900 text-[10px] font-bold truncate">{itemName}</strong></div>
-          <div className="flex"><span className="w-8 text-slate-500 font-normal">두께</span> <strong className="text-slate-900 font-extrabold underline">{thicknessText}</strong></div>
-          <div className="flex"><span className="w-8 text-slate-500 font-normal">규격</span> <strong className="text-slate-900 font-bold truncate">{specText}</strong></div>
+          <div className="flex"><span className="w-8 text-slate-500 font-normal">규격</span> <strong className="text-blue-700 text-xs font-black underline">{pipeSpecText}</strong></div>
           <div className="flex"><span className="w-8 text-slate-500 font-normal">순번</span> <strong className="text-slate-900 font-bold">1 / 1</strong></div>
         </div>
       </div>
