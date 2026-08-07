@@ -93,6 +93,11 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
   const [printResult, setPrintResult] = useState<'success' | 'error' | null>(null);
   const [qzLoaded, setQzLoaded] = useState(false);
 
+  // QZ Tray 연결 상태
+  const [connected, setConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [printers, setPrinters] = useState<string[]>([]);
+
   // QZ Tray JS 스크립트 동적 로드
   useEffect(() => {
     if ((window as any).qz) { setQzLoaded(true); return; }
@@ -103,6 +108,27 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
     document.head.appendChild(script);
     return () => { document.head.removeChild(script); };
   }, []);
+
+  const connectQz = async () => {
+    setError(null);
+    try {
+      const qz = (window as any).qz;
+      if (!qz) throw new Error('QZ Tray 스크립트가 로드되지 않았습니다.');
+      if (!qz.websocket.isActive()) {
+        await qz.websocket.connect();
+      }
+      setConnected(true);
+      const found = await qz.printers.find();
+      setPrinters(found || []);
+      if (found && found.length > 0 && !selectedPrinter) {
+        const defaultP = found.find((p: string) => p.toLowerCase().includes('godex') || p.toLowerCase().includes('label')) || found[0];
+        setSelectedPrinter(defaultP);
+      }
+    } catch (err: any) {
+      setConnected(false);
+      setError(err?.message || 'QZ Tray 연결 실패 (프로그램 실행 필요)');
+    }
+  };
 
   const handlePrint = async () => {
     setPrinting(true);
@@ -268,7 +294,7 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
 
         {!connected ? (
           <button
-            onClick={handleConnect}
+            onClick={connectQz}
             disabled={!qzLoaded}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2 rounded-lg disabled:opacity-40"
           >
