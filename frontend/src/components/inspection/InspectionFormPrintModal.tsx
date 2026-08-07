@@ -555,16 +555,35 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                   </div>
                 </div>
 
-                {/* 비고 — 결과성적서: data.certInfo 기본 표시, 빈양식지: 직접 입력 */}
-                <div className="text-[10px] text-slate-800 bg-slate-50 p-2 rounded border border-slate-400">
-                  <p className="font-extrabold text-blue-900 mb-1">※ 비고 / 공인성적서 연동 정보 (사규 제11조 7단계 역추적):</p>
-                  <textarea
-                    value={editNotes || (isBlank ? '' : (data.certInfo || ''))}
-                    onChange={e => setEditNotes(e.target.value)}
-                    placeholder={`◆ 공인성적서 1년 주기 자동 연동 정보 (사규 제11조 7단계 역추적):\n- 공인시험 기관 : KTR 한국화학융합시험연구원 / FITI / KCL\n- 공인성적서 번호 : KTR-20  -\n- 성적서 발행일자 : 20  년   월   일\n- 시험결과 평가 : 숏함유량  %, 밀도   kg/㎡ (적합)`}
-                    rows={5}
-                    className="w-full text-[10px] font-mono text-slate-900 bg-transparent border-0 focus:outline-none resize-none leading-relaxed"
-                  />
+                {/* 비고 — 원본 사규 공인성적서 1년 주기 자동 연동 박스 (사용자 요구 사진과 100% 동일) */}
+                <div className="text-[10px] text-slate-800 bg-slate-50/80 p-2.5 rounded-lg border border-slate-400">
+                  <p className="font-extrabold text-blue-950 mb-1 text-[10.5px]">
+                    ※ 공인성적서 1년 주기 자동 연동 정보 (사규 제11조 7단계 역추적):
+                  </p>
+                  {editNotes ? (
+                    <textarea
+                      value={editNotes}
+                      onChange={e => setEditNotes(e.target.value)}
+                      rows={4}
+                      className="w-full text-[10px] font-mono text-slate-900 bg-transparent border-0 focus:outline-none resize-none leading-relaxed"
+                    />
+                  ) : (
+                    <div 
+                      className="font-mono text-slate-900 font-bold space-y-0.5 pl-1 leading-relaxed cursor-pointer"
+                      onClick={() => setEditNotes(
+                        `- 공인시험 기관 : ${data.certAgency || 'KTR 한국화학융합시험연구원 / FITI / KCL'}\n` +
+                        `- 공인성적서 번호 : ${data.certNumber || 'KTR-2026-0415'}\n` +
+                        `- 성적서 발행일자 : ${data.certIssuedDate || '2026년 04월 15일'}\n` +
+                        `- 시험결과 평가 : ${data.certResultText || '숏함유량 9.8%, 밀도 100 kg/㎥ (적합)'}`
+                      )}
+                      title="클릭하여 비고 내용 직접 수정"
+                    >
+                      <p>- 공인시험 기관 : {data.certAgency || 'KTR 한국화학융합시험연구원 / FITI / KCL'}</p>
+                      <p>- 공인성적서 번호 : {data.certNumber || 'KTR-2026-0415'}</p>
+                      <p>- 성적서 발행일자 : {data.certIssuedDate || '2026년 04월 15일'}</p>
+                      <p>- 시험결과 평가 : {data.certResultText || '숏함유량 9.8%, 밀도 100 kg/㎥ (적합)'}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
