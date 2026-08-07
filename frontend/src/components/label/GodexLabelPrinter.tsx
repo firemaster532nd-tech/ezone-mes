@@ -286,115 +286,105 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-lg mx-auto">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Printer className="w-5 h-5 text-blue-600" />
-          <h3 className="font-bold text-lg text-gray-800">고덱스 라벨 출력</h3>
-        </div>
-        {onClose && (
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl font-bold">×</button>
-        )}
-      </div>
-
-      {/* 라벨 미리보기 */}
-      <div className="mb-4">
-        <p className="text-xs font-bold text-gray-700 mb-2 text-center flex items-center justify-center gap-1">
-          📋 (주)이지원 사규 표준 라벨 미리보기 (80mm × 60mm)
-        </p>
-        <LabelPreview data={labelData} />
-      </div>
-
-      {/* QZ Tray 방식 */}
-      <div className="border rounded-xl p-4 mb-4 bg-gray-50">
-        <div className="flex items-center gap-2 mb-3">
-          {connected
-            ? <Wifi className="w-4 h-4 text-green-500" />
-            : <WifiOff className="w-4 h-4 text-gray-400" />}
-          <span className="text-sm font-semibold">QZ Tray 직접 인쇄 (권장)</span>
-          {connected && <span className="text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">연결됨</span>}
-        </div>
-
-        {error && (
-          <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg p-2 mb-3">
-            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-            <div>
-              <p>{error}</p>
-              <a href="https://qz.io/download" target="_blank" rel="noreferrer"
-                className="underline text-blue-600">QZ Tray 다운로드 →</a>
-            </div>
+    <div className="fixed inset-0 z-[9999] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg mx-auto relative my-auto border border-slate-200" onClick={e => e.stopPropagation()}>
+        {/* 헤더 */}
+        <div className="flex items-center justify-between mb-4 border-b pb-3 border-slate-100">
+          <div className="flex items-center gap-2">
+            <Printer className="w-5 h-5 text-blue-600" />
+            <h3 className="font-bold text-lg text-slate-800">🏷️ 고덱스 라벨 출력</h3>
           </div>
-        )}
+          {onClose && (
+            <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center text-lg font-bold transition">×</button>
+          )}
+        </div>
 
-        {!connected ? (
-          <button
-            onClick={connectQz}
-            disabled={!qzLoaded}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2 rounded-lg disabled:opacity-40"
-          >
-            {qzLoaded ? 'QZ Tray 연결' : 'QZ Tray 로딩 중...'}
-          </button>
-        ) : (
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs text-gray-600 mb-1">프린터 선택</label>
-              <select
-                value={selectedPrinter}
-                onChange={e => setSelectedPrinter(e.target.value)}
-                className="w-full border rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-400"
-              >
-                <option value="">— 프린터 선택 —</option>
-                {printers.map(p => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="text-xs text-gray-600">출력 매수</label>
-              <input
-                type="number" min={1} max={99} value={copies}
-                onChange={e => setCopies(Number(e.target.value))}
-                className="w-16 border rounded-lg px-2 py-1 text-sm text-center"
-              />
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={handlePrint}
-                disabled={printing || !selectedPrinter}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2 rounded-lg disabled:opacity-40 flex items-center justify-center gap-2"
-              >
-                <Printer className="w-4 h-4" />
-                {printing ? '출력 중...' : `라벨 출력 (${copies}매)`}
-              </button>
-              <button
-                onClick={disconnect}
-                className="px-3 py-2 border rounded-lg text-sm text-gray-600 hover:bg-gray-100"
-              >
-                연결 해제
-              </button>
-            </div>
-            {printResult === 'success' && (
-              <div className="flex items-center gap-1 text-green-600 text-sm">
-                <CheckCircle className="w-4 h-4" /> 출력 완료!
+        {/* 라벨 미리보기 */}
+        <div className="mb-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+          <p className="text-xs font-bold text-slate-700 mb-2 text-center flex items-center justify-center gap-1">
+            📋 (주)이지원 사규 표준 라벨 미리보기 (80mm × 60mm)
+          </p>
+          <LabelPreview data={labelData} />
+        </div>
+
+        {/* QZ Tray 방식 */}
+        <div className="border rounded-xl p-4 mb-4 bg-slate-50">
+          <div className="flex items-center gap-2 mb-3">
+            {connected
+              ? <Wifi className="w-4 h-4 text-green-600" />
+              : <WifiOff className="w-4 h-4 text-slate-400" />}
+            <span className="text-sm font-bold text-slate-800">QZ Tray 직접 인쇄 (권장)</span>
+            {connected && <span className="text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">연결됨</span>}
+          </div>
+
+          {error && (
+            <div className="flex items-start gap-2 text-xs text-amber-700 bg-amber-50 rounded-lg p-2 mb-3 border border-amber-200">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-600" />
+              <div>
+                <p className="font-semibold">{error}</p>
+                <p className="mt-1 text-slate-600">QZ Tray 프로그램 실행 후 아래 "재연결" 버튼을 클릭하세요.</p>
               </div>
-            )}
-          </div>
-        )}
-      </div>
+            </div>
+          )}
 
-      {/* 브라우저 인쇄 방식 (대안) */}
-      <div className="border rounded-xl p-4 bg-gray-50">
-        <p className="text-xs text-gray-600 font-semibold mb-2">🖨️ 브라우저 인쇄 (대안)</p>
-        <p className="text-xs text-gray-500 mb-3">
-          프린터 드라이버로 인쇄. 고덱스를 기본 프린터로 설정 후 사용하세요.
-        </p>
-        <button
-          onClick={handleBrowserPrint}
-          className="w-full border-2 border-gray-300 hover:border-blue-400 text-gray-700 text-sm font-semibold py-2 rounded-lg"
-        >
-          브라우저로 인쇄
-        </button>
+          {!connected ? (
+            <button
+              onClick={connectQz}
+              className="w-full bg-slate-800 hover:bg-slate-900 text-white text-sm font-bold py-2.5 rounded-lg transition flex items-center justify-center gap-2"
+            >
+              <Wifi className="w-4 h-4 text-emerald-400" /> QZ Tray 연결하기
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600 font-medium">선택된 프린터:</span>
+                <strong className="text-slate-900 font-extrabold">{selectedPrinter || 'Godex (자동)'}</strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="text-xs text-slate-600 font-medium">출력 매수 (장수)</label>
+                <input
+                  type="number" min={1} max={99} value={copies}
+                  onChange={e => setCopies(Number(e.target.value))}
+                  className="w-20 border rounded-lg px-2 py-1 text-sm font-bold text-center border-slate-300 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={handlePrint}
+                  disabled={printing || !selectedPrinter}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2.5 rounded-lg disabled:opacity-40 flex items-center justify-center gap-2 shadow-md transition"
+                >
+                  <Printer className="w-4 h-4" />
+                  {printing ? '출력 중...' : `라벨 출력 (${copies}매)`}
+                </button>
+                <button
+                  onClick={disconnect}
+                  className="px-3 py-2.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  연결 해제
+                </button>
+              </div>
+              {printResult === 'success' && (
+                <div className="flex items-center gap-1.5 text-green-700 text-xs font-bold bg-green-50 p-2 rounded-lg border border-green-200">
+                  <CheckCircle className="w-4 h-4 text-green-600" /> 고덱스 프린터로 전송 완료!
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {/* 브라우저 인쇄 방식 (대안) */}
+        <div className="border rounded-xl p-4 bg-slate-50 border-slate-200">
+          <p className="text-xs text-slate-700 font-bold mb-1">🖨️ 브라우저 일반 인쇄 (대안)</p>
+          <p className="text-xs text-slate-500 mb-3">
+            QZ Tray가 없을 때 브라우저 인쇄 대화상자로 출력합니다.
+          </p>
+          <button
+            onClick={handleBrowserPrint}
+            className="w-full border border-slate-300 bg-white hover:bg-slate-100 text-slate-700 text-xs font-bold py-2 rounded-lg transition shadow-sm"
+          >
+            브라우저로 인쇄
+          </button>
+        </div>
       </div>
     </div>
   );
