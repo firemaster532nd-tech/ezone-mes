@@ -145,6 +145,20 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
     }
   };
 
+  const disconnect = async () => {
+    try {
+      const qz = (window as any).qz;
+      if (qz && qz.websocket.isActive()) {
+        await qz.websocket.disconnect();
+      }
+    } catch {
+      /* ignore */
+    } finally {
+      setConnected(false);
+      setSelectedPrinter('');
+    }
+  };
+
   const handlePrint = async () => {
     setPrinting(true);
     setPrintResult(null);
