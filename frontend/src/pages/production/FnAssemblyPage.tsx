@@ -45,17 +45,17 @@ export function FnAssemblyPage() {
   const [assembledBy, setAssembledBy] = useState('공정작업자');
   const [notes, setNotes] = useState('');
 
-  // 투입 부자재 LOT 선택
+  // 투입 부자재 LOT 선택 (슬리브U, 차열시트S, 보호철판GI, 고무패킹PK)
   const [selectedSleeveLot, setSelectedSleeveLot] = useState('');
   const [selectedSheetLot, setSelectedSheetLot] = useState('');
   const [selectedPlateLot, setSelectedPlateLot] = useState('');
-  const [selectedSealantLot, setSelectedSealantLot] = useState('');
+  const [selectedPackingLot, setSelectedPackingLot] = useState('');
 
   // 자재 LOT 옵션 목록
   const [sleeveLots, setSleeveLots] = useState<MaterialLotOption[]>([]);
   const [sheetLots, setSheetLots] = useState<MaterialLotOption[]>([]);
   const [plateLots, setPlateLots] = useState<MaterialLotOption[]>([]);
-  const [sealantLots, setSealantLots] = useState<MaterialLotOption[]>([]);
+  const [packingLots, setPackingLots] = useState<MaterialLotOption[]>([]);
 
   // 계보 상세보기 모달
   const [detailModalItem, setDetailModalItem] = useState<FinishedStock | null>(null);
@@ -87,11 +87,11 @@ export function FnAssemblyPage() {
       const res = await api.get<{ data: MaterialLotOption[] }>('/material-lots?limit=200');
       const all = res.data || [];
 
-      // 슬리브(U), 차열시트(S/시트), 보호철판(GI), 실란트(SS)
+      // 슬리브(U), 차열시트(S/시트), 보호철판(GI), 고무패킹(PK)
       setSleeveLots(all.filter(l => l.lot_number.includes('U') || l.category?.includes('슬리브') || l.item_name?.includes('슬리브')));
       setSheetLots(all.filter(l => l.lot_number.includes('-S') || l.category?.includes('시트') || l.item_name?.includes('시트')));
       setPlateLots(all.filter(l => l.lot_number.includes('GI') || l.category?.includes('철판') || l.item_name?.includes('철판') || l.item_name?.includes('소켓')));
-      setSealantLots(all.filter(l => l.lot_number.includes('SS') || l.category?.includes('실란트') || l.item_name?.includes('실란트')));
+      setPackingLots(all.filter(l => l.lot_number.includes('PK') || l.category?.includes('패킹') || l.item_name?.includes('패킹')));
     } catch (e) {
       console.warn('Failed to fetch material lots', e);
     }
@@ -126,7 +126,7 @@ export function FnAssemblyPage() {
         sleeve_lot: selectedSleeveLot,
         sheet_lot: selectedSheetLot || null,
         plate_lot: selectedPlateLot || null,
-        sealant_lot: selectedSealantLot || null,
+        packing_lot: selectedPackingLot || null,
         qty: Number(qty),
         assembled_by: assembledBy,
         notes,
@@ -174,10 +174,23 @@ export function FnAssemblyPage() {
                 onChange={e => setDiam(Number(e.target.value))}
                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold"
               >
-                <option value={100}>100A (100파이 - 210H~몸통)</option>
-                <option value={75}>75A (75파이)</option>
-                <option value={50}>50A (50파이)</option>
+                <option value={100}>100A (100파이 - 210H~몸통, 12EA/BOX)</option>
+                <option value={75}>75A (75파이, 24EA/BOX, 960EA/PLT)</option>
+                <option value={50}>50A (50파이, 30EA/BOX, 1440EA/PLT)</option>
               </select>
+            </div>
+
+            {/* 엑셀 수불대장 표준 포장 단위 안내 뱃지 */}
+            <div className="bg-slate-900/90 p-2.5 rounded-xl border border-indigo-800/60 text-xs font-mono space-y-1">
+              <div className="flex justify-between text-indigo-300 font-bold">
+                <span>📦 엑셀 수불 표준 포장단위:</span>
+                <span className="text-amber-300">
+                  {diam === 100 ? '12EA/BOX (240~1440EA/PLT)' : diam === 75 ? '24EA/BOX (960EA/PLT)' : '30EA/BOX (1440EA/PLT)'}
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400">
+                완제품 생산 LOT 예시: <strong className="text-emerald-400">260720-FN-{diam}(0001~1680)</strong>
+              </p>
             </div>
 
             <div>
@@ -258,14 +271,14 @@ export function FnAssemblyPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-300 mb-1">4. 내화 실란트 LOT (SS)</label>
+                <label className="block text-[11px] font-bold text-slate-300 mb-1">4. 상/하부 고무패킹 LOT (PK)</label>
                 <select
-                  value={selectedSealantLot}
-                  onChange={e => setSelectedSealantLot(e.target.value)}
+                  value={selectedPackingLot}
+                  onChange={e => setSelectedPackingLot(e.target.value)}
                   className="w-full bg-slate-800 border border-slate-600 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 font-mono"
                 >
-                  <option value="">-- 실란트 LOT 선택 --</option>
-                  {sealantLots.map(l => (
+                  <option value="">-- 고무패킹 LOT 선택 (선택) --</option>
+                  {packingLots.map(l => (
                     <option key={l.lot_number} value={l.lot_number}>
                       [{l.lot_number}] {l.item_name} (재고: {l.qty_current}EA)
                     </option>

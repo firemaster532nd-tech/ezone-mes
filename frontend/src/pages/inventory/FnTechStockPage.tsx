@@ -43,7 +43,7 @@ const FALLBACK_FINISHED: FinishedStock[] = [
   { id:12, diameter_mm:50,  spec:'몸통', qty:447 },
 ];
 const FALLBACK_MATERIAL: MaterialStock[] = [
-  { id:1,  item_name:'일체형슬리브', spec:'100파이',  qty:0,     unit:'ea' },
+  { id:1,  item_name:'일체형슬리브', spec:'100파이(210H)', qty:1680, unit:'ea' },
   { id:2,  item_name:'일체형슬리브', spec:'75파이',   qty:642,   unit:'ea' },
   { id:3,  item_name:'일체형슬리브', spec:'50파이',   qty:447,   unit:'ea' },
   { id:4,  item_name:'보호철판',      spec:'100파이', qty:2341,  unit:'ea' },
