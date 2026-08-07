@@ -1,5 +1,6 @@
 import { useInspectors } from '@/hooks/useInspectors';
 import React, { useState, useEffect } from 'react';
+import { parsePureLotAndLocation } from '@/lib/lotFormatUtils';
 
 import { api } from '@/lib/api';
 import { PageHeader } from '@/components/shared/PageHeader';
@@ -759,7 +760,8 @@ export function SocketBracketInspectionPage() {
             <table className="w-full text-sm text-left">
               <thead className="bg-slate-900/50 text-slate-400 text-xs uppercase font-medium">
                 <tr>
-                  <th className="px-4 py-3">LOT 번호</th>
+                  <th className="px-4 py-3">사규 LOT 번호</th>
+                  <th className="px-4 py-3 text-center">보관 위치 (Rack)</th>
                   <th className="px-4 py-3">품목명</th>
                   <th className="px-4 py-3 text-right">수량</th>
                   <th className="px-4 py-3">분류</th>
@@ -769,27 +771,35 @@ export function SocketBracketInspectionPage() {
               <tbody className="divide-y divide-slate-700/50">
                 {history.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-slate-500">조회된 입고 이력이 없습니다.</td>
+                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500">조회된 입고 이력이 없습니다.</td>
                   </tr>
-                ) : history.map((h, i) => (
-                  <tr key={h.lot_number || i} className="hover:bg-slate-700/30 transition-colors">
-                    <td className="px-4 py-3 font-mono font-bold text-emerald-400">{h.lot_number}</td>
-                    <td className="px-4 py-3 text-slate-200">{h.item_name}</td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-300">{h.qty_current} EA</td>
-                    <td className="px-4 py-3 text-slate-400">{h.category}</td>
-                    <td className="px-4 py-3 text-slate-400 text-xs">
-                      <div className="flex items-center justify-between gap-2">
-                        <span>{h.received_date?.slice(0, 10)}</span>
-                        <button
-                          onClick={() => handleOpenPrintModal(h)}
-                          className="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded flex items-center gap-1 shadow-sm"
-                        >
-                          <Printer className="h-3.5 w-3.5" /> 인쇄
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                ) : history.map((h, i) => {
+                  const { pureLotNumber, locationText } = parsePureLotAndLocation(h.lot_number, h.location);
+                  return (
+                    <tr key={h.lot_number || i} className="hover:bg-slate-700/30 transition-colors">
+                      <td className="px-4 py-3 font-mono font-bold text-emerald-400">{pureLotNumber}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="px-2 py-0.5 rounded text-xs font-mono font-bold bg-slate-700 text-amber-300 border border-slate-600">
+                          {locationText}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-200">{h.item_name}</td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-300">{h.qty_current} EA</td>
+                      <td className="px-4 py-3 text-slate-400">{h.category}</td>
+                      <td className="px-4 py-3 text-slate-400 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span>{h.received_date?.slice(0, 10)}</span>
+                          <button
+                            onClick={() => handleOpenPrintModal(h)}
+                            className="px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded flex items-center gap-1 shadow-sm"
+                          >
+                            <Printer className="h-3.5 w-3.5" /> 인쇄
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
 
