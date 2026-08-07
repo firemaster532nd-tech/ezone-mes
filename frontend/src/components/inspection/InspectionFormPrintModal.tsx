@@ -560,30 +560,15 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
                   <p className="font-extrabold text-blue-950 mb-1 text-[10.5px]">
                     ※ 공인성적서 1년 주기 자동 연동 정보 (사규 제11조 7단계 역추적):
                   </p>
-                  {editNotes ? (
-                    <textarea
-                      value={editNotes}
-                      onChange={e => setEditNotes(e.target.value)}
-                      rows={4}
-                      className="w-full text-[10px] font-mono text-slate-900 bg-transparent border-0 focus:outline-none resize-none leading-relaxed"
-                    />
-                  ) : (
-                    <div 
-                      className="font-mono text-slate-900 font-bold space-y-0.5 pl-1 leading-relaxed cursor-pointer"
-                      onClick={() => setEditNotes(
-                        `- 공인시험 기관 : ${data.certAgency || 'KTR 한국화학융합시험연구원 / FITI / KCL'}\n` +
-                        `- 공인성적서 번호 : ${data.certNumber || 'KTR-2026-0415'}\n` +
-                        `- 성적서 발행일자 : ${data.certIssuedDate || '2026년 04월 15일'}\n` +
-                        `- 시험결과 평가 : ${data.certResultText || '숏함유량 9.8%, 밀도 100 kg/㎥ (적합)'}`
-                      )}
-                      title="클릭하여 비고 내용 직접 수정"
-                    >
-                      <p>- 공인시험 기관 : {data.certAgency || 'KTR 한국화학융합시험연구원 / FITI / KCL'}</p>
-                      <p>- 공인성적서 번호 : {data.certNumber || 'KTR-2026-0415'}</p>
-                      <p>- 성적서 발행일자 : {data.certIssuedDate || '2026년 04월 15일'}</p>
-                      <p>- 시험결과 평가 : {data.certResultText || '숏함유량 9.8%, 밀도 100 kg/㎥ (적합)'}</p>
-                    </div>
-                  )}
+                  <div className="font-mono text-slate-900 font-bold space-y-0.5 pl-1 leading-relaxed">
+                    <p>- 공인시험 기관 : {data.certAgency || 'KTR 한국화학융합시험연구원 / FITI / KCL'}</p>
+                    <p>- 공인성적서 번호 : {data.certNumber || 'KTR-2026-0415'}</p>
+                    <p>- 성적서 발행일자 : {data.certIssuedDate || '2026년 04월 15일'}</p>
+                    <p>- 시험결과 평가 : {data.certResultText || '숏함유량 9.8%, 밀도 100 kg/㎥ (적합)'}</p>
+                    {editNotes && (
+                      <p className="mt-1 pt-1 border-t border-slate-300 text-blue-900 font-semibold">{editNotes}</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
