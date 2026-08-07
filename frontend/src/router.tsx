@@ -250,6 +250,7 @@ export const router = createBrowserRouter([
       { path: 'inventory/location', element: <LocationManagementPage /> },
       { path: 'inventory/label-reprint', element: <LabelReprintPage /> },
       // 재고수불대장
+      { path: 'inventory/master-ledger',       element: <MasterMaterialLedgerPage /> },
       { path: 'inventory/material-stock',       element: <MaterialStockPage /> },
       { path: 'inventory/material-ledger',      element: <MaterialLedgerPage /> },
       { path: 'inventory/non-certified-stock',  element: <NonCertifiedStockPage /> },

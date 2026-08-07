@@ -114,6 +114,7 @@ export const shopTopGroups: TopNavGroup[] = [
   {
     key: 'inventory', label: '재고관리', Icon: Boxes,
     children: [
+      { label: '📑 원부자재 종합 수불대장', path: '/inventory/master-ledger' },
       { label: '원부자재 통합 재고관리', path: '/inventory/material-stock' },
       { label: '바코드 스캔 WMS', path: '/inventory/barcode-wms' },
       { label: '랙 로케이션 관리', path: '/inventory/location' },

@@ -672,5 +672,175 @@ export async function inventoryLedgerRoutes(app: FastifyInstance) {
       return reply.code(500).send({ error: 'sync_error', message: String(err) });
     }
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // GET /api/material-ledger/master-summary — 원부자재 종합 수불대장 집계 API
+  // ─────────────────────────────────────────────────────────────────────────
+  app.get('/api/material-ledger/master-summary', { preHandler: requireAuth }, async (req, reply) => {
+    const { category, from, to } = req.query as any;
+
+    try {
+      const { rows } = await pool.query(`
+        SELECT 
+          ml.lot_id,
+          ml.lot_number,
+          ml.category,
+          ml.item_name,
+          ml.unit,
+          ml.density,
+          ml.thickness,
+          ml.width_mm,
+          ml.length_mm,
+          ROUND(ml.qty_current::numeric, 2) AS current_qty,
+          COALESCE(SUM(CASE WHEN mt.txn_type = 'IN' THEN mt.qty ELSE 0 END), 0) AS total_in,
+          COALESCE(SUM(CASE WHEN mt.txn_type = 'OUT' THEN ABS(mt.qty) ELSE 0 END), 0) AS total_out,
+          COALESCE(SUM(CASE WHEN mt.txn_type = 'LOSS' THEN ABS(mt.qty) ELSE 0 END), 0) AS total_loss,
+          COALESCE(SUM(CASE WHEN mt.txn_type = 'ADJ' THEN mt.qty ELSE 0 END), 0) AS total_adj,
+          MAX(mt.txn_date) AS last_txn_date
+        FROM material_lots ml
+        LEFT JOIN material_transactions mt ON mt.lot_id = ml.lot_id
+        WHERE ml.is_active = TRUE
+          ${category ? `AND ml.category = '${category}'` : ''}
+        GROUP BY ml.lot_id
+        ORDER BY ml.category, ml.item_name, ml.lot_number
+      `);
+
+      return reply.send({ data: rows });
+    } catch (err: any) {
+      console.error('[master-summary] 오류:', err);
+      return reply.code(500).send({ error: 'server_error', message: err.message });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // POST /api/production/cutting/process-loss — 작업지시서+재단일지 연동 로스 자동계산 API
+  // ─────────────────────────────────────────────────────────────────────────
+  app.post('/api/production/cutting/process-loss', { preHandler: requireAuth }, async (req, reply) => {
+    const {
+      work_order_id,
+      input_lot_id,
+      cut_spec_name,
+      target_length_mm,
+      cut_qty,
+      total_input_length_mm,
+      saw_blade_loss_mm = 2,
+      operator_name,
+      notes
+    } = req.body as any;
+
+    if (!input_lot_id || !target_length_mm || !cut_qty || !total_input_length_mm) {
+      return reply.code(400).send({ error: 'bad_request', message: '필수 재단 매개변수(lot_id, target_length_mm, cut_qty, total_input_length_mm) 누락' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. 투입 LOT 확인 및 수량 차감
+      const { rows: [lot] } = await client.query(
+        `SELECT * FROM material_lots WHERE lot_id = $1 AND is_active = TRUE FOR UPDATE`,
+        [input_lot_id]
+      );
+
+      if (!lot) {
+        throw new Error('투입할 원자재/시트 LOT를 찾을 수 없습니다.');
+      }
+
+      // 2. 정량 소요량 & 로스 자동 계산
+      const targetLen = Number(target_length_mm);
+      const qtyCount = Number(cut_qty);
+      const totalLen = Number(total_input_length_mm);
+      const bladeLoss = Number(saw_blade_loss_mm);
+
+      // 정량 소요 길이 (톱날 로스 포함)
+      const pureUsedLength = targetLen * qtyCount;
+      const bladeLossLength = bladeLoss * qtyCount;
+      const totalUsedLength = pureUsedLength + bladeLossLength;
+      
+      // 자동 잔여 로스 산출
+      const remainLossLength = Math.max(0, totalLen - totalUsedLength);
+      const totalCalculatedLoss = bladeLossLength + remainLossLength;
+
+      // 3. 투입 원자재/시트 수량 차감 트랜잭션 기록
+      const currentQty = Number(lot.qty_current);
+      const newQty = Math.max(0, currentQty - qtyCount); // 시트 개수 또는 길이 차감
+
+      await client.query(
+        `UPDATE material_lots SET qty_current = $1, updated_at = NOW() WHERE lot_id = $2`,
+        [newQty, input_lot_id]
+      );
+
+      await client.query(
+        `INSERT INTO material_transactions 
+          (txn_date, lot_id, lot_number, category, txn_type, qty, qty_before, qty_after, source_type, notes)
+         VALUES (CURRENT_DATE, $1, $2, $3, 'OUT', $4, $5, $6, 'CUTTING_WORK', $7)`,
+        [input_lot_id, lot.lot_number, lot.category, qtyCount, currentQty, newQty,
+         `작업지시 ${work_order_id || ''} 재단 투입 차감 (생산 ${qtyCount}개)`]
+      );
+
+      // 4. 로스(Loss) 트랜잭션 자동 기록
+      await client.query(
+        `INSERT INTO material_transactions
+          (txn_date, lot_id, lot_number, category, txn_type, qty, qty_before, qty_after, source_type, notes)
+         VALUES (CURRENT_DATE, $1, $2, $3, 'LOSS', $4, $5, $5, 'CUTTING_LOSS', $6)`,
+        [input_lot_id, lot.lot_number, lot.category, totalCalculatedLoss, newQty,
+         `재단 자동 로스 산출: 톱날 손실 ${bladeLossLength}mm + 자투리 손실 ${remainLossLength}mm (총 ${totalCalculatedLoss}mm 로스)`]
+      );
+
+      // 5. 정규 재단 완료 신규 LOT 자동 채번 및 생성
+      const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+      const newLotNumber = `CUT${dateStr}-${Math.floor(100 + Math.random() * 900)}`;
+
+      const { rows: [newCutLot] } = await client.query(
+        `INSERT INTO material_lots
+          (lot_number, category, item_name, thickness, width_mm, length_mm, unit, qty_current, location, notes)
+         VALUES ($1, '반제품(조립소켓/틈새시트/플래싱)', $2, $3, $4, $5, '개', $6, '재단창고', $7)
+         RETURNING *`,
+        [
+          newLotNumber,
+          cut_spec_name || `${lot.item_name} (재단 ${targetLen}mm)`,
+          lot.thickness,
+          lot.width_mm,
+          targetLen,
+          qtyCount,
+          `작업지시 ${work_order_id || ''} 정규 재단 완료품 (상속 LOT: ${lot.lot_number})`
+        ]
+      );
+
+      // 신규 재단품 입고(IN) 기록
+      await client.query(
+        `INSERT INTO material_transactions
+          (txn_date, lot_id, lot_number, category, txn_type, qty, qty_before, qty_after, source_type, notes)
+         VALUES (CURRENT_DATE, $1, $2, $3, 'IN', $4, 0, $4, 'CUTTING_COMPLETE', $5)`,
+        [newCutLot.lot_id, newLotNumber, newCutLot.category, qtyCount,
+         `재단 생산 완료 등록 (${qtyCount}개)`]
+      );
+
+      await client.query('COMMIT');
+
+      return reply.send({
+        ok: true,
+        message: '작업지시 및 재단일지 연동 차감 & 로스 자동계산 완료',
+        data: {
+          input_lot_number: lot.lot_number,
+          new_cut_lot_number: newLotNumber,
+          produced_qty: qtyCount,
+          used_length_mm: pureUsedLength,
+          saw_blade_loss_mm: bladeLossLength,
+          scrap_loss_mm: remainLossLength,
+          total_loss_mm: totalCalculatedLoss,
+          remaining_input_qty: newQty
+        }
+      });
+
+    } catch (err: any) {
+      await client.query('ROLLBACK');
+      console.error('[cutting/process-loss] 오류:', err);
+      return reply.code(500).send({ error: 'cutting_process_failed', message: err.message });
+    } finally {
+      client.release();
+    }
+  });
 }
+
 
