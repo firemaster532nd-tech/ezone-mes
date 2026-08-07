@@ -145,12 +145,12 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
     setPrinting(true);
     setPrintResult(null);
     try {
-      const spec = [
+      const specText = [
+        labelData.thickness ? (typeof labelData.thickness === 'number' ? `${labelData.thickness}T` : String(labelData.thickness)) : '',
         labelData.density ? `${labelData.density}K` : '',
-        labelData.thickness ? `${labelData.thickness}T` : '',
         labelData.width_mm ? `${labelData.width_mm}W` : '',
         labelData.length_mm ? `${labelData.length_mm}L` : '',
-      ].filter(Boolean).join(' ');
+      ].filter(Boolean).join(' ') || labelData.thickness?.toString() || '규격 미기재';
 
       const count = copies > 0 ? copies : Math.max(1, Number(labelData.qty_current || 1));
       
@@ -158,7 +158,7 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
       const labelHtmlContent = await generateSerializedLotLabelBatchHtml(
         labelData.lot_number,
         labelData.item_name || '품목명 미지정',
-        spec,
+        specText,
         labelData.location_name || labelData.location || '-',
         Number(labelData.qty_current || 1),
         labelData.unit || 'EA',
@@ -210,18 +210,18 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
   const handleBrowserPrint = async () => {
     const win = window.open('', '_blank', 'width=450,height=380');
     if (!win) return;
-    const spec = [
+    const specText = [
+      labelData.thickness ? (typeof labelData.thickness === 'number' ? `${labelData.thickness}T` : String(labelData.thickness)) : '',
       labelData.density ? `${labelData.density}K` : '',
-      labelData.thickness ? `${labelData.thickness}T` : '',
       labelData.width_mm ? `${labelData.width_mm}W` : '',
       labelData.length_mm ? `${labelData.length_mm}L` : '',
-    ].filter(Boolean).join(' ');
+    ].filter(Boolean).join(' ') || labelData.thickness?.toString() || '규격 미기재';
 
     const count = copies > 0 ? copies : Math.max(1, Number(labelData.qty_current || 1));
     const labelHtml = await generateSerializedLotLabelBatchHtml(
       labelData.lot_number,
       labelData.item_name || '품목명 미지정',
-      spec,
+      specText,
       labelData.location_name || labelData.location || '-',
       Number(labelData.qty_current || 1),
       labelData.unit || 'EA',
