@@ -67,8 +67,8 @@ export function PrintPreviewModal({ isOpen, onClose, htmlContent, printerName }:
 
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden">
+    <div className="fixed inset-0 bg-black/70 z-[9999] flex items-start justify-center pt-4 sm:pt-8 pb-10 p-2 sm:p-4 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden my-auto">
 
         {/* 헤더 */}
         <div className="p-4 border-b flex justify-between items-center bg-slate-50">

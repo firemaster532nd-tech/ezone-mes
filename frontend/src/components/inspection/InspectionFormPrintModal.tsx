@@ -159,31 +159,34 @@ export function InspectionFormPrintModal({ isOpen, onClose, data }: InspectionFo
   );
 
   return (
-    <div className="print-modal-overlay fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="print-modal-box bg-white rounded-2xl max-w-5xl w-full p-6 space-y-4 shadow-2xl relative border border-slate-300">
+    <div className="print-modal-overlay fixed inset-0 z-50 bg-black/80 flex items-start justify-center pt-3 sm:pt-6 pb-12 px-2 sm:px-4 overflow-y-auto">
+      <div className="print-modal-box bg-white rounded-2xl max-w-5xl w-full p-4 sm:p-6 space-y-4 shadow-2xl relative border border-slate-300 my-auto">
 
-        {/* ── 상단 조종 툴바 (인쇄 시 숨김) ── */}
-        <div className="print-hidden-toolbar border-b border-slate-200 pb-3 space-y-2.5" style={{ writingMode: 'horizontal-tb', direction: 'ltr' }}>
+        {/* ── 상단 조종 툴바 (인쇄 시 숨김 / 화면 스크롤 시 상단 고정 sticky) ── */}
+        <div className="print-hidden-toolbar sticky -top-4 z-30 bg-white/95 backdrop-blur-md border border-slate-200 p-3 sm:p-4 rounded-xl shadow-md space-y-2.5" style={{ writingMode: 'horizontal-tb', direction: 'ltr' }}>
 
           {/* Row 1: 제목 + 버튼 */}
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-3">
-              <span className="px-3 py-1 bg-slate-900 text-blue-400 font-mono font-black text-sm rounded-lg shadow-sm">
+          <div className="flex flex-wrap justify-between items-center gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="px-2.5 py-1 bg-slate-900 text-blue-400 font-mono font-black text-xs sm:text-sm rounded-lg shadow-sm">
                 {data.formCode || 'EZC-D-101-1'}
               </span>
-              <h3 className="font-extrabold text-slate-900 text-base">
+              <h3 className="font-extrabold text-slate-900 text-sm sm:text-base">
                 📄 (주)이지원 품질보증 A4 검사성적서 인쇄
               </h3>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 ml-auto">
               <button
                 onClick={handlePrint}
-                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl text-xs shadow-md transition-all"
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl text-xs sm:text-sm flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 transition"
               >
-                <Printer className="h-4 w-4" />
-                {isBlank ? '빈 양식지 A4 인쇄' : 'A4 성적서 인쇄'}
+                <Printer className="h-4 w-4" /> 🖨️ 저장 & A4 인쇄
               </button>
-              <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-100 transition-colors">
+              <button
+                onClick={onClose}
+                className="p-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition"
+                title="닫기"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>

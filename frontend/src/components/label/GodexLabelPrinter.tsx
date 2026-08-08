@@ -284,7 +284,7 @@ export function GodexLabelPrinter({ labelData, printerName: initialPrinter, copi
   };
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-in fade-in duration-200" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] bg-black/75 backdrop-blur-sm flex items-start justify-center pt-4 sm:pt-8 pb-10 p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-200" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-lg mx-auto relative my-auto border border-slate-200" onClick={e => e.stopPropagation()}>
         {/* 헤더 */}
         <div className="flex items-center justify-between mb-4 border-b pb-3 border-slate-100">
